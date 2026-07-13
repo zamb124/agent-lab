@@ -14,6 +14,7 @@ from apps.flows.src.durable_execution.models import (
     ActivityLifecyclePayload,
     ActivityRecord,
     ActivityStatus,
+    ConversationMessageAppendedPayload,
     EmptyWorkflowEventPayload,
     ExecutionBranchReason,
     ExecutionStateDelta,
@@ -314,6 +315,65 @@ class DurableWorkflowRuntime:
             return result
         raise WorkflowConcurrencyError(
             f"Failed to append lifecycle event for workflow {session_id!r}"
+        )
+
+    async def append_conversation_message(
+        self,
+        session_id: str,
+        message: Message,
+        *,
+        payload: ConversationMessageAppendedPayload,
+    ) -> bool:
+        """Durable append внешнего turn (оператор/пользователь) в лог сессии.
+
+        Идемпотентно по `message.message_id`: если сообщение уже в проекции —
+        no-op. OCC-конфликт при параллельной записи повторяется до 5 раз с
+        перечитыванием head. Возвращает True, если сообщение было дописано.
+        """
+        company_id = self._company_id()
+        for attempt_index in range(5):
+            state, expected_head_sequence, expected_execution_branch_id, status = (
+                await self._load_head_for_append(
+                    company_id=company_id,
+                    session_id=session_id,
+                )
+            )
+            if state is None or expected_head_sequence is None or status is None:
+                raise ValueError(f"Workflow instance not found: {session_id!r}")
+            if any(existing.message_id == message.message_id for existing in state.messages):
+                return False
+            after = state.model_copy(deep=True)
+            after.messages.append(message)
+            state_json = self._dump_state(after)
+            try:
+                result = await self._repository.append_state_transition(
+                    company_id=company_id,
+                    session_id=session_id,
+                    event_type=WorkflowEventType.conversation_message_appended,
+                    payload=payload,
+                    state_delta=build_state_delta(state, after),
+                    state_json=state_json,
+                    status=status,
+                    snapshot=False,
+                    expected_head_sequence=expected_head_sequence,
+                    expected_execution_branch_id=expected_execution_branch_id,
+                )
+            except WorkflowConcurrencyError:
+                if attempt_index == 4:
+                    raise
+                continue
+            await self._cache_projection(
+                company_id=company_id,
+                session_id=session_id,
+                state_json=state_json,
+                head_sequence=result.sequence,
+                head_state_hash=result.state_hash,
+                execution_branch_id=result.execution_branch_id,
+                status=status,
+            )
+            return True
+        raise WorkflowConcurrencyError(
+            f"Failed to append conversation message for workflow {session_id!r}"
         )
 
     async def save_state(

@@ -210,6 +210,7 @@ def check_components_zone() -> None:
         "PlatformModal",
         "PlatformFormModal",
         "PlatformBottomSheet",
+        "PlatformSpinner",
     }
     extends_pattern = re.compile(r"class\s+(\w+)\s+extends\s+(\w+)\b")
     for path in files:

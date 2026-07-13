@@ -54,6 +54,7 @@ from core.worktracker.models import (
     WorkItemCommentRole,
     WorkItemHook,
     WorkItemHookEvent,
+    WorkItemInteractionSpec,
     WorkItemKind,
     WorkItemLink,
     WorkItemPriority,
@@ -223,6 +224,7 @@ class WorkItemService:
         labels: list[str] | None = None,
         assignment: WorkItemAssignment | None = None,
         blocking: bool = False,
+        interaction: WorkItemInteractionSpec | None = None,
         hooks: list[WorkItemHook] | None = None,
         links: list[WorkItemLink] | None = None,
         variables: VariableMap | None = None,
@@ -248,6 +250,7 @@ class WorkItemService:
             created_by=created_by,
             assignment=assignment if assignment is not None else UnassignedAssignment(),
             blocking=blocking,
+            interaction=interaction,
             hooks=hooks or [],
             resolution=None,
             links=links or [],
@@ -619,6 +622,20 @@ class WorkItemService:
 
     async def is_member(self, work_queue_id: str, member: WorkActor) -> bool:
         return await self._repo.is_member(work_queue_id, member)
+
+    async def operator_authorized(self, item: WorkItem, user_id: str) -> bool:
+        """Оператор допущен к задаче: участник очереди и (если claim) он же claimed."""
+        assignment = item.assignment
+        if not isinstance(assignment, QueueAssignment):
+            return False
+        if (
+            assignment.claimed_by_user_id is not None
+            and assignment.claimed_by_user_id != user_id
+        ):
+            return False
+        return await self._repo.is_member(
+            assignment.work_queue_id, UserActor(user_id=user_id)
+        )
 
     # === Доски ===
 

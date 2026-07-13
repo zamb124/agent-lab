@@ -73,7 +73,29 @@ package_path.write_text(json.dumps(package_payload, indent=2) + "\n", encoding="
 for desktop_name in ("forge.deb.desktop", "forge.rpm.desktop"):
     source = branding_dir / desktop_name
     target = goose_desktop / desktop_name
-    shutil.copyfile(source, target)
+    desktop_text = source.read_text(encoding="utf-8")
+    desktop_replacements = [
+        ("Name=HumanitecAgent", f"Name={distro.bundle_name}"),
+        ("Name=LinnexAgent", f"Name={distro.bundle_name}"),
+        ("Name=Goose", f"Name={distro.bundle_name}"),
+        (
+            "Exec=/usr/lib/humanitec/HumanitecAgent %U",
+            f"Exec=/usr/lib/{distro.id}/{distro.bundle_name} %U",
+        ),
+        (
+            "Exec=/usr/lib/humanitec/LinnexAgent %U",
+            f"Exec=/usr/lib/{distro.id}/{distro.bundle_name} %U",
+        ),
+        ("Icon=/usr/share/pixmaps/humanitecagent.png", f"Icon=/usr/share/pixmaps/{package_slug}.png"),
+        ("Icon=/usr/share/pixmaps/linnexagent.png", f"Icon=/usr/share/pixmaps/{package_slug}.png"),
+        ("x-scheme-handler/humanitec", f"x-scheme-handler/{distro.protocol_scheme}"),
+        ("x-scheme-handler/linnex", f"x-scheme-handler/{distro.protocol_scheme}"),
+        ("x-scheme-handler/goose", f"x-scheme-handler/{distro.protocol_scheme}"),
+    ]
+    for source_value, target_value in desktop_replacements:
+        if source_value in desktop_text:
+            desktop_text = desktop_text.replace(source_value, target_value)
+    target.write_text(desktop_text, encoding="utf-8")
 
 icons_dir = branding_dir / "icons"
 goose_images = goose_desktop / "src" / "images"
@@ -81,7 +103,7 @@ goose_images.mkdir(parents=True, exist_ok=True)
 required_icons = ("icon.png", "icon.ico", "icon.icns")
 icons_complete = all((icons_dir / icon_name).is_file() for icon_name in required_icons)
 if not icons_complete:
-    icon_generator = repo_root / "scripts" / "generate_humanitec_desktop_icons.py"
+    icon_generator = repo_root / "scripts" / "generate_linnex_desktop_icons.py"
     if not icon_generator.is_file():
         raise SystemExit(f"desktop icon generator missing: {icon_generator}")
     subprocess.run(
@@ -667,20 +689,90 @@ if packager_name_marker not in text:
         text = text.replace(packager_cfg_anchor, packager_cfg_patch, 1)
     else:
         raise SystemExit("forge.config.ts packager cfg anchor missing")
-replacements = {
-    "name: 'Goose'": f"name: '{package_id}'",
-    "bin: 'Goose'": f"bin: '{distro.bundle_name}'",
-    "name: 'GooseProtocol'": f"name: '{distro.bundle_name}Protocol'",
-    "schemes: ['goose']": f"schemes: ['{distro.protocol_scheme}']",
-    "id: 'io.github.block.Goose'": f"id: 'ai.humanitec.{package_id}'",
-    "maintainer: 'AAIF (Agentic AI Foundation)'": f"maintainer: '{distro.maintainer}'",
-    "homepage: 'https://goose-docs.ai/'": f"homepage: '{distro.homepage}'",
-}
-for source, target in replacements.items():
-    if source in text:
-        text = text.replace(source, target)
-    elif target not in text:
-        raise SystemExit(f"forge.config.ts branding anchor missing: {source}")
+def replace_forge_branding_value(
+    forge_text: str,
+    *,
+    label: str,
+    target: str,
+    sources: tuple[str, ...],
+) -> str:
+    if target in forge_text:
+        return forge_text
+    for source in sources:
+        if source in forge_text:
+            return forge_text.replace(source, target)
+    missing = ", ".join(repr(source) for source in sources)
+    raise SystemExit(f"forge.config.ts branding anchor missing ({label}): {missing}")
+
+
+forge_replacements: list[tuple[str, str, tuple[str, ...]]] = [
+    (
+        "maker package name",
+        f"name: '{package_id}'",
+        ("name: 'Goose'", "name: 'humanitecagent'", "name: 'linnexagent'"),
+    ),
+    (
+        "maker binary",
+        f"bin: '{distro.bundle_name}'",
+        ("bin: 'Goose'", "bin: 'HumanitecAgent'", "bin: 'LinnexAgent'"),
+    ),
+    (
+        "protocol name",
+        f"name: '{distro.bundle_name}Protocol'",
+        (
+            "name: 'GooseProtocol'",
+            "name: 'HumanitecAgentProtocol'",
+            "name: 'LinnexAgentProtocol'",
+        ),
+    ),
+    (
+        "protocol scheme",
+        f"schemes: ['{distro.protocol_scheme}']",
+        ("schemes: ['goose']", "schemes: ['humanitec']", "schemes: ['linnex']"),
+    ),
+    (
+        "flatpak id",
+        f"id: 'ai.humanitec.{package_id}'",
+        (
+            "id: 'io.github.block.Goose'",
+            "id: 'ai.humanitec.humanitecagent'",
+            "id: 'ai.humanitec.linnexagent'",
+        ),
+    ),
+    (
+        "maintainer",
+        f"maintainer: '{distro.maintainer}'",
+        (
+            "maintainer: 'AAIF (Agentic AI Foundation)'",
+            "maintainer: 'Humanitec <support@humanitec.ru>'",
+            "maintainer: 'Linnex <support@linnex.io>'",
+        ),
+    ),
+    (
+        "homepage",
+        f"homepage: '{distro.homepage}'",
+        (
+            "homepage: 'https://goose-docs.ai/'",
+            "homepage: 'https://humanitec.ru'",
+            "homepage: 'https://linnex.io'",
+        ),
+    ),
+    (
+        "wix manufacturer",
+        f"manufacturer: '{distro.ui_product_name}'",
+        ("manufacturer: 'Humanitec'", "manufacturer: 'Linnex'"),
+    ),
+    (
+        "macos usage description",
+        f"NSHumanitecUsageDescription: '{distro.display_name} desktop agent'",
+        (
+            "NSHumanitecUsageDescription: 'HumanitecAgent desktop agent'",
+            "NSHumanitecUsageDescription: 'LinnexAgent desktop agent'",
+        ),
+    ),
+]
+for label, target, sources in forge_replacements:
+    text = replace_forge_branding_value(text, label=label, target=target, sources=sources)
 
 extra_resource_anchor = "extraResource: ['src/bin', 'src/images'],"
 extra_resource_target = "extraResource: ['src/bin', 'src/images', 'humanitec.defaults.json'],"

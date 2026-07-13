@@ -103,6 +103,11 @@
     "label_created": "Создана",
     "label_updated": "Обновлена"
   },
+  "hitl_chat": {
+    "title": "Диалог с пользователем",
+    "reply_placeholder": "Ваш ответ пользователю…",
+    "complete": "Ответить и завершить"
+  },
   "board_page": {
     "title": "Задачи",
     "create": "Новая задача",

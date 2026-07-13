@@ -1,5 +1,5 @@
 /**
- * Плавающая карточка загрузки HumanitecAgent на лендинге.
+ * Плавающая карточка загрузки desktop-агента на лендинге (имя бренда — из i18n {agentProductName}).
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';

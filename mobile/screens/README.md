@@ -53,7 +53,7 @@ uv run python mobile/screens/generate_app_store_screenshots.py
 - Phone — соотношение 16:9 или 9:16, минимум 320 px по короткой стороне; в скрипте — 1080×1920 и 1920×1080.
 - 7" Tablet — 1200×1920 и 1920×1200.
 - 10" Tablet — 1600×2560 и 2560×1600.
-- Дополнительные обязательные поля Play Console (генерируются `scripts/generate_humanitec_pwa_icons.py`):
+- Дополнительные обязательные поля Play Console (генерируются `scripts/generate_linnex_pwa_icons.py`):
   - **High-res icon** 512×512 → `mobile/screens/play_icon_512.png`
   - **Feature graphic** 1024×500 → `mobile/screens/play_feature_graphic_1024x500.png`
 

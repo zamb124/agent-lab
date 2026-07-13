@@ -108,7 +108,7 @@ async def test_flows_experiment_with_branches(
 
     await flows_create_branch(page, branch_id, GREEN_GARDEN_BRANCH)
     await flows_select_branch_tab(page, re.escape(GREEN_GARDEN_BRANCH))
-    await expect(page).to_have_url(re.compile(rf"/branch/{re.escape(branch_id)}"), timeout=30_000)
+    await expect(page).to_have_url(re.compile(rf"/editor/{re.escape(branch_id)}(?:/|$)"), timeout=30_000)
     await scenario.step(
         "Создайте и откройте ветку «Летние скидки»",
         page,

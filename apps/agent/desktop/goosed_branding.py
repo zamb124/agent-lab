@@ -40,6 +40,19 @@ def _replace_in_file_text(
         _ = file_path.write_text(text, encoding="utf-8")
 
 
+def apply_distro_to_prompt_text(text: str, distro: HumanitecDistroConfig) -> str:
+    text = text.replace("HumanitecAgent", distro.display_name)
+    text = text.replace("Humanitec", distro.ui_product_name)
+    return text
+
+
+def apply_distro_to_prompt_file(prompt_path: Path, distro: HumanitecDistroConfig) -> None:
+    prompt_text = prompt_path.read_text(encoding="utf-8")
+    branded_text = apply_distro_to_prompt_text(prompt_text, distro)
+    if branded_text != prompt_text:
+        _ = prompt_path.write_text(branded_text, encoding="utf-8")
+
+
 def apply_goosed_prompt_templates(vendor_goose: Path, distro: HumanitecDistroConfig) -> None:
     prompts_target = vendor_goose / GOOSED_PROMPTS_RELATIVE
     if not prompts_target.is_dir():
@@ -48,7 +61,9 @@ def apply_goosed_prompt_templates(vendor_goose: Path, distro: HumanitecDistroCon
         raise FileNotFoundError(f"branded prompts dir missing: {BRANDED_PROMPTS_DIR}")
 
     for branded_prompt_path in sorted(BRANDED_PROMPTS_DIR.glob("*.md")):
-        _ = shutil.copyfile(branded_prompt_path, prompts_target / branded_prompt_path.name)
+        target_prompt_path = prompts_target / branded_prompt_path.name
+        _ = shutil.copyfile(branded_prompt_path, target_prompt_path)
+        apply_distro_to_prompt_file(target_prompt_path, distro)
 
     verify_goosed_prompt_templates(prompts_target, distro)
 
@@ -64,10 +79,19 @@ def patch_goosed_rust_sources(vendor_goose: Path, distro: HumanitecDistroConfig)
             "Main system prompt that defines goose's personality and behavior": (
                 f"Main system prompt that defines {distro.ui_product_name}'s personality and behavior"
             ),
+            "Main system prompt that defines Humanitec's personality and behavior": (
+                f"Main system prompt that defines {distro.ui_product_name}'s personality and behavior"
+            ),
             "Prompt for generating new Goose apps based on the user instructions": (
                 f"Prompt for generating new {distro.ui_product_name} apps based on the user instructions"
             ),
+            "Prompt for generating new Humanitec apps based on the user instructions": (
+                f"Prompt for generating new {distro.ui_product_name} apps based on the user instructions"
+            ),
             "Prompt for updating existing Goose apps based on feedback": (
+                f"Prompt for updating existing {distro.ui_product_name} apps based on feedback"
+            ),
+            "Prompt for updating existing Humanitec apps based on feedback": (
                 f"Prompt for updating existing {distro.ui_product_name} apps based on feedback"
             ),
             "Prompt used when goose creates step-by-step plans. CLI only": (
@@ -76,22 +100,30 @@ def patch_goosed_rust_sources(vendor_goose: Path, distro: HumanitecDistroConfig)
         },
         required_any=(f"{distro.ui_product_name}'s personality",),
     )
+    platform_identity = (
+        f'"You are a general-purpose AI agent called {distro.ui_product_name}, '
+        f'part of the {distro.ui_product_name} platform".to_string()'
+    )
     _replace_in_file_text(
         prompt_manager_path,
         {
             '"You are a general-purpose AI agent called goose, created by Block".to_string()': (
-                f'"You are a general-purpose AI agent called {distro.ui_product_name}, '
-                f'part of the Humanitec platform".to_string()'
+                platform_identity
+            ),
+            '"You are a general-purpose AI agent called Humanitec, part of the Humanitec platform".to_string()': (
+                platform_identity
             ),
         },
         required_any=(f"called {distro.ui_product_name}",),
     )
+    agent_identity = (
+        f'.unwrap_or("You are a general-purpose AI agent called {distro.ui_product_name}")'
+    )
     _replace_in_file_text(
         mcp_client_path,
         {
-            '.unwrap_or("You are a general-purpose AI agent called goose")': (
-                f'.unwrap_or("You are a general-purpose AI agent called {distro.ui_product_name}")'
-            ),
+            '.unwrap_or("You are a general-purpose AI agent called goose")': agent_identity,
+            '.unwrap_or("You are a general-purpose AI agent called Humanitec")': agent_identity,
         },
         required_any=(f"called {distro.ui_product_name}",),
     )

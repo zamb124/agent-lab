@@ -45,7 +45,18 @@ export class ChatController {
      *   onChange: (state: object) => void,
      *   onUiEvent?: (uiEvent: object, meta: { taskId: string|null, contextId: string|null }) => void,
      *   onRunEvent?: (type: string, payload: object) => void,
+     *   transport?: {
+     *     attach?: (controller: ChatController) => void,
+     *     loadHistory?: () => Promise<void>,
+     *     send: (input: object) => Promise<void>,
+     *     cancel?: () => Promise<void>,
+     *     dispose?: () => void,
+     *   } | null,
      * }} options
+     *   transport — необязательный не-A2A транспорт (например operator_handoff в
+     *   карточке WorkItem): при наличии send/cancel/history делегируются в него,
+     *   а он подаёт turns в reducer через публичный applyRuntimeVerb. A2A-путь
+     *   (flows/embed/landing) при отсутствии transport не меняется.
      */
     constructor(options) {
         if (!options || typeof options !== 'object') {
@@ -63,12 +74,38 @@ export class ChatController {
         this._onChange = options.onChange;
         this._onUiEvent = typeof options.onUiEvent === 'function' ? options.onUiEvent : null;
         this._onRunEvent = typeof options.onRunEvent === 'function' ? options.onRunEvent : null;
+        this._transport = options.transport && typeof options.transport === 'object' ? options.transport : null;
+        if (this._transport !== null && typeof this._transport.send !== 'function') {
+            throw new Error('ChatController: options.transport.send required');
+        }
         /** @type {object} */
         this._state = createInitialChatRuntimeState();
         /** @type {AbortController|null} */
         this._streamAbort = null;
         this._sending = false;
         this._cancelBusy = false;
+        if (this._transport !== null && typeof this._transport.attach === 'function') {
+            this._transport.attach(this);
+        }
+    }
+
+    get hasTransport() {
+        return this._transport !== null;
+    }
+
+    /** Загрузить историю (только для не-A2A транспорта); A2A использует loadSession хоста. */
+    async loadHistory() {
+        if (this._transport === null || typeof this._transport.loadHistory !== 'function') {
+            return;
+        }
+        await this._transport.loadHistory();
+    }
+
+    /** Освободить ресурсы транспорта (подписки на шину и т.п.). */
+    dispose() {
+        if (this._transport !== null && typeof this._transport.dispose === 'function') {
+            this._transport.dispose();
+        }
     }
 
     get state() {
@@ -89,6 +126,23 @@ export class ChatController {
             throw new Error('ChatController: target object required');
         }
         this._target = target;
+    }
+
+    /**
+     * Задать не-A2A транспорт после конструирования (хост узнаёт work-item/policy
+     * из атрибутов уже после constructor). Идемпотентно по ссылке.
+     */
+    setTransport(transport) {
+        if (!transport || typeof transport !== 'object' || typeof transport.send !== 'function') {
+            throw new Error('ChatController.setTransport: transport with send required');
+        }
+        if (this._transport === transport) {
+            return;
+        }
+        this._transport = transport;
+        if (typeof transport.attach === 'function') {
+            transport.attach(this);
+        }
     }
 
     /** Обновить режим credentials (cookie include/omit) — хост узнаёт его после конструирования. */
@@ -224,6 +278,17 @@ export class ChatController {
         }
         if (this._sending) {
             throw new Error('ChatController.send: stream already active');
+        }
+        if (this._transport !== null) {
+            this._sending = true;
+            this._onChange(this._state);
+            try {
+                await this._transport.send(input);
+            } finally {
+                this._sending = false;
+                this._onChange(this._state);
+            }
+            return;
         }
         const message = typeof input.message === 'string' ? input.message : '';
         const files = Array.isArray(input.files) ? input.files : [];
@@ -417,6 +482,12 @@ export class ChatController {
     /** Отмена активного выполнения: abort SSE + JSON-RPC tasks/cancel. */
     async cancel() {
         if (this._cancelBusy) {
+            return;
+        }
+        if (this._transport !== null) {
+            if (typeof this._transport.cancel === 'function') {
+                await this._transport.cancel();
+            }
             return;
         }
         stopStreamTtsPlayback();

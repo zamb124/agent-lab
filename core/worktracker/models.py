@@ -151,6 +151,8 @@ class FlowSessionLink(WorktrackerModel):
     session_id: str = Field(..., min_length=1)
     a2a_task_id: str | None = None
     context_id: str | None = None
+    flow_id: str | None = None
+    branch_id: str | None = None
 
 
 class SyncMessageLink(WorktrackerModel):
@@ -220,6 +222,46 @@ class WorkItemResolution(WorktrackerModel):
     text: str = ""
     files: list[FileRef] = Field(default_factory=list)
     resolved_by: WorkActor | None = None
+
+
+# === Интерактивный контракт задачи (operator_handoff) ===
+
+
+class WorkItemInteractionMode(StrEnum):
+    """Как оператор взаимодействует с задачей в её карточке."""
+
+    NONE = "none"
+    SINGLE_REPLY = "single_reply"
+    TAKEOVER = "takeover"
+
+
+class WorkItemInteractionSpec(WorktrackerModel):
+    """First-class контракт взаимодействия: задаётся создателем задачи (flows HITL).
+
+    Определяет, показывать ли встроенный чат сессии и какие кнопки в композере.
+    Хранится на задаче, не в непрозрачном `hook.binding`.
+    """
+
+    mode: WorkItemInteractionMode = WorkItemInteractionMode.NONE
+
+
+class WorkItemConversationRef(WorktrackerModel):
+    """Ссылка на разговор flows-сессии для встроенного чата в карточке задачи."""
+
+    session_id: str = Field(..., min_length=1)
+    context_id: str = Field(..., min_length=1)
+    flow_id: str = Field(..., min_length=1)
+    branch_id: str = Field(default="default", min_length=1)
+    a2a_task_id: str | None = None
+
+
+class WorkItemInteractionPolicy(WorktrackerModel):
+    """Вычисляемая политика композера для карточки задачи (проекция, не персист)."""
+
+    mode: WorkItemInteractionMode = WorkItemInteractionMode.NONE
+    can_send: bool = False
+    can_complete: bool = False
+    conversation: WorkItemConversationRef | None = None
 
 
 # === Очереди и доски ===
@@ -326,6 +368,7 @@ class WorkItem(WorktrackerModel):
     created_by: WorkActor
     assignment: WorkItemAssignment = Field(default_factory=UnassignedAssignment)
     blocking: bool = False
+    interaction: WorkItemInteractionSpec | None = None
     hooks: list[WorkItemHook] = Field(default_factory=list)
     resolution: WorkItemResolution | None = None
     links: list[WorkItemLink] = Field(default_factory=list)
@@ -336,3 +379,51 @@ class WorkItem(WorktrackerModel):
 
     def hooks_for(self, event: WorkItemHookEvent) -> list[WorkItemHook]:
         return [hook for hook in self.hooks if hook.event == event]
+
+    def flow_session_link(self) -> FlowSessionLink | None:
+        for link in self.links:
+            if isinstance(link, FlowSessionLink):
+                return link
+        return None
+
+
+def build_conversation_ref(item: WorkItem) -> WorkItemConversationRef | None:
+    """Строит ссылку на разговор из типизированного FlowSessionLink задачи."""
+    link = item.flow_session_link()
+    if link is None:
+        return None
+    if link.context_id is None or link.flow_id is None:
+        return None
+    return WorkItemConversationRef(
+        session_id=link.session_id,
+        context_id=link.context_id,
+        flow_id=link.flow_id,
+        branch_id=link.branch_id or "default",
+        a2a_task_id=link.a2a_task_id,
+    )
+
+
+def build_interaction_policy(
+    item: WorkItem,
+    *,
+    operator_authorized: bool,
+) -> WorkItemInteractionPolicy:
+    """Вычисляет политику композера карточки задачи.
+
+    single_reply: чат read-only + только «Завершить».
+    takeover: двусторонний чат «Отправить» + «Завершить».
+    Прочее: mode=none (обычная задача, встроенного чата нет).
+    """
+    spec = item.interaction
+    if spec is None or spec.mode == WorkItemInteractionMode.NONE:
+        return WorkItemInteractionPolicy(mode=WorkItemInteractionMode.NONE)
+    is_terminal = item.state in TERMINAL_WORK_ITEM_STATES
+    active = operator_authorized and not is_terminal
+    can_send = active and spec.mode == WorkItemInteractionMode.TAKEOVER
+    can_complete = active
+    return WorkItemInteractionPolicy(
+        mode=spec.mode,
+        can_send=can_send,
+        can_complete=can_complete,
+        conversation=build_conversation_ref(item),
+    )

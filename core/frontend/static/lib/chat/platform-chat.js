@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from '../lit-shim.js';
 import { ChatController, TtsOnlyStreamLifecycle } from './runtime/chat-controller.js';
 import { createChatProfile, resolveChatViewConfig, fetchChatProfile } from './runtime/chat-profile.js';
+import { OperatorConversationTransport } from './runtime/operator-conversation-transport.js';
 import { crmA2aInterfaceLanguageVariables, embedChatLabelsForLang } from './chat-default-labels.js';
 import { readEmbedChatUrlParams, applyEmbedChatDrawerSizeVars } from './chat-url-params.js';
 import { resolveEmbedChatTheme } from './chat-theme.js';
@@ -310,6 +311,8 @@ export class PlatformChat extends LitElement {
         platformUiOrigin: { type: String, attribute: 'platform-ui-origin' },
         flowId: { type: String, attribute: 'flow-id' },
         embedId: { type: String, attribute: 'embed-id' },
+        workItemId: { type: String, attribute: 'work-item-id' },
+        interactionPolicy: { type: Object, attribute: 'interaction-policy' },
         branchId: { type: String, attribute: 'branch-id' },
         assistantTitle: { type: String, attribute: 'assistant-title' },
         labels: { type: Object },
@@ -795,6 +798,10 @@ export class PlatformChat extends LitElement {
         this.platformUiOrigin = '';
         this.flowId = '';
         this.embedId = '';
+        /** WorkItem(operator_handoff) id — идентификатор поверхности профиля operator_handoff. */
+        this.workItemId = '';
+        /** @type {object|null} interaction_policy задачи (mode/can_send/can_complete/conversation). */
+        this.interactionPolicy = null;
         this.branchId = '';
         this.assistantTitle = '';
         this.labels = {};
@@ -842,6 +849,10 @@ export class PlatformChat extends LitElement {
             onRunEvent: (type, payload) => this._emitChatRunEvent(type, payload),
         });
         this._controller.initSession({});
+
+        /** @type {InstanceType<typeof OperatorConversationTransport>|null} operator_handoff транспорт. */
+        this._operatorTransport = null;
+        this._operatorHistoryLoaded = false;
 
         /** look из chat-profile (embed): theme, assistant_title, placeholder, voice_*, position */
         this._look = null;
@@ -946,6 +957,59 @@ export class PlatformChat extends LitElement {
 
     _branchId() {
         return this.branchId != null ? String(this.branchId).trim() : '';
+    }
+
+    _isOperatorProfile() {
+        return this.profile === 'operator_handoff';
+    }
+
+    /** conversation-ref из interaction_policy задачи. */
+    _operatorConversationRef() {
+        const policy = this.interactionPolicy;
+        if (!policy || typeof policy !== 'object') {
+            return null;
+        }
+        const conv = policy.conversation;
+        if (!conv || typeof conv !== 'object' || typeof conv.context_id !== 'string' || conv.context_id === '') {
+            return null;
+        }
+        return conv;
+    }
+
+    /**
+     * Смонтировать operator-транспорт в тот же ChatController: снимок разговора,
+     * подписка на push, отправка ответа оператора. Идемпотентно; ждёт, пока хост
+     * задаст work-item-id + interaction_policy.conversation.
+     */
+    _ensureOperatorTransport() {
+        if (!this._isOperatorProfile() || this._operatorHistoryLoaded) {
+            return;
+        }
+        const workItemId = String(this.workItemId || '').trim();
+        const conversation = this._operatorConversationRef();
+        if (workItemId === '' || conversation === null || !hasPlatformBus()) {
+            return;
+        }
+        this._operatorHistoryLoaded = true;
+        this._operatorTransport = new OperatorConversationTransport({
+            workItemId,
+            conversation,
+            baseUrl: String(this.flowsBaseUrl || '').trim().replace(/\/$/, ''),
+            credentials: this._requestCredentials(),
+            getHeaders: () => this._outboundFlowsRequestHeaders(),
+            bus: getPlatformBus(),
+        });
+        this._controller.setTransport(this._operatorTransport);
+        void this._controller.loadHistory();
+    }
+
+    /** Виден ли композер отправки: для operator_handoff — только при can_send. */
+    _composerVisible() {
+        if (!this._isOperatorProfile()) {
+            return true;
+        }
+        const policy = this.interactionPolicy;
+        return Boolean(policy && typeof policy === 'object' && policy.can_send === true);
     }
 
     _requestCredentials() {
@@ -1246,9 +1310,11 @@ export class PlatformChat extends LitElement {
             this._onFullscreenChange = null;
         }
         this._unbindToggleListener();
+        this._controller.dispose();
     }
 
     firstUpdated() {
+        this._ensureOperatorTransport();
         this._loadEmbedCredentials();
         void this._loadChatProfileIfNeeded();
         this._startGreetingTypingIfNeeded();
@@ -1276,6 +1342,9 @@ export class PlatformChat extends LitElement {
         }
         if (changed.has('profile') || changed.has('chatPolicy')) {
             this._refreshViewConfig();
+        }
+        if (changed.has('profile') || changed.has('workItemId') || changed.has('interactionPolicy')) {
+            this._ensureOperatorTransport();
         }
         if (changed.has('conversationKey') && changed.get('conversationKey') !== undefined) {
             this._newChat();
@@ -2825,6 +2894,16 @@ export class PlatformChat extends LitElement {
         if ((!message && files.length === 0) || this._isLoading()) {
             return;
         }
+        if (this._isOperatorProfile()) {
+            // operator_handoff: отправка через транспорт (REST + push), без A2A/voice.
+            this._stickToBottom = true;
+            try {
+                await this._controller.send({ message });
+            } finally {
+                this.requestUpdate();
+            }
+            return;
+        }
         if (!this.flowsBaseUrl || (!this.flowId && !this.embedId)) {
             throw new Error('platform-chat: flowsBaseUrl and (flowId or embedId) are required');
         }
@@ -3393,6 +3472,8 @@ export class PlatformChat extends LitElement {
                     )}
                 </div>
                 ${this._renderSuggestedPrompts()}
+                ${this._composerVisible()
+                    ? html`
                 <div class="chat-composer">
                     <flows-chat-input
                         .loading=${loading}
@@ -3420,6 +3501,8 @@ export class PlatformChat extends LitElement {
                         @toast=${this._onComposerToast}
                     ></flows-chat-input>
                 </div>
+                      `
+                    : nothing}
             </div>
         `;
     }

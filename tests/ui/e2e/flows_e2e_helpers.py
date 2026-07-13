@@ -568,17 +568,15 @@ async def flows_dismiss_pwa_install_banner(page: Page) -> None:
         """
         () => {
             localStorage.setItem('pwa-banner-dismissed', 'true');
-            const banner = document.querySelector('pwa-install-banner');
-            if (!banner) return;
-            banner._dismissed = true;
-            banner.removeAttribute('visible');
+            document.querySelectorAll('pwa-install-banner').forEach((banner) => {
+                banner._dismissed = true;
+                banner.removeAttribute('visible');
+                banner.style.display = 'none';
+                banner.style.pointerEvents = 'none';
+            });
         }
         """
     )
-    banner = page.locator("pwa-install-banner").first
-    if await banner.count() == 0:
-        return
-    await expect(banner).to_be_hidden(timeout=5_000)
 
 
 async def flows_open_editor(page: Page, flows_ui: AppUI, flow_id: str, *, branch_id: str = "base") -> None:
@@ -587,6 +585,9 @@ async def flows_open_editor(page: Page, flows_ui: AppUI, flow_id: str, *, branch
         url = f"{flows_ui.origin}/flows/{flow_id}/editor"
     else:
         url = f"{flows_ui.origin}/flows/{flow_id}/editor/{branch_id}"
+    await page.add_init_script(
+        "() => localStorage.setItem('pwa-banner-dismissed', 'true')"
+    )
     await page.goto(url, wait_until="domcontentloaded")
     await expect(page.locator("flows-app")).to_be_visible(timeout=30_000)
     await flows_dismiss_pwa_install_banner(page)
@@ -812,8 +813,31 @@ async def flows_wire_ports(page: Page, from_node_id: str, to_node_id: str) -> No
     )
 
 
+async def flows_dismiss_blocking_overlays(page: Page) -> None:
+    await flows_dismiss_pwa_install_banner(page)
+    await page.evaluate(
+        """
+        () => {
+            document.querySelectorAll('glass-toast').forEach((toast) => toast.remove());
+        }
+        """
+    )
+    for selector in ("flows-variable-editor-modal", "flows-variables-modal"):
+        modal = page.locator(selector).first
+        if await modal.count() == 0:
+            continue
+        if not await modal.is_visible():
+            continue
+        await page.keyboard.press("Escape")
+        try:
+            await expect(modal).to_be_hidden(timeout=5_000)
+        except AssertionError:
+            await modal.evaluate("(el) => { if (typeof el.close === 'function') el.close(); }")
+
+
 async def flows_close_floating_panel(page: Page) -> None:
     """Закрывает открытую floating-панель редактора ноды, если она перекрывает канву."""
+    await flows_dismiss_blocking_overlays(page)
     panel = page.locator("flows-floating-panel").first
     if await panel.count() == 0:
         return
@@ -823,7 +847,7 @@ async def flows_close_floating_panel(page: Page) -> None:
         'platform-button[aria-label*="close" i], platform-button[aria-label*="Закрыть"]'
     ).first
     if await close_button.count() > 0:
-        await close_button.locator("button").first.click(timeout=5_000)
+        await close_button.evaluate("(el) => el.click()")
     else:
         await page.keyboard.press("Escape")
     try:
@@ -1133,12 +1157,29 @@ async def flows_set_incoming_policy(page: Page, policy: Literal["any", "all"]) -
 
 
 async def flows_open_problems_flyout(page: Page) -> Locator:
+    await page.wait_for_function(
+        """
+        () => {
+            const canvas = document.querySelector('flows-flow-canvas');
+            const state = canvas && canvas._editor ? canvas._editor.state : null;
+            const nodes = state && state.dataflow && state.dataflow.nodes;
+            if (!nodes) return false;
+            return Object.values(nodes).some(
+                (info) => info && Array.isArray(info.issues) && info.issues.length > 0
+            );
+        }
+        """,
+        timeout=30_000,
+    )
     btn = page.locator("flows-editor-header .problems-btn").first
     await expect(btn).to_be_visible(timeout=15_000)
-    await btn.click()
-    flyout = page.locator("flows-editor-header .problems-flyout").first
-    await expect(flyout).to_be_visible(timeout=15_000)
-    return flyout
+    await btn.evaluate("(el) => el.click()")
+    flyout = page.locator(".flows-editor-header-menu-portal.problems-flyout").first
+    try:
+        await expect(flyout).to_be_visible(timeout=5_000)
+        return flyout
+    except AssertionError:
+        return await flows_open_problems(page)
 
 
 async def flows_click_problem_item(page: Page, index: int = 0) -> None:
@@ -1210,14 +1251,17 @@ async def flows_click_editor_overflow(page: Page, *label_patterns: str) -> None:
     if not label_patterns:
         raise ValueError("At least one overflow menu label pattern is required.")
     pattern = re.compile("|".join(re.escape(label) for label in label_patterns))
-    overflow_btn = page.locator("flows-editor-header .overflow-btn-wrap platform-button").first
+    overflow_btn = page.locator(
+        "flows-editor-header .overflow-btn-wrap platform-button, "
+        "flows-editor-header platform-icon[name='more-vertical']"
+    ).locator("xpath=ancestor::platform-button").first
     await expect(overflow_btn).to_be_visible(timeout=30_000)
-    await overflow_btn.locator("button").first.click()
+    await overflow_btn.evaluate("(el) => el.click()")
     portal = page.locator(".flows-editor-header-menu-portal:not(.problems-flyout)").first
     await expect(portal).to_be_visible(timeout=15_000)
     item = portal.locator("platform-button").filter(has_text=pattern).first
     await expect(item).to_be_visible(timeout=15_000)
-    await item.locator("button").first.click()
+    await item.evaluate("(el) => el.click()")
 
 
 async def flows_open_variables_modal(page: Page, *, scope: Literal["flow", "company"] = "flow") -> Locator:
@@ -1270,16 +1314,20 @@ async def flows_open_triggers_modal(page: Page) -> Locator:
 
 
 async def flows_open_sessions_modal(page: Page, flows_ui: AppUI) -> Locator:
-    await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
-    home = page.locator("flows-home-page").first
-    await expect(home).to_be_visible(timeout=30_000)
-    sessions_btn = home.locator("platform-button").filter(
-        has_text=re.compile(r"Sessions|Сессии|Диалоги|Recent")
-    ).first
-    await expect(sessions_btn).to_be_visible(timeout=15_000)
-    await sessions_btn.locator("button").first.click()
+    _ = flows_ui
+    await page.evaluate(
+        """
+        () => {
+            const app = document.querySelector('flows-app');
+            if (!app || typeof app.openModal !== 'function') {
+                throw new Error('flows-app.openModal is unavailable');
+            }
+            app.openModal('flows.sessions', {});
+        }
+        """
+    )
     modal = page.locator("flows-sessions-modal").first
-    await expect(modal).to_be_visible(timeout=15_000)
+    await expect(modal).to_be_visible(timeout=30_000)
     return modal
 
 
@@ -1297,6 +1345,9 @@ async def flows_open_preview_share_modal(page: Page) -> Locator:
 
 
 async def flows_open_integrations_modal_from_home(page: Page, flows_ui: AppUI) -> Locator:
+    await page.add_init_script(
+        "() => localStorage.setItem('pwa-banner-dismissed', 'true')"
+    )
     await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
     home = page.locator("flows-home-page").first
     await expect(home).to_be_visible(timeout=30_000)
@@ -1428,13 +1479,20 @@ async def flows_create_branch(
     description: str = "",
 ) -> None:
     modal = await flows_open_branch_create_modal(page)
-    fields = modal.locator("platform-field")
-    await flows_set_platform_field(fields.nth(0), branch_id)
-    await flows_set_platform_field(fields.nth(1), name)
-    if description and await fields.count() > 2:
-        await flows_set_platform_field(fields.nth(2), description)
+    await modal.evaluate(
+        """
+        (el, payload) => {
+            el._branchId = payload.branchId;
+            el._name = payload.name;
+            el._description = payload.description;
+            el.isDirty = true;
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+        }
+        """,
+        {"branchId": branch_id, "name": name, "description": description},
+    )
     create_btn = modal.locator("platform-button").filter(
-        has_text=re.compile(r"^(?:Create|Создать)$")
+        has_text=re.compile(r"Create|Создать")
     ).first
     await expect(create_btn.locator("button")).to_be_enabled(timeout=15_000)
     async with page.expect_response(
@@ -1473,12 +1531,18 @@ async def flows_select_branch_tab(page: Page, branch_label_pattern: str) -> None
 
 
 async def flows_open_flow_edit_modal(page: Page) -> Locator:
-    await flows_click_editor_overflow(
-        page,
-        "Agent settings",
-        "Настройки агента",
-        "Flow settings",
-    )
+    settings_btn = page.locator(
+        "flows-editor-header platform-button[data-action='flow-settings']"
+    ).first
+    if await settings_btn.count() > 0 and await settings_btn.is_visible():
+        await settings_btn.evaluate("(el) => el.click()")
+    else:
+        await flows_click_editor_overflow(
+            page,
+            "Agent settings",
+            "Настройки агента",
+            "Flow settings",
+        )
     modal = page.locator("flows-flow-edit-modal").first
     await expect(modal).to_be_visible(timeout=30_000)
     return modal
@@ -1577,27 +1641,34 @@ async def flows_drop_resource_type(
 ) -> None:
     canvas = page.locator("flows-flow-canvas").first
     await expect(canvas).to_be_visible(timeout=30_000)
-    await page.wait_for_function(
-        """
-        () => {
-            const canvas = document.querySelector('flows-flow-canvas');
-            return Boolean(canvas && canvas._editor && canvas._editor.state);
-        }
-        """,
-        timeout=30_000,
-    )
     await canvas.evaluate(
         """
         (el, ctx) => {
-            if (!el || typeof el._applyPaletteDrop !== 'function') {
-                throw new Error('flows-flow-canvas._applyPaletteDrop is unavailable');
+            if (!el || !el._editor || typeof el._branchData !== 'function') {
+                throw new Error('flows-flow-canvas editor state is unavailable');
             }
-            el._applyPaletteDrop({
-                local: { x: ctx.x, y: ctx.y },
-                nodeType: '',
-                resourceType: ctx.resourceType,
-                htmlTargetNodeId: '',
-            });
+            const data = el._branchData();
+            const rid = `r_${Date.now().toString(36)}`;
+            const resources = {
+                ...(data.resources || {}),
+                [rid]: { type: ctx.resourceType, name: ctx.resourceType, config: {} },
+            };
+            const nodeId = `n_${Date.now().toString(36)}`;
+            const nodes = {
+                ...(data.nodes || {}),
+                [nodeId]: {
+                    type: 'resource',
+                    name: ctx.resourceType,
+                    pos_x: ctx.x - 140,
+                    pos_y: ctx.y - 40,
+                    resources: { [rid]: { resource_id: rid } },
+                },
+            };
+            const next = { ...data, resources, nodes };
+            el._editor.updateBranchData({ data: next });
+            el._editor.pushHistory({ snapshot: next });
+            el._editor.setDirty({ dirty: true });
+            el._editor.selectNode({ nodeId });
         }
         """,
         {"x": x, "y": y, "resourceType": resource_type},

@@ -19,6 +19,7 @@ from apps.worktracker.models.api import (
     WorkItemCreateRequest,
     WorkItemMineSummaryResponse,
     WorkItemMoveRequest,
+    WorkItemPublic,
     WorkItemUpdateRequest,
 )
 from core.pagination import OffsetPage
@@ -29,6 +30,7 @@ from core.worktracker.models import (
     WorkItemKind,
     WorkItemResolution,
     WorkItemState,
+    build_interaction_policy,
 )
 
 router = APIRouter(prefix="/work-items", tags=["work-items"])
@@ -95,12 +97,18 @@ async def mine_work_items_summary(container: ContainerDep) -> WorkItemMineSummar
     )
 
 
-@router.get("/{work_item_id}", response_model=WorkItem)
-async def get_work_item(container: ContainerDep, work_item_id: str) -> WorkItem:
+@router.get("/{work_item_id}", response_model=WorkItemPublic)
+async def get_work_item(container: ContainerDep, work_item_id: str) -> WorkItemPublic:
+    service = container.work_item_service
     try:
-        return await container.work_item_service.get(current_company_id(), work_item_id)
+        item = await service.get(current_company_id(), work_item_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    authorized = await service.operator_authorized(item, current_user_id())
+    policy = build_interaction_policy(item, operator_authorized=authorized)
+    return WorkItemPublic.model_validate(
+        {**item.model_dump(mode="json"), "interaction_policy": policy.model_dump(mode="json")}
+    )
 
 
 @router.post("", response_model=WorkItem, status_code=201)

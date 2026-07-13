@@ -103,6 +103,11 @@
     "label_created": "Created",
     "label_updated": "Updated"
   },
+  "hitl_chat": {
+    "title": "Conversation with user",
+    "reply_placeholder": "Your reply to the user…",
+    "complete": "Reply and complete"
+  },
   "board_page": {
     "title": "Tasks",
     "create": "New task",

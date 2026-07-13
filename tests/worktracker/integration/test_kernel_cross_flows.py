@@ -17,7 +17,9 @@ import pytest
 
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMEntity
+from apps.flows.src.models.hitl_conversation import ConversationTurnRole
 from apps.flows.src.models.hitl_schemas import HitlHandoffCommand
+from apps.flows.src.runtime.a2a_messages import build_user_message
 from apps.flows.tools.work_item_tools import (
     work_item_complete,
     work_item_create,
@@ -25,10 +27,6 @@ from apps.flows.tools.work_item_tools import (
 )
 from core.files.file_ref import FileRef
 from core.identity.flow_employee import flow_employee_user_id
-from tests.fixtures.flow_employee_test_helpers import (
-    cleanup_flow_employee_for_tests,
-    provision_flow_employee_for_tests,
-)
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode
 from core.variables.models import normalize_variables_map
@@ -43,11 +41,16 @@ from core.worktracker.models import (
     WorkItemCommentRole,
     WorkItemHook,
     WorkItemHookEvent,
+    WorkItemInteractionMode,
     WorkItemKind,
     WorkItemResolution,
     WorkItemState,
 )
 from core.worktracker.service import WorkItemService
+from tests.fixtures.flow_employee_test_helpers import (
+    cleanup_flow_employee_for_tests,
+    provision_flow_employee_for_tests,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -320,10 +323,17 @@ async def test_hitl_register_creates_operator_handoff_work_item(app, container, 
     assert completed_hook.path == "/flows/api/v1/internal/work-items/completed"
     assert completed_hook.binding["correlation_id"] == str(cid)
     assert completed_hook.binding["session_id"] == state.session_id
-    # comment-хук для takeover-стрима
-    assert len(item.hooks_for(WorkItemHookEvent.COMMENT)) == 1
-    # flow_session link на исходную сессию
-    assert any(getattr(link, "session_id", None) == state.session_id for link in item.links)
+    # HITL больше не регистрирует comment-хук: диалог идёт durable append в лог сессии
+    assert item.hooks_for(WorkItemHookEvent.COMMENT) == []
+    # single_reply -> read-only чат + одна кнопка «Завершить»
+    assert item.interaction is not None
+    assert item.interaction.mode is WorkItemInteractionMode.SINGLE_REPLY
+    # flow_session link на исходную сессию с flow_id/branch_id для встроенного чата
+    link = item.flow_session_link()
+    assert link is not None
+    assert link.session_id == state.session_id
+    assert link.flow_id == state.session_flow_id
+    assert link.branch_id == state.branch_id
 
 
 async def test_hitl_register_is_idempotent_by_correlation(app, container, unique_id):
@@ -369,10 +379,133 @@ async def test_hitl_resume_with_invalid_binding_raises(app, container, unique_id
     }
     with pytest.raises(ValueError):
         await container.hitl_work_item_service.resume_from_completion(
-            company_id="system",
             work_item_id=f"wi_missing_{unique_id}",
             binding=binding,
             resolution=WorkItemResolution(text="done"),
+        )
+
+
+# ============================ HITL: встроенный чат карточки (тот же лог сессии) ============================
+
+
+async def test_hitl_operator_chat_shares_session_log_and_appends(app, container, unique_id):
+    """Оператор видит тот же лог сессии; takeover-ответ durable-append'ится и идемпотентен."""
+    slug = f"hitlchat-{unique_id}"
+    queue = await container.work_item_service.create_queue(
+        company_id="system", name="HITLChat", slug=slug
+    )
+    member = f"op_{unique_id}"
+    await container.work_item_service.add_queue_member(
+        company_id="system",
+        work_queue_id=queue.work_queue_id,
+        member=UserActor(user_id=member),
+    )
+
+    state = _hitl_state(unique_id)
+    user_msg = build_user_message(
+        "Привет, нужна помощь",
+        "start_node",
+        context_id=state.context_id,
+        task_id=state.task_id,
+    )
+    state.messages.append(user_msg)
+    await container.workflow_runtime.save_state(state.session_id, state)
+
+    command = _hitl_command(unique_id)
+    _cid, work_item_id = await container.hitl_work_item_service.register_handoff(
+        state,
+        question="q",
+        task_title="t",
+        assignee_queue_slug=slug,
+        handoff_mode=HandoffMode.TAKEOVER,
+        command=command,
+    )
+    await container.work_item_service.claim(
+        company_id="system", work_item_id=work_item_id, user_id=member
+    )
+
+    conv = container.hitl_conversation_service
+    snapshot = await conv.get_snapshot(
+        company_id="system", work_item_id=work_item_id, operator_user_id=member
+    )
+    assert snapshot.policy.mode is WorkItemInteractionMode.TAKEOVER
+    assert snapshot.policy.can_send is True
+    assert snapshot.policy.can_complete is True
+    assert any(turn.role == ConversationTurnRole.USER for turn in snapshot.turns)
+
+    turn = await conv.append_operator_message(
+        company_id="system",
+        work_item_id=work_item_id,
+        operator_user_id=member,
+        text="Здравствуйте! Помогаю.",
+        idempotency_key="k1",
+    )
+    assert turn.role == ConversationTurnRole.OPERATOR
+
+    repeat = await conv.append_operator_message(
+        company_id="system",
+        work_item_id=work_item_id,
+        operator_user_id=member,
+        text="Здравствуйте! Помогаю.",
+        idempotency_key="k1",
+    )
+    assert repeat.message_id == turn.message_id
+
+    after = await conv.get_snapshot(
+        company_id="system", work_item_id=work_item_id, operator_user_id=member
+    )
+    operator_turns = [t for t in after.turns if t.role == ConversationTurnRole.OPERATOR]
+    assert len(operator_turns) == 1
+    assert operator_turns[0].text == "Здравствуйте! Помогаю."
+
+
+async def test_hitl_operator_chat_rejects_unauthorized_and_non_takeover_send(
+    app, container, unique_id
+):
+    """Не член очереди не пишет; single_reply запрещает append (только Завершить)."""
+    slug = f"hitlchat2-{unique_id}"
+    await container.work_item_service.create_queue(
+        company_id="system", name="HITLChat2", slug=slug
+    )
+    state = _hitl_state(unique_id)
+    await container.workflow_runtime.save_state(state.session_id, state)
+    command = _hitl_command(unique_id)
+    _cid, work_item_id = await container.hitl_work_item_service.register_handoff(
+        state,
+        question="q",
+        task_title="t",
+        assignee_queue_slug=slug,
+        handoff_mode=HandoffMode.SINGLE_REPLY,
+        command=command,
+    )
+
+    conv = container.hitl_conversation_service
+    with pytest.raises(PermissionError):
+        await conv.append_operator_message(
+            company_id="system",
+            work_item_id=work_item_id,
+            operator_user_id=f"outsider_{unique_id}",
+            text="hi",
+            idempotency_key="k1",
+        )
+
+    member = f"op_{unique_id}"
+    await container.work_item_service.add_queue_member(
+        company_id="system",
+        work_queue_id=(await container.work_item_service.get("system", work_item_id)).assignment.work_queue_id,
+        member=UserActor(user_id=member),
+    )
+    await container.work_item_service.claim(
+        company_id="system", work_item_id=work_item_id, user_id=member
+    )
+    # single_reply: отправка сообщения запрещена (композер только «Завершить»)
+    with pytest.raises(ValueError):
+        await conv.append_operator_message(
+            company_id="system",
+            work_item_id=work_item_id,
+            operator_user_id=member,
+            text="hi",
+            idempotency_key="k2",
         )
 
 

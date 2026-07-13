@@ -63,7 +63,7 @@ from core.tasks.push_notifications import (
     set_push_config,
 )
 from core.types import JsonObject, require_json_object
-from core.worktracker.models import UserActor, WorkItemCommentRole
+from core.worktracker.models import build_conversation_ref
 
 logger = get_logger(__name__)
 
@@ -308,38 +308,33 @@ class A2AChannel(BaseChannel):
         Маршрутизирует текст пользователя в dialog_log без запуска flow.
         Возвращает status-update input-required (задача остаётся в ожидании оператора).
         """
-        svc = self.container.work_item_service
         if self.context is None or self.context.active_company is None:
             raise ValueError("A2A takeover reply requires active_company in context")
-
-        comment_files: list[FileRef] = []
-        if prepared.files_data:
-            for file_ref in prepared.files_data:
-                if file_ref.file_id is not None:
-                    comment_files.append(file_ref)
-                    continue
-                if file_ref.url is not None and file_ref.url.startswith(("http://", "https://")):
-                    continue
-                if file_ref.url is not None:
-                    raise ValueError(
-                        "Вложение A2A без file_id: ожидается персист через API (S3), "
-                        + "локальные url в state.files не поддерживаются."
-                    )
+        company_id = self.context.active_company.company_id
 
         work_item_id = prepared.takeover_work_item_id
         if work_item_id is None:
             raise ValueError("takeover_work_item_id is required for takeover user reply")
 
-        _ = await svc.add_comment(
-            company_id=self.context.active_company.company_id,
+        item = await self.container.work_item_service.get(company_id, work_item_id)
+        ref = build_conversation_ref(item)
+        if ref is None:
+            raise ValueError(f"WorkItem {work_item_id!r} без ссылки на разговор сессии")
+        source_message_id = (
+            prepared.message.message_id
+            if prepared.message is not None
+            else f"{work_item_id}:{prepared.task_id}"
+        )
+        _ = await self.container.hitl_conversation_service.append_user_message(
+            company_id=company_id,
             work_item_id=work_item_id,
-            author=UserActor(user_id=prepared.user_id),
-            role=WorkItemCommentRole.USER,
+            ref=ref,
+            user_id=prepared.user_id,
             text=prepared.content,
-            files=comment_files if comment_files else None,
+            source_message_id=source_message_id,
         )
         logger.info(
-            "[on_message_stream] takeover user-reply added as WorkItemComment, "
+            "[on_message_stream] takeover user-reply appended to session log, "
             + "task_id=%s, work_item=%s",
             prepared.task_id,
             work_item_id,

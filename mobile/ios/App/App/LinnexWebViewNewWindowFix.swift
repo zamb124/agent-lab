@@ -3,7 +3,7 @@ import Foundation
 import ObjectiveC
 import WebKit
 
-private typealias HumanitecCreateWebViewIMP = @convention(c) (
+private typealias LinnexCreateWebViewIMP = @convention(c) (
     AnyObject,
     Selector,
     WKWebView,
@@ -21,10 +21,10 @@ private typealias HumanitecCreateWebViewIMP = @convention(c) (
  в подклассе VC нельзя. Перехват через swizzle; правила совпадают с `decidePolicyFor`
  (`shouldAllowNavigation` и префиксы server/local URL).
  */
-enum HumanitecWebViewNewWindowFix {
+enum LinnexWebViewNewWindowFix {
     private static var didInstall = false
     private static let lock = NSLock()
-    private static var originalCreateWebView: HumanitecCreateWebViewIMP?
+    private static var originalCreateWebView: LinnexCreateWebViewIMP?
 
     private static let createWebViewSelector = #selector(WKUIDelegate.webView(_:createWebViewWith:for:windowFeatures:))
 
@@ -35,17 +35,17 @@ enum HumanitecWebViewNewWindowFix {
         didInstall = true
 
         let handlerClass = WebViewDelegationHandler.self
-        let swizzledSelector = #selector(WebViewDelegationHandler.humanitec_cap_webView(_:createWebViewWith:for:windowFeatures:))
+        let swizzledSelector = #selector(WebViewDelegationHandler.linnex_cap_webView(_:createWebViewWith:for:windowFeatures:))
 
         guard let originalMethod = class_getInstanceMethod(handlerClass, createWebViewSelector) else {
-            fatalError("HumanitecWebViewNewWindowFix: WebViewDelegationHandler не содержит createWebViewWith (смена версии Capacitor?).")
+            fatalError("LinnexWebViewNewWindowFix: WebViewDelegationHandler не содержит createWebViewWith (смена версии Capacitor?).")
         }
         guard let swizzledMethod = class_getInstanceMethod(handlerClass, swizzledSelector) else {
-            fatalError("HumanitecWebViewNewWindowFix: не найден humanitec_cap_webView — проверьте @objc-метод в расширении.")
+            fatalError("LinnexWebViewNewWindowFix: не найден linnex_cap_webView — проверьте @objc-метод в расширении.")
         }
 
         let originalIMP = method_getImplementation(originalMethod)
-        originalCreateWebView = unsafeBitCast(originalIMP, to: HumanitecCreateWebViewIMP.self)
+        originalCreateWebView = unsafeBitCast(originalIMP, to: LinnexCreateWebViewIMP.self)
         method_exchangeImplementations(originalMethod, swizzledMethod)
     }
 
@@ -57,14 +57,14 @@ enum HumanitecWebViewNewWindowFix {
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         guard let imp = originalCreateWebView else {
-            fatalError("HumanitecWebViewNewWindowFix: original IMP не сохранён")
+            fatalError("LinnexWebViewNewWindowFix: original IMP не сохранён")
         }
         return imp(selfPtr, createWebViewSelector, webView, configuration, navigationAction, windowFeatures)
     }
 }
 
 extension WebViewDelegationHandler {
-    @objc dynamic func humanitec_cap_webView(
+    @objc dynamic func linnex_cap_webView(
         _ webView: WKWebView,
         createWebViewWith configuration: WKWebViewConfiguration,
         for navigationAction: WKNavigationAction,
@@ -85,7 +85,7 @@ extension WebViewDelegationHandler {
                 }
             }
         }
-        return HumanitecWebViewNewWindowFix.callOriginalCapacitorCreateWebView(
+        return LinnexWebViewNewWindowFix.callOriginalCapacitorCreateWebView(
             selfPtr: self,
             webView: webView,
             configuration: configuration,

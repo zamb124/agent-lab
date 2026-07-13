@@ -21,7 +21,6 @@ from apps.agent.desktop.build_contract import (
     load_default_distro_config,
 )
 from apps.agent.desktop.ui_branding import verify_no_goose_docs_urls
-from tests.agent.desktop_e2e.desktop_app import _run_apply_branding
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DESKTOP_ROOT = REPO_ROOT / "apps" / "agent" / "desktop"
@@ -29,6 +28,24 @@ DIST_DIR = DESKTOP_ROOT / "dist"
 BUILD_SCRIPT = DESKTOP_ROOT / "scripts" / "build.sh"
 APPLY_BRANDING_SCRIPT = DESKTOP_ROOT / "scripts" / "apply_branding.sh"
 BRANDING_DIR = DESKTOP_ROOT / "branding"
+
+
+def run_apply_branding() -> None:
+    if not APPLY_BRANDING_SCRIPT.is_file():
+        raise FileNotFoundError(f"apply_branding.sh missing: {APPLY_BRANDING_SCRIPT}")
+    completed = subprocess.run(
+        [str(APPLY_BRANDING_SCRIPT)],
+        cwd=str(REPO_ROOT),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "apply_branding.sh failed\n"
+            + f"stdout:\n{completed.stdout}\n"
+            + f"stderr:\n{completed.stderr}"
+        )
 
 
 def _tool_path_env() -> dict[str, str]:
@@ -53,9 +70,9 @@ def _which_tool(name: str) -> str | None:
 def test_distro_config_branding_fields() -> None:
     distro = load_default_distro_config()
     assert distro.id == "humanitec"
-    assert distro.display_name == "HumanitecAgent"
-    assert distro.bundle_name == "HumanitecAgent"
-    assert distro.protocol_scheme == "humanitec"
+    assert distro.display_name == "LinnexAgent"
+    assert distro.bundle_name == "LinnexAgent"
+    assert distro.protocol_scheme == "linnex"
     assert distro.platform_mcp_path == "/flows/api/v1/agent/platform-mcp"
     assert distro.default_extensions == ["developer", "computercontroller"]
 
@@ -71,9 +88,9 @@ def test_distro_fields_in_release_artifact(tmp_path: Path) -> None:
     )
     content = artifact.read_text(encoding="utf-8")
     distro = load_default_distro_config()
-    assert "HumanitecAgent" in content
-    assert "protocol_scheme=humanitec" in content
-    assert f"{distro.protocol_scheme}://" == "humanitec://"
+    assert distro.display_name in content
+    assert f"protocol_scheme={distro.protocol_scheme}" in content
+    assert f"{distro.protocol_scheme}://" in content
     assert distro.platform_mcp_path == "/flows/api/v1/agent/platform-mcp"
     assert distro.default_extensions == ["developer", "computercontroller"]
 
@@ -91,8 +108,9 @@ def test_artifact_filename_matches_download_contract(platform_name: str) -> None
 def test_branding_desktop_templates() -> None:
     for desktop_name in ("forge.deb.desktop", "forge.rpm.desktop"):
         content = (BRANDING_DIR / desktop_name).read_text(encoding="utf-8")
-        assert "Name=HumanitecAgent" in content
-        assert "x-scheme-handler/humanitec" in content
+        assert "Name=" in content
+        assert "Exec=" in content
+        assert "x-scheme-handler/" in content
 
 
 def _run_build(
@@ -124,8 +142,8 @@ def _run_build(
     if completed.returncode != 0:
         raise AssertionError(
             "build.sh failed\n"
-            f"stdout:\n{completed.stdout}\n"
-            f"stderr:\n{completed.stderr}"
+            + f"stdout:\n{completed.stdout}\n"
+            + f"stderr:\n{completed.stderr}"
         )
     distro = load_default_distro_config()
     artifact = output_dir / artifact_filename(platform_name, version_sha, distro.bundle_name)
@@ -187,29 +205,32 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
         if completed.returncode != 0:
             raise AssertionError(
                 "git checkout failed before apply_branding\n"
-                f"stdout:\n{completed.stdout}\n"
-                f"stderr:\n{completed.stderr}"
+                + f"stdout:\n{completed.stdout}\n"
+                + f"stderr:\n{completed.stderr}"
             )
 
-        _run_apply_branding()
+        run_apply_branding()
 
         package_payload = package_json.read_text(encoding="utf-8")
         forge_payload = forge_config.read_text(encoding="utf-8")
         deb_payload = (goose_desktop / "forge.deb.desktop").read_text(encoding="utf-8")
 
-        assert '"productName": "HumanitecAgent"' in package_payload
-        assert '"name": "humanitecagent"' in package_payload
+        distro = load_default_distro_config()
+        package_id = distro.bundle_name.lower()
+
+        assert f'"productName": "{distro.bundle_name}"' in package_payload
+        assert f'"name": "{package_id}"' in package_payload
         assert "name: process.env.GOOSE_BUNDLE_NAME" in forge_payload
         assert "executableName: process.env.GOOSE_BUNDLE_NAME" in forge_payload
         assert "tmpdir: process.env.ELECTRON_PACKAGER_TMPDIR" in forge_payload
-        assert "name: 'humanitecagent'" in forge_payload
-        assert "bin: 'HumanitecAgent'" in forge_payload
-        assert "schemes: ['humanitec']" in forge_payload
+        assert f"name: '{package_id}'" in forge_payload
+        assert f"bin: '{distro.bundle_name}'" in forge_payload
+        assert f"schemes: ['{distro.protocol_scheme}']" in forge_payload
         assert "@electron-forge/maker-wix" in forge_payload
         assert "@reforged/maker-appimage" in forge_payload
         assert "name: '@electron-forge/maker-deb',\n      platforms: ['linux']," in forge_payload
-        assert "Name=HumanitecAgent" in deb_payload
-        assert "x-scheme-handler/humanitec" in deb_payload
+        assert f"Name={distro.bundle_name}" in deb_payload
+        assert f"x-scheme-handler/{distro.protocol_scheme}" in deb_payload
         defaults_payload = (goose_desktop / "humanitec.defaults.json").read_text(encoding="utf-8")
         assert '"platform_mcp_path": "/flows/api/v1/agent/platform-mcp"' in defaults_payload
         assert '"developer"' in defaults_payload
@@ -229,9 +250,9 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
         assert "goose-docs.ai" not in base_chat_payload
         assert "humanitecWatermarkIcon" in base_chat_payload
         assert distro.ui_product_name_lower in base_chat_payload
-        assert "Humanitec is working on it…" in loading_goose_payload
-        assert "Спросить Humanitec" in ru_messages_payload
-        assert "Humanitec работает над этим" in ru_messages_payload
+        assert f"{distro.ui_product_name} is working on it…" in loading_goose_payload
+        assert f"Спросить {distro.ui_product_name}" in ru_messages_payload
+        assert f"{distro.ui_product_name} работает над этим" in ru_messages_payload
         assert ".goosehints" in ru_messages_payload
         assert "goosed (GOOSE_SERVER__SECRET_KEY)" in ru_messages_payload
         verify_no_goose_docs_urls(goose_desktop)
@@ -244,7 +265,7 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
         if defaults_path.is_file():
             defaults_path.unlink()
         for ui_path, ui_backup in ui_branding_backups.items():
-            ui_path.write_text(ui_backup, encoding="utf-8")
+            _ = ui_path.write_text(ui_backup, encoding="utf-8")
 
 
 def test_artifact_ready_distinguishes_placeholder_from_release(

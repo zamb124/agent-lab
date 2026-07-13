@@ -48,6 +48,7 @@ class WorkItemRow(Base):
     created_by: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     assignment: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     blocking: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    interaction: Mapped[JsonObject | None] = mapped_column(JSONB, nullable=True)
     hooks: Mapped[JsonArray] = mapped_column(JSONB, nullable=False, default=list)
     resolution: Mapped[JsonObject | None] = mapped_column(JSONB, nullable=True)
     links: Mapped[JsonArray] = mapped_column(JSONB, nullable=False, default=list)

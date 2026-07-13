@@ -474,6 +474,13 @@ if ! uv run python scripts/check_platform_typography.py; then
     fail "platform typography canon — см. scripts/check_platform_typography.py и frontend.mdc Typography canon"
 fi
 
+# 34. Единый спиннер: собственные CSS-спиннеры в apps/** запрещены — используйте <platform-spinner>.
+SPINNER_KEYFRAMES_HITS="$(rg -n '@keyframes\s+spin\b' apps/*/ui -g '*.js' || true)"
+if [ -n "$SPINNER_KEYFRAMES_HITS" ]; then
+    fail "apps/**/ui: собственный @keyframes spin запрещён — используйте <platform-spinner>"
+    echo "$SPINNER_KEYFRAMES_HITS" >&2
+fi
+
 if [ "$ERR" -ne 0 ]; then
     exit 1
 fi

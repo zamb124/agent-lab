@@ -116,8 +116,6 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
                 branch_id: this._branchId.trim(),
                 name: this._name.trim(),
                 description: this._description,
-                nodes: {},
-                edges: [],
             },
         });
         await this._flows.get(this.flowId);

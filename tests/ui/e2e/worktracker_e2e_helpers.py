@@ -346,3 +346,53 @@ async def worktracker_click_nav(page: Page, *labels: str) -> None:
     nav = page.locator("worktracker-sidebar button.nav-item").filter(has_text=pattern).first
     await expect(nav).to_be_visible(timeout=15_000)
     await nav.click()
+
+
+# --------------------------------------------------------------------------------------
+# Встроенный HITL-чат (platform-chat operator_handoff в карточке задачи)
+# --------------------------------------------------------------------------------------
+
+
+async def worktracker_hitl_embedded_chat(editor: Locator) -> Locator:
+    """`<platform-chat profile=operator_handoff>` внутри карточки operator_handoff."""
+    chat = editor.locator("section.wt-hitl platform-chat").first
+    await expect(chat).to_be_visible(timeout=60_000)
+    return chat
+
+
+async def worktracker_hitl_chat_wait_text(
+    editor: Locator,
+    text_pattern: re.Pattern[str] | str,
+) -> None:
+    chat = await worktracker_hitl_embedded_chat(editor)
+    pattern = (
+        text_pattern
+        if isinstance(text_pattern, re.Pattern)
+        else re.compile(re.escape(text_pattern), re.I)
+    )
+    await expect(chat.get_by_text(pattern).first).to_be_visible(timeout=120_000)
+
+
+async def worktracker_hitl_chat_send(editor: Locator, text: str) -> None:
+    chat = await worktracker_hitl_embedded_chat(editor)
+    textarea = chat.locator("flows-chat-input textarea")
+    await expect(textarea).to_be_visible(timeout=30_000)
+    await textarea.fill(text)
+    send_btn = chat.locator("flows-chat-input button.send-btn:not(.muted)").first
+    await expect(send_btn).to_be_enabled(timeout=10_000)
+    await send_btn.click()
+    await expect(chat.get_by_text(re.compile(re.escape(text.strip()), re.I)).first).to_be_visible(
+        timeout=60_000,
+    )
+
+
+async def flows_user_chat_wait_text(page: Page, text_pattern: re.Pattern[str] | str) -> None:
+    """Текст в чате покупателя (flows chat-page) — в т.ч. ответ оператора по Emitter."""
+    chat = page.locator("chat-page").first
+    await expect(chat).to_be_visible(timeout=30_000)
+    pattern = (
+        text_pattern
+        if isinstance(text_pattern, re.Pattern)
+        else re.compile(re.escape(text_pattern), re.I)
+    )
+    await expect(chat.get_by_text(pattern).first).to_be_visible(timeout=120_000)

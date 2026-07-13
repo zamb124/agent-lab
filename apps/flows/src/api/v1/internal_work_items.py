@@ -3,8 +3,11 @@
 
 Сервис worktracker дёргает их через ServiceClient на событиях задачи:
 - `completed` → возобновление durable workflow (HITL resume);
-- `assigned`  → агентский инбокс: запуск flow при назначении задачи на агента;
-- `comment`   → takeover-бридж: стрим комментария оператора конечному пользователю.
+- `assigned`  → агентский инбокс: запуск flow при назначении задачи на агента.
+
+Диалог оператора/пользователя в HITL идёт через durable append в
+`ExecutionState.messages` (см. `hitl_conversation_service`), а не через хук
+`comment`. `WorkItemComment` — только внутренние заметки оператора.
 
 `binding` — flows-owned данные, положенные при регистрации задачи.
 """
@@ -15,12 +18,9 @@ from fastapi import APIRouter
 from pydantic import Field
 
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.durable_execution import create_initial_state
-from apps.flows.src.streaming.emitter import Emitter
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows_worker.broker_core import broker as flows_broker
 from core.context import require_context
-from core.files.file_attachments import file_ref_ids, parse_file_refs
 from core.files.file_ref import FileRef
 from core.logging import get_logger
 from core.models import StrictBaseModel
@@ -52,14 +52,6 @@ class WorkItemAssignedBody(StrictBaseModel):
     binding: JsonObject = {}
 
 
-class WorkItemCommentBody(StrictBaseModel):
-    event: str = "comment"
-    work_item_id: str
-    company_id: str
-    comment: JsonObject
-    binding: JsonObject
-
-
 @router.post("/work-items/completed")
 async def work_item_completed(container: ContainerDep, body: WorkItemCompletedBody) -> JsonObject:
     """Возобновляет flow по завершённой operator-handoff задаче WorkItem."""
@@ -69,7 +61,6 @@ async def work_item_completed(container: ContainerDep, body: WorkItemCompletedBo
         files=body.resolution_files,
     )
     await container.hitl_work_item_service.resume_from_completion(
-        company_id=body.company_id,
         work_item_id=body.work_item_id,
         binding=body.binding,
         resolution=resolution,
@@ -117,53 +108,3 @@ async def work_item_assigned(container: ContainerDep, body: WorkItemAssignedBody
         background_kind="work_item_assigned",
     )
     return {"status": "agent_run_enqueued", "work_item_id": body.work_item_id}
-
-
-@router.post("/work-items/comment")
-async def work_item_comment(container: ContainerDep, body: WorkItemCommentBody) -> JsonObject:
-    """Takeover-бридж: стрим комментария оператора конечному пользователю через Emitter."""
-    if body.comment.get("role") != "operator":
-        return {"status": "ignored", "work_item_id": body.work_item_id}
-    text_raw = body.comment.get("text")
-    text = text_raw.strip() if isinstance(text_raw, str) else ""
-    file_ids = file_ref_ids(parse_file_refs(body.comment.get("files")))
-    if not file_ids:
-        legacy_ids = body.comment.get("file_ids")
-        if isinstance(legacy_ids, list):
-            file_ids = [str(item) for item in legacy_ids]
-    if not text and not file_ids:
-        return {"status": "empty", "work_item_id": body.work_item_id}
-
-    session_id = _require_binding_str(body.binding, "session_id")
-    end_user_id = _require_binding_str(body.binding, "end_user_id")
-    a2a_task_id_raw = body.binding.get("a2a_task_id")
-    a2a_task_id = a2a_task_id_raw if isinstance(a2a_task_id_raw, str) and a2a_task_id_raw else ""
-    context_id_raw = body.binding.get("context_id")
-    context_id = (
-        context_id_raw
-        if isinstance(context_id_raw, str) and context_id_raw
-        else session_id.split(":", 1)[-1]
-    )
-    branch_raw = body.binding.get("branch_id")
-    branch_id = branch_raw if isinstance(branch_raw, str) and branch_raw else "default"
-
-    exec_state = create_initial_state(
-        task_id=a2a_task_id,
-        context_id=context_id,
-        user_id=end_user_id,
-        session_id=session_id,
-        branch_id=branch_id,
-    )
-    emitter = Emitter(container.redis_client, exec_state)
-    if text:
-        await emitter.emit_text(text, append=True, last_chunk=False, artifact_name="operator_reply")
-    if file_ids:
-        await emitter.emit_file_artifact(file_ids)
-    return {"status": "streamed", "work_item_id": body.work_item_id}
-
-
-def _require_binding_str(binding: JsonObject, key: str) -> str:
-    value = binding.get(key)
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"binding.{key} обязателен для takeover stream")
-    return value

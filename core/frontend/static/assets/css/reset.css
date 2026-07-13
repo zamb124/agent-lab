@@ -4,6 +4,14 @@
  * Поддержка темной и светлой темы
  */
 
+@font-face {
+    font-family: 'Michroma';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('https://fonts.gstatic.com/s/michroma/v19/PN_zRfy9qWD8fEagAMg6rzjb.woff2') format('woff2');
+}
+
 *, *::before, *::after {
     box-sizing: border-box;
     margin: 0;

@@ -4,6 +4,7 @@
  */
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
+import './platform-spinner.js';
 
 export class PlatformButton extends PlatformElement {
     static styles = css`
@@ -253,7 +254,7 @@ export class PlatformButton extends PlatformElement {
                 title=${label.length > 0 ? label : nothing}
                 ?disabled=${this.disabled || this.loading}
             >
-                ${this.loading ? html`<span>...</span>` : ''}
+                ${this.loading ? html`<platform-spinner size="xs"></platform-spinner>` : ''}
                 <slot></slot>
             </button>
         `;

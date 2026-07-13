@@ -28,7 +28,6 @@ from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows_worker.broker_core import broker as flows_broker
 from core.clients.redis_client import RedisClient
 from core.context import get_context
-from core.files.storage import CANONICAL_DOWNLOAD_URL_PREFIX
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode
@@ -39,10 +38,10 @@ from core.worktracker.models import (
     FlowSessionLink,
     QueueAssignment,
     SystemActor,
-    WorkItemComment,
-    WorkItemCommentRole,
     WorkItemHook,
     WorkItemHookEvent,
+    WorkItemInteractionMode,
+    WorkItemInteractionSpec,
     WorkItemKind,
     WorkItemResolution,
 )
@@ -51,33 +50,12 @@ from core.worktracker.service import WorkItemService
 logger = get_logger(__name__)
 
 WORK_ITEM_COMPLETED_HOOK_PATH = "/flows/api/v1/internal/work-items/completed"
-WORK_ITEM_COMMENT_HOOK_PATH = "/flows/api/v1/internal/work-items/comment"
 HANDOFF_PREVIEW_MAX_LEN = 200
 
-
-def _format_dialog(comments: list[WorkItemComment], resolution_text: str) -> str:
-    lines: list[str] = []
-    for comment in comments:
-        text = comment.text.strip()
-        if not text and not comment.files:
-            continue
-        label = "Оператор" if comment.role == WorkItemCommentRole.OPERATOR else "Пользователь"
-        parts: list[str] = []
-        if text:
-            parts.append(text)
-        for file_ref in comment.files:
-            if file_ref.file_id is None:
-                continue
-            parts.append(f"[Файл: {CANONICAL_DOWNLOAD_URL_PREFIX}/{file_ref.file_id}]")
-        if parts:
-            lines.append(f"[{label}]: {' '.join(parts)}")
-    dialog_text = "\n".join(lines)
-    if not dialog_text:
-        return resolution_text
-    return (
-        f"Диалог оператора с пользователем:\n{dialog_text}\n\n"
-        f"Итог оператора: {resolution_text}"
-    )
+_HANDOFF_MODE_TO_INTERACTION: dict[HandoffMode, WorkItemInteractionMode] = {
+    HandoffMode.SINGLE_REPLY: WorkItemInteractionMode.SINGLE_REPLY,
+    HandoffMode.TAKEOVER: WorkItemInteractionMode.TAKEOVER,
+}
 
 
 class HitlWorkItemService:
@@ -150,17 +128,14 @@ class HitlWorkItemService:
             kind=WorkItemKind.OPERATOR_HANDOFF,
             assignment=QueueAssignment(work_queue_id=queue.work_queue_id),
             blocking=True,
+            interaction=WorkItemInteractionSpec(
+                mode=_HANDOFF_MODE_TO_INTERACTION[handoff_mode],
+            ),
             hooks=[
                 WorkItemHook(
                     event=WorkItemHookEvent.COMPLETED,
                     service="flows",
                     path=WORK_ITEM_COMPLETED_HOOK_PATH,
-                    binding=binding,
-                ),
-                WorkItemHook(
-                    event=WorkItemHookEvent.COMMENT,
-                    service="flows",
-                    path=WORK_ITEM_COMMENT_HOOK_PATH,
                     binding=binding,
                 ),
             ],
@@ -169,6 +144,8 @@ class HitlWorkItemService:
                     session_id=state.session_id,
                     a2a_task_id=state.task_id,
                     context_id=state.context_id,
+                    flow_id=state.session_flow_id,
+                    branch_id=state.branch_id,
                 )
             ],
             variables=normalize_variables_map(state.variables),
@@ -190,14 +167,14 @@ class HitlWorkItemService:
     async def resume_from_completion(
         self,
         *,
-        company_id: str,
         work_item_id: str,
         binding: JsonObject,
         resolution: WorkItemResolution,
     ) -> None:
         """Возобновляет durable workflow по завершённой operator-задаче.
 
-        При takeover в content попадает форматированный диалог комментариев.
+        Диалог takeover уже в ExecutionState.messages; resume передаёт только
+        закрывающий ответ оператора (`resolution.text`).
         """
         session_id = self._require_str(binding, "session_id")
         flow_id = self._require_str(binding, "flow_id")
@@ -227,10 +204,9 @@ class HitlWorkItemService:
             flow_id=flow_id,
         )
 
+        # takeover-диалог уже в ExecutionState.messages (durable append реплик).
+        # Resume передаёт только закрывающий ответ оператора; single_reply — его же.
         content = resolution.text
-        if binding.get("handoff_mode") == HandoffMode.TAKEOVER.value:
-            comments = await self._work_items.list_comments(company_id, work_item_id)
-            content = _format_dialog(comments, resolution.text)
 
         context_id = binding.get("context_id")
         cid = (

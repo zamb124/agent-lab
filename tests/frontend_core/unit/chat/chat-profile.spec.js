@@ -5,6 +5,33 @@ import {
     resolveChatViewConfig,
 } from '../../../../core/frontend/static/lib/chat/runtime/chat-profile.js';
 
+describe('operator_handoff profile', () => {
+    it('входит в CHAT_PROFILE_KINDS и даёт минимальный диалоговый вид', () => {
+        expect(CHAT_PROFILE_KINDS).toContain('operator_handoff');
+        const profile = createChatProfile({ kind: 'operator_handoff' });
+        expect(profile.capabilities.runTrace).toBe(false);
+        expect(profile.capabilities.filesPanel).toBe(false);
+        expect(profile.capabilities.cancel).toBe(false);
+    });
+
+    it('viewConfig фиксирован независимо от policy (single_reply/takeover)', () => {
+        const profile = createChatProfile({ kind: 'operator_handoff' });
+        for (const policy of [
+            null,
+            { mode: 'single_reply', can_send: false, can_complete: true },
+            { mode: 'takeover', can_send: true, can_complete: true },
+        ]) {
+            const vc = resolveChatViewConfig(profile, policy);
+            expect(vc.profileKind).toBe('operator_handoff');
+            expect(vc.showRunTrace).toBe(false);
+            expect(vc.showFilesPanel).toBe(false);
+            expect(vc.allowCancel).toBe(false);
+            expect(vc.toolCallsDisplay).toBe('hidden');
+            expect(vc.suggestedPrompts).toEqual([]);
+        }
+    });
+});
+
 describe('createChatProfile', () => {
     it('создаёт профиль для каждого известного kind', () => {
         for (const kind of CHAT_PROFILE_KINDS) {

@@ -59,6 +59,33 @@ def build_assistant_message(
     )
 
 
+def build_operator_message(
+    content: str,
+    source_node_id: str,
+    *,
+    operator_user_id: str,
+    message_id: str,
+    context_id: str | None = None,
+    task_id: str | None = None,
+) -> Message:
+    """Сообщение оператора в HITL: role=agent + metadata.hitl_role=operator.
+
+    `message_id` детерминирован снаружи (идемпотентность durable append).
+    """
+    return Message(
+        message_id=message_id,
+        role=Role.agent,
+        parts=[Part(root=TextPart(text=content))],
+        context_id=context_id,
+        task_id=task_id,
+        metadata={
+            "node_id": source_node_id,
+            "hitl_role": "operator",
+            "operator_user_id": operator_user_id,
+        },
+    )
+
+
 def build_tool_result_message(
     tool_call_id: str,
     content: str,

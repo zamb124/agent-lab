@@ -623,9 +623,7 @@ Learning path **flows** (простое → сложное):
 
 **E2E-тесты:** 45/45 — все обязательные карточки §3 и §4a имеют `@pytest.mark.scenario` UI E2E-тесты.
 
-**Документация (README RU+EN + PNG):** 39/45. Осталось сгенерировать через scenario-прогон:
-`organize-large-graph`, `parameters-and-secrets`, `reuse-with-resources`,
-`experiment-with-branches`, `publish-and-operate`, `connect-oauth-integrations`.
+**Документация (README RU+EN + PNG):** 45/45 — все обязательные slug'и §3 и §4a имеют полный комплект.
 
 **Taxonomy:** теги `flows` и сервис `worktracker` — готовы; learning paths `flows`,
 `worktracker-operators` и исправленные href developer path — в `docs/scenarios/taxonomy.yaml`.
@@ -716,9 +714,7 @@ E2E-тесты (все `[x]`):
 
 Документация (README RU+EN + PNG):
 
-- [x] 39 slug'ов с полным комплектом
-- [ ] `organize-large-graph`, `parameters-and-secrets` — папки docs ещё не созданы
-- [ ] `reuse-with-resources`, `experiment-with-branches`, `publish-and-operate`, `connect-oauth-integrations` — только частичные PNG, README отсутствуют
+- [x] 45/45 slug'ов с полным комплектом
 
 Прогон: `make test-up && UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e/test_flows_*.py tests/ui/e2e/test_worktracker_operators.py -m scenario -v --tb=short`
 

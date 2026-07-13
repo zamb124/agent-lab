@@ -8,7 +8,13 @@
  * `editor_test` игнорирует policy и показывает всё. Невалидный вход — throw.
  */
 
-export const CHAT_PROFILE_KINDS = Object.freeze(['spa', 'editor_test', 'embed_public', 'embed_preview']);
+export const CHAT_PROFILE_KINDS = Object.freeze([
+    'spa',
+    'editor_test',
+    'embed_public',
+    'embed_preview',
+    'operator_handoff',
+]);
 
 const TOOL_CALLS_DISPLAY_VALUES = Object.freeze(['hidden', 'compact', 'detailed']);
 const ERRORS_DISPLAY_VALUES = Object.freeze(['generic', 'detailed']);
@@ -45,6 +51,15 @@ const PROFILE_CAPABILITIES = Object.freeze({
         browserPreviews: true,
         filesPanel: true,
         cancel: true,
+    }),
+    // Поверхность оператора в карточке WorkItem(operator_handoff): чистый диалог
+    // без run-trace/preview/files-панели; отмена стрима неприменима (нет A2A-стрима).
+    operator_handoff: Object.freeze({
+        runTrace: false,
+        traceActions: false,
+        browserPreviews: false,
+        filesPanel: false,
+        cancel: false,
     }),
 });
 
@@ -136,6 +151,25 @@ export function resolveChatViewConfig(profile, chatPolicy) {
     }
     const policy = chatPolicy && typeof chatPolicy === 'object' ? chatPolicy : {};
     const caps = profile.capabilities;
+
+    if (profile.kind === 'operator_handoff') {
+        // Минимальный диалоговый вид: политика композера (send/complete) приходит
+        // отдельно из interaction_policy задачи, не из FlowChatSettings.
+        return Object.freeze({
+            profileKind: profile.kind,
+            showReasoning: false,
+            toolCallsDisplay: 'hidden',
+            showActivity: false,
+            errorsDisplay: 'generic',
+            showRunTrace: false,
+            showTraceActions: false,
+            showBrowserPreviews: false,
+            showFilesPanel: false,
+            allowCancel: false,
+            greetingMessage: null,
+            suggestedPrompts: Object.freeze([]),
+        });
+    }
 
     if (profile.kind === 'editor_test') {
         return Object.freeze({

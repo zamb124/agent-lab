@@ -2137,24 +2137,29 @@ def _default_humanitec_platform_brand() -> PlatformBrandConfig:
     )
 
 
+def _default_linnex_platform_brand() -> PlatformBrandConfig:
+    return PlatformBrandConfig(
+        platform_name="Linnex",
+        support_email="support@linnex.io",
+        agent_product_name="LinnexAgent",
+        models_product_name="Linnex Models",
+        voice_product_name="Linnex Voice",
+        llms_display_label="Linnex LLMs",
+        flows_product_label="Linnex Flows",
+        auth_apple_client_id="app.linnex.io",
+        vapid_email="admin@linnex.io",
+    )
+
+
 def default_platform_brands() -> dict[str, PlatformBrandConfig]:
     humanitec_brand = _default_humanitec_platform_brand()
+    linnex_brand = _default_linnex_platform_brand()
     return {
+        "linnex.io": linnex_brand.model_copy(deep=True),
+        "localhost": linnex_brand.model_copy(deep=True),
+        "lvh.me": linnex_brand.model_copy(deep=True),
         "humanitec.ru": humanitec_brand.model_copy(deep=True),
         "agents-lab.ru": humanitec_brand.model_copy(deep=True),
-        "localhost": humanitec_brand.model_copy(deep=True),
-        "lvh.me": humanitec_brand.model_copy(deep=True),
-        "linnex.io": PlatformBrandConfig(
-            platform_name="Linnex",
-            support_email="support@linnex.io",
-            agent_product_name="LinnexAgent",
-            models_product_name="Linnex Models",
-            voice_product_name="Linnex Voice",
-            llms_display_label="Linnex LLMs",
-            flows_product_label="Linnex Flows",
-            auth_apple_client_id="app.linnex.io",
-            vapid_email="admin@linnex.io",
-        ),
     }
 
 

@@ -51,15 +51,6 @@ export class NamespacesPage extends PlatformPage {
                 margin-bottom: var(--space-2);
             }
             .empty-hint { font-size: var(--text-sm); color: var(--text-tertiary); }
-            .loading-spinner {
-                width: 48px; height: 48px;
-                border: 4px solid var(--glass-border-subtle);
-                border-top: 4px solid var(--accent);
-                border-radius: 50%;
-                animation: spin 1s linear infinite;
-                margin-bottom: var(--space-4);
-            }
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
             .loading-text { font-size: var(--text-base); color: var(--text-secondary); }
         `,
     ];
@@ -77,7 +68,7 @@ export class NamespacesPage extends PlatformPage {
         if (this._namespaces.loading) {
             return html`
                 <div class="loading">
-                    <div class="loading-spinner"></div>
+                    <platform-spinner size="xl"></platform-spinner>
                     <div class="loading-text">${this.t('namespace_list.loading')}</div>
                 </div>
             `;

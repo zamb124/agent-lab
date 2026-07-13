@@ -78,6 +78,21 @@ async def test_flows_reuse_with_resources(
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
     await flows_drop_resource_type(page, "files", x=640, y=400)
+    resource_ids = await flows_canvas_node_ids_of_type(page, "resource")
+    if not resource_ids:
+        raise AssertionError("resource node missing after palette drop")
+
+    async def _ensure_resource_node() -> str:
+        ids = await flows_canvas_node_ids_of_type(page, "resource")
+        if ids:
+            return ids[0]
+        await flows_drop_resource_type(page, "files", x=640, y=400)
+        ids = await flows_canvas_node_ids_of_type(page, "resource")
+        if not ids:
+            raise AssertionError("resource node missing after palette drop")
+        return ids[0]
+
+    resource_node_id = resource_ids[0]
     await scenario.step(
         "Перетащите ресурс files на канву",
         page,
@@ -93,10 +108,8 @@ async def test_flows_reuse_with_resources(
         ),
     )
 
-    resource_ids = await flows_canvas_node_ids_of_type(page, "resource")
-    if not resource_ids:
-        raise AssertionError("resource node missing after palette drop")
-    await flows_open_node_editor(page, resource_ids[0])
+    resource_node_id = await _ensure_resource_node()
+    await flows_open_node_editor(page, resource_node_id)
     name_field = page.locator("flows-base-resource-editor platform-field").first
     if await name_field.count() > 0:
         await flows_set_platform_field(name_field, GREEN_GARDEN_CATALOG_FILE)
@@ -115,6 +128,7 @@ async def test_flows_reuse_with_resources(
         ),
     )
 
+    resource_node_id = await _ensure_resource_node()
     await flows_open_node_editor(page, "agent")
     resources_heading = page.locator("flows-llm-node-editor").get_by_text(
         re.compile(r"ресурс|resource", re.I)
@@ -200,10 +214,10 @@ async def test_flows_parameters_and_secrets(
     await flows_open_editor(page, flows_ui, flow_id)
     modal = await flows_open_variables_modal(page, scope="flow")
     add_btn = modal.locator("platform-button").filter(
-        has=modal.locator("platform-icon[name='plus']")
+        has=page.locator("platform-icon[name='plus']")
     ).first
     await expect(add_btn).to_be_visible(timeout=15_000)
-    await add_btn.locator("button").first.click()
+    await add_btn.evaluate("(el) => el.click()")
     var_editor = page.locator("flows-variable-editor-modal").first
     await expect(var_editor).to_be_visible(timeout=15_000)
     await scenario.step(

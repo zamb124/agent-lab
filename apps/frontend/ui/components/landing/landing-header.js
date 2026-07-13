@@ -63,9 +63,8 @@ export class LandingHeader extends PlatformElement {
                 gap: 10px;
                 text-decoration: none;
                 white-space: nowrap;
-                flex: 1 1 0;
-                min-width: 0;
-                overflow: hidden;
+                flex: 0 0 auto;
+                overflow: visible;
             }
             
             .logo-icon {
@@ -90,11 +89,22 @@ export class LandingHeader extends PlatformElement {
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
+
+            .logo-wordmark {
+                height: 40px;
+                width: auto;
+                object-fit: contain;
+                display: block;
+                flex: 0 0 auto;
+                filter: var(--landing-wordmark-filter, none);
+            }
             
             .nav {
                 display: none;
                 align-items: center;
-                gap: 30px;
+                gap: 24px;
+                flex: 0 1 auto;
+                margin: 0 auto;
             }
             
             .nav-link {
@@ -449,7 +459,7 @@ export class LandingHeader extends PlatformElement {
                 }
             }
             
-            @media (min-width: 1100px) {
+            @media (min-width: 1300px) {
                 .nav {
                     display: flex;
                 }
@@ -755,10 +765,7 @@ export class LandingHeader extends PlatformElement {
         return html`
             <header class="header-container" @click=${this._onHeaderBarClick}>
                 <a href="/" class="logo" @click=${this._closeMobileMenu}>
-                    <div class="logo-icon">
-                        <img src="/static/core/assets/service_logos/frontend_logo.svg" alt="${brand.platformName}" />
-                    </div>
-                    <span class="logo-text">${brand.platformName}</span>
+                    <img class="logo-wordmark" src="/static/core/assets/service_logos/linnex_test.png" alt="${brand.platformName}" />
                 </a>
                 
                 <nav class="nav">

@@ -78,10 +78,16 @@ def parse_i18n_messages(raw_payload: object, source_label: str) -> I18nMessages:
     return parsed_messages
 
 
+def rebrand_legacy_product_names_in_text(text: str, distro: HumanitecDistroConfig) -> str:
+    text = text.replace("HumanitecAgent", distro.display_name)
+    text = text.replace("Humanitec", distro.ui_product_name)
+    return replace_ui_product_name_in_text(text, ui_product_name=distro.ui_product_name)
+
+
 def apply_ui_product_name_to_i18n_messages(
     messages: I18nMessages,
     *,
-    ui_product_name: str,
+    distro: HumanitecDistroConfig,
 ) -> I18nMessages:
     patched_messages: I18nMessages = {}
     for message_key, message_entry in messages.items():
@@ -90,9 +96,9 @@ def apply_ui_product_name_to_i18n_messages(
             continue
         default_message = message_entry["defaultMessage"]
         patched_messages[message_key] = {
-            "defaultMessage": replace_ui_product_name_in_text(
+            "defaultMessage": rebrand_legacy_product_names_in_text(
                 default_message,
-                ui_product_name=ui_product_name,
+                distro=distro,
             ),
         }
     return patched_messages
@@ -169,6 +175,26 @@ def patch_base_chat_watermark(goose_desktop: Path, distro: HumanitecDistroConfig
           </div>"""
     if watermark_anchor in text:
         text = text.replace(watermark_anchor, watermark_patch, 1)
+    elif "humanitecWatermarkIcon" in text:
+        for old_homepage in ("https://goose-docs.ai", "https://humanitec.ru", "https://linnex.io"):
+            old_href = f'href="{old_homepage}"'
+            if old_href in text:
+                text = text.replace(old_href, f'href="{distro.homepage}"', 1)
+                break
+        for old_alt in ("Goose", "Humanitec", "Linnex"):
+            old_alt_attr = f'alt="{old_alt}"'
+            if old_alt_attr in text:
+                text = text.replace(old_alt_attr, f'alt="{distro.ui_product_name}"', 1)
+                break
+        for old_lower in ("goose", "humanitec", "linnex"):
+            old_label = f"                {old_lower}\n"
+            if old_label in text:
+                text = text.replace(
+                    old_label,
+                    f"                {distro.ui_product_name_lower}\n",
+                    1,
+                )
+                break
     elif distro.homepage not in text or distro.ui_product_name_lower not in text:
         raise ValueError(f"{base_chat_path}: watermark anchor missing")
     _ = base_chat_path.write_text(text, encoding="utf-8")
@@ -176,18 +202,19 @@ def patch_base_chat_watermark(goose_desktop: Path, distro: HumanitecDistroConfig
 
 def patch_loading_goose_messages(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
     loading_goose_path = goose_desktop / "src" / "components" / "LoadingGoose.tsx"
+    product_name = distro.ui_product_name
     replacements = {
-        "defaultMessage: 'goose is thinking…'": (
-            f"defaultMessage: '{distro.ui_product_name} is thinking…'"
-        ),
-        "defaultMessage: 'goose is working on it…'": (
-            f"defaultMessage: '{distro.ui_product_name} is working on it…'"
-        ),
-        "defaultMessage: 'goose is waiting…'": (
-            f"defaultMessage: '{distro.ui_product_name} is waiting…'"
-        ),
+        "defaultMessage: 'goose is thinking…'": f"defaultMessage: '{product_name} is thinking…'",
+        "defaultMessage: 'Humanitec is thinking…'": f"defaultMessage: '{product_name} is thinking…'",
+        "defaultMessage: 'goose is working on it…'": f"defaultMessage: '{product_name} is working on it…'",
+        "defaultMessage: 'Humanitec is working on it…'": f"defaultMessage: '{product_name} is working on it…'",
+        "defaultMessage: 'goose is waiting…'": f"defaultMessage: '{product_name} is waiting…'",
+        "defaultMessage: 'Humanitec is waiting…'": f"defaultMessage: '{product_name} is waiting…'",
         "defaultMessage: 'goose is compacting the conversation...'": (
-            f"defaultMessage: '{distro.ui_product_name} is compacting the conversation...'"
+            f"defaultMessage: '{product_name} is compacting the conversation...'"
+        ),
+        "defaultMessage: 'Humanitec is compacting the conversation...'": (
+            f"defaultMessage: '{product_name} is compacting the conversation...'"
         ),
     }
     _replace_in_file_text(
@@ -199,12 +226,12 @@ def patch_loading_goose_messages(goose_desktop: Path, distro: HumanitecDistroCon
 
 def patch_onboarding_guard_messages(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
     onboarding_path = goose_desktop / "src" / "components" / "onboarding" / "OnboardingGuard.tsx"
+    target_message = f"defaultMessage: 'Unable to connect to {distro.ui_product_name} agent server'"
     _replace_in_file_text(
         onboarding_path,
         {
-            "defaultMessage: 'Unable to connect to Goose server'": (
-                f"defaultMessage: 'Unable to connect to {distro.ui_product_name} agent server'"
-            ),
+            "defaultMessage: 'Unable to connect to Goose server'": target_message,
+            "defaultMessage: 'Unable to connect to Humanitec agent server'": target_message,
         },
         required_any=(f"Unable to connect to {distro.ui_product_name} agent server",),
     )
@@ -212,19 +239,34 @@ def patch_onboarding_guard_messages(goose_desktop: Path, distro: HumanitecDistro
 
 def patch_main_process_ui_strings(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
     main_path = goose_desktop / "src" / "main.ts"
+    product_name = distro.ui_product_name
+    bundle_name = distro.bundle_name
+    display_name = distro.display_name
     replacements = {
-        "'Focus Goose Window'": f"'Focus {distro.ui_product_name} Window'",
-        "'About Goose'": f"'About {distro.ui_product_name}'",
-        "'Hide Goose'": f"'Hide {distro.bundle_name}'",
-        "'聚焦 Goose 窗口'": f"'聚焦 {distro.ui_product_name} 窗口'",
-        "'关于 Goose'": f"'关于 {distro.ui_product_name}'",
-        "'隐藏 Goose'": f"'隐藏 {distro.bundle_name}'",
-        "applicationName: 'Goose'": f"applicationName: '{distro.display_name}'",
-        "title: 'Goose'": f"title: '{distro.display_name}'",
-        "title: 'Goose Failed to Start'": f"title: '{distro.display_name} Failed to Start'",
-        "item.label === 'Goose'": f"item.label === '{distro.bundle_name}'",
-        "menuT('Focus Goose Window')": f"menuT('Focus {distro.ui_product_name} Window')",
-        "menuT('About Goose')": f"menuT('About {distro.ui_product_name}')",
+        "'Focus Goose Window'": f"'Focus {product_name} Window'",
+        "'Focus Humanitec Window'": f"'Focus {product_name} Window'",
+        "'About Goose'": f"'About {product_name}'",
+        "'About Humanitec'": f"'About {product_name}'",
+        "'Hide Goose'": f"'Hide {bundle_name}'",
+        "'Hide HumanitecAgent'": f"'Hide {bundle_name}'",
+        "'聚焦 Goose 窗口'": f"'聚焦 {product_name} 窗口'",
+        "'聚焦 Humanitec 窗口'": f"'聚焦 {product_name} 窗口'",
+        "'关于 Goose'": f"'关于 {product_name}'",
+        "'关于 Humanitec'": f"'关于 {product_name}'",
+        "'隐藏 Goose'": f"'隐藏 {bundle_name}'",
+        "'隐藏 HumanitecAgent'": f"'隐藏 {bundle_name}'",
+        "applicationName: 'Goose'": f"applicationName: '{display_name}'",
+        "applicationName: 'HumanitecAgent'": f"applicationName: '{display_name}'",
+        "title: 'Goose'": f"title: '{display_name}'",
+        "title: 'HumanitecAgent'": f"title: '{display_name}'",
+        "title: 'Goose Failed to Start'": f"title: '{display_name} Failed to Start'",
+        "title: 'HumanitecAgent Failed to Start'": f"title: '{display_name} Failed to Start'",
+        "item.label === 'Goose'": f"item.label === '{bundle_name}'",
+        "item.label === 'HumanitecAgent'": f"item.label === '{bundle_name}'",
+        "menuT('Focus Goose Window')": f"menuT('Focus {product_name} Window')",
+        "menuT('Focus Humanitec Window')": f"menuT('Focus {product_name} Window')",
+        "menuT('About Goose')": f"menuT('About {product_name}')",
+        "menuT('About Humanitec')": f"menuT('About {product_name}')",
     }
     _replace_in_file_text(
         main_path,
@@ -235,16 +277,28 @@ def patch_main_process_ui_strings(goose_desktop: Path, distro: HumanitecDistroCo
 
 def patch_forge_usage_descriptions(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
     forge_path = goose_desktop / "forge.config.ts"
+    calendar_target = (
+        f"'{distro.ui_product_name} needs access to your calendars to help manage "
+        "and query calendar events.'"
+    )
+    reminder_target = (
+        f"'{distro.ui_product_name} needs access to your reminders to help manage "
+        "and query reminders.'"
+    )
     _replace_in_file_text(
         forge_path,
         {
             "'Goose needs access to your calendars to help manage and query calendar events.'": (
-                f"'{distro.ui_product_name} needs access to your calendars to help manage "
-                "and query calendar events.'"
+                calendar_target
+            ),
+            "'Humanitec needs access to your calendars to help manage and query calendar events.'": (
+                calendar_target
             ),
             "'Goose needs access to your reminders to help manage and query reminders.'": (
-                f"'{distro.ui_product_name} needs access to your reminders to help manage "
-                "and query reminders.'"
+                reminder_target
+            ),
+            "'Humanitec needs access to your reminders to help manage and query reminders.'": (
+                reminder_target
             ),
         },
         required_any=(f"{distro.ui_product_name} needs access to your calendars",),
@@ -270,6 +324,17 @@ def patch_goose_docs_urls(goose_desktop: Path, distro: HumanitecDistroConfig) ->
         source: target.format(homepage=homepage)
         for source, target in GOOSE_DOCS_URL_REPLACEMENTS
     }
+    legacy_homepage_sources = (
+        "https://humanitec.ru/",
+        "https://humanitec.ru",
+        "https://linnex.io/",
+        "https://linnex.io",
+    )
+    for legacy_homepage in legacy_homepage_sources:
+        if legacy_homepage.endswith("/"):
+            url_replacements[legacy_homepage] = f"{homepage}/"
+        else:
+            url_replacements[legacy_homepage] = homepage
     for file_path in iter_desktop_branding_source_paths(goose_desktop):
         text = file_path.read_text(encoding="utf-8")
         modified = False
@@ -305,7 +370,7 @@ def patch_i18n_messages_file(messages_path: Path, distro: HumanitecDistroConfig)
     parsed_messages = parse_i18n_messages(merged_messages, str(messages_path))
     patched_messages = apply_ui_product_name_to_i18n_messages(
         parsed_messages,
-        ui_product_name=distro.ui_product_name,
+        distro=distro,
     )
     for message_key, message_entry in patched_messages.items():
         existing_entry = merged_messages.get(message_key)
@@ -328,22 +393,24 @@ def patch_i18n_message_files(goose_desktop: Path, distro: HumanitecDistroConfig)
 
 def patch_prompts_settings_section(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
     prompts_settings_path = goose_desktop / "src" / "components" / "settings" / "PromptsSettingsSection.tsx"
+    behavior_target = (
+        f"Customize the prompts that define {distro.ui_product_name}'s behavior in different contexts."
+    )
     _replace_in_file_text(
         prompts_settings_path,
         {
-            "Customize the prompts that define goose's behavior in different contexts.": (
-                f"Customize the prompts that define {distro.ui_product_name}'s behavior in different contexts."
-            ),
+            "Customize the prompts that define goose's behavior in different contexts.": behavior_target,
+            "Customize the prompts that define Humanitec's behavior in different contexts.": behavior_target,
         },
         required_any=(f"{distro.ui_product_name}'s behavior",),
     )
 
 
 def patch_extension_catalog_descriptions(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
+    preferences_target = f"Teach {distro.ui_product_name} your preferences as you go."
     replacements = {
-        "Teach goose your preferences as you go.": (
-            f"Teach {distro.ui_product_name} your preferences as you go."
-        ),
+        "Teach goose your preferences as you go.": preferences_target,
+        "Teach Humanitec your preferences as you go.": preferences_target,
     }
     for relative_path in (
         "src/built-in-extensions.json",
@@ -369,7 +436,7 @@ def verify_patched_desktop_ui_sources(
         encoding="utf-8"
     )
     if distro.ui_product_name_lower not in base_chat_text:
-        raise ValueError("BaseChat.tsx missing Humanitec watermark label")
+        raise ValueError("BaseChat.tsx missing branded watermark label")
 
     ru_messages_path = goose_desktop / "src" / "i18n" / "messages" / "ru.json"
     if ru_messages_path.is_file():

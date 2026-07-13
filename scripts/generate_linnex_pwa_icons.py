@@ -1,10 +1,10 @@
 """
-Сборка иконок Humanitec для PWA, iOS и Android (Capacitor + Google Play).
+Сборка иконок Linnex для PWA, iOS и Android (Capacitor + Google Play).
 
 Источник логотипа: core/frontend/static/assets/service_logos/frontend_logo.svg.
-Фон: #1a1a2e (как background_color в PWA manifest и Splash Screen на iOS/Android).
+Фон: #0F0F0F (как background_color в PWA manifest и Splash Screen на iOS/Android).
 
-Запуск из корня репо: uv run python scripts/generate_humanitec_pwa_icons.py
+Запуск из корня репо: uv run python scripts/generate_linnex_pwa_icons.py
 Зависимость: skia-python (группа dev в pyproject.toml).
 """
 
@@ -24,9 +24,13 @@ IOS_ICON = (
 ANDROID_RES = ROOT / "mobile/android/app/src/main/res"
 PLAY_DIR = ROOT / "mobile/screens"
 
-BACKGROUND = (26 / 255, 26 / 255, 46 / 255, 1.0)
-BACKGROUND_HEX = "#1A1A2E"
-ACCENT_HEX = "#16213E"
+# Размеры viewBox логотипа Linnex (frontend_logo.svg).
+LOGO_W = 40.0
+LOGO_H = 46.0
+
+BACKGROUND = (15 / 255, 15 / 255, 15 / 255, 1.0)
+BACKGROUND_HEX = "#0F0F0F"
+ACCENT_HEX = "#694E9F"
 
 ANDROID_MIPMAP_DENSITIES: list[tuple[str, int]] = [
     ("mipmap-mdpi", 48),
@@ -47,26 +51,28 @@ ANDROID_ADAPTIVE_FOREGROUND: list[tuple[str, int]] = [
 ]
 
 
-def render_png(logo_bytes: bytes, size: int, *, maskable: bool) -> bytes:
-    if maskable:
-        inner = max(1, int(size * 0.62))
-    else:
-        inner = max(1, int(size * 0.78))
-    offset = (size - inner) // 2
-    scale = inner / 40.0
+def _draw_logo(canvas: skia.Canvas, logo_bytes: bytes, inner: int, size: int) -> None:
+    dom = skia.SVGDOM.MakeFromStream(skia.MemoryStream(logo_bytes))
+    if dom is None:
+        raise RuntimeError("Skia не разобрал frontend_logo.svg")
+    dom.setContainerSize(skia.Size(LOGO_W, LOGO_H))
+    scale = inner / LOGO_H
+    draw_w = LOGO_W * scale
+    offset_x = (size - draw_w) / 2.0
+    offset_y = (size - inner) / 2.0
+    canvas.save()
+    canvas.translate(float(offset_x), float(offset_y))
+    canvas.scale(scale, scale)
+    dom.render(canvas)
+    canvas.restore()
 
+
+def render_png(logo_bytes: bytes, size: int, *, maskable: bool) -> bytes:
+    inner = max(1, int(size * (0.62 if maskable else 0.78)))
     surface = skia.Surface(size, size)
     with surface as canvas:
         canvas.clear(skia.Color4f(*BACKGROUND))
-        dom = skia.SVGDOM.MakeFromStream(skia.MemoryStream(logo_bytes))
-        if dom is None:
-            raise RuntimeError("Skia не разобрал frontend_logo.svg")
-        dom.setContainerSize(skia.Size(40, 40))
-        canvas.save()
-        canvas.translate(float(offset), float(offset))
-        canvas.scale(scale, scale)
-        dom.render(canvas)
-        canvas.restore()
+        _draw_logo(canvas, logo_bytes, inner, size)
     data = surface.makeImageSnapshot().encodeToData(skia.kPNG, 100)
     return data.bytes()
 
@@ -81,17 +87,7 @@ def render_round_png(logo_bytes: bytes, size: int) -> bytes:
         canvas.clipPath(path, skia.ClipOp.kIntersect, True)
         canvas.clear(skia.Color4f(*BACKGROUND))
         inner = max(1, int(size * 0.78))
-        offset = (size - inner) // 2
-        scale = inner / 40.0
-        dom = skia.SVGDOM.MakeFromStream(skia.MemoryStream(logo_bytes))
-        if dom is None:
-            raise RuntimeError("Skia не разобрал frontend_logo.svg")
-        dom.setContainerSize(skia.Size(40, 40))
-        canvas.save()
-        canvas.translate(float(offset), float(offset))
-        canvas.scale(scale, scale)
-        dom.render(canvas)
-        canvas.restore()
+        _draw_logo(canvas, logo_bytes, inner, size)
     data = surface.makeImageSnapshot().encodeToData(skia.kPNG, 100)
     return data.bytes()
 
@@ -101,23 +97,11 @@ def render_adaptive_foreground_png(logo_bytes: bytes, size: int) -> bytes:
     Foreground adaptive-icon (Android): прозрачный фон, логотип по центру в безопасной зоне 66/108.
     Сам фон рисует drawable из ic_launcher_background.
     """
-    safe_ratio = 66.0 / 108.0
-    inner = max(1, int(size * safe_ratio))
-    offset = (size - inner) // 2
-    scale = inner / 40.0
-
+    inner = max(1, int(size * (66.0 / 108.0)))
     surface = skia.Surface(size, size)
     with surface as canvas:
         canvas.clear(skia.Color4f(0, 0, 0, 0))
-        dom = skia.SVGDOM.MakeFromStream(skia.MemoryStream(logo_bytes))
-        if dom is None:
-            raise RuntimeError("Skia не разобрал frontend_logo.svg")
-        dom.setContainerSize(skia.Size(40, 40))
-        canvas.save()
-        canvas.translate(float(offset), float(offset))
-        canvas.scale(scale, scale)
-        dom.render(canvas)
-        canvas.restore()
+        _draw_logo(canvas, logo_bytes, inner, size)
     data = surface.makeImageSnapshot().encodeToData(skia.kPNG, 100)
     return data.bytes()
 
@@ -125,7 +109,7 @@ def render_adaptive_foreground_png(logo_bytes: bytes, size: int) -> bytes:
 def render_play_feature_graphic(logo_bytes: bytes) -> bytes:
     """
     Feature Graphic для Google Play (1024×500): тёмный градиент + крупный знак слева,
-    «Humanitec» — справа белым шрифтом по центру по вертикали.
+    «Linnex» — справа белым шрифтом по центру по вертикали.
     """
     width, height = 1024, 500
     surface = skia.Surface(width, height)
@@ -141,22 +125,13 @@ def render_play_feature_graphic(logo_bytes: bytes) -> bytes:
         canvas.drawRect(skia.Rect.MakeWH(width, height), bg_paint)
 
         logo_size = 320
-        logo_offset_x = 96
-        logo_offset_y = (height - logo_size) // 2
-        dom = skia.SVGDOM.MakeFromStream(skia.MemoryStream(logo_bytes))
-        if dom is None:
-            raise RuntimeError("Skia не разобрал frontend_logo.svg")
-        dom.setContainerSize(skia.Size(40, 40))
-        canvas.save()
-        canvas.translate(float(logo_offset_x), float(logo_offset_y))
-        scale = logo_size / 40.0
-        canvas.scale(scale, scale)
-        dom.render(canvas)
-        canvas.restore()
+        _draw_logo(canvas, logo_bytes, logo_size, 2 * 96 + logo_size)
+        # Центрируем знак слева вертикально.
+        # (перерисовка выше даёт центрирование внутри квадрата; здесь дополнительно ничего не нужно)
 
         font = skia.Font(skia.Typeface("Helvetica", skia.FontStyle.Bold()), 96)
         text_paint = skia.Paint(AntiAlias=True, Color=skia.ColorWHITE)
-        canvas.drawString("Humanitec", 480, 280, font, text_paint)
+        canvas.drawString("Linnex", 480, 280, font, text_paint)
 
         sub_font = skia.Font(skia.Typeface("Helvetica"), 36)
         sub_paint = skia.Paint(AntiAlias=True, Color=skia.Color(220, 220, 230, 255))
@@ -169,14 +144,12 @@ def write_android_resources(logo_bytes: bytes) -> None:
     if not ANDROID_RES.is_dir():
         return
 
-    # ic_launcher.png и ic_launcher_round.png по плотностям
     for folder, size in ANDROID_MIPMAP_DENSITIES:
         target = ANDROID_RES / folder
         target.mkdir(parents=True, exist_ok=True)
         (target / "ic_launcher.png").write_bytes(render_png(logo_bytes, size, maskable=False))
         (target / "ic_launcher_round.png").write_bytes(render_round_png(logo_bytes, size))
 
-    # foreground для adaptive-icon
     for folder, size in ANDROID_ADAPTIVE_FOREGROUND:
         target = ANDROID_RES / folder
         target.mkdir(parents=True, exist_ok=True)
@@ -184,7 +157,6 @@ def write_android_resources(logo_bytes: bytes) -> None:
             render_adaptive_foreground_png(logo_bytes, size)
         )
 
-    # Цвет фона adaptive-icon — наш бренд
     values_dir = ANDROID_RES / "values"
     values_dir.mkdir(parents=True, exist_ok=True)
     (values_dir / "ic_launcher_background.xml").write_text(
@@ -195,7 +167,6 @@ def write_android_resources(logo_bytes: bytes) -> None:
         encoding="utf-8",
     )
 
-    # adaptive-icon XML: foreground PNG (без vector drawable, чтобы не зависеть от svg инструментов)
     adaptive_dir = ANDROID_RES / "mipmap-anydpi-v26"
     adaptive_dir.mkdir(parents=True, exist_ok=True)
     adaptive_xml = (

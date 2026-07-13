@@ -40,6 +40,7 @@ from core.worktracker.models import (
     WorkItemComment,
     WorkItemCommentRole,
     WorkItemHook,
+    WorkItemInteractionSpec,
     WorkItemKind,
     WorkItemLink,
     WorkItemPriority,
@@ -193,6 +194,11 @@ def _work_item_to_row(item: WorkItem) -> WorkItemRow:
     ]
     variables_json = _variables_to_json(item.variables)
     attachments_json = _attachments_to_json(item.attachments)
+    interaction_json: JsonObject | None = (
+        require_json_object(item.interaction.model_dump(mode="json"), "WorkItemInteractionSpec")
+        if item.interaction is not None
+        else None
+    )
     return WorkItemRow(
         work_item_id=item.work_item_id,
         company_id=item.company_id,
@@ -209,6 +215,7 @@ def _work_item_to_row(item: WorkItem) -> WorkItemRow:
         created_by=_actor_to_json(item.created_by),
         assignment=assignment_json,
         blocking=item.blocking,
+        interaction=interaction_json,
         hooks=hooks_json,
         resolution=resolution_json,
         links=links_json,
@@ -230,6 +237,11 @@ def _row_to_work_item(row: WorkItemRow) -> WorkItem:
     labels = [str(label) for label in row.labels]
     variables = _variables_from_json(require_json_object(row.variables, "variables"))
     attachments = parse_file_refs(row.attachments)
+    interaction = (
+        WorkItemInteractionSpec.model_validate(require_json_object(row.interaction, "interaction"))
+        if row.interaction is not None
+        else None
+    )
     return WorkItem(
         work_item_id=row.work_item_id,
         company_id=row.company_id,
@@ -246,6 +258,7 @@ def _row_to_work_item(row: WorkItemRow) -> WorkItem:
         created_by=_actor_from_json(require_json_object(row.created_by, "created_by")),
         assignment=_ASSIGNMENT_ADAPTER.validate_python(row.assignment),
         blocking=row.blocking,
+        interaction=interaction,
         hooks=hooks,
         resolution=resolution,
         links=links,

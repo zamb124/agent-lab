@@ -49,6 +49,7 @@ import { setDefaultI18nNamespace } from '../utils/i18n-namespace.js';
 import { prefersReducedMotion } from '../utils/motion.js';
 
 import '../components/pwa-install-banner.js';
+import '../components/platform-spinner.js';
 import '../components/glass-toast.js';
 import '../components/platform-shell-page.js';
 import '../components/platform-modal-stack.js';
@@ -98,16 +99,7 @@ export class PlatformApp extends PlatformElement {
                 min-height: var(--app-vh, 100vh);
                 padding: 40px;
             }
-            .loading-spinner {
-                width: 48px; height: 48px;
-                border: 4px solid var(--glass-border-medium);
-                border-top-color: var(--accent);
-                border-radius: 50%;
-                animation: loading-spin 1s linear infinite;
-                margin-bottom: 24px;
-            }
-            .loading-text { font-size: 16px; color: var(--text-muted); }
-            @keyframes loading-spin { to { transform: rotate(360deg); } }
+            .loading-text { font-size: 16px; color: var(--text-muted); margin-top: 24px; }
         `,
     ];
 
@@ -303,7 +295,7 @@ export class PlatformApp extends PlatformElement {
         if (!auth || auth.status === 'unknown' || auth.status === 'validating') {
             return html`
                 <div class="loading-container">
-                    <div class="loading-spinner"></div>
+                    <platform-spinner size="xl"></platform-spinner>
                     <div class="loading-text">${this.t('loading', {}, 'common')}</div>
                 </div>
             `;

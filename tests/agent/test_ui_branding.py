@@ -8,12 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from apps.agent.desktop.build_contract import load_default_distro_config
+from apps.agent.desktop.build_contract import HumanitecDistroConfig, load_default_distro_config
 from apps.agent.desktop.ui_branding import (
     I18nMessages,
     apply_ui_branding,
     apply_ui_product_name_to_i18n_messages,
     parse_i18n_messages,
+    rebrand_legacy_product_names_in_text,
     replace_ui_product_name_in_text,
     should_skip_i18n_message_key,
     verify_no_goose_docs_urls,
@@ -53,7 +54,32 @@ def test_replace_ui_product_name_preserves_goosed_and_env() -> None:
     )
 
 
+def test_rebrand_legacy_product_names_replaces_humanitec_before_goose() -> None:
+    distro = HumanitecDistroConfig.model_validate(
+        {
+            "id": "humanitec",
+            "display_name": "LinnexAgent",
+            "bundle_name": "LinnexAgent",
+            "ui_product_name": "Linnex",
+            "ui_product_name_lower": "linnex",
+            "protocol_scheme": "linnex",
+            "auth_callback_path": "auth/callback",
+            "pairing_path": "pairing",
+            "primary_color": "#694E9F",
+            "platform_mcp_path": "/flows/api/v1/agent/platform-mcp",
+            "default_frontend_base_url": "https://linnex.io",
+            "homepage": "https://linnex.io",
+            "maintainer": "Linnex <support@linnex.io>",
+            "default_extensions": ["developer"],
+        }
+    )
+    source = "HumanitecAgent подключается к Humanitec и goose"
+    expected = "LinnexAgent подключается к Linnex и Linnex"
+    assert rebrand_legacy_product_names_in_text(source, distro=distro) == expected
+
+
 def test_apply_ui_product_name_to_i18n_messages_skips_goosehints_modal() -> None:
+    distro = load_default_distro_config()
     messages: I18nMessages = {
         "loadingGoose.streaming": {"defaultMessage": "goose работает над этим…"},
         "goosehintsModal.dialogTitle": {
@@ -62,11 +88,11 @@ def test_apply_ui_product_name_to_i18n_messages_skips_goosehints_modal() -> None
     }
     patched = apply_ui_product_name_to_i18n_messages(
         messages,
-        ui_product_name="Humanitec",
+        distro=distro,
     )
     streaming_entry = patched["loadingGoose.streaming"]
     assert isinstance(streaming_entry, dict)
-    assert streaming_entry["defaultMessage"] == "Humanitec работает над этим…"
+    assert streaming_entry["defaultMessage"] == f"{distro.ui_product_name} работает над этим…"
     goosehints_entry = patched["goosehintsModal.dialogTitle"]
     assert isinstance(goosehints_entry, dict)
     assert goosehints_entry["defaultMessage"] == "Настроить подсказки проекта (.goosehints)"
@@ -99,8 +125,8 @@ def test_patch_goose_docs_urls_replaces_all_desktop_sources() -> None:
     if git_reset.returncode != 0:
         raise AssertionError(
             "git checkout failed before apply_ui_branding\n"
-            f"stdout:\n{git_reset.stdout}\n"
-            f"stderr:\n{git_reset.stderr}"
+            + f"stdout:\n{git_reset.stdout}\n"
+            + f"stderr:\n{git_reset.stderr}"
         )
 
     try:
@@ -109,10 +135,10 @@ def test_patch_goose_docs_urls_replaces_all_desktop_sources() -> None:
         constants_payload = (
             goose_desktop / "src" / "components" / "settings" / "providers" / "modal" / "constants.tsx"
         ).read_text(encoding="utf-8")
-        assert "https://humanitec.ru/docs/quickstart" in constants_payload
+        assert f"{load_default_distro_config().homepage}/docs/quickstart" in constants_payload
     finally:
         for ui_path, ui_backup in ui_branding_backups.items():
-            ui_path.write_text(ui_backup, encoding="utf-8")
+            _ = ui_path.write_text(ui_backup, encoding="utf-8")
 
 
 @pytest.mark.parametrize(
@@ -121,7 +147,7 @@ def test_patch_goose_docs_urls_replaces_all_desktop_sources() -> None:
         (
             "ru_goose_status.json",
             ("Спросить goose", "goose работает"),
-            ("Спросить Humanitec", "Humanitec работает"),
+            ("Спросить Linnex", "Linnex работает"),
         ),
     ],
 )
@@ -138,7 +164,7 @@ def test_i18n_fixture_rebrand(
     parsed_messages = parse_i18n_messages(messages_raw, str(fixture_path))
     patched = apply_ui_product_name_to_i18n_messages(
         parsed_messages,
-        ui_product_name="Humanitec",
+        distro=load_default_distro_config(),
     )
     serialized = json.dumps(patched, ensure_ascii=False)
     for token in forbidden:

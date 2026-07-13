@@ -131,6 +131,9 @@ learning_paths:
       - label_ru: Перехват диалога оператором
         label_en: Operator dialog takeover
         href: scenarios/worktracker/operators/operator-takeover-dialog/
+      - label_ru: Встроенный чат в задаче HITL
+        label_en: Embedded chat in an HITL task
+        href: scenarios/worktracker/operators/hitl-embedded-operator-chat/
       - label_ru: Маршрутизация и переназначение
         label_en: Route and reassign tasks
         href: scenarios/worktracker/operators/route-and-reassign-tasks/

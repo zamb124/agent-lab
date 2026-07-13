@@ -13,7 +13,7 @@
 | **Default language** | Russian (ru-RU). Дополнительно — English (en-US). |
 | **Category** | Productivity (основная) или Business. |
 | **Tags** | `Productivity`, `Business`, `Communication`. |
-| **App icon** (512×512) | `mobile/screens/play_icon_512.png` — генерируется `scripts/generate_humanitec_pwa_icons.py`. |
+| **App icon** (512×512) | `mobile/screens/play_icon_512.png` — генерируется `scripts/generate_linnex_pwa_icons.py`. |
 | **Feature graphic** (1024×500) | `mobile/screens/play_feature_graphic_1024x500.png` — там же. |
 
 ---

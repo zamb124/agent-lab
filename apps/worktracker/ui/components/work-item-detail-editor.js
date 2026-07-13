@@ -26,6 +26,8 @@ import './worktracker-detail-content.js';
 import './worktracker-activity-thread.js';
 import './worktracker-detail-inspector.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/chat/platform-chat.js';
 
 export class WorkItemDetailEditor extends PlatformElement {
     static i18nNamespace = 'worktracker';
@@ -37,6 +39,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         _titleDraft: { state: true },
         _descriptionDraft: { state: true },
         _commentDraft: { state: true },
+        _hitlReplyDraft: { state: true },
         _labelsDraft: { state: true },
         _dueDateDraft: { state: true },
         _attachmentsDraft: { state: true },
@@ -117,6 +120,38 @@ export class WorkItemDetailEditor extends PlatformElement {
                 box-sizing: border-box;
                 padding: var(--worktracker-surface-padding);
             }
+            .wt-hitl {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                min-width: 0;
+            }
+            .wt-hitl-title {
+                margin: 0;
+                font-size: var(--font-size-sm);
+                font-weight: 600;
+                color: var(--text-secondary);
+            }
+            .wt-hitl-chat {
+                display: flex;
+                min-height: 360px;
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                overflow: hidden;
+            }
+            .wt-hitl-chat platform-chat {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            .wt-hitl-reply {
+                display: flex;
+                align-items: flex-end;
+                gap: var(--space-2);
+            }
+            .wt-hitl-reply platform-field {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
         `,
     ];
 
@@ -128,6 +163,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._titleDraft = '';
         this._descriptionDraft = '';
         this._commentDraft = '';
+        this._hitlReplyDraft = '';
         this._labelsDraft = [];
         this._dueDateDraft = '';
         this._attachmentsDraft = [];
@@ -634,6 +670,73 @@ export class WorkItemDetailEditor extends PlatformElement {
         `;
     }
 
+    _isHandoff(item) {
+        return Boolean(item) && item.kind === 'operator_handoff';
+    }
+
+    _renderHitlChat(item) {
+        const policy = item && item.interaction_policy && typeof item.interaction_policy === 'object'
+            ? item.interaction_policy
+            : null;
+        if (!policy || policy.mode === 'none') {
+            return nothing;
+        }
+        const singleReply = policy.mode === 'single_reply' && policy.can_complete === true;
+        return html`
+            <section class="wt-hitl">
+                <h3 class="wt-hitl-title">${this.t('hitl_chat.title')}</h3>
+                <div class="wt-hitl-chat">
+                    <platform-chat
+                        profile="operator_handoff"
+                        display="page"
+                        ?hide-header=${true}
+                        work-item-id=${this.workItemId}
+                        .interactionPolicy=${policy}
+                        .flowsBaseUrl=${'/flows'}
+                        ?use-credentials=${true}
+                    ></platform-chat>
+                </div>
+                ${singleReply ? this._renderSingleReply() : nothing}
+            </section>
+        `;
+    }
+
+    _renderSingleReply() {
+        const draft = typeof this._hitlReplyDraft === 'string' ? this._hitlReplyDraft.trim() : '';
+        return html`
+            <div class="wt-hitl-reply">
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    pill-embed
+                    pill-density="dense"
+                    data-canon="composer"
+                    .label=${''}
+                    .placeholder=${this.t('hitl_chat.reply_placeholder')}
+                    .value=${this._hitlReplyDraft}
+                    @change=${(e) => {
+                        this._hitlReplyDraft = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+                    }}
+                ></platform-field>
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    ?disabled=${draft.length === 0}
+                    @click=${() => this._completeHitlWithReply()}
+                >${this.t('hitl_chat.complete')}</button>
+            </div>
+        `;
+    }
+
+    _completeHitlWithReply() {
+        const text = typeof this._hitlReplyDraft === 'string' ? this._hitlReplyDraft.trim() : '';
+        if (!text || !this.workItemId) {
+            return;
+        }
+        this._completeOp.run({ work_item_id: this.workItemId, resolution_text: text });
+        this._hitlReplyDraft = '';
+    }
+
     _renderActivity() {
         return html`
             <worktracker-activity-thread
@@ -685,12 +788,18 @@ export class WorkItemDetailEditor extends PlatformElement {
         const state = item && typeof item.state === 'string' ? item.state : 'open';
         const expanded = !this._isMobile || this._propertiesExpanded;
 
+        const isHandoff = this._isHandoff(item);
+
         if (this.layout === 'page') {
             return html`
                 <div class="wt-page-main">
                     <div class="wt-card wt-detail-card">
                         <div class="wt-card-section wt-detail-card-inner">
                             ${this._renderContent(item, loading, state)}
+                            ${isHandoff ? html`
+                                <hr class="wt-card-divider wt-card-divider-inset" />
+                                ${this._renderHitlChat(item)}
+                            ` : nothing}
                             <hr class="wt-card-divider wt-card-divider-inset" />
                             ${this._renderActivity()}
                         </div>
@@ -708,6 +817,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         return html`
             <div class="wt-panel-stack">
                 ${this._renderContent(item, loading, state)}
+                ${isHandoff ? this._renderHitlChat(item) : nothing}
                 ${this._renderActivity()}
             </div>
             ${item ? this._renderInspector(item, true) : nothing}

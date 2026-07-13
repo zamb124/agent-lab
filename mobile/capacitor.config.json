@@ -1,11 +1,13 @@
 {
-  "appId": "ru.humanitec.app",
-  "appName": "Humanitec",
+  "appId": "io.linnex.app",
+  "appName": "Linnex",
   "webDir": "www",
   "server": {
-    "url": "https://humanitec.ru",
+    "url": "https://linnex.io",
     "cleartext": false,
     "allowNavigation": [
+      "linnex.io",
+      "*.linnex.io",
       "humanitec.ru",
       "*.humanitec.ru",
       "humanetic.ru",
@@ -38,7 +40,7 @@
       "presentationOptions": ["badge", "sound", "alert"]
     },
     "SplashScreen": {
-      "backgroundColor": "#1a1a2e",
+      "backgroundColor": "#0F0F0F",
       "launchShowDuration": 0,
       "launchAutoHide": false,
       "launchFadeOutDuration": 200,

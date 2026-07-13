@@ -67,7 +67,7 @@ describe('PlatformApp: factories', () => {
 describe('PlatformApp: render', () => {
     beforeEach(() => resetPlatformState());
 
-    it('рендерит loading-spinner до AUTH_VALIDATED', async () => {
+    it('рендерит platform-spinner до AUTH_VALIDATED', async () => {
         class App extends PlatformApp {
             static defaultI18nNamespace = 'platform';
             getBaseUrl() { return ''; }
@@ -78,7 +78,8 @@ describe('PlatformApp: render', () => {
             customElements.define('frontend-core-test-app-3', App);
         }
         const el = await fixture(html`<frontend-core-test-app-3></frontend-core-test-app-3>`);
-        expect(el.shadowRoot.querySelector('.loading-spinner')).to.exist;
+        expect(el.shadowRoot.querySelector('.loading-container')).to.exist;
+        expect(el.shadowRoot.querySelector('platform-spinner')).to.exist;
     });
 
     it('после AUTH_USER_LOADED рендерит renderRoute() + platform-modal-stack', async () => {

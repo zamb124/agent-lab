@@ -38,6 +38,7 @@ from apps.flows.src.services.handoff_context_service import (
     HandoffContextService,
 )
 from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
+from apps.flows.src.services.hitl_conversation_service import HitlConversationService
 from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
 from apps.flows.src.services.lara_action_engine import LaraActionEngine
 from apps.flows.src.services.lara_facade import LaraFacade
@@ -180,6 +181,14 @@ class FlowContainer(BaseContainer):
     def hitl_work_item_service(self) -> HitlWorkItemService:
         return HitlWorkItemService(
             work_item_service=self.work_item_service,
+            redis_client=self.redis_client,
+        )
+
+    @lazy
+    def hitl_conversation_service(self) -> HitlConversationService:
+        return HitlConversationService(
+            work_item_service=self.work_item_service,
+            workflow_runtime=self.workflow_runtime,
             redis_client=self.redis_client,
         )
 

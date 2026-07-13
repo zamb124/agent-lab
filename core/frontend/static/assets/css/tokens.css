@@ -246,7 +246,13 @@
     
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+    --font-brand: 'Michroma', var(--font-sans);
     --font-feature-sans: 'cv02' 1, 'cv03' 1, 'cv04' 1, 'cv11' 1;
+
+    /* ========== СПИННЕР (единый бренд-логотип) ========== */
+    --spinner-size: 24px;
+    --spinner-duration: 1.2s;
+    --spinner-overlay-bg: rgba(15, 15, 15, 0.55);
     
     --text-xs: 0.75rem;
     --text-sm: 0.8125rem;

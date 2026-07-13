@@ -1,15 +1,15 @@
 {
   "id": "humanitec",
-  "display_name": "HumanitecAgent",
-  "bundle_name": "HumanitecAgent",
-  "ui_product_name": "Humanitec",
-  "ui_product_name_lower": "humanitec",
-  "protocol_scheme": "humanitec",
+  "display_name": "LinnexAgent",
+  "bundle_name": "LinnexAgent",
+  "ui_product_name": "Linnex",
+  "ui_product_name_lower": "linnex",
+  "protocol_scheme": "linnex",
   "auth_callback_path": "auth/callback",
   "pairing_path": "pairing",
-  "primary_color": "#0066FF",
+  "primary_color": "#694E9F",
   "platform_mcp_path": "/flows/api/v1/agent/platform-mcp",
-  "default_frontend_base_url": "https://humanitec.ru",
+  "default_frontend_base_url": "https://linnex.io",
   "default_extensions": [
     "developer",
     "computercontroller"

@@ -4,6 +4,7 @@
  */
 import { html, css } from '../../assets/js/lit/lit.min.js';
 import { PlatformElement } from '../platform-element/index.js';
+import './platform-spinner.js';
 
 export class GlassButton extends PlatformElement {
     static styles = [
@@ -104,25 +105,18 @@ export class GlassButton extends PlatformElement {
             
             .loading {
                 position: relative;
-                color: transparent;
                 pointer-events: none;
             }
-            
-            .loading::after {
-                content: '';
-                position: absolute;
-                width: 16px;
-                height: 16px;
-                border: 2px solid currentColor;
-                border-right-color: transparent;
-                border-radius: 50%;
-                animation: spin 0.6s linear infinite;
+
+            .loading ::slotted(*) {
+                visibility: hidden;
             }
-            
-            @keyframes spin {
-                to {
-                    transform: rotate(360deg);
-                }
+
+            .loading platform-spinner {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
             }
         `
     ];
@@ -157,6 +151,7 @@ export class GlassButton extends PlatformElement {
                 class=${parts.join(' ')}
                 ?disabled=${this.disabled || this.loading}
             >
+                ${this.loading ? html`<platform-spinner size="sm"></platform-spinner>` : ''}
                 <slot></slot>
             </button>
         `;

@@ -12,12 +12,22 @@ from core.variables.models import VariableMap
 from core.worktracker.models import (
     BoardColumn,
     WorkActor,
+    WorkItem,
     WorkItemAssignment,
+    WorkItemInteractionPolicy,
     WorkItemKind,
     WorkItemLink,
     WorkItemPriority,
     WorkItemState,
 )
+
+
+class WorkItemPublic(WorkItem):
+    """Проекция задачи для UI: доменные поля + вычисленная политика композера."""
+
+    interaction_policy: WorkItemInteractionPolicy = Field(
+        default_factory=WorkItemInteractionPolicy
+    )
 
 
 class WorkItemCreateRequest(StrictBaseModel):

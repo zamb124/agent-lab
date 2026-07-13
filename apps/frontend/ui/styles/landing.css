@@ -75,6 +75,7 @@
     --landing-footer-bg: var(--marketing-footer-bg);
     --landing-section-gradient: var(--marketing-hero-bg);
     --landing-reviews-gradient: var(--marketing-footer-bg);
+    --landing-wordmark-filter: invert(1) hue-rotate(180deg);
 }
 
 @media (min-width: 768px) {

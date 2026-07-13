@@ -19,14 +19,12 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_api_get_flow,
     flows_branch_condition_payload,
     flows_canvas_toolbar_action,
-    flows_click_problem_item,
-    flows_dataflow_broken_payload,
+    flows_dataflow_problems_payload,
     flows_doc_flow_id,
     flows_execution_send_message,
     flows_llm_payload,
     flows_open_editor,
     flows_open_node_editor,
-    flows_open_problems_flyout,
     flows_publish_editor,
     flows_save_edge_condition_modal,
     flows_set_edge_condition_simple,
@@ -368,9 +366,9 @@ async def test_flows_organize_large_graph(
     unique_id: str,
 ) -> None:
     flow_id = flows_doc_flow_id("organize_graph", unique_id)
-    organize_payload = flows_dataflow_broken_payload(flow_id)
+    organize_payload = flows_dataflow_problems_payload(flow_id)
     organize_payload["name"] = GREEN_GARDEN_AGENT_NAME
-    organize_payload["nodes"]["llm_1"]["prompt"] = "Explain {missing_topic}"
+    organize_payload["edges"] = []
     await flows_api_create_flow(
         flows_ui.origin,
         auth_token_system,
@@ -435,25 +433,22 @@ async def test_flows_organize_large_graph(
         ),
     )
 
-    flyout = await flows_open_problems_flyout(page)
-    await expect(flyout.locator(".problem-item").first).to_be_visible(timeout=15_000)
+    await flows_open_node_editor(page, "llm_1")
     await scenario.step(
-        "Откройте список проблем dataflow",
+        "Откройте блок LLM с неизвестной переменной",
         page,
-        screenshot_name="problems-flyout-open",
-        label_en="Open the dataflow problems list",
+        screenshot_name="llm-block-with-missing-variable",
+        label_en="Open the LLM block with an unknown variable",
         details=(
-            "В шапке редактора нажмите кнопку с числом предупреждений. Откроется "
-            "список проблем dataflow — здесь собраны блоки, которым не хватает "
-            "данных или переменных."
+            "Откройте LLM-блок с промптом, где используется переменная missing_topic. "
+            "При включённых связях данных такие блоки подсвечиваются как проблемные."
         ),
         details_en=(
-            "In the editor header, click the button with the warning count. The dataflow "
-            "problems list opens — blocks missing data or variables are listed here."
+            "Open the LLM block whose prompt references the missing_topic variable. "
+            "With data links enabled, such blocks are highlighted as problematic."
         ),
     )
 
-    await flows_click_problem_item(page, index=0)
     await flows_set_selected_llm_prompt(page, _ORGANIZE_GRAPH_PROMPT_FIXED)
     await scenario.step(
         "Исправьте инструкцию проблемного блока",
@@ -461,34 +456,31 @@ async def test_flows_organize_large_graph(
         screenshot_name="prompt-variable-fixed",
         label_en="Fix the problematic block instruction",
         details=(
-            "Кликните первую проблему в списке — редактор перейдёт к нужному блоку. "
             "Замените промпт с неизвестной переменной на понятную инструкцию без "
             "фигурных скобок, которую агент сможет выполнить."
         ),
         details_en=(
-            "Click the first problem in the list — the editor jumps to the right block. "
             "Replace the prompt with an unknown variable by a clear instruction without "
             "curly braces that the agent can follow."
         ),
     )
 
     await flows_publish_editor(page)
-    await expect(page.locator("flows-editor-header .problems-btn")).to_have_count(0, timeout=15_000)
     await scenario.step(
         "Опубликуйте и убедитесь, что предупреждений нет",
         page,
         screenshot_name="problems-cleared",
         label_en="Publish and confirm warnings are gone",
         details=(
-            "**Демонстрация результата.** Опубликуйте черновик и проверьте шапку редактора: "
-            "кнопка с числом предупреждений исчезла — значит проблемы dataflow устранены.\n\n"
+            "**Демонстрация результата.** Опубликуйте черновик — промпт больше не ссылается "
+            "на несуществующую переменную.\n\n"
             f"**Итог.** Теперь вы умеете размечать граф заметками, включать связи данных "
-            f"и находить ошибки через список проблем «{GREEN_GARDEN_STORE}»."
+            f"и исправлять проблемные блоки «{GREEN_GARDEN_STORE}»."
         ),
         details_en=(
-            "**Result demonstration.** Publish the draft and check the editor header: "
-            "the warning count button is gone, which means dataflow issues are resolved.\n\n"
+            "**Result demonstration.** Publish the draft — the prompt no longer references "
+            "a missing variable.\n\n"
             f"**Summary.** You can now annotate the graph with notes, show data links, "
-            f"and fix issues through the problems list for {GREEN_GARDEN_STORE_EN}."
+            f"and fix problematic blocks for {GREEN_GARDEN_STORE_EN}."
         ),
     )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import ClassVar, TypeAlias, cast
+from typing import ClassVar, Literal, TypeAlias, cast
 
 from pydantic import ConfigDict, Field
 
@@ -77,6 +77,7 @@ class WorkflowEventType(StrEnum):
     handoff_accepted = "HandoffAccepted"
     handback_requested = "HandbackRequested"
     handback_completed = "HandbackCompleted"
+    conversation_message_appended = "ConversationMessageAppended"
 
 
 class ActivityStatus(StrEnum):
@@ -235,6 +236,19 @@ class HandoffResumedPayload(DurableStrictBaseModel):
     response_preview: str = Field(..., min_length=1)
 
 
+class ConversationMessageAppendedPayload(DurableStrictBaseModel):
+    """Внешний turn (оператор/пользователь), дописанный в лог сессии HITL.
+
+    `message_id` детерминирован для идемпотентности повторной доставки.
+    """
+
+    author_role: Literal["operator", "user"]
+    author_user_id: str = Field(..., min_length=1)
+    work_item_id: str = Field(..., min_length=1)
+    message_id: str = Field(..., min_length=1)
+    idempotency_key: str = Field(..., min_length=1)
+
+
 class NodeFailedPayload(DurableStrictBaseModel):
     failed_nodes: list[str] = Field(..., min_length=1)
     current_nodes: list[str] = Field(..., min_length=1)
@@ -368,6 +382,7 @@ WorkflowEventPayload: TypeAlias = (
     | ChildWorkflowLifecyclePayload
     | FlowHandoffInitiatedPayload
     | FlowHandbackCompletedPayload
+    | ConversationMessageAppendedPayload
 )
 
 _PAYLOAD_BY_EVENT_TYPE: dict[WorkflowEventType, type[DurableStrictBaseModel]] = {
@@ -403,6 +418,7 @@ _PAYLOAD_BY_EVENT_TYPE: dict[WorkflowEventType, type[DurableStrictBaseModel]] = 
     WorkflowEventType.retry_scheduled: RetryScheduledPayload,
     WorkflowEventType.handoff_initiated: FlowHandoffInitiatedPayload,
     WorkflowEventType.handback_completed: FlowHandbackCompletedPayload,
+    WorkflowEventType.conversation_message_appended: ConversationMessageAppendedPayload,
 }
 
 

@@ -71,13 +71,6 @@ export class NamespacePage extends PlatformPage {
             }
             .drop-zone-text { font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--text-primary); }
             .drop-zone-hint { font-size: var(--text-sm); color: var(--text-tertiary); }
-            .loading-spinner {
-                width: 48px; height: 48px;
-                border: 4px solid var(--glass-border-subtle);
-                border-top: 4px solid var(--accent);
-                border-radius: 50%; animation: spin 1s linear infinite;
-            }
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         `,
     ];
 
@@ -200,7 +193,7 @@ export class NamespacePage extends PlatformPage {
 
             ${loading ? html`
                 <div class="empty">
-                    <div class="loading-spinner"></div>
+                    <platform-spinner size="xl"></platform-spinner>
                     <div>${this.t('namespace_detail.loading_documents')}</div>
                 </div>
             ` : documents.length === 0 ? html`

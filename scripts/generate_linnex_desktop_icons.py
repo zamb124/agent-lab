@@ -1,10 +1,10 @@
 """
-Генерация иконок HumanitecAgent для Electron desktop (.png, .ico, .icns).
+Генерация иконок LinnexAgent для Electron desktop (.png, .ico, .icns).
 
 Источник: core/frontend/static/assets/service_logos/frontend_logo.svg
-Фон: #1A1A2E (как PWA).
+Фон: #0F0F0F (как PWA).
 
-Запуск: uv run python scripts/generate_humanitec_desktop_icons.py [output_dir]
+Запуск: uv run python scripts/generate_linnex_desktop_icons.py [output_dir]
 """
 
 from __future__ import annotations
@@ -23,7 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 LOGO_SVG = ROOT / "core/frontend/static/assets/service_logos/frontend_logo.svg"
 DEFAULT_OUTPUT_DIR = ROOT / "apps/agent/desktop/branding/icons"
 
-BACKGROUND = (26 / 255, 26 / 255, 46 / 255, 1.0)
+# Размеры viewBox логотипа Linnex (frontend_logo.svg).
+LOGO_W = 40.0
+LOGO_H = 46.0
+
+BACKGROUND = (15 / 255, 15 / 255, 15 / 255, 1.0)
 
 ICNS_ICONSET_ENTRIES: list[tuple[str, int]] = [
     ("icon_16x16.png", 16),
@@ -43,8 +47,10 @@ ICO_SIZES: tuple[int, ...] = (16, 32, 48, 64, 128, 256)
 
 def render_png(logo_bytes: bytes, size: int) -> bytes:
     inner = max(1, int(size * 0.78))
-    offset = (size - inner) // 2
-    scale = inner / 40.0
+    scale = inner / LOGO_H
+    draw_w = LOGO_W * scale
+    offset_x = (size - draw_w) / 2.0
+    offset_y = (size - inner) / 2.0
 
     surface = skia.Surface(size, size)
     with surface as canvas:
@@ -52,9 +58,9 @@ def render_png(logo_bytes: bytes, size: int) -> bytes:
         dom = skia.SVGDOM.MakeFromStream(skia.MemoryStream(logo_bytes))
         if dom is None:
             raise RuntimeError("Skia не разобрал frontend_logo.svg")
-        dom.setContainerSize(skia.Size(40, 40))
+        dom.setContainerSize(skia.Size(LOGO_W, LOGO_H))
         canvas.save()
-        canvas.translate(float(offset), float(offset))
+        canvas.translate(float(offset_x), float(offset_y))
         canvas.scale(scale, scale)
         dom.render(canvas)
         canvas.restore()
@@ -84,7 +90,7 @@ def write_icns_icon(logo_bytes: bytes, output_dir: Path) -> None:
     if platform.system() != "Darwin":
         raise RuntimeError("icon.icns generation requires macOS iconutil")
     _ = output_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="humanitec-iconset-") as tmp_dir:
+    with tempfile.TemporaryDirectory(prefix="linnex-iconset-") as tmp_dir:
         iconset_dir = Path(tmp_dir) / "icon.iconset"
         iconset_dir.mkdir()
         for filename, size in ICNS_ICONSET_ENTRIES:
