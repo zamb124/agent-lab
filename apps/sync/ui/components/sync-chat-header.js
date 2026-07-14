@@ -16,6 +16,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
+import '@platform/lib/components/glass-spinner.js';
 import { buildChatSubtitle, channelDisplayTitle } from './_helpers/sync-channel-display.js';
 import { isOnline } from '../_helpers/sync-presence.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
@@ -505,7 +506,15 @@ export class SyncChatHeader extends PlatformElement {
         }
         const channel = this._channel();
         if (!channel) {
-            return this._renderListChrome(this.t('sidebar.loading'), '');
+            return html`
+                <span class="avatar list-mark" aria-hidden="true">
+                    <platform-icon name="chat" size="22"></platform-icon>
+                </span>
+                <div class="text">
+                    <glass-spinner></glass-spinner>
+                </div>
+                <div class="actions"></div>
+            `;
         }
         const presence = this._presenceSel.value;
         const typingByChannel = presence && presence.typingByChannel ? presence.typingByChannel : null;

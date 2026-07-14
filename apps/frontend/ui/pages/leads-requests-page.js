@@ -142,7 +142,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                         @click=${() => this._list.loadMore()}
                     >
                         ${this._list.loadingMore
-                            ? this.t('leads_page.loading')
+                            ? html`<glass-spinner size="xs"></glass-spinner>`
                             : this.t('leads_page.load_more')}
                     </button>
                 </div>
@@ -178,7 +178,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                     ?disabled=${loading}
                     @click=${() => this._list.load()}
                 >
-                    ${loading ? this.t('leads_page.loading') : this.t('leads_page.reload')}
+                    ${loading ? html`<glass-spinner size="xs"></glass-spinner>` : this.t('leads_page.reload')}
                 </button>
             </div>
             ${body}

@@ -178,18 +178,19 @@ class FlowContainer(BaseContainer):
         )
 
     @lazy
-    def hitl_work_item_service(self) -> HitlWorkItemService:
-        return HitlWorkItemService(
-            work_item_service=self.work_item_service,
-            redis_client=self.redis_client,
-        )
-
-    @lazy
     def hitl_conversation_service(self) -> HitlConversationService:
         return HitlConversationService(
             work_item_service=self.work_item_service,
             workflow_runtime=self.workflow_runtime,
             redis_client=self.redis_client,
+        )
+
+    @lazy
+    def hitl_work_item_service(self) -> HitlWorkItemService:
+        return HitlWorkItemService(
+            work_item_service=self.work_item_service,
+            redis_client=self.redis_client,
+            hitl_conversation_service=self.hitl_conversation_service,
         )
 
     @lazy

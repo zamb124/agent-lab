@@ -27,9 +27,31 @@ export const WORK_ITEM_MUTATION_SUCCEEDED = [
 
 function _mergeWorkItem(state, item) {
     const id = item.work_item_id;
+    const existing = state.byId[id];
+    let merged = item;
+    // Push и часть mutation-ответов — domain WorkItem без interaction_policy.
+    // Без сохранения политики HITL-секция в карточке исчезает после claim/update.
+    if (
+        existing
+        && typeof existing === 'object'
+        && existing.interaction_policy
+        && typeof existing.interaction_policy === 'object'
+        && (!item.interaction_policy || typeof item.interaction_policy !== 'object')
+    ) {
+        const prev = existing.interaction_policy;
+        const isTerminal = item.state === 'done' || item.state === 'cancelled' || item.state === 'failed';
+        merged = {
+            ...item,
+            interaction_policy: {
+                ...prev,
+                can_send: isTerminal ? false : Boolean(prev.can_send),
+                can_complete: isTerminal ? false : Boolean(prev.can_complete),
+            },
+        };
+    }
     const idx = state.items.findIndex((x) => x && x.work_item_id === id);
-    const items = idx === -1 ? [...state.items, item] : state.items.map((x, i) => (i === idx ? item : x));
-    return { ...state, items, byId: { ...state.byId, [id]: item } };
+    const items = idx === -1 ? [...state.items, merged] : state.items.map((x, i) => (i === idx ? merged : x));
+    return { ...state, items, byId: { ...state.byId, [id]: merged } };
 }
 
 export const workItemsResource = createResourceCollection({

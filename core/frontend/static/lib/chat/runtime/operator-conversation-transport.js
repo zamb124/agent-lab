@@ -1,18 +1,18 @@
 /**
  * Транспорт встроенного чата HITL-задачи (operator_handoff) для `<platform-chat>`.
  *
- * Оператор в карточке WorkItem видит технически тот же разговор сессии, что и
- * пользователь. Источник истины — durable-леджер flows (`ExecutionState.messages`),
- * проекция отдаётся REST-снимком, новые turns приходят push-событием
- * `flows/hitl_conversation/turn_appended` через `platform:ui_events` -> WS.
- *
- * Транспорт не рендерит и не редьюсит сам: он подаёт turns в общий chat-reducer
- * через публичный `controller.applyRuntimeVerb(...)`, поэтому бабблы, композер и
- * токены — ровно те же, что в чате flows/embed. Дедуп по `message_id` (и снимок,
- * и push, и эхо POST проходят через единый `_ingestTurn`).
+ * Оператор видит тот же разговор сессии, что и пользователь.
+ * Источник истины — durable `ExecutionState.messages` (REST snapshot).
+ * Live — A2A `tasks/resubscribe` на `a2a_task_id` (тот же Redis stream, что user chat).
+ * Ask (takeover): POST `/hitl/{id}/conversation/messages`.
+ * Close: WorkItem complete (не этот транспорт).
  */
 
-export const HITL_CONVERSATION_TURN_APPENDED = 'flows/hitl_conversation/turn_appended';
+import {
+    a2aEndpointUrl,
+    buildA2aResubscribeBody,
+    consumeA2aStream,
+} from './a2a-stream.js';
 
 /** origin+префикс flows без завершающего слэша; пустая строка — same-origin `/flows`. */
 function _flowsRoot(baseUrl) {
@@ -46,11 +46,16 @@ export class OperatorConversationTransport {
     /**
      * @param {{
      *   workItemId: string,
-     *   conversation: { session_id: string, context_id: string, flow_id: string, branch_id?: string },
+     *   conversation: {
+     *     session_id: string,
+     *     context_id: string,
+     *     flow_id: string,
+     *     branch_id?: string,
+     *     a2a_task_id?: string|null,
+     *   },
      *   baseUrl?: string,
      *   credentials?: RequestCredentials,
      *   getHeaders?: () => Promise<Record<string, string>>,
-     *   bus: { subscribeType: (type: string, cb: (event: object) => void) => (() => void) },
      *   fetchImpl?: typeof fetch,
      * }} options
      */
@@ -62,28 +67,35 @@ export class OperatorConversationTransport {
             throw new Error('OperatorConversationTransport: workItemId required');
         }
         const conv = options.conversation;
-        if (!conv || typeof conv !== 'object'
-            || typeof conv.context_id !== 'string' || conv.context_id.trim() === ''
-            || typeof conv.session_id !== 'string' || conv.session_id.trim() === ''
-            || typeof conv.flow_id !== 'string' || conv.flow_id.trim() === '') {
+        if (!conv || typeof conv !== 'object') {
             throw new Error('OperatorConversationTransport: conversation ref required');
         }
-        if (!options.bus || typeof options.bus.subscribeType !== 'function') {
-            throw new Error('OperatorConversationTransport: bus with subscribeType required');
+        if (typeof conv.context_id !== 'string' || conv.context_id.trim() === '') {
+            throw new Error('OperatorConversationTransport: conversation.context_id required');
+        }
+        if (typeof conv.session_id !== 'string' || conv.session_id.trim() === '') {
+            throw new Error('OperatorConversationTransport: conversation.session_id required');
+        }
+        if (typeof conv.flow_id !== 'string' || conv.flow_id.trim() === '') {
+            throw new Error('OperatorConversationTransport: conversation.flow_id required');
+        }
+        const a2aTaskId = typeof conv.a2a_task_id === 'string' ? conv.a2a_task_id.trim() : '';
+        if (a2aTaskId === '') {
+            throw new Error('OperatorConversationTransport: conversation.a2a_task_id required');
         }
         this._workItemId = options.workItemId.trim();
         this._conversation = conv;
+        this._a2aTaskId = a2aTaskId;
         this._root = _flowsRoot(options.baseUrl);
         this._credentials = options.credentials || 'include';
         this._getHeaders = typeof options.getHeaders === 'function' ? options.getHeaders : async () => ({});
-        this._bus = options.bus;
         this._fetch = typeof options.fetchImpl === 'function' ? options.fetchImpl : globalThis.fetch.bind(globalThis);
         /** @type {import('./chat-controller.js').ChatController|null} */
         this._controller = null;
         /** @type {Set<string>} */
         this._seen = new Set();
-        /** @type {(() => void)|null} */
-        this._unsubscribe = null;
+        /** @type {AbortController|null} */
+        this._liveAbort = null;
     }
 
     attach(controller) {
@@ -123,29 +135,85 @@ export class OperatorConversationTransport {
             sessionId: this._conversation.session_id,
             flowId: this._conversation.flow_id,
             contextId: this._conversation.context_id,
-            taskId: null,
+            taskId: this._a2aTaskId,
             messages,
         });
-        this._subscribeRealtime();
+        this._startLiveTail();
     }
 
-    _subscribeRealtime() {
-        if (this._unsubscribe !== null) {
+    _startLiveTail() {
+        this._stopLiveTail();
+        if (this._controller === null) {
             return;
         }
-        this._unsubscribe = this._bus.subscribeType(HITL_CONVERSATION_TURN_APPENDED, (event) => {
-            const payload = event && typeof event === 'object' ? event.payload : null;
-            if (!payload || typeof payload !== 'object') {
-                return;
-            }
-            if (payload.work_item_id !== this._workItemId) {
-                return;
-            }
-            this._ingestTurn(payload.turn);
-        });
+        this._liveAbort = new AbortController();
+        void this._runLiveTail(this._liveAbort);
     }
 
-    /** Единая точка приёма turn (снимок/push/эхо POST) с дедупом по message_id. */
+    _stopLiveTail() {
+        if (this._liveAbort !== null) {
+            this._liveAbort.abort();
+            this._liveAbort = null;
+        }
+    }
+
+    /**
+     * @param {AbortController} abort
+     */
+    async _runLiveTail(abort) {
+        const streamState = {
+            contextId: this._conversation.context_id,
+            taskId: this._a2aTaskId,
+            taskPrimed: true,
+        };
+        const target = {
+            baseUrl: this._root,
+            flowId: this._conversation.flow_id,
+        };
+        try {
+            while (!abort.signal.aborted) {
+                let terminal = false;
+                try {
+                    const headers = await this._getHeaders();
+                    await consumeA2aStream(
+                        {
+                            url: a2aEndpointUrl(target),
+                            body: buildA2aResubscribeBody(this._a2aTaskId),
+                            headers,
+                            credentials: this._credentials,
+                            signal: abort.signal,
+                        },
+                        (frame) => {
+                            if (terminal || abort.signal.aborted || this._controller === null) {
+                                return;
+                            }
+                            terminal = this._controller.relayA2aFrame(frame, streamState).terminal;
+                        },
+                    );
+                } catch (err) {
+                    if (err instanceof Error && err.name === 'AbortError') {
+                        break;
+                    }
+                    await new Promise((resolve) => {
+                        setTimeout(resolve, 800);
+                    });
+                    continue;
+                }
+                if (terminal || abort.signal.aborted) {
+                    break;
+                }
+                await new Promise((resolve) => {
+                    setTimeout(resolve, 400);
+                });
+            }
+        } finally {
+            if (this._liveAbort === abort) {
+                this._liveAbort = null;
+            }
+        }
+    }
+
+    /** Единая точка приёма turn (снимок / эхо POST) с дедупом по message_id. */
     _ingestTurn(turn) {
         if (!turn || typeof turn !== 'object' || typeof turn.message_id !== 'string') {
             return;
@@ -187,13 +255,10 @@ export class OperatorConversationTransport {
     }
 
     async cancel() {
-        /* HITL takeover не имеет отменяемого стрима; отмена — no-op. */
+        /* HITL takeover: отмена live tail — no-op для send; dispose останавливает SSE. */
     }
 
     dispose() {
-        if (this._unsubscribe !== null) {
-            this._unsubscribe();
-            this._unsubscribe = null;
-        }
+        this._stopLiveTail();
     }
 }

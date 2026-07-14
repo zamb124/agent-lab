@@ -836,7 +836,9 @@ export class CRMSuggestsPage extends CRMNamespacePage {
                         @click=${() => this._loadSuggests()}
                     >
                         <platform-icon name="refresh" size="14"></platform-icon>
-                        ${loading ? this.t('suggests_page.loading') : this.t('suggests_page.refresh')}
+                        ${loading
+                            ? html`<glass-spinner size="xs"></glass-spinner>`
+                            : this.t('suggests_page.refresh')}
                     </button>
                 </div>
 

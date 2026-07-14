@@ -145,6 +145,7 @@
     <!-- Стили -->
     <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
     <link rel="stylesheet" href="/static/core/assets/css/reset.css">
+    <link rel="stylesheet" href="/static/core/assets/css/platform-boot-spinner.css">
     <link rel="stylesheet" href="/static/frontend/styles/landing.css">
 <style>
         body {
@@ -159,23 +160,6 @@
             display: block;
             width: 100%;
             min-height: 100vh;
-        }
-        
-        platform-app:not(:defined),
-        frontend-app:not(:defined) {
-            position: fixed;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--bg-gradient, linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #1a1a2e 75%, #16213e 100%));
-            z-index: 9999;
-            color: var(--text-secondary, rgba(255, 255, 255, 0.5));
-            font-family: var(--font-sans);
-        }
-
-        frontend-app:not(:defined)::after {
-            content: 'AI Studio';
         }
 </style>
 </head>

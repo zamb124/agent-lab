@@ -9,6 +9,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/glass-spinner.js';
 
 const CATALOG_ACCESS_GET = 'office/catalog_access_get';
 const CATALOG_ACCESS_PATCH = 'office/catalog_access_update';
@@ -317,7 +318,7 @@ export class OfficeAccessModal extends PlatformFormModal {
 
     renderBody() {
         if (this._loading) {
-            return html`<div>${this.t('access.loading')}</div>`;
+            return html`<div><glass-spinner></glass-spinner></div>`;
         }
         const showMembers = this._isCatalog() ? !this._companyVisible : true;
         return html`

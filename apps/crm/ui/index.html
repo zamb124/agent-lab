@@ -35,6 +35,7 @@
     
     <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
     <link rel="stylesheet" href="/static/core/assets/css/reset.css">
+    <link rel="stylesheet" href="/static/core/assets/css/platform-boot-spinner.css">
 
     <!-- Токены platform-button наследуются из tokens.css -->
 <script type="module">
@@ -43,24 +44,6 @@
     </script>
     <script src="/crm/ui/vendor/3d-force-graph/3d-force-graph.min.js"></script>
     <script src="/static/core/assets/js/marked.min.js"></script>
-
-    <style>
-crm-app:not(:defined) {
-            position: fixed;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--bg-gradient);
-            z-index: 9999;
-            color: rgba(255, 255, 255, 0.5);
-            font-family: var(--font-sans);
-        }
-
-        crm-app:not(:defined)::after {
-            content: 'NetWorkle';
-        }
-</style>
 </head>
 <body class="platform-shell">
     <crm-app></crm-app>

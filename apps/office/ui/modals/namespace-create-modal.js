@@ -14,6 +14,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { setPlatformNamespaceSelection } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/glass-spinner.js';
 
 const FORM_NAME = 'office/namespace_create_form';
 const NAMESPACES_NAME = 'office/namespaces';
@@ -197,7 +198,7 @@ export class OfficeNamespaceCreateModal extends PlatformFormModal {
     _renderTemplates() {
         const items = this._templateItems();
         if (this._templates.busy && items.length === 0) {
-            return html`<div class="empty-templates">${this.t('namespace_modal.templates_loading')}</div>`;
+            return html`<div class="empty-templates"><glass-spinner></glass-spinner></div>`;
         }
         if (items.length === 0) {
             return html`<div class="empty-templates">${this.t('namespace_modal.templates_empty')}</div>`;

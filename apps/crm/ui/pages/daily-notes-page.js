@@ -1822,7 +1822,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                             title=${this.t('daily_notes_page.add_note')}
                         >
                             ${this._creatingNote
-                                ? html`<glass-spinner size="16"></glass-spinner>`
+                                ? html`<glass-spinner size="xs"></glass-spinner>`
                                 : html`<platform-icon name="plus" size="18"></platform-icon>`}
                         </button>
                         <button
@@ -1881,7 +1881,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                     <button class="cta-btn" type="button" ?disabled=${this._creatingNote} @click=${this._onCreateNote}>
                         <span class="cta-btn-content">
                             ${this._creatingNote
-                                ? html`<glass-spinner size="16"></glass-spinner>`
+                                ? html`<glass-spinner size="xs"></glass-spinner>`
                                 : ''}
                             ${this._creatingNote
                                 ? this.t('daily_notes_page.add_note_creating')
@@ -1896,7 +1896,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 <section class="main-column">
                     <div class="cards-scroll">
                         ${loading && filteredNotes.length === 0 ? html`
-                            <div class="empty"><glass-spinner size="40"></glass-spinner></div>
+                            <div class="empty"><glass-spinner size="sm"></glass-spinner></div>
                         ` : filteredNotes.length === 0 ? html`
                             <div class="empty">
                                 <div>${this.t('daily_notes_page.empty_period')}</div>

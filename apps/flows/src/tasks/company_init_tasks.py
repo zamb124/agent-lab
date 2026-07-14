@@ -42,11 +42,11 @@ async def init_company_resources(
 
     Если company_id == "system":
         Загружает ВСЕ агенты и тулы из registry в system namespace
-        (запускается при старте сервиса)
+        (триггер: idle `company_init_system` при старте idle_worker)
 
     Иначе:
         Загружает ТОЛЬКО PUBLIC агенты и тулы из кода в company namespace
-        (запускается при создании компании)
+        (триггер: idle `company_init_new_company` при создании компании)
 
     Аргументы:
         company_id: "system" или ID компании

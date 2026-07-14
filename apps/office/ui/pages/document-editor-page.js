@@ -15,6 +15,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-document-viewer-host.js';
+import '@platform/lib/components/glass-spinner.js';
 
 const BAD_BINDING_PATTERNS = [/\//, /\.\./, /\.html?$/i, /^\s*$/];
 
@@ -86,9 +87,10 @@ export class OfficeDocumentEditorPage extends PlatformPage {
                 font-size: var(--text-sm);
             }
             .loading {
-                color: var(--text-secondary);
+                display: flex;
+                align-items: center;
+                justify-content: center;
                 padding: var(--space-3);
-                font-size: var(--text-sm);
             }
         `,
     ];
@@ -166,7 +168,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
             ${this.embedded ? nothing : this._renderPageHeader()}
             <div class="editor-area">
                 ${showLoading
-                    ? html`<div class="loading">${this.t('editor.loading')}</div>`
+                    ? html`<div class="loading"><glass-spinner size="lg"></glass-spinner></div>`
                     : (openConfig
                         ? html`<platform-document-viewer-host
                                 .bindingId=${this.bindingId}

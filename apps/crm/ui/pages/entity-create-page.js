@@ -169,7 +169,7 @@ export class CRMEntityCreatePage extends PlatformPage {
                                 @click=${() => this._onToolbarSave()}
                             >
                                 ${this._submitting
-                                    ? html`<glass-spinner size="16"></glass-spinner>`
+                                    ? html`<glass-spinner size="xs"></glass-spinner>`
                                     : nothing}
                                 ${this._submitting
                                     ? this.t('entity_modal.action_saving')

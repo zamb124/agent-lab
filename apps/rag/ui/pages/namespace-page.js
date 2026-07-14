@@ -15,6 +15,7 @@ import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/glass-spinner.js';
 
 const ACCEPT_TYPES = '.pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.pptx';
 const DOC_STATUS_EVENT = 'rag/document_status/succeeded';
@@ -193,8 +194,7 @@ export class NamespacePage extends PlatformPage {
 
             ${loading ? html`
                 <div class="empty">
-                    <platform-spinner size="xl"></platform-spinner>
-                    <div>${this.t('namespace_detail.loading_documents')}</div>
+                    <glass-spinner size="lg"></glass-spinner>
                 </div>
             ` : documents.length === 0 ? html`
                 <div class="drop-zone ${this._dragOver ? 'drag-over' : ''}"

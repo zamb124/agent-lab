@@ -80,6 +80,7 @@ describe('PlatformApp: render', () => {
         const el = await fixture(html`<frontend-core-test-app-3></frontend-core-test-app-3>`);
         expect(el.shadowRoot.querySelector('.loading-container')).to.exist;
         expect(el.shadowRoot.querySelector('platform-spinner')).to.exist;
+        expect(el.shadowRoot.querySelector('.loading-text')).to.not.exist;
     });
 
     it('после AUTH_USER_LOADED рендерит renderRoute() + platform-modal-stack', async () => {

@@ -459,6 +459,53 @@ async def test_hitl_operator_chat_shares_session_log_and_appends(app, container,
     assert operator_turns[0].text == "Здравствуйте! Помогаю."
 
 
+async def test_hitl_operator_chat_materializes_state_content_without_messages(
+    app, container, unique_id
+):
+    """Code-only путь: state.content без messages → оператор видит реплику пользователя."""
+    slug = f"hitlchat3-{unique_id}"
+    queue = await container.work_item_service.create_queue(
+        company_id="system", name="HITLChat3", slug=slug
+    )
+    member = f"op_{unique_id}"
+    await container.work_item_service.add_queue_member(
+        company_id="system",
+        work_queue_id=queue.work_queue_id,
+        member=UserActor(user_id=member),
+    )
+
+    state = _hitl_state(unique_id)
+    user_text = "Нужен перехват диалога по спорному возврату"
+    state.content = user_text
+    await container.workflow_runtime.save_state(state.session_id, state)
+
+    command = _hitl_command(unique_id)
+    _cid, work_item_id = await container.hitl_work_item_service.register_handoff(
+        state,
+        question="q",
+        task_title="t",
+        assignee_queue_slug=slug,
+        handoff_mode=HandoffMode.TAKEOVER,
+        command=command,
+    )
+    await container.hitl_conversation_service.materialize_triggering_user_content(
+        company_id="system",
+        work_item_id=work_item_id,
+        state=state,
+        node_id="hitl_takeover_demo",
+    )
+    await container.work_item_service.claim(
+        company_id="system", work_item_id=work_item_id, user_id=member
+    )
+
+    snapshot = await container.hitl_conversation_service.get_snapshot(
+        company_id="system", work_item_id=work_item_id, operator_user_id=member
+    )
+    user_turns = [t for t in snapshot.turns if t.role == ConversationTurnRole.USER]
+    assert len(user_turns) == 1
+    assert user_turns[0].text == user_text
+
+
 async def test_hitl_operator_chat_rejects_unauthorized_and_non_takeover_send(
     app, container, unique_id
 ):

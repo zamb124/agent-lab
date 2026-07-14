@@ -28,6 +28,7 @@ import './worktracker-detail-inspector.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/chat/platform-chat.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class WorkItemDetailEditor extends PlatformElement {
     static i18nNamespace = 'worktracker';
@@ -131,6 +132,12 @@ export class WorkItemDetailEditor extends PlatformElement {
                 font-size: var(--font-size-sm);
                 font-weight: 600;
                 color: var(--text-secondary);
+            }
+            .wt-hitl-hint {
+                margin: 0;
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                line-height: 1.4;
             }
             .wt-hitl-chat {
                 display: flex;
@@ -682,9 +689,17 @@ export class WorkItemDetailEditor extends PlatformElement {
             return nothing;
         }
         const singleReply = policy.mode === 'single_reply' && policy.can_complete === true;
+        const modeHint = policy.mode === 'single_reply'
+            ? this.t('hitl_chat.hint_single_reply')
+            : policy.mode === 'takeover'
+                ? this.t('hitl_chat.hint_takeover')
+                : '';
         return html`
             <section class="wt-hitl">
                 <h3 class="wt-hitl-title">${this.t('hitl_chat.title')}</h3>
+                ${modeHint
+                    ? html`<p class="wt-hitl-hint">${modeHint}</p>`
+                    : nothing}
                 <div class="wt-hitl-chat">
                     <platform-chat
                         profile="operator_handoff"
@@ -738,6 +753,10 @@ export class WorkItemDetailEditor extends PlatformElement {
     }
 
     _renderActivity() {
+        const item = this._item();
+        const handoffSubtitle = this._isHandoff(item)
+            ? this.t('hitl_chat.activity_internal_hint')
+            : '';
         return html`
             <worktracker-activity-thread
                 ?embedded=${this.layout === 'page'}
@@ -746,6 +765,7 @@ export class WorkItemDetailEditor extends PlatformElement {
                 comment-draft=${this._commentDraft}
                 .commentFiles=${this._commentFilesDraft}
                 locale=${this._localeSel.value}
+                subtitle=${handoffSubtitle}
                 @wt-comment-change=${(e) => {
                     this._commentDraft = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                 }}
@@ -780,7 +800,7 @@ export class WorkItemDetailEditor extends PlatformElement {
 
         if (this.layout === 'inspector-only') {
             if (!item) {
-                return html`<div class="wt-loading">${this.t('detail_panel.loading')}</div>`;
+                return html`<div class="wt-loading"><glass-spinner></glass-spinner></div>`;
             }
             return this._renderInspector(item, false);
         }

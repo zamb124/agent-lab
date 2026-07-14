@@ -106,7 +106,10 @@
   "hitl_chat": {
     "title": "Conversation with user",
     "reply_placeholder": "Your reply to the user…",
-    "complete": "Reply and complete"
+    "complete": "Reply and complete",
+    "hint_single_reply": "Reply to the user only via the field below and “Reply and complete”. Comments in Activity are not visible to the user.",
+    "hint_takeover": "Message the user in the conversation above. Activity comments are internal team notes only.",
+    "activity_internal_hint": "Internal team notes — the user does not see them."
   },
   "board_page": {
     "title": "Tasks",

@@ -549,6 +549,19 @@ function _userMessageAdded(state, p) {
     const message = p.message;
     if (!message || typeof message !== 'object') return state;
     const ensured = _ensureContextBucket(state, contextId);
+    const bucket = ensured.messagesByContextId && ensured.messagesByContextId[contextId];
+    const existing = bucket && Array.isArray(bucket.messages) ? bucket.messages : [];
+    const last = existing.length > 0 ? existing[existing.length - 1] : null;
+    const newContent = typeof message.content === 'string' ? message.content : '';
+    if (
+        last
+        && last.role === 'user'
+        && typeof last.content === 'string'
+        && last.content === newContent
+        && newContent !== ''
+    ) {
+        return state;
+    }
     return {
         ..._pushMessage(ensured, contextId, message),
         filesByContextId: {
@@ -731,6 +744,15 @@ function _operatorReply(state, p) {
     const text = typeof p.text === 'string' ? p.text : '';
     if (!taskId || !text) return state;
     return _applyToBucketMessages(state, taskId, (messages) => {
+        const last = messages.length > 0 ? messages[messages.length - 1] : null;
+        if (
+            last
+            && last.role === 'operator'
+            && typeof last.content === 'string'
+            && last.content === text
+        ) {
+            return messages;
+        }
         const operatorMsg = {
             id: `operator_${taskId}_${Date.now()}`,
             role: 'operator',

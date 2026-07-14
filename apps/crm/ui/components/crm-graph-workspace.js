@@ -1822,8 +1822,7 @@ export class CRMGraphWorkspace extends PlatformElement {
 
                 ${this._loading ? html`
                     <div class="loading-overlay">
-                        <glass-spinner size="14"></glass-spinner>
-                        <span>${this.t('graph.loading')}</span>
+                        <glass-spinner size="xs"></glass-spinner>
                     </div>
                 ` : nothing}
 

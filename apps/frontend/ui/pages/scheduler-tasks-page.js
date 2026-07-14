@@ -256,7 +256,7 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
         const snapshot = snapshotByScheduleTaskId[t.schedule_task_id];
         const loading = Boolean(loadingByScheduleTaskId[t.schedule_task_id]);
         const data = !snapshot && loading
-            ? html`<div>${this.t('scheduler_page.redis_loading')}</div>`
+            ? html`<div><glass-spinner></glass-spinner></div>`
             : snapshot
                 ? html`<pre>${JSON.stringify(snapshot, null, 2)}</pre>`
                 : html`<div>${this.t('scheduler_page.redis_empty')}</div>`;

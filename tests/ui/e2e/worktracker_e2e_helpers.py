@@ -370,7 +370,47 @@ async def worktracker_hitl_chat_wait_text(
         if isinstance(text_pattern, re.Pattern)
         else re.compile(re.escape(text_pattern), re.I)
     )
-    await expect(chat.get_by_text(pattern).first).to_be_visible(timeout=120_000)
+    source = pattern.pattern
+    deadline = time.monotonic() + 120.0
+    last_bubble_count = 0
+    last_bubble_texts: list[str] = []
+    while time.monotonic() < deadline:
+        stats = await chat.evaluate(
+            """
+            (el, reSource) => {
+                const re = new RegExp(reSource, 'i');
+                const root = el.renderRoot;
+                if (!root) {
+                    return { bubbleCount: 0, matched: false, texts: [] };
+                }
+                const bubbles = root.querySelectorAll('flows-chat-message');
+                const texts = [];
+                let matched = false;
+                for (const bubble of bubbles) {
+                    const bubbleRoot = bubble.renderRoot || bubble.shadowRoot;
+                    const text = (bubbleRoot ? bubbleRoot.textContent : bubble.textContent) || '';
+                    texts.push(text);
+                    if (re.test(text)) {
+                        matched = true;
+                    }
+                }
+                return { bubbleCount: bubbles.length, matched, texts };
+            }
+            """,
+            source,
+        )
+        if isinstance(stats, dict):
+            last_bubble_count = int(stats.get("bubbleCount") or 0)
+            raw_texts = stats.get("texts")
+            if isinstance(raw_texts, list):
+                last_bubble_texts = [str(t) for t in raw_texts]
+            if stats.get("matched") is True:
+                return
+        await asyncio.sleep(0.5)
+    raise AssertionError(
+        f"embedded HITL chat did not show text matching {source!r} within 120s "
+        f"(last bubble count={last_bubble_count}, texts={last_bubble_texts!r})"
+    )
 
 
 async def worktracker_hitl_chat_send(editor: Locator, text: str) -> None:
@@ -384,6 +424,19 @@ async def worktracker_hitl_chat_send(editor: Locator, text: str) -> None:
     await expect(chat.get_by_text(re.compile(re.escape(text.strip()), re.I)).first).to_be_visible(
         timeout=60_000,
     )
+
+
+async def worktracker_hitl_single_reply_complete(editor: Locator, text: str) -> None:
+    """single_reply: ответ через форму «Ответить и завершить» (не Activity, не chat composer)."""
+    reply = editor.locator(".wt-hitl-reply").first
+    await expect(reply).to_be_visible(timeout=30_000)
+    field = reply.locator("platform-field[data-canon='composer']").first
+    await expect(field).to_be_visible(timeout=15_000)
+    await _set_platform_field(field, text)
+    # После change Lit перерисовывает форму — кнопку берём заново.
+    btn = editor.locator(".wt-hitl-reply button.btn-primary").first
+    await expect(btn).to_be_enabled(timeout=10_000)
+    await btn.evaluate("(el) => el.click()")
 
 
 async def flows_user_chat_wait_text(page: Page, text_pattern: re.Pattern[str] | str) -> None:

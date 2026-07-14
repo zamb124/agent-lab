@@ -36,6 +36,16 @@ from core.worktracker.models import (
 router = APIRouter(prefix="/work-items", tags=["work-items"])
 
 
+async def _to_public(container: ContainerDep, item: WorkItem) -> WorkItemPublic:
+    authorized = await container.work_item_service.operator_authorized(
+        item, current_user_id()
+    )
+    policy = build_interaction_policy(item, operator_authorized=authorized)
+    return WorkItemPublic.model_validate(
+        {**item.model_dump(mode="json"), "interaction_policy": policy.model_dump(mode="json")}
+    )
+
+
 @router.get("", response_model=OffsetPage[WorkItem])
 async def list_work_items(
     container: ContainerDep,
@@ -104,11 +114,7 @@ async def get_work_item(container: ContainerDep, work_item_id: str) -> WorkItemP
         item = await service.get(current_company_id(), work_item_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    authorized = await service.operator_authorized(item, current_user_id())
-    policy = build_interaction_policy(item, operator_authorized=authorized)
-    return WorkItemPublic.model_validate(
-        {**item.model_dump(mode="json"), "interaction_policy": policy.model_dump(mode="json")}
-    )
+    return await _to_public(container, item)
 
 
 @router.post("", response_model=WorkItem, status_code=201)
@@ -203,10 +209,10 @@ async def move_work_item(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/{work_item_id}/claim", response_model=WorkItem)
-async def claim_work_item(container: ContainerDep, work_item_id: str) -> WorkItem:
+@router.post("/{work_item_id}/claim", response_model=WorkItemPublic)
+async def claim_work_item(container: ContainerDep, work_item_id: str) -> WorkItemPublic:
     try:
-        return await container.work_item_service.claim(
+        item = await container.work_item_service.claim(
             company_id=current_company_id(),
             work_item_id=work_item_id,
             user_id=current_user_id(),
@@ -215,6 +221,7 @@ async def claim_work_item(container: ContainerDep, work_item_id: str) -> WorkIte
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await _to_public(container, item)
 
 
 @router.post("/{work_item_id}/comments", response_model=WorkItemComment, status_code=201)
@@ -239,10 +246,10 @@ async def list_comments(container: ContainerDep, work_item_id: str) -> list[Work
     return await container.work_item_service.list_comments(current_company_id(), work_item_id)
 
 
-@router.post("/{work_item_id}/complete", response_model=WorkItem)
+@router.post("/{work_item_id}/complete", response_model=WorkItemPublic)
 async def complete_work_item(
     container: ContainerDep, work_item_id: str, body: WorkItemCompleteRequest
-) -> WorkItem:
+) -> WorkItemPublic:
     company_id = current_company_id()
     resolution = WorkItemResolution(
         text=body.resolution_text,
@@ -258,11 +265,11 @@ async def complete_work_item(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return completion.work_item
+    return await _to_public(container, completion.work_item)
 
 
-@router.post("/{work_item_id}/cancel", response_model=WorkItem)
-async def cancel_work_item(container: ContainerDep, work_item_id: str) -> WorkItem:
+@router.post("/{work_item_id}/cancel", response_model=WorkItemPublic)
+async def cancel_work_item(container: ContainerDep, work_item_id: str) -> WorkItemPublic:
     try:
         completion = await container.work_item_service.cancel(
             company_id=current_company_id(),
@@ -270,4 +277,4 @@ async def cancel_work_item(container: ContainerDep, work_item_id: str) -> WorkIt
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return completion.work_item
+    return await _to_public(container, completion.work_item)

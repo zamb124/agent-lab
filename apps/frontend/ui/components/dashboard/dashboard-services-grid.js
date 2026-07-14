@@ -126,15 +126,15 @@ export class DashboardServicesGrid extends PlatformElement {
 
     _metricValue(idx, metricKey, svcId, activeCompanyId) {
         if (!metricKey) {
-            return this.t('console_home.stat_loading');
+            return '—';
         }
         if (svcId === 'litserve' && activeCompanyId !== 'system') {
-            return this.t('console_home.stat_loading');
+            return '—';
         }
         const op = this._countOps[idx];
-        if (!op) return this.t('console_home.stat_loading');
+        if (!op) return '—';
         const result = op.lastResult;
-        if (!result) return this.t('console_home.stat_loading');
+        if (!result) return '—';
         return this.t(metricKey, { count: result.total });
     }
 

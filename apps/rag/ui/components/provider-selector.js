@@ -10,6 +10,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class ProviderSelector extends PlatformElement {
     static i18nNamespace = 'rag';
@@ -100,7 +101,7 @@ export class ProviderSelector extends PlatformElement {
         const switching = this._switch.busy;
 
         if (this._providers.busy && items.length === 0) {
-            return html`<div class="empty">${this.t('settings_view.providers_loading')}</div>`;
+            return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
         }
 
         return html`

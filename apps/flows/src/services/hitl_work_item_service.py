@@ -2,15 +2,10 @@
 HITL через платформенное ядро задач WorkItem.
 
 Операторский handoff создаёт `WorkItem(kind=operator_handoff, blocking=True)` в
-platform_worktracker с двумя хуками: `completed` (возобновление durable workflow)
-и `comment` (стрим takeover-сообщений оператора пользователю). На завершении
-worktracker дёргает `/flows/api/v1/internal/work-items/completed`, а flows
-возобновляет durable workflow (`process_flow_task(is_resume=True)`), маршрутизируя
-ответ исполнителю по `state.current_nodes`/`interrupt_path`.
-
-Снимок прерывания и контекст хранятся в `WorkItemHook.binding` (flows-owned,
-для ядра непрозрачны). Задача оператора, как и любая, переназначаема (reassign)
-на агента/человека — хук `completed` срабатывает одинаково.
+platform_worktracker с хуком `completed`. Диалог — durable `ExecutionState.messages`
+через `HitlConversationService` + Redis `stream:{a2a_task_id}` (Emitter); user/operator
+слушают live `tasks/resubscribe`. На complete — closing append, затем
+`process_flow_task(is_resume=True)`.
 """
 
 from __future__ import annotations
@@ -24,6 +19,7 @@ from apps.flows.src.observability.hitl_timing import (
     maybe_record_hitl_operator_response,
     record_hitl_interrupt,
 )
+from apps.flows.src.services.hitl_conversation_service import HitlConversationService
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows_worker.broker_core import broker as flows_broker
 from core.clients.redis_client import RedisClient
@@ -66,9 +62,11 @@ class HitlWorkItemService:
         *,
         work_item_service: WorkItemService,
         redis_client: RedisClient,
+        hitl_conversation_service: HitlConversationService,
     ) -> None:
         self._work_items: WorkItemService = work_item_service
         self._redis: RedisClient = redis_client
+        self._conversation: HitlConversationService = hitl_conversation_service
 
     async def register_handoff(
         self,
@@ -204,9 +202,30 @@ class HitlWorkItemService:
             flow_id=flow_id,
         )
 
-        # takeover-диалог уже в ExecutionState.messages (durable append реплик).
-        # Resume передаёт только закрывающий ответ оператора; single_reply — его же.
+        ctx = get_context()
+        if ctx is None or ctx.active_company is None:
+            raise ValueError("resume_from_completion: нужен Context с active_company")
+        company_id = ctx.active_company.company_id
+
+        # Closing reply → durable messages + Redis stream до resume (live resubscribe).
         content = resolution.text
+        if content.strip():
+            item = await self._work_items.get(company_id, work_item_id)
+            operator_user_id = ""
+            assignment = item.assignment
+            if isinstance(assignment, QueueAssignment):
+                claimed = assignment.claimed_by_user_id
+                if isinstance(claimed, str) and claimed.strip():
+                    operator_user_id = claimed.strip()
+            if operator_user_id == "":
+                operator_user_id = end_user_id
+            _ = await self._conversation.append_closing_operator_reply(
+                company_id=company_id,
+                work_item_id=work_item_id,
+                operator_user_id=operator_user_id,
+                text=content,
+                idempotency_key=f"complete:{work_item_id}",
+            )
 
         context_id = binding.get("context_id")
         cid = (

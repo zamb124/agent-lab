@@ -1186,7 +1186,7 @@ export class CRMTemplatesPage extends PlatformPage {
             return html`
                 <div class="right-column">
                     <div class="panel">
-                        <div class="empty">${this.t('templates_page.loading_detail')}</div>
+                        <div class="empty"><glass-spinner size="lg"></glass-spinner></div>
                     </div>
                 </div>
             `;

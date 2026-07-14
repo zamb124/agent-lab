@@ -312,7 +312,7 @@ export class CRMEntityHoverPreview extends PlatformElement {
             : html`
                 <div class="crm-entity-preview-portal__center">
                     ${this._entities.loading
-                        ? html`<glass-spinner size="16"></glass-spinner>`
+                        ? html`<glass-spinner size="xs"></glass-spinner>`
                         : this.t('note_page.not_found_title')}
                 </div>
             `;

@@ -62,24 +62,24 @@ export class DashboardStatStrip extends PlatformElement {
         if (subscription && typeof subscription.plan === 'string' && subscription.plan.length > 0) {
             return subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1);
         }
-        return this.t('console_home.stat_loading');
+        return '—';
     }
 
     _balanceValue(subscription) {
         const formatted = subscription ? this._formatCurrency(subscription.balance) : null;
-        if (formatted === null) return this.t('console_home.stat_loading');
+        if (formatted === null) return '—';
         return `${formatted} ${this.t('console_home.currency_rub')}`;
     }
 
     _spentValue(subscription) {
         const formatted = subscription ? this._formatCurrency(subscription.current_month_spent) : null;
-        if (formatted === null) return this.t('console_home.stat_loading');
+        if (formatted === null) return '—';
         return `${formatted} ${this.t('console_home.currency_rub')}`;
     }
 
     _servicesValue(statusResult, activeCompanyId) {
         if (!statusResult || !Array.isArray(statusResult.items)) {
-            return this.t('console_home.stat_loading');
+            return '—';
         }
         const items = statusResult.items;
         const total = items.length;

@@ -139,7 +139,6 @@ export class JoinPage extends PlatformPage {
             return html`
                 <div class="checking">
                     <glass-spinner></glass-spinner>
-                    <p>${this.t('join_page.preview_loading')}</p>
                 </div>
             `;
         }

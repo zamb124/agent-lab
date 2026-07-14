@@ -542,8 +542,7 @@ export class FlowsApp extends PlatformApp {
         if (!this._bootstrapped) {
             return html`
                 <div class="loading-container">
-                    <div class="loading-spinner"></div>
-                    <div class="loading-text">${this.t('loading', {}, 'common')}</div>
+                    <platform-spinner size="xl"></platform-spinner>
                 </div>
             `;
         }

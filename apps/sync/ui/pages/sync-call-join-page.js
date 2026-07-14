@@ -401,7 +401,6 @@ export class SyncCallJoinPage extends PlatformPage {
                 <glass-card class="card">
                     <div class="load-panel" role="status" aria-live="polite">
                         <glass-spinner size="lg"></glass-spinner>
-                        <p>${this.t('call_join.loading')}</p>
                     </div>
                 </glass-card>
             `;
@@ -436,7 +435,6 @@ export class SyncCallJoinPage extends PlatformPage {
                 <glass-card class="card">
                     <div class="load-panel" role="status" aria-live="polite">
                         <glass-spinner size="lg"></glass-spinner>
-                        <p>${this.t('call_join.loading')}</p>
                     </div>
                 </glass-card>
             `;

@@ -14,6 +14,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/fields/platform-field.js';
 
@@ -407,7 +408,7 @@ export class CRMRelationshipTypesPage extends PlatformPage {
     _renderList() {
         const items = this._resource.items;
         if (this._resource.loading && items.length === 0) {
-            return html`<div class="section"><div class="empty">${this.t('relationship_types_page.loading')}</div></div>`;
+            return html`<div class="section"><div class="empty"><glass-spinner size="lg"></glass-spinner></div></div>`;
         }
         if (items.length === 0) {
             return html`<div class="section"><div class="empty">${this.t('relationship_types_page.empty')}</div></div>`;

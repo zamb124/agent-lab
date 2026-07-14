@@ -2548,6 +2548,12 @@ class HitlNode(BaseNode):
                 handoff_mode=mode,
                 command=handoff_command,
             )
+            await container.hitl_conversation_service.materialize_triggering_user_content(
+                company_id=company_id,
+                work_item_id=work_item_id,
+                state=state,
+                node_id=self.node_id,
+            )
             return {
                 "correlation_id": str(cid),
                 "work_item_id": work_item_id,

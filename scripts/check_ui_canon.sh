@@ -481,6 +481,18 @@ if [ -n "$SPINNER_KEYFRAMES_HITS" ]; then
     echo "$SPINNER_KEYFRAMES_HITS" >&2
 fi
 
+# 35. Boot shell: запрещён текст имени сервиса в :not(:defined)::after — только platform-boot-spinner.css.
+BOOT_TEXT_HITS="$(rg -n ":not\\(:defined\\)::after\\s*\\{[^}]*content:\\s*['\"]" apps/*/ui/index.html || true)"
+if [ -n "$BOOT_TEXT_HITS" ]; then
+    fail "apps/*/ui/index.html: текстовый boot content запрещён — подключите platform-boot-spinner.css"
+    echo "$BOOT_TEXT_HITS" >&2
+fi
+MISSING_BOOT_CSS="$(rg -L 'platform-boot-spinner\\.css' apps/*/ui/index.html || true)"
+if [ -n "$MISSING_BOOT_CSS" ]; then
+    fail "apps/*/ui/index.html: отсутствует link на platform-boot-spinner.css"
+    echo "$MISSING_BOOT_CSS" >&2
+fi
+
 if [ "$ERR" -ne 0 ]; then
     exit 1
 fi

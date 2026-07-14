@@ -114,6 +114,15 @@ await process_flow_task.kiq(
 
 Тулы для `llm_node` (`apps/flows/tools/scheduling.py`): `schedule_cron_task`, `schedule_interval_task`, `schedule_one_time_task`, `list_scheduled_tasks`, `cancel_scheduled_task`. Внутри — `ScheduleService` контейнера flows. Требование: `state.session_id` в формате `flow_id:context_id`, иначе `ValueError`. Тулы дописывают список `scheduled_tasks` в state.
 
+## Company init (idle → flows_worker)
+
+| Сценарий | Idle-задача | Доменный executor |
+|---|---|---|
+| Новая компания | `company_init_new_company` (`apps/idle_worker/tasks/company_init_tasks.py`) | `POST /flows/api/v1/internal/company/init` → `init_company_resources` |
+| System bootstrap | `company_init_system` — enqueue из `idle_worker_startup` (skip в `is_testing()`) | тот же internal API → `init_company_resources` |
+
+HTTP-процесс flows **не** ставит и не выполняет тяжёлый company/MCP init в lifespan. Testing fixtures — синхронно в `apps/flows/main.py` при `is_testing()`.
+
 ## Календарный автосинк (idle worker через scheduler)
 
 Задача `calendar_sync_tick` (`apps/idle_worker/tasks/calendar_sync_tasks.py`). Регистрация cron в `apps/scheduler/main.py` на старте через `SchedulerService`: `company_id="system"`, cron `*/1 * * * *`, idempotency (есть `pending` — дубль не создаётся; есть `paused` — задача резюмируется). Модуль `calendar_sync_tasks` обязан быть импортирован в `apps/idle_worker/worker.py` и в `apps/scheduler/scheduler.py`. Параметры в `settings.calendar_sync`: `lookback_days`, `lookahead_months`, `batch_size`, `max_integrations_per_tick`, `max_parallel_integrations`, `notification_dedup_ttl_seconds`. Нотификации новых событий — `core.websocket.publisher.notify_user`, дедупликация по `calendar:notify:{company_id}:{user_id}:{provider}:{event_id}` в `shared_storage`.

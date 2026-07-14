@@ -436,7 +436,7 @@ export class PlatformWorkItemPreview extends PlatformElement {
             : html`
                 <div class="platform-work-item-preview-portal__center">
                     ${loading
-                        ? html`<glass-spinner size="16"></glass-spinner>`
+                        ? html`<glass-spinner size="xs"></glass-spinner>`
                         : this.t('work_item_preview.not_found')}
                 </div>
             `;

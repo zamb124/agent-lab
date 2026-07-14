@@ -551,7 +551,7 @@ export class FrontendApp extends PlatformApp {
 
     renderRoute(routeKey, params) {
         if (!routeKey) {
-            return html`<div class="loading-container"><div class="loading-spinner"></div></div>`;
+            return html`<div class="loading-container"><platform-spinner size="xl"></platform-spinner></div>`;
         }
         if (PUBLIC_ROUTE_KEYS.has(routeKey)) {
             return this._renderPublic(routeKey, params);

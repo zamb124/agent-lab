@@ -22,6 +22,8 @@ export class WorktrackerActivityThread extends PlatformElement {
         workItemId: { type: String, attribute: 'work-item-id' },
         locale: { type: String },
         embedded: { type: Boolean },
+        /** Подпись под заголовком (например, что Activity — внутренние заметки HITL). */
+        subtitle: { type: String },
     };
 
     static styles = [
@@ -59,6 +61,7 @@ export class WorktrackerActivityThread extends PlatformElement {
         this.workItemId = '';
         this.locale = 'ru';
         this.embedded = false;
+        this.subtitle = '';
     }
 
     _formatTimestamp(value) {
@@ -145,6 +148,9 @@ export class WorktrackerActivityThread extends PlatformElement {
         return html`
             <section class="wt-activity">
                 <h3 class="wt-activity-title">${this.t('detail_page.section_activity')}</h3>
+                ${typeof this.subtitle === 'string' && this.subtitle.trim() !== ''
+                    ? html`<p class="wt-activity-subtitle">${this.subtitle}</p>`
+                    : nothing}
                 ${this._renderComments()}
                 <div class="wt-composer">
                     <platform-field

@@ -1019,7 +1019,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                 ${this._templatePickerOpen
                     ? html`
                         ${typesLoading
-                            ? html`<span class="detail-template-value">${this.t('entity_modal.types_loading')}</span>`
+                            ? html`<span class="detail-template-value"><glass-spinner size="xs"></glass-spinner></span>`
                             : html`
                                 <platform-field
                                     class="detail-template-select"
@@ -1142,7 +1142,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                         @click=${() => this._onToolbarSave()}
                     >
                         ${this._editToolbarSubmitting
-                            ? html`<glass-spinner size="16"></glass-spinner>`
+                            ? html`<glass-spinner size="xs"></glass-spinner>`
                             : html`<platform-icon name="check" size="18"></platform-icon>`}
                     </button>
                     <button

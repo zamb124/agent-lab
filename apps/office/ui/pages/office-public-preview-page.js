@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-document-viewer-host.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class OfficePublicPreviewPage extends PlatformPage {
     static i18nNamespace = 'documents';
@@ -168,7 +169,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
                 <span class="title">${title}</span>
             </div>
             <div class="body">
-                ${this._loading ? html`<div class="status">${this.t('public_preview.loading')}</div>` : ''}
+                ${this._loading ? html`<div class="status"><glass-spinner size="lg"></glass-spinner></div>` : ''}
                 ${this._errorKey ? html`<div class="error">${this.t(this._errorKey)}</div>` : ''}
                 ${!this._loading && !this._errorKey && this._resolve && this._resolve.resource_kind === 'catalog'
                     ? html`
@@ -191,7 +192,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
                             .bindingId=${this._openConfig.binding_id}
                             .openConfig=${this._openConfig}
                         >
-                            <span slot="loading">${this.t('public_preview.loading')}</span>
+                            <glass-spinner slot="loading"></glass-spinner>
                         </platform-document-viewer-host>
                     </div>
                 ` : ''}

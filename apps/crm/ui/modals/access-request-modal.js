@@ -22,6 +22,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 
 const ENTITIES_NAME = 'crm/entities';
@@ -334,7 +335,7 @@ export class CRMAccessRequestModal extends PlatformModal {
                     </div>
                     <div class="meta">
                         <div class="name">${this.entityId}</div>
-                        <div class="sub">${this.t('access_request_modal.loading_entity')}</div>
+                        <div class="sub"><glass-spinner></glass-spinner></div>
                     </div>
                 </div>
             `;

@@ -284,7 +284,7 @@ export class FrontendTracingPage extends PlatformPage {
                 ${isOpen ? html`
                     <div class="suggest">
                         ${this._facets.loading(key)
-                            ? html`<div class="suggest-empty">${this.t('tracing_page.loading')}</div>`
+                            ? html`<div class="suggest-empty"><glass-spinner></glass-spinner></div>`
                             : (items.length === 0
                                 ? html`<div class="suggest-empty">${this.t('tracing_page.empty')}</div>`
                                 : items.map((it) => html`
@@ -495,7 +495,7 @@ export class FrontendTracingPage extends PlatformPage {
                 ${hasMore ? html`
                     <div class="footer-actions">
                         <button class="btn" ?disabled=${loadingMore} @click=${() => this._spans.loadMore()}>
-                            ${loadingMore ? this.t('tracing_page.loading') : this.t('tracing_page.load_more')}
+                            ${loadingMore ? html`<glass-spinner size="xs"></glass-spinner>` : this.t('tracing_page.load_more')}
                         </button>
                     </div>
                 ` : null}

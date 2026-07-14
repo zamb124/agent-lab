@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/glass-spinner.js';
 import { renderFlowsNodeEditorSurface } from '../components/editor/flows-node-editor-surface.js';
 import { asObject, isPlainObject, asString } from '../_helpers/flows-resolvers.js';
 import {
@@ -198,7 +199,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
 
     renderBody() {
         if (this._loadPhase === 'loading' || this._loadPhase === 'idle') {
-            return html`<div class="body-wrap">${this.t('embedded_tool_config.loading')}</div>`;
+            return html`<div class="body-wrap"><glass-spinner></glass-spinner></div>`;
         }
         if (this._loadPhase === 'error' || this._node === null) {
             return html`<div class="body-wrap">${this.t('embedded_tool_config.error')}</div>`;

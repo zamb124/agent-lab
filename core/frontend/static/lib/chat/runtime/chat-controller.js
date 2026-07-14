@@ -20,6 +20,7 @@ import {
     a2aEndpointUrl,
     buildA2aCancelBody,
     buildA2aMessageStreamBody,
+    buildA2aResubscribeBody,
     consumeA2aStream,
 } from './a2a-stream.js';
 import {
@@ -28,6 +29,7 @@ import {
     createInitialChatRuntimeState,
     STREAM_INCOMPLETE_I18N_KEY,
 } from './chat-state.js';
+import { findActiveHitlPause } from './hitl-pause-listener.js';
 import {
     feedStreamTtsFromA2aResult,
     stopStreamTtsPlayback,
@@ -84,6 +86,10 @@ export class ChatController {
         this._streamAbort = null;
         this._sending = false;
         this._cancelBusy = false;
+        /** @type {AbortController|null} */
+        this._hitlLiveAbort = null;
+        /** @type {string|null} */
+        this._hitlLiveTaskId = null;
         if (this._transport !== null && typeof this._transport.attach === 'function') {
             this._transport.attach(this);
         }
@@ -101,8 +107,9 @@ export class ChatController {
         await this._transport.loadHistory();
     }
 
-    /** Освободить ресурсы транспорта (подписки на шину и т.п.). */
+    /** Освободить ресурсы транспорта и HITL live resubscribe. */
     dispose() {
+        this.stopHitlLiveTail();
         if (this._transport !== null && typeof this._transport.dispose === 'function') {
             this._transport.dispose();
         }
@@ -167,6 +174,7 @@ export class ChatController {
     }
 
     newChat() {
+        this.stopHitlLiveTail();
         if (this._streamAbort !== null) {
             this._streamAbort.abort();
         }
@@ -290,6 +298,7 @@ export class ChatController {
             }
             return;
         }
+        this.stopHitlLiveTail();
         const message = typeof input.message === 'string' ? input.message : '';
         const files = Array.isArray(input.files) ? input.files : [];
         if (message.trim() === '' && files.length === 0) {
@@ -384,6 +393,7 @@ export class ChatController {
                 this._onRunEvent('flows/run/flow_done', {});
             }
             this._onChange(this._state);
+            this.syncHitlLiveTail();
         }
     }
 
@@ -476,6 +486,94 @@ export class ChatController {
                 this._onRunEvent('flows/run/flow_done', {});
             }
             this._onChange(this._state);
+            this.syncHitlLiveTail();
+        }
+    }
+
+    /**
+     * На активной operator_task паузе — live `tasks/resubscribe` (тот же Redis stream,
+     * что у operator chat). Не используется при operator_handoff transport.
+     */
+    syncHitlLiveTail() {
+        if (this._transport !== null) {
+            return;
+        }
+        if (this._sending) {
+            return;
+        }
+        const pause = findActiveHitlPause(this._state);
+        if (pause === null) {
+            this.stopHitlLiveTail();
+            return;
+        }
+        if (this._hitlLiveTaskId === pause.taskId && this._hitlLiveAbort !== null) {
+            return;
+        }
+        this.stopHitlLiveTail();
+        this._hitlLiveTaskId = pause.taskId;
+        this._hitlLiveAbort = new AbortController();
+        void this._runHitlLiveTail(pause, this._hitlLiveAbort);
+    }
+
+    stopHitlLiveTail() {
+        if (this._hitlLiveAbort !== null) {
+            this._hitlLiveAbort.abort();
+            this._hitlLiveAbort = null;
+        }
+        this._hitlLiveTaskId = null;
+    }
+
+    /**
+     * @param {{ workItemId: string, taskId: string, contextId: string, flowId: string }} pause
+     * @param {AbortController} abort
+     */
+    async _runHitlLiveTail(pause, abort) {
+        const streamState = {
+            contextId: pause.contextId,
+            taskId: pause.taskId,
+            taskPrimed: true,
+        };
+        try {
+            while (!abort.signal.aborted) {
+                let terminal = false;
+                try {
+                    const headers = await this._getHeaders();
+                    await consumeA2aStream(
+                        {
+                            url: a2aEndpointUrl(this._target),
+                            body: buildA2aResubscribeBody(pause.taskId),
+                            headers,
+                            credentials: this._credentials,
+                            signal: abort.signal,
+                        },
+                        (frame) => {
+                            if (terminal || abort.signal.aborted) {
+                                return;
+                            }
+                            terminal = this.relayA2aFrame(frame, streamState).terminal;
+                        },
+                    );
+                } catch (err) {
+                    if (err instanceof Error && err.name === 'AbortError') {
+                        break;
+                    }
+                    await new Promise((resolve) => {
+                        setTimeout(resolve, 800);
+                    });
+                    continue;
+                }
+                if (terminal || abort.signal.aborted) {
+                    break;
+                }
+                await new Promise((resolve) => {
+                    setTimeout(resolve, 400);
+                });
+            }
+        } finally {
+            if (this._hitlLiveAbort === abort) {
+                this._hitlLiveAbort = null;
+                this._hitlLiveTaskId = null;
+            }
         }
     }
 

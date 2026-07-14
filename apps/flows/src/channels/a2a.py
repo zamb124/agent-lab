@@ -33,6 +33,7 @@ from a2a.types import (
 )
 from a2a.utils.message import get_message_text, new_agent_text_message
 
+from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.channels.base import BaseChannel
 from apps.flows.src.channels.types import ChannelRequestContext, PreparedTaskParams
 from apps.flows.src.container_contracts import FlowRuntimeContainer
@@ -66,6 +67,19 @@ from core.types import JsonObject, require_json_object
 from core.worktracker.models import build_conversation_ref
 
 logger = get_logger(__name__)
+
+
+def _task_needs_live_resubscribe_tail(task: Task) -> bool:
+    """True — после snapshot нужен live Redis tail (задача ещё не terminal)."""
+    state = task.status.state
+    if state in (
+        TaskState.completed,
+        TaskState.failed,
+        TaskState.canceled,
+        TaskState.rejected,
+    ):
+        return False
+    return True
 
 
 def _text_part(text: str) -> Part:
@@ -651,11 +665,31 @@ class A2AChannel(BaseChannel):
     async def on_resubscribe_to_task(
         self, params: TaskIdParams, context: ChannelRequestContext = None
     ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
-        """Переподписка на события задачи."""
+        """Snapshot Task + живой tail Redis `stream:{task_id}` до финального события.
+
+        Нужен для HITL: после `input-required` (operator_task) исходный
+        `message/stream` обрывается вместе с worker'ом; user и operator
+        переподписываются сюда и получают mid-dialog / resume события.
+        """
         _ = context
+        set_current_channel(self)
         task = await self.on_get_task(TaskQueryParams(id=params.id))
-        if task:
-            yield task
+        if task is None:
+            return
+        yield task
+        if not _task_needs_live_resubscribe_tail(task):
+            return
+
+        timeout = 120.0 if is_testing() else float(get_flows_settings().default_flow_timeout_seconds)
+        subscriber = EventSubscriber(self.container.redis_client)
+        logger.info(
+            "a2a.resubscribe.live_tail",
+            task_id=task.id,
+            task_state=task.status.state.value if task.status and task.status.state else None,
+            timeout_seconds=timeout,
+        )
+        async for event in subscriber.subscribe(task.id, timeout=timeout):
+            yield event
 
     @override
     async def on_set_task_push_notification_config(

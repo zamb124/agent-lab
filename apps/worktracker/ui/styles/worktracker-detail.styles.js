@@ -117,6 +117,12 @@ export const worktrackerDetailContentStyles = css`
         color: var(--text-secondary);
         margin: 0;
     }
+    .wt-activity-subtitle {
+        margin: 0;
+        font-size: var(--text-xs);
+        color: var(--text-tertiary);
+        line-height: 1.4;
+    }
     .wt-activity-empty {
         font-size: var(--text-sm);
         color: var(--text-tertiary);

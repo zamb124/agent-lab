@@ -2483,7 +2483,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                                         </div>
                                     `}
                                 ${loadingMore
-                                    ? html`<div class="loading-more">${this.t('loading', {}, 'common')}</div>`
+                                    ? html`<div class="loading-more"><glass-spinner></glass-spinner></div>`
                                     : nothing}
                                 <div class="scroll-sentinel"></div>
                             `}

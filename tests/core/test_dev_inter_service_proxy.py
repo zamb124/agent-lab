@@ -4,6 +4,7 @@ from core.middleware.dev_inter_service_proxy import (
     _ONLYOFFICE_STATIC_SEGMENTS,
     _is_local_target_for_process,
     _is_onlyoffice_upstream_path,
+    _is_process_local_shared_path,
     _rewrite_upstream_origin_text,
 )
 
@@ -19,6 +20,13 @@ def test_frontend_process_proxies_documents() -> None:
 def test_flows_skips_only_own_segment() -> None:
     assert _is_local_target_for_process("flows", "flows") is True
     assert _is_local_target_for_process("documents", "flows") is False
+
+
+def test_platform_brand_is_local_on_every_service() -> None:
+    assert _is_process_local_shared_path("/frontend/api/platform/brand") is True
+    assert _is_process_local_shared_path("/frontend/api/platform/brand/") is True
+    assert _is_process_local_shared_path("/frontend/api/companies") is False
+    assert _is_process_local_shared_path("/frontend/api/platform-tracing/spans") is False
 
 
 def test_onlyoffice_static_segments() -> None:

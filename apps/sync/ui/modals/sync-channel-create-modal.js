@@ -19,6 +19,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-user-chip.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class SyncChannelCreateModal extends PlatformFormModal {
     static modalKind = 'sync.channel_create';
@@ -198,7 +199,7 @@ export class SyncChannelCreateModal extends PlatformFormModal {
                 ></platform-field>
                 <div class="members-list">
                     ${teamLoading && candidates.length === 0 ? html`
-                        <div class="members-empty">${this.t('channel_modal.members_loading')}</div>
+                        <div class="members-empty"><glass-spinner></glass-spinner></div>
                     ` : ''}
                     ${!teamLoading && candidates.length === 0 ? html`
                         <div class="members-empty">${this.t('channel_modal.members_empty')}</div>

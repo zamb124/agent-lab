@@ -836,12 +836,17 @@ export class PlatformChat extends LitElement {
         this.panelMaximized = false;
         this.fabUnreadCount = 0;
 
+        /** @type {InstanceType<typeof OperatorConversationTransport>|null} operator_handoff транспорт. */
+        this._operatorTransport = null;
+        this._operatorHistoryLoaded = false;
+
         /** @type {InstanceType<typeof ChatController>} */
         this._controller = new ChatController({
             target: this._controllerTarget(),
             getHeaders: () => this._outboundFlowsRequestHeaders(),
             credentials: 'omit',
             onChange: () => {
+                this._syncHitlLiveTail();
                 this.requestUpdate();
                 this.dispatchEvent(new CustomEvent('chat-state-changed', { bubbles: true, composed: true }));
             },
@@ -849,10 +854,6 @@ export class PlatformChat extends LitElement {
             onRunEvent: (type, payload) => this._emitChatRunEvent(type, payload),
         });
         this._controller.initSession({});
-
-        /** @type {InstanceType<typeof OperatorConversationTransport>|null} operator_handoff транспорт. */
-        this._operatorTransport = null;
-        this._operatorHistoryLoaded = false;
 
         /** look из chat-profile (embed): theme, assistant_title, placeholder, voice_*, position */
         this._look = null;
@@ -977,9 +978,8 @@ export class PlatformChat extends LitElement {
     }
 
     /**
-     * Смонтировать operator-транспорт в тот же ChatController: снимок разговора,
-     * подписка на push, отправка ответа оператора. Идемпотентно; ждёт, пока хост
-     * задаст work-item-id + interaction_policy.conversation.
+     * Смонтировать operator-транспорт: REST snapshot + live tasks/resubscribe.
+     * Ждёт work-item-id + interaction_policy.conversation с a2a_task_id.
      */
     _ensureOperatorTransport() {
         if (!this._isOperatorProfile() || this._operatorHistoryLoaded) {
@@ -987,20 +987,35 @@ export class PlatformChat extends LitElement {
         }
         const workItemId = String(this.workItemId || '').trim();
         const conversation = this._operatorConversationRef();
-        if (workItemId === '' || conversation === null || !hasPlatformBus()) {
+        if (workItemId === '' || conversation === null) {
             return;
         }
-        this._operatorHistoryLoaded = true;
+        const a2aTaskId = typeof conversation.a2a_task_id === 'string'
+            ? conversation.a2a_task_id.trim()
+            : '';
+        if (a2aTaskId === '') {
+            return;
+        }
+        if (this._operatorTransport !== null) {
+            return;
+        }
         this._operatorTransport = new OperatorConversationTransport({
             workItemId,
             conversation,
             baseUrl: String(this.flowsBaseUrl || '').trim().replace(/\/$/, ''),
             credentials: this._requestCredentials(),
             getHeaders: () => this._outboundFlowsRequestHeaders(),
-            bus: getPlatformBus(),
         });
         this._controller.setTransport(this._operatorTransport);
-        void this._controller.loadHistory();
+        void this._controller.loadHistory().then(() => {
+            this._operatorHistoryLoaded = true;
+        }).catch(() => {
+            if (this._operatorTransport !== null) {
+                this._operatorTransport.dispose();
+                this._operatorTransport = null;
+            }
+            this._operatorHistoryLoaded = false;
+        });
     }
 
     /** Виден ли композер отправки: для operator_handoff — только при can_send. */
@@ -1010,6 +1025,18 @@ export class PlatformChat extends LitElement {
         }
         const policy = this.interactionPolicy;
         return Boolean(policy && typeof policy === 'object' && policy.can_send === true);
+    }
+
+    /**
+     * User-chat: на operator_task — live A2A tasks/resubscribe (тот же stream, что у operator).
+     * Для operator_handoff не нужен — там OperatorConversationTransport со своим resubscribe.
+     */
+    _syncHitlLiveTail() {
+        if (this._isOperatorProfile()) {
+            this._controller.stopHitlLiveTail();
+            return;
+        }
+        this._controller.syncHitlLiveTail();
     }
 
     _requestCredentials() {
@@ -1310,6 +1337,10 @@ export class PlatformChat extends LitElement {
             this._onFullscreenChange = null;
         }
         this._unbindToggleListener();
+        if (this._operatorTransport !== null) {
+            this._operatorTransport.dispose();
+            this._operatorTransport = null;
+        }
         this._controller.dispose();
     }
 
@@ -2895,7 +2926,7 @@ export class PlatformChat extends LitElement {
             return;
         }
         if (this._isOperatorProfile()) {
-            // operator_handoff: отправка через транспорт (REST + push), без A2A/voice.
+            // operator_handoff: ask через REST; live — tasks/resubscribe, без A2A message/stream.
             this._stickToBottom = true;
             try {
                 await this._controller.send({ message });

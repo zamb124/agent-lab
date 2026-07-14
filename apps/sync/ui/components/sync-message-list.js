@@ -368,7 +368,7 @@ export class SyncMessageList extends PlatformElement {
         const showJump = unread > 0 && !this._stickToBottom;
         return html`
             <div class="scroll">
-                ${loadingOlder ? html`<div class="loading-banner"><glass-spinner size="14"></glass-spinner>${this.t('message_list.loading_history')}</div>` : ''}
+                ${loadingOlder ? html`<div class="loading-banner"><glass-spinner size="xs"></glass-spinner></div>` : ''}
                 ${!hasOlder && items.length > 0 ? '' : ''}
                 ${grouped.map((entry) => entry.kind === 'day'
                     ? html`<div class="day" data-day-key=${entry.key}><span class="day-pill">${entry.label}</span></div>`

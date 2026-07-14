@@ -49,7 +49,6 @@ from apps.flows.src.services.mcp_sync import (  # noqa: E402
     ensure_default_mcp_servers_for_company,
     sync_auto_mcp_servers_for_company,
 )
-from apps.flows.src.tasks.company_init_tasks import init_company_resources  # noqa: E402
 from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
 from apps.flows.src.triggers.dev_polling import start_dev_polling, stop_dev_polling  # noqa: E402
 from core.api.integrations import set_flow_resume_handler  # noqa: E402
@@ -65,7 +64,6 @@ from core.logging import get_logger  # noqa: E402
 from core.models.context_models import Context  # noqa: E402
 from core.models.i18n_models import Language  # noqa: E402
 from core.models.identity_models import Company, User  # noqa: E402
-from core.utils.background import run_with_log_context  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -153,8 +151,8 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
     if settings.server.env == "development" and not is_testing():
         await sync_landing_public_demo_flows_from_bundles(container, settings)
 
-    # Загрузка tools + постановка init_company в worker не должны блокировать lifespan:
-    # иначе HTTP-сервер не слушает порт, пока не отработают БД и TaskIQ (Docker health → unhealthy).
+    # Production/dev system bootstrap: idle_worker → POST /internal/company/init → flows_worker.
+    # Тяжёлый company/MCP init в HTTP-процессе flows запрещён (healthcheck + ownership).
     if is_testing():
         system_context = Context(
             user=User(user_id="system", name="System", groups=["admin"]),
@@ -208,60 +206,6 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
             logger.error(f"Ошибка запуска миграции в system: {e}", exc_info=True)
         finally:
             clear_context()
-    else:
-
-        async def _tools_and_company_init_background() -> None:
-            system_context = Context(
-                user=User(user_id="system", name="System", groups=["admin"]),
-                host="system",
-                session_id="system-startup",
-                channel="system",
-                language=Language.RU,
-                active_company=Company(
-                    company_id="system",
-                    name="System",
-                    subdomain="system",
-                ),
-                user_companies=[],
-                trace_id="system:startup",
-            )
-            set_context(system_context)
-            try:
-                loaded_tools = await load_tools_to_db(container.tool_repository)
-                logger.info(f"Загружено tools: {loaded_tools}")
-
-                runtime_container = as_flow_runtime_container(container)
-                _ = await ensure_default_mcp_servers_for_company(container=runtime_container)
-                synced = await sync_auto_mcp_servers_for_company(container=runtime_container)
-                logger.info(
-                    "MCP синхронизация для system: servers=%s tools=%s",
-                    synced["servers"],
-                    synced["tools"],
-                )
-                task = await init_company_resources.kiq(
-                    company_id="system",
-                    company_name="System",
-                    subdomain="system",
-                )
-                logger.info(
-                    "Фоновая инициализация flows для system: task_id=%s",
-                    task.task_id,
-                )
-            except Exception as e:
-                logger.error(
-                    "Ошибка запуска миграции в system: %s",
-                    e,
-                    exc_info=True,
-                )
-            finally:
-                clear_context()
-
-        _ = run_with_log_context(
-            _tools_and_company_init_background(),
-            name="flows.tools_and_company_init_background",
-            background_kind="startup",
-        )
-        logger.info("flows.tools_and_company_init_scheduled")
 
     if is_testing():
         logger.info("Пропускаем синхронизацию LLM моделей (TESTING)")

@@ -14,6 +14,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 import {
     aggregateIncidentWeightsByNode,
     computeGraphNodeDisplaySize,
@@ -1032,7 +1033,7 @@ export class CRMMiniGraph extends PlatformElement {
         if (this._graphOp.busy) {
             return html`
                 <div class=${boxClass}>
-                    <div class="mini-empty" style="flex:1;min-height:0;">${this.t('graph.mini_loading')}</div>
+                    <div class="mini-empty" style="flex:1;min-height:0;"><glass-spinner></glass-spinner></div>
                     ${footerBar}
                 </div>
             `;

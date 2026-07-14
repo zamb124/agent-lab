@@ -15,6 +15,7 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/glass-spinner.js';
 
 const MEMBERS_NAME = 'office/catalog_members';
 const COMPANY_MEMBERS_NAME = 'office/company_members';
@@ -174,7 +175,7 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
     _renderMembers() {
         const items = this._activeMembers();
         if (this._members.busy && items.length === 0) {
-            return html`<div class="empty">${this.t('catalog_members_modal.members_loading')}</div>`;
+            return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
         }
         if (items.length === 0) {
             return html`<div class="empty">—</div>`;

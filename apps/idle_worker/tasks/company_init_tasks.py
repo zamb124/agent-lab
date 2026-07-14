@@ -1,28 +1,20 @@
 """
-Инициализация новой компании после её создания.
+Оркестрация инициализации компаний через idle_worker.
 
 Контракт
 --------
-- `apps/frontend/api/companies.py::create_company` создаёт `Company` в БД и
-  публикует HTTP-ответ владельцу немедленно (UX: не блокировать создание
-  компании на доступности `flows`/`sync`).
-- Дальнейшая инициализация (агенты, дефолтный канал sync) запускается через
-  эту TaskIQ-задачу с retry и явным `Company.metadata.initialization_status`.
+- Новая компания: `apps/frontend/api/companies.py::create_company` создаёт
+  `Company` в БД и сразу отвечает владельцу. Дальше — `company_init_new_company`
+  (flows init + дефолтный sync-канал) с `Company.metadata.initialization_status`.
+- System bootstrap: при старте `idle_worker` ставится `company_init_system` —
+  только `POST /flows/api/v1/internal/company/init` для `company_id=system`
+  (без sync-канала). Тяжёлый init в HTTP-процессе flows запрещён.
 
-Раньше прямо в HTTP-хендлере стояли `try: ... except Exception: logger.error(...)
-# НЕ падаем` — каскадные сбои в `flows`/`sync` оставляли компанию без агентов
-и без канала, без какого-либо следа в данных. UI считал компанию готовой,
-владелец видел пустой dashboard. Теперь:
-
-- `initialization_status` = "pending"     — задача зашедулена, ещё не отработала.
-- `initialization_status` = "in_progress" — задача начала выполнение.
-- `initialization_status` = "completed"   — оба под-шага успешны.
-- `initialization_status` = "failed"      — после исчерпания retry хотя бы
-  один под-шаг не прошёл; `initialization_error` содержит структурированный
-  details, UI обязан показать баннер.
-
-Сам ответ HTTP-хендлера остаётся быстрым, но костыля «тихо ничего не
-сделать» больше нет.
+Статусы новой компании:
+- `pending`     — задача зашедулена, ещё не отработала.
+- `in_progress` — задача начала работу.
+- `completed`   — оба под-шага успешны.
+- `failed`      — после исчерпания retry; `initialization_error` для UI-баннера.
 """
 
 from __future__ import annotations
@@ -37,8 +29,13 @@ from core.types import JsonObject, require_json_object
 logger = get_logger(__name__)
 
 TASK_INIT_NEW_COMPANY = "company_init_new_company"
+TASK_INIT_SYSTEM_COMPANY = "company_init_system"
 
 _DEFAULT_NAMESPACE_FOR_NEW_COMPANY = "default"
+_SYSTEM_COMPANY_ID = "system"
+_SYSTEM_COMPANY_NAME = "System"
+_SYSTEM_COMPANY_SUBDOMAIN = "system"
+_SYSTEM_USER_ID = "system"
 
 
 async def _set_company_initialization_status(
@@ -169,4 +166,57 @@ async def initialize_new_company_task(
     return {
         "company_id": company_id,
         "initialization_status": "completed",
+    }
+
+
+@idle_broker.task(
+    task_name=TASK_INIT_SYSTEM_COMPANY,
+    queue_name="idle",
+    retry_on_error=True,
+    max_retries=3,
+)
+async def initialize_system_company_task() -> JsonObject:
+    """
+    Bootstrap компании system: tools/flows/MCP через flows_worker.
+
+    Вызывается из `idle_worker_startup` (enqueue only). Sync-канал не создаётся.
+    """
+    container = get_container()
+    service_client = container.service_client
+
+    try:
+        flows_response = await service_client.post(
+            "flows",
+            "/flows/api/v1/internal/company/init",
+            json={
+                "company_id": _SYSTEM_COMPANY_ID,
+                "company_name": _SYSTEM_COMPANY_NAME,
+                "subdomain": _SYSTEM_COMPANY_SUBDOMAIN,
+            },
+            headers=build_internal_context_headers(
+                company_id=_SYSTEM_COMPANY_ID,
+                user_id=_SYSTEM_USER_ID,
+            ),
+        )
+    except ServiceClientError as service_error:
+        logger.error(
+            "company_init.system_failed",
+            company_id=_SYSTEM_COMPANY_ID,
+            error_message=str(service_error),
+            exc_info=True,
+        )
+        raise
+
+    flows_init_payload = require_json_object(
+        flows_response, "flows /flows/api/v1/internal/company/init response"
+    )
+    logger.info(
+        "company_init.system_done",
+        company_id=_SYSTEM_COMPANY_ID,
+        flows_task_id=flows_init_payload.get("task_id"),
+    )
+    return {
+        "company_id": _SYSTEM_COMPANY_ID,
+        "flows_task_id": flows_init_payload.get("task_id"),
+        "initialization_status": "enqueued",
     }

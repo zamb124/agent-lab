@@ -2,8 +2,9 @@
 
 Источник правды разговора — `ExecutionState.messages`. Реплики оператора и
 пользователя во время HITL пишутся durable-append'ом в лог сессии (не в
-`WorkItemComment`), стримятся конечному пользователю через `Emitter` и
-публикуются в realtime-канал `conversation:{session_id}` для карточки оператора.
+`WorkItemComment`) и стримятся в Redis `stream:{a2a_task_id}` через `Emitter`
+(user и operator слушают live `tasks/resubscribe`). Company push
+`flows/hitl_conversation/turn_appended` — для канбана, не для пузырей чата.
 """
 
 from __future__ import annotations
@@ -95,6 +96,67 @@ class HitlConversationService:
             )
         return turns
 
+    async def materialize_triggering_user_content(
+        self,
+        *,
+        company_id: str,
+        work_item_id: str,
+        state: ExecutionState,
+        node_id: str,
+    ) -> None:
+        """Durable-append реплики пользователя из state.content, если её ещё нет в messages.
+
+        На code-only путях (example_graph classifier → hitl_node) вход пользователя
+        попадает в state.content, но не в state.messages; без материализации оператор
+        не видит текст, с которым создалась HITL-задача.
+        """
+        if not isinstance(state.content, str):
+            return
+        clean = state.content.strip()
+        if not clean:
+            return
+        for message in state.messages:
+            if _turn_role(message) == ConversationTurnRole.USER and _message_text(message) == clean:
+                return
+        if state.user_id.strip() == "":
+            raise ValueError("materialize_triggering_user_content: state.user_id required")
+        message_id = f"hitl-user-input:{state.task_id}"
+        message = build_user_message(
+            clean,
+            node_id,
+            context_id=state.context_id,
+            task_id=state.task_id,
+        )
+        message.message_id = message_id
+        appended = await self._runtime.append_conversation_message(
+            state.session_id,
+            message,
+            payload=ConversationMessageAppendedPayload(
+                author_role="user",
+                author_user_id=state.user_id,
+                work_item_id=work_item_id,
+                message_id=message_id,
+                idempotency_key=message_id,
+            ),
+        )
+        if appended:
+            turn = await self._sync_after_append(
+                WorkItemConversationRef(
+                    session_id=state.session_id,
+                    context_id=state.context_id,
+                    flow_id=state.session_flow_id,
+                    branch_id=state.branch_id,
+                    a2a_task_id=state.task_id,
+                ),
+                message,
+            )
+            await self._publish_realtime(
+                company_id=company_id,
+                work_item_id=work_item_id,
+                session_id=state.session_id,
+                turn=turn,
+            )
+
     async def get_snapshot(
         self,
         *,
@@ -105,6 +167,15 @@ class HitlConversationService:
         item = await self._work_items.get(company_id, work_item_id)
         authorized = await self._work_items.operator_authorized(item, operator_user_id)
         policy = build_interaction_policy(item, operator_authorized=authorized)
+        if policy.conversation is not None:
+            state = await self._runtime.get_state(policy.conversation.session_id)
+            if state is not None:
+                await self.materialize_triggering_user_content(
+                    company_id=company_id,
+                    work_item_id=work_item_id,
+                    state=state,
+                    node_id=HITL_CONVERSATION_NODE_ID,
+                )
         turns = await self._load_turns(policy)
         cursor = turns[-1].cursor if turns else 0
         return ConversationSnapshot(
@@ -212,12 +283,84 @@ class HitlConversationService:
         )
         turn = await self._sync_after_append(ref, message)
         if appended:
+            await self._stream_to_user(ref, clean, artifact_name="user_message")
             await self._publish_realtime(
                 company_id=company_id,
                 work_item_id=work_item_id,
                 session_id=ref.session_id,
                 turn=turn,
             )
+        return turn
+
+    async def append_closing_operator_reply(
+        self,
+        *,
+        company_id: str,
+        work_item_id: str,
+        operator_user_id: str,
+        text: str,
+        idempotency_key: str,
+    ) -> ConversationTurn | None:
+        """Закрывающая реплика оператора (single_reply complete / takeover complete).
+
+        Тот же durable append + Emitter, что mid-dialog ask в takeover.
+        Пустой text — no-op (None).
+        """
+        clean = text.strip()
+        if clean == "":
+            return None
+        item = await self._work_items.get(company_id, work_item_id)
+        spec = item.interaction
+        if spec is None:
+            raise ValueError(f"WorkItem {work_item_id!r} без interaction spec")
+        if spec.mode not in (
+            WorkItemInteractionMode.SINGLE_REPLY,
+            WorkItemInteractionMode.TAKEOVER,
+        ):
+            raise ValueError(
+                f"Закрывающий ответ HITL недоступен для mode={spec.mode.value!r}"
+            )
+        ref = build_conversation_ref(item)
+        if ref is None:
+            raise ValueError(f"WorkItem {work_item_id!r} без ссылки на разговор сессии")
+        if not isinstance(ref.a2a_task_id, str) or not ref.a2a_task_id.strip():
+            raise ValueError(f"WorkItem {work_item_id!r} без a2a_task_id для stream")
+
+        message_id = f"hitl-op-close:{idempotency_key}"
+        message = build_operator_message(
+            clean,
+            HITL_CONVERSATION_NODE_ID,
+            operator_user_id=operator_user_id,
+            message_id=message_id,
+            context_id=ref.context_id,
+            task_id=ref.a2a_task_id,
+        )
+        appended = await self._runtime.append_conversation_message(
+            ref.session_id,
+            message,
+            payload=ConversationMessageAppendedPayload(
+                author_role="operator",
+                author_user_id=operator_user_id,
+                work_item_id=work_item_id,
+                message_id=message_id,
+                idempotency_key=idempotency_key,
+            ),
+        )
+        turn = await self._sync_after_append(ref, message)
+        if appended:
+            await self._stream_to_user(ref, clean, artifact_name="operator_reply")
+            await self._publish_realtime(
+                company_id=company_id,
+                work_item_id=work_item_id,
+                session_id=ref.session_id,
+                turn=turn,
+            )
+        logger.info(
+            "hitl.conversation.closing_operator_reply",
+            work_item_id=work_item_id,
+            session_id=ref.session_id,
+            appended=appended,
+        )
         return turn
 
     async def _sync_after_append(
@@ -233,8 +376,13 @@ class HitlConversationService:
     async def _stream_to_user(
         self, ref: WorkItemConversationRef, text: str, *, artifact_name: str
     ) -> None:
+        task_id = ref.a2a_task_id
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise ValueError(
+                f"HITL stream requires a2a_task_id on conversation ref (session={ref.session_id!r})"
+            )
         state = create_initial_state(
-            task_id=ref.a2a_task_id or "",
+            task_id=task_id.strip(),
             context_id=ref.context_id,
             user_id="",
             session_id=ref.session_id,

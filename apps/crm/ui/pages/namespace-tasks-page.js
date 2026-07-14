@@ -28,6 +28,7 @@ import { CoreEvents } from '@platform/lib/events/index.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 
@@ -600,7 +601,7 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
                         >
                             <platform-icon name="refresh" size="14"></platform-icon>
                             ${loading
-                                ? this.t('namespace_tasks_page.loading')
+                                ? html`<glass-spinner size="xs"></glass-spinner>`
                                 : this.t('namespace_tasks_page.refresh')}
                         </button>
                     </div>

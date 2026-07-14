@@ -13,6 +13,7 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/glass-spinner.js';
 
 const KIND_ENUM_VALUES = ['embedding', 'rerank'];
 
@@ -302,7 +303,7 @@ export class HumanitecModelsPage extends PlatformPage {
                 </section>
 
                 ${loading
-                    ? html`<p class="loading">${this.t('models.loading')}</p>`
+                    ? html`<glass-spinner></glass-spinner>`
                     : ''}
 
                 ${!loading && items.length === 0

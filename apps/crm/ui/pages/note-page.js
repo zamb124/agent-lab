@@ -758,7 +758,6 @@ export class CRMNotePage extends CRMNamespacePage {
                 <div class="body">
                     <div class="center">
                         <glass-spinner size="lg"></glass-spinner>
-                        <p>${this.t('note_page.loading')}</p>
                     </div>
                 </div>
             `;
@@ -789,7 +788,6 @@ export class CRMNotePage extends CRMNamespacePage {
                 <div class="body">
                     <div class="center">
                         <glass-spinner size="lg"></glass-spinner>
-                        <p>${this.t('note_page.loading')}</p>
                     </div>
                 </div>
             `;

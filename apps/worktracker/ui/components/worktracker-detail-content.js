@@ -11,6 +11,7 @@ import './worktracker-state-pill.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/prompt-editor.js';
 import '@platform/lib/components/platform-file-attachments.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class WorktrackerDetailContent extends PlatformElement {
     static i18nNamespace = 'worktracker';
@@ -105,7 +106,7 @@ export class WorktrackerDetailContent extends PlatformElement {
 
         return html`
             <div class=${mainClass}>
-                ${this.loading ? html`<div class="wt-loading">${this.t('detail_panel.loading')}</div>` : nothing}
+                ${this.loading ? html`<div class="wt-loading"><glass-spinner></glass-spinner></div>` : nothing}
                 ${this.layout === 'panel' ? html`
                     <div class="wt-state-header">
                         <worktracker-state-pill

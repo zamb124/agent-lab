@@ -571,7 +571,7 @@ export class CRMShareModal extends PlatformModal {
                     </div>
                     <div class="meta">
                         <div class="name">${this.entityId}</div>
-                        <div class="sub">${this.t('share_modal.loading_entity')}</div>
+                        <div class="sub"><glass-spinner></glass-spinner></div>
                     </div>
                 </div>
             `;

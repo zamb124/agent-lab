@@ -53,6 +53,8 @@ response = await client.post("crm", "/crm/api/v1/entities/", json=data)
 
 Браузер и тот же origin (shell на :8002, API flows на :8001): без ingress в `development`/`test` при локальном Host срабатывает `DevInterServiceProxyMiddleware` в `create_service_app`. Путь `/flows/...`, `/crm/...`, `/voice/...`, `/documents/...` пересылается на `server.*_service_url` (если текущий процесс — не целевой сервис). В upstream уходит **тот же `Host`, что у браузера** (`qqq.lvh.me:8002`), не `localhost:8001` — иначе `CompanyResolver` не видит субдомен и `/flows` (frontend) уводит на выбор компании, `/sync` часто в `anonymous`.
 
+`GET/OPTIONS /frontend/api/platform/brand` не проксируется: `create_service_app` монтирует `platform_brand` на каждом сервисе. Иначе одиночный `scripts/run.py flows` (без frontend:8002) отдаёт 502, sync bootstrap не ставит `window.__PLATFORM_BRAND__`, и SPA падает в `getPlatformI18nVars`.
+
 Префиксы OnlyOffice (`/web-apps`, `/common`, `/cache`, `/fonts`, `/sdkjs`, `/downloadfile`) и пути `/{semver}-{hex}/{web-apps,sdkjs,fonts,doc}/...` (co-editing / Socket.IO) при заданном `server.document_server_dev_upstream_url` уходят на Document Server с `Host` = `Host` запроса браузера — иначе подписанные URL DS указывают на порт контейнера и ломают CORS.
 
 Локальный Host — `core.utils.domain.is_local`. В production с внешним доменом прокси не включается.

@@ -14,7 +14,9 @@ from playwright.async_api import Page, expect
 from tests.ui.e2e.flows_e2e_helpers import flows_open_chat_page
 from tests.ui.e2e.hitl_e2e_bridge import (
     EXAMPLE_GRAPH_ID,
+    GREEN_GARDEN_HITL_MESSAGE,
     GREEN_GARDEN_TAKEOVER_MESSAGE,
+    hitl_api_wait_conversation_text,
     hitl_trigger_deterministic,
 )
 from tests.ui.e2e.worktracker_e2e_helpers import (
@@ -23,6 +25,7 @@ from tests.ui.e2e.worktracker_e2e_helpers import (
     worktracker_hitl_chat_send,
     worktracker_hitl_chat_wait_text,
     worktracker_hitl_embedded_chat,
+    worktracker_hitl_single_reply_complete,
     worktracker_open_task_page,
 )
 from tests.ui.harness import AppUI
@@ -78,6 +81,12 @@ async def test_worktracker_hitl_embedded_operator_chat(
     user_page = ui_page_system
     await flows_open_chat_page(user_page, flows_ui, EXAMPLE_GRAPH_ID)
     work_item_id = await hitl_trigger_deterministic(user_page, GREEN_GARDEN_TAKEOVER_MESSAGE)
+    await hitl_api_wait_conversation_text(
+        flows_ui.origin,
+        auth_token_system,
+        work_item_id,
+        GREEN_GARDEN_TAKEOVER_MESSAGE,
+    )
 
     wt_page = await user_page.context.new_page()
     try:
@@ -161,5 +170,119 @@ async def test_worktracker_hitl_embedded_operator_chat(
             "**Summary.** You can now use the embedded chat on an HITL task: read full "
             "history, reply with the same composer as in Flows, and see the result in "
             "the customer chat in real time."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="worktracker",
+    tag="operators",
+    doc_slug="hitl-single-reply-complete",
+    title="Один ответ оператора и завершение HITL",
+    description=(
+        "**Для чего:** эта инструкция покажет режим одного ответа: оператор пишет "
+        "покупателю через «Ответить и завершить», а не через комментарии в активности.\n\n"
+        "**Какие проблемы решает:** легко перепутать внутренние заметки команды с "
+        "ответом покупателю — тогда сообщение не появится в чате агента.\n\n"
+        "**Результат:** после «Ответить и завершить» покупатель видит ответ в своём "
+        "чате, задача закрывается."
+    ),
+    title_en="Single operator reply and HITL complete",
+    description_en=(
+        "**What for:** this guide shows single-reply mode: the operator answers the "
+        "customer via Reply and complete, not via Activity comments.\n\n"
+        "**Problems it solves:** internal team notes are easy to confuse with a "
+        "customer reply — then the message never appears in the agent chat.\n\n"
+        "**Result:** after Reply and complete the customer sees the answer in their "
+        "chat and the task closes."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(360)
+async def test_worktracker_hitl_single_reply_complete(
+    scenario: ScenarioRecorder,
+    flows_ui: AppUI,
+    worktracker_ui: AppUI,
+    ui_page_system: Page,
+    auth_token_system: str,
+    hitl_demo_ready: str,
+    flows_service,
+    taskiq_worker,
+    worktracker_http_service,
+    unique_id: str,
+) -> None:
+    _ = auth_token_system, hitl_demo_ready, flows_service, taskiq_worker, worktracker_http_service
+    operator_reply = f"Марина из поддержки: оформим возврат по фото ({unique_id})"
+
+    user_page = ui_page_system
+    await flows_open_chat_page(user_page, flows_ui, EXAMPLE_GRAPH_ID)
+    work_item_id = await hitl_trigger_deterministic(user_page, GREEN_GARDEN_HITL_MESSAGE)
+    await hitl_api_wait_conversation_text(
+        flows_ui.origin,
+        auth_token_system,
+        work_item_id,
+        GREEN_GARDEN_HITL_MESSAGE,
+    )
+
+    wt_page = await user_page.context.new_page()
+    try:
+        editor = await worktracker_open_task_page(wt_page, worktracker_ui, work_item_id)
+        await worktracker_hitl_embedded_chat(editor)
+        await expect(editor.locator(".wt-hitl-hint").first).to_be_visible(timeout=30_000)
+        await scenario.step(
+            "Откройте задачу с подсказкой single_reply",
+            wt_page,
+            screenshot_name="single-reply-hint",
+            label_en="Open the task with the single-reply hint",
+            details=(
+                "В карточке видно блок «Диалог с пользователем» и подсказку: ответ "
+                "покупателю — только через «Ответить и завершить». Комментарии в "
+                "«Активности» пользователь не видит."
+            ),
+            details_en=(
+                "The card shows Conversation with user and a hint: reply to the "
+                "customer only via Reply and complete. Activity comments are not "
+                "visible to the user."
+            ),
+        )
+
+        await worktracker_claim_task(wt_page, editor)
+        await worktracker_hitl_single_reply_complete(editor, operator_reply)
+        await scenario.step(
+            "Ответьте и завершите задачу",
+            wt_page,
+            screenshot_name="single-reply-completed",
+            label_en="Reply and complete the task",
+            details=(
+                "Введите ответ в поле под диалогом и нажмите «Ответить и завершить». "
+                "Задача закрывается, ответ уходит покупателю — не через ленту активности."
+            ),
+            details_en=(
+                "Type the reply under the conversation and click Reply and complete. "
+                "The task closes and the answer goes to the customer — not via the "
+                "activity thread."
+            ),
+        )
+    finally:
+        await wt_page.close()
+
+    await flows_user_chat_wait_text(user_page, operator_reply)
+    await scenario.step(
+        "Проверьте ответ в чате покупателя",
+        user_page,
+        screenshot_name="customer-sees-single-reply",
+        label_en="Verify the reply in the customer chat",
+        details=(
+            "**Демонстрация результата.** В чате покупателя виден ответ оператора. "
+            "Плашка ожидания снимается после завершения задачи.\n\n"
+            "**Итог.** В режиме одного ответа пишите только в «Ответить и завершить»; "
+            "«Активность» — для внутренних заметок команды."
+        ),
+        details_en=(
+            "**Result demonstration.** The customer chat shows the operator reply. "
+            "The waiting banner clears after the task completes.\n\n"
+            "**Summary.** In single-reply mode write only in Reply and complete; "
+            "Activity is for internal team notes."
         ),
     )

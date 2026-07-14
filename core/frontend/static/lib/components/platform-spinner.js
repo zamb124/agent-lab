@@ -8,11 +8,11 @@ import { PlatformElement } from '../platform-element/index.js';
 const SPINNER_LOGO_SRC = '/static/core/assets/service_logos/linnex_spinner_logo.png';
 
 const SIZE_PX = {
-    xs: 16,
-    sm: 20,
-    md: 24,
-    lg: 32,
-    xl: 48,
+    xs: 32,
+    sm: 40,
+    md: 48,
+    lg: 64,
+    xl: 96,
 };
 
 export class PlatformSpinner extends PlatformElement {
@@ -59,10 +59,10 @@ export class PlatformSpinner extends PlatformElement {
             }
 
             :host([fullscreen]) .spinner-logo {
-                width: 96px;
-                height: 96px;
-                min-width: 96px;
-                min-height: 96px;
+                width: 192px;
+                height: 192px;
+                min-width: 192px;
+                min-height: 192px;
             }
 
             :host(.hidden) {
@@ -109,9 +109,15 @@ export class PlatformSpinner extends PlatformElement {
     }
 
     updated() {
-        const px = SIZE_PX[this.size];
-        if (px) {
-            this.style.setProperty('--spinner-size', `${px}px`);
+        const sizeKey = this.size;
+        const namedPx = SIZE_PX[sizeKey];
+        if (namedPx) {
+            this.style.setProperty('--spinner-size', `${namedPx}px`);
+            return;
+        }
+        const numericPx = Number(sizeKey);
+        if (Number.isFinite(numericPx) && numericPx > 0) {
+            this.style.setProperty('--spinner-size', `${numericPx}px`);
         }
     }
 

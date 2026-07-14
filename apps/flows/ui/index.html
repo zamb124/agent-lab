@@ -45,6 +45,7 @@
     <!-- Platform UI Styles (из core/frontend) -->
     <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
     <link rel="stylesheet" href="/static/core/assets/css/reset.css">
+    <link rel="stylesheet" href="/static/core/assets/css/platform-boot-spinner.css">
 <style>
         /* Критические стили для предотвращения FOUC */
         flows-app {
@@ -52,21 +53,6 @@
             width: 100%;
             height: 100vh;
             background: transparent;
-        }
-        flows-app:not(:defined) {
-            position: fixed;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--bg-gradient);
-            z-index: 9999;
-            color: var(--text-tertiary);
-            font-family: var(--font-sans);
-        }
-
-        flows-app:not(:defined)::after {
-            content: 'AI Studio';
         }
 </style>
 </head>

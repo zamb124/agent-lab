@@ -892,7 +892,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
     _renderTemplates() {
         const items = this._templates.items;
         if (this._templates.loading && items.length === 0) {
-            return html`<div class="empty-templates">${this.t('namespace_modal.templates_loading')}</div>`;
+            return html`<div class="empty-templates"><glass-spinner></glass-spinner></div>`;
         }
         if (items.length === 0) {
             return html`<div class="empty-templates">${this.t('namespace_modal.templates_empty')}</div>`;
@@ -990,7 +990,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
     _renderEditabilityBadge() {
         const result = this._editability.lastResult;
         if (this._editability.busy && !result) {
-            return html`<div class="meta-loading">${this.t('namespace_modal.editability_loading')}</div>`;
+            return html`<div class="meta-loading"><glass-spinner></glass-spinner></div>`;
         }
         if (!result) return null;
         return html`

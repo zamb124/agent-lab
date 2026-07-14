@@ -608,6 +608,20 @@ function _artifactUpdateToRuntimeEvents(out, result, contextId, taskId) {
                 });
             } else if (artifact.name === 'operator_reply') {
                 out.events.push({ type: 'operator_reply', payload: { task_id: taskId, text } });
+            } else if (artifact.name === 'user_message') {
+                out.events.push({
+                    type: 'user_message_added',
+                    payload: {
+                        contextId,
+                        message: {
+                            id: `hitl-user-stream-${taskId}-${Date.now()}`,
+                            role: 'user',
+                            content: text,
+                            timestamp: new Date().toISOString(),
+                            files: [],
+                        },
+                    },
+                });
             } else if (artifact.name !== 'operator_files') {
                 out.events.push({ type: 'content_chunk', payload: { task_id: taskId, text } });
             }

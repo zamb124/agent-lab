@@ -14,11 +14,7 @@
                 if (!brand) {
                     return;
                 }
-                var modelsName = String(brand.modelsProductName || 'Platform Models');
-                document.title = modelsName;
-                var style = document.createElement('style');
-                style.textContent = 'litserve-app:not(:defined)::after { content: ' + JSON.stringify(modelsName) + '; }';
-                document.head.appendChild(style);
+                document.title = String(brand.modelsProductName || 'Platform Models');
             } catch (_err) {
                 /* brand bootstrap optional before module load */
             }
@@ -42,23 +38,7 @@
 
     <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
     <link rel="stylesheet" href="/static/core/assets/css/reset.css">
-<style>
-litserve-app:not(:defined) {
-            position: fixed;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--bg-gradient);
-            z-index: 9999;
-            color: rgba(255, 255, 255, 0.5);
-            font-family: var(--font-sans);
-        }
-
-        litserve-app:not(:defined)::after {
-            content: 'Platform Models';
-        }
-</style>
+    <link rel="stylesheet" href="/static/core/assets/css/platform-boot-spinner.css">
 </head>
 <body class="platform-shell">
     <litserve-app></litserve-app>

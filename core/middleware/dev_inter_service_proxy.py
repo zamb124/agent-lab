@@ -7,6 +7,9 @@
 В development/test при Host localhost или *.lvh.me запрос пересылается на URL из server.*_service_url.
 Если текущий процесс уже обслуживает этот сервис (первый сегмент пути совпадает с именем процесса
 или с публичным префиксом из _PREFIX_TO_SERVICE_URL_KEY, например office и /documents/...), прокси не используется.
+GET/OPTIONS /frontend/api/platform/brand тоже локальный на любом сервисе (create_service_app
+монтирует platform_brand на всех процессах) — иначе одиночный `scripts/run.py flows` уходит
+в 502 на frontend:8002 и SPA падает без window.__PLATFORM_BRAND__.
 
 OnlyOffice: префиксы /web-apps, /common, /cache, /fonts, /sdkjs, /downloadfile, /command и пути
 /{semver}-{hex}/web-apps/..., /{semver}-{hex}/sdkjs/..., /{semver}-{hex}/sdkjs-plugins/...,
@@ -116,6 +119,13 @@ def _is_local_target_for_process(first_path_segment: str, process_service_name: 
     if _PREFIX_TO_SERVICE_URL_KEY.get(first_path_segment) == process_service_name:
         return True
     return False
+
+
+def _is_process_local_shared_path(path: str) -> bool:
+    """Пути, смонтированные на каждом сервисе через create_service_app — без прокси на frontend."""
+    return path == "/frontend/api/platform/brand" or path.startswith(
+        "/frontend/api/platform/brand/"
+    )
 
 
 _HOP_BY_HOP_REQUEST: frozenset[str] = frozenset(
@@ -379,6 +389,9 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
                 rewrite_origin_to=public_origin,
             )
 
+        if _is_process_local_shared_path(path):
+            return await call_next(request)
+
         if target not in _SERVICE_PREFIXES:
             return await call_next(request)
 
@@ -473,6 +486,8 @@ class DevInterServiceWsProxyMiddleware:
                 raise RuntimeError("ASGI websocket scope missing scheme")
             rewrite_origin_to = _public_origin_from_host(scheme, client_host)
         else:
+            if _is_process_local_shared_path(path):
+                return await self.app(scope, receive, send)
             if target not in _SERVICE_PREFIXES:
                 return await self.app(scope, receive, send)
             if _is_local_target_for_process(target, self._service_name):

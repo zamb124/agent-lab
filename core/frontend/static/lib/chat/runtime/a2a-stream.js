@@ -119,6 +119,19 @@ export function buildA2aCancelBody(taskId) {
     };
 }
 
+/** JSON-RPC body `tasks/resubscribe` (snapshot + live Redis tail). */
+export function buildA2aResubscribeBody(taskId) {
+    if (typeof taskId !== 'string' || taskId.trim() === '') {
+        throw new Error('a2a-stream: taskId required for resubscribe');
+    }
+    return {
+        jsonrpc: '2.0',
+        id: String(Date.now()),
+        method: 'tasks/resubscribe',
+        params: { id: taskId.trim() },
+    };
+}
+
 function _headersObject(headers) {
     const out = {};
     headers.forEach((value, key) => {

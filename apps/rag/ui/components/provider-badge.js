@@ -9,6 +9,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class ProviderBadge extends PlatformElement {
     static i18nNamespace = 'rag';
@@ -63,7 +64,7 @@ export class ProviderBadge extends PlatformElement {
             <div class="badge">
                 <div class="label">${this.t('sidebar.provider_label')}</div>
                 ${loading
-                    ? html`<div class="empty">${this.t('sidebar.providers_loading')}</div>`
+                    ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
                     : html`
                         <div class="provider-info">
                             <span class="status"></span>

@@ -39,9 +39,16 @@ DELETE /flows/api/v1/mcp/catalog/{catalog_id}/install
 
 ### Internal company init
 
-Новая компания: `POST /flows/api/v1/internal/company/init` (signed headers через `build_internal_context_headers`) → TaskIQ `init_company_resources` → `ensure_default_mcp_servers_for_company` + `provision_mcp_catalog_for_company`. Ошибки MCP при init **не проглатываются** — raise для retry.
+`POST /flows/api/v1/internal/company/init` (signed headers через `build_internal_context_headers`) → TaskIQ `init_company_resources` (очередь `flows_worker`) → `ensure_default_mcp_servers_for_company` + `provision_mcp_catalog_for_company` + `sync_auto_mcp_servers_for_company`. Ошибки MCP при init **не проглатываются** — raise для retry.
 
-Вызывается из `apps/idle_worker/tasks/company_init_tasks.py` при создании компании.
+Триггеры (только через `idle_worker`, не из HTTP lifespan flows):
+
+| Сценарий | Idle-задача | Примечание |
+|---|---|---|
+| Новая компания | `company_init_new_company` | + дефолтный sync-канал |
+| System bootstrap | `company_init_system` | enqueue из `idle_worker_startup`; без sync-канала |
+
+Тяжёлый company/MCP init через `run_with_log_context` / `asyncio` в `apps/flows/main.py` **запрещён**. Testing path в flows lifespan остаётся синхронным (fixtures без воркеров).
 
 ## Модели
 
@@ -276,6 +283,7 @@ Git-бандл: `apps/flows/mcp_branding/` (`manifest.yaml`, `icons/`, `SOURCES.
 - `apps/flows/src/services/mcp_catalog_provisioner.py` — provision per company, override lock, reset.
 - `apps/flows/src/services/mcp_sync.py` — `sync_mcp_server_tools`.
 - `apps/flows/src/tasks/company_init_tasks.py` — `init_company_resources`.
+- `apps/idle_worker/tasks/company_init_tasks.py` — `company_init_new_company`, `company_init_system`.
 - `apps/flows/ui/modals/flows-mcp-servers-modal.js`, `flows-library-picker-modal.js` — UI Store + picker.
 - `apps/idle_worker/tasks/mcp_catalog_tasks.py` — TaskIQ crawl/provision/resync.
 - `apps/flows/mcp_catalog_allowlist.yaml` — curated `platform_approved` / auth overrides.

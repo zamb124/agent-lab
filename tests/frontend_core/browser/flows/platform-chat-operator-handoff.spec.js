@@ -1,3 +1,8 @@
+/**
+ * Operator handoff surface: REST conversation snapshot + live tasks/resubscribe.
+ * Company WS turn_appended не канал пузырей чата.
+ */
+
 import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '../../../../core/frontend/static/lib/chat/platform-chat.js';
@@ -7,9 +12,8 @@ const CONVERSATION = {
     context_id: 'ctx1',
     flow_id: 'flow1',
     branch_id: 'default',
+    a2a_task_id: 'tsk-hitl-op-1',
 };
-
-const HITL_CONVERSATION_TURN_APPENDED = 'flows/hitl_conversation/turn_appended';
 
 function snapshotResponse(turns) {
     return new Response(JSON.stringify({
@@ -18,6 +22,18 @@ function snapshotResponse(turns) {
         cursor: turns.length,
         policy: { mode: 'takeover', can_send: true, can_complete: true, conversation: CONVERSATION },
     }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+}
+
+function hangingSseResponse() {
+    const stream = new ReadableStream({
+        start() {
+            /* держим open до abort (live resubscribe) */
+        },
+    });
+    return new Response(stream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+    });
 }
 
 async function waitFor(predicate, { timeout = 2000 } = {}) {
@@ -31,16 +47,18 @@ async function waitFor(predicate, { timeout = 2000 } = {}) {
     throw new Error('waitFor: timeout');
 }
 
-describe('platform-chat operator_handoff', () => {
-    /** @type {ReturnType<typeof bootstrapTestBus>} */
-    let bus;
+describe('platform-chat operator_handoff', function () {
+    this.timeout(8000);
+
     let restoreFetch;
     let sentBodies;
+    let resubscribeCalls;
 
     beforeEach(() => {
         resetPlatformState();
-        bus = bootstrapTestBus();
+        bootstrapTestBus();
         sentBodies = [];
+        resubscribeCalls = 0;
         const previousFetch = window.fetch;
         restoreFetch = () => { window.fetch = previousFetch; };
         window.fetch = async (rawUrl, init = {}) => {
@@ -58,6 +76,13 @@ describe('platform-chat operator_handoff', () => {
                     JSON.stringify({ cursor: 3, message_id: 'op1', role: 'operator', text: 'здравствуйте, помогу' }),
                     { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } },
                 );
+            }
+            if (method === 'POST' && /\/flows\/api\/v1\/flow1$/.test(url.pathname)) {
+                const body = typeof init.body === 'string' ? JSON.parse(init.body) : {};
+                if (body.method === 'tasks/resubscribe') {
+                    resubscribeCalls += 1;
+                    return hangingSseResponse();
+                }
             }
             return previousFetch(rawUrl, init);
         };
@@ -95,32 +120,32 @@ describe('platform-chat operator_handoff', () => {
         const bubbles = el.renderRoot.querySelectorAll('flows-chat-message');
         expect(bubbles.length).to.equal(2);
         expect(el.renderRoot.querySelector('flows-chat-input')).to.not.equal(null);
+        await waitFor(() => resubscribeCalls >= 1);
     });
 
-    it('takeover: push flows/hitl_conversation/turn_appended добавляет новый баббл', async () => {
+    it('takeover: runtime verb operator_reply (кадр resubscribe) добавляет баббл', async () => {
         const el = await mount(takeoverPolicy);
         await waitFor(() => el.renderRoot.querySelectorAll('flows-chat-message').length >= 2);
-        bus.dispatch(HITL_CONVERSATION_TURN_APPENDED, {
-            work_item_id: 'wi1',
-            session_id: CONVERSATION.session_id,
-            turn: { cursor: 3, message_id: 'm3', role: 'user', text: 'спасибо, жду' },
+        el._controller.applyRuntimeVerb('operator_reply', {
+            task_id: CONVERSATION.a2a_task_id,
+            text: 'спасибо, жду',
         });
         await waitFor(() => el.renderRoot.querySelectorAll('flows-chat-message').length >= 3);
         expect(el.renderRoot.querySelectorAll('flows-chat-message').length).to.equal(3);
     });
 
-    it('takeover: дубликат push по message_id не создаёт второй баббл', async () => {
+    it('takeover: повтор того же operator_reply текста не дублирует баббл', async () => {
         const el = await mount(takeoverPolicy);
         await waitFor(() => el.renderRoot.querySelectorAll('flows-chat-message').length >= 2);
-        const dup = {
-            work_item_id: 'wi1',
-            session_id: CONVERSATION.session_id,
-            turn: { cursor: 1, message_id: 'm1', role: 'user', text: 'у меня проблема' },
+        const payload = {
+            task_id: CONVERSATION.a2a_task_id,
+            text: 'один ответ',
         };
-        bus.dispatch(HITL_CONVERSATION_TURN_APPENDED, dup);
-        bus.dispatch(HITL_CONVERSATION_TURN_APPENDED, dup);
-        await new Promise((r) => setTimeout(r, 100));
-        expect(el.renderRoot.querySelectorAll('flows-chat-message').length).to.equal(2);
+        el._controller.applyRuntimeVerb('operator_reply', payload);
+        el._controller.applyRuntimeVerb('operator_reply', payload);
+        await waitFor(() => el.renderRoot.querySelectorAll('flows-chat-message').length >= 3);
+        await new Promise((r) => setTimeout(r, 80));
+        expect(el.renderRoot.querySelectorAll('flows-chat-message').length).to.equal(3);
     });
 
     it('single_reply: композер скрыт (read-only диалог)', async () => {

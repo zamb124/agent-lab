@@ -172,7 +172,7 @@ export class DashboardServiceCard extends PlatformElement {
         if (this.healthState === 'unhealthy') {
             return this.t('console_home.stat_unavailable');
         }
-        return this.t('console_home.stat_loading');
+        return '—';
     }
 
     render() {

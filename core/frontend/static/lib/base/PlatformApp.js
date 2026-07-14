@@ -99,7 +99,6 @@ export class PlatformApp extends PlatformElement {
                 min-height: var(--app-vh, 100vh);
                 padding: 40px;
             }
-            .loading-text { font-size: 16px; color: var(--text-muted); margin-top: 24px; }
         `,
     ];
 
@@ -296,7 +295,6 @@ export class PlatformApp extends PlatformElement {
             return html`
                 <div class="loading-container">
                     <platform-spinner size="xl"></platform-spinner>
-                    <div class="loading-text">${this.t('loading', {}, 'common')}</div>
                 </div>
             `;
         }

@@ -71,6 +71,8 @@ COMMON_TEST_ENV: dict[str, str] = {
     "DATABASE__REDIS_URL": "redis://localhost:63792/0",
     "TASKS__BROKER_URL": "redis://localhost:63792/1",
     "AUTH__PERMISSIONS_ENABLED": "false",
+    # DevInterServiceProxy: браузер на :9021 с путём /flows/... → flows_service_url (см. dev_inter_service_proxy.mdc).
+    "SERVER__ENV": "test",
     "SERVER__DEFAULT_TENANT_ID": "test_tenant",
     "SERVER__FLOWS_SERVICE_URL": "http://localhost:9001",
     "SERVER__RAG_SERVICE_URL": "http://localhost:9002",

@@ -5,8 +5,9 @@
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
-import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/glass-spinner.js';
 import '../components/worktracker-icon-action.js';
 import { reorderByInsertIndex } from '../utils/board-column-reorder.js';
 
@@ -468,7 +469,7 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
 
     renderBody() {
         if (this._loading) {
-            return html`<div>${this.t('board_settings_modal.loading')}</div>`;
+            return html`<div><glass-spinner></glass-spinner></div>`;
         }
         return html`
             <form class="form-grid" @submit=${(e) => { e.preventDefault(); this._performSave(); }}>

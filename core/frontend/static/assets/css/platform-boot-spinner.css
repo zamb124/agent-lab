@@ -1,0 +1,56 @@
+/**
+ * Pre-Lit boot spinner: rotating Linnex logo while *-app custom element upgrades.
+ * Replaces service-name text (NetWorkle / Sync / RAG / …) on all service shells.
+ */
+crm-app:not(:defined),
+frontend-app:not(:defined),
+flows-app:not(:defined),
+rag-app:not(:defined),
+sync-app:not(:defined),
+office-app:not(:defined),
+worktracker-app:not(:defined),
+litserve-app:not(:defined) {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-gradient, #0f0f0f);
+    z-index: 9999;
+}
+
+crm-app:not(:defined)::after,
+frontend-app:not(:defined)::after,
+flows-app:not(:defined)::after,
+rag-app:not(:defined)::after,
+sync-app:not(:defined)::after,
+office-app:not(:defined)::after,
+worktracker-app:not(:defined)::after,
+litserve-app:not(:defined)::after {
+    content: '';
+    width: 192px;
+    height: 192px;
+    flex-shrink: 0;
+    background: url('/static/core/assets/service_logos/linnex_spinner_logo.png') center / contain no-repeat;
+    animation: platform-boot-spin var(--spinner-duration, 1.2s) linear infinite;
+    will-change: transform;
+}
+
+@keyframes platform-boot-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    crm-app:not(:defined)::after,
+    frontend-app:not(:defined)::after,
+    flows-app:not(:defined)::after,
+    rag-app:not(:defined)::after,
+    sync-app:not(:defined)::after,
+    office-app:not(:defined)::after,
+    worktracker-app:not(:defined)::after,
+    litserve-app:not(:defined)::after {
+        animation: none;
+    }
+}

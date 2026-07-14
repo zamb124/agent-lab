@@ -652,7 +652,7 @@ export class FlowsLogsModal extends PlatformModal {
                 @click=${() => this._manualReload()}
             >
                 ${busy
-                    ? html`<glass-spinner size="14"></glass-spinner>`
+                    ? html`<glass-spinner size="xs"></glass-spinner>`
                     : html`<platform-icon name="refresh" size="16"></platform-icon>`}
             </platform-button>
         `;

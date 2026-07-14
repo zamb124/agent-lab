@@ -36,7 +36,7 @@ alwaysApply: false
 
 ## HITL и задачи оператора
 
-Доменных WS-команд у flows нет. HITL и задачи оператора ведутся в платформенном ядре `WorkItem` (сервис **worktracker**, `/worktracker/api/v1/work-items*`, → **`worktracker.mdc`**). flows предоставляет только internal-эндпоинты для хуков: `POST /flows/api/v1/internal/work-items/{completed,assigned,comment}`.
+Доменных WS-команд у flows нет. HITL и задачи оператора ведутся в платформенном ядре `WorkItem` (сервис **worktracker**, `/worktracker/api/v1/work-items*`, → **`worktracker.mdc`**). flows предоставляет internal-эндпоинты для хуков: `POST /flows/api/v1/internal/work-items/{completed,assigned}` и HITL-диалог `/flows/api/v1/hitl/{work_item_id}/conversation*` (`HitlConversationService`).
 
 ## Flow как сотрудник (employee)
 

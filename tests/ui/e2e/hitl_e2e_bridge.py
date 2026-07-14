@@ -90,6 +90,78 @@ async def hitl_trigger_deterministic(page: Page, message: str = "Нужен оп
     return await hitl_wait_chat_input_required(page)
 
 
+async def hitl_api_wait_conversation_text(
+    flows_origin: str,
+    auth_token: str,
+    work_item_id: str,
+    text_pattern: re.Pattern[str] | str,
+    *,
+    timeout_s: float = 120.0,
+) -> None:
+    """Ждёт текст в GET /flows/api/v1/hitl/{work_item_id}/conversation (снимок леджера)."""
+    import httpx
+
+    pattern = (
+        text_pattern
+        if isinstance(text_pattern, re.Pattern)
+        else re.compile(re.escape(text_pattern), re.I)
+    )
+    deadline = time.monotonic() + timeout_s
+    path = f"/flows/api/v1/hitl/{work_item_id}/conversation"
+    last_turns: list[str] | None = None
+    last_policy: object = None
+    session_debug: dict[str, object] | None = None
+    async with httpx.AsyncClient(
+        base_url=flows_origin,
+        cookies={"auth_token": auth_token},
+        timeout=630.0,
+    ) as client:
+        while time.monotonic() < deadline:
+            response = await client.get(path)
+            if response.status_code < 400:
+                payload = response.json()
+                last_policy = payload.get("policy")
+                turns = payload.get("turns")
+                if isinstance(turns, list):
+                    last_turns = [
+                        str(turn.get("text"))
+                        for turn in turns
+                        if isinstance(turn, dict) and isinstance(turn.get("text"), str)
+                    ]
+                    for turn in turns:
+                        if isinstance(turn, dict):
+                            text = turn.get("text")
+                            if isinstance(text, str) and pattern.search(text):
+                                return
+            if (
+                session_debug is None
+                and isinstance(last_policy, dict)
+                and isinstance(last_policy.get("conversation"), dict)
+            ):
+                session_id = last_policy["conversation"].get("session_id")
+                if isinstance(session_id, str) and session_id:
+                    state_resp = await client.get(
+                        FLOWS_TASKS_STATE_PATH,
+                        params={"session_id": session_id},
+                    )
+                    if state_resp.status_code < 400:
+                        state_payload = state_resp.json()
+                        if isinstance(state_payload, dict):
+                            session_debug = {
+                                "content": state_payload.get("content"),
+                                "message_count": len(state_payload.get("messages") or [])
+                                if isinstance(state_payload.get("messages"), list)
+                                else None,
+                            }
+            await asyncio.sleep(1.0)
+    raise AssertionError(
+        f"conversation {work_item_id!r} did not contain {pattern.pattern!r} within {timeout_s}s"
+        + (f"; last turns={last_turns!r}" if last_turns is not None else "")
+        + (f"; policy={last_policy!r}" if last_policy is not None else "")
+        + (f"; session_debug={session_debug!r}" if session_debug is not None else "")
+    )
+
+
 async def hitl_wait_chat_input_required(page: Page) -> str:
     banner = page.locator("chat-page .input-required-banner").first
     await expect(banner).to_be_visible(timeout=120_000)

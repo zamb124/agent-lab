@@ -5,6 +5,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class OfficeCatalogSemanticSearchResults extends PlatformElement {
     static i18nNamespace = 'documents';
@@ -113,7 +114,7 @@ export class OfficeCatalogSemanticSearchResults extends PlatformElement {
 
     render() {
         if (this.loading) {
-            return html`<div class="loading">${this.t('semantic_search.loading')}</div>`;
+            return html`<div class="loading"><glass-spinner size="lg"></glass-spinner></div>`;
         }
         const items = Array.isArray(this.items) ? this.items : [];
         const query = typeof this.query === 'string' ? this.query.trim() : '';

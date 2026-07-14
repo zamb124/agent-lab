@@ -11,6 +11,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 import '../components/namespace-card.js';
 
 export class NamespacesPage extends PlatformPage {
@@ -51,7 +52,6 @@ export class NamespacesPage extends PlatformPage {
                 margin-bottom: var(--space-2);
             }
             .empty-hint { font-size: var(--text-sm); color: var(--text-tertiary); }
-            .loading-text { font-size: var(--text-base); color: var(--text-secondary); }
         `,
     ];
 
@@ -68,8 +68,7 @@ export class NamespacesPage extends PlatformPage {
         if (this._namespaces.loading) {
             return html`
                 <div class="loading">
-                    <platform-spinner size="xl"></platform-spinner>
-                    <div class="loading-text">${this.t('namespace_list.loading')}</div>
+                    <glass-spinner size="lg"></glass-spinner>
                 </div>
             `;
         }

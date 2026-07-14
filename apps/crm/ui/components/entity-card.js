@@ -1941,7 +1941,7 @@ export class CRMEntityCard extends PlatformElement {
     _renderTypeStep() {
         const items = this._entityTypes.items;
         if (this._entityTypes.loading && items.length === 0) {
-            return html`<div class="empty-hint">${this.t('entity_modal.types_loading')}</div>`;
+            return html`<div class="empty-hint"><glass-spinner></glass-spinner></div>`;
         }
         if (items.length === 0) {
             return html`<div class="empty-hint">${this.t('entity_modal.types_empty')}</div>`;
@@ -2908,9 +2908,7 @@ export class CRMEntityCard extends PlatformElement {
                     ${this._grantsExpanded
                         ? html`
                             <div class="collapsible-content">
-                                ${this._grantsOp.busy
-                                    ? html`<div class="empty-soft"><glass-spinner size="sm"></glass-spinner></div>`
-                                    : html`<div class="empty-soft">${this.t('grants.loading')}</div>`}
+                                <div class="empty-soft"><glass-spinner size="sm"></glass-spinner></div>
                             </div>
                         `
                         : nothing}
