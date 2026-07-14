@@ -21,6 +21,7 @@ const FLOW_WITH_CHAT = {
         show_reasoning: false,
         tool_calls_display: 'compact',
         show_activity: true,
+        show_skill_loads: true,
         errors_display: 'generic',
         show_run_trace: false,
         show_trace_actions: false,

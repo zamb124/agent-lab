@@ -63,6 +63,26 @@ describe('frontend-team-page flow employee badge', () => {
         fixtureCleanup();
     });
 
+    it('_renderRow показывает role-tag AI employee только у flow-сотрудника', async () => {
+        const el = await fixture(html`<frontend-team-page></frontend-team-page>`);
+        await elementUpdated(el);
+
+        const employeeHost = document.createElement('div');
+        const humanHost = document.createElement('div');
+        render(el._renderRow(EMPLOYEE_MEMBER), employeeHost);
+        render(el._renderRow({
+            user_id: 'human_1',
+            name: 'Human',
+            email: 'human@example.com',
+            roles: ['admin'],
+            is_flow_employee: false,
+        }), humanHost);
+        await elementUpdated(el);
+
+        expect(employeeHost.querySelector('.role-tag')?.textContent).to.equal('AI employee');
+        expect(humanHost.querySelector('.role-tag')).to.equal(null);
+    });
+
     it('_renderCard показывает role-tag AI employee только у flow-сотрудника', async () => {
         const el = await fixture(html`<frontend-team-page></frontend-team-page>`);
         await elementUpdated(el);

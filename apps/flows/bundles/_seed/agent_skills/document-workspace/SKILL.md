@@ -3,7 +3,6 @@ name: document-workspace
 description: Create, read, edit, and open platform files and Office Documents (docx/xlsx/txt). Use when the user asks for reports, tables, file edits, or opening a document in the editor.
 allowed-tools: read_file create_file documents_open_file documents_replace_text documents_append_text documents_update_cells format_text_markdown summarize_text
 depends_on: docx-templates
-activation: explicit
 ---
 
 # Document workspace

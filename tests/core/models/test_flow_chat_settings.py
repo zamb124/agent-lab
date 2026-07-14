@@ -43,10 +43,18 @@ def test_resolve_effective_flow_chat_partial_override() -> None:
 
 
 def test_resolve_effective_flow_chat_empty_override_object_is_noop() -> None:
-    flow_chat = FlowChatSettings(show_activity=False)
+    flow_chat = FlowChatSettings(show_activity=False, show_skill_loads=False)
     override = EmbedChatPolicyOverride()
     effective = resolve_effective_flow_chat(flow_chat, override)
     assert effective.show_activity is False
+    assert effective.show_skill_loads is False
+
+
+def test_resolve_effective_flow_chat_override_show_skill_loads() -> None:
+    flow_chat = FlowChatSettings(show_skill_loads=True)
+    override = EmbedChatPolicyOverride(show_skill_loads=False)
+    effective = resolve_effective_flow_chat(flow_chat, override)
+    assert effective.show_skill_loads is False
 
 
 def test_resolve_effective_flow_chat_override_suggested_prompts() -> None:

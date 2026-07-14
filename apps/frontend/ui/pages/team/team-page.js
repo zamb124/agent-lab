@@ -339,7 +339,12 @@ export class FrontendTeamPage extends PlatformPage {
             <tr>
                 <td><platform-user-chip user-id=${m.user_id} size="md"></platform-user-chip></td>
                 <td>${m.email || ''}</td>
-                <td>${this._renderRoles(m)}</td>
+                <td>
+                    ${m.is_flow_employee === true
+                        ? html`<span class="role-tag">${this.t('team_page.flow_employee_badge')}</span>`
+                        : ''}
+                    ${this._renderRoles(m)}
+                </td>
                 <td class="actions">
                     ${isOwner ? '' : html`
                         <button class="btn btn-ghost btn-danger" @click=${() => this._removeMember(m)}>

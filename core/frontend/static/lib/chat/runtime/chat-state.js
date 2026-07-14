@@ -130,6 +130,7 @@ function _newAssistantMessage(taskId, id) {
         toolCalls: [],
         toolResults: [],
         browserPreviews: [],
+        skillLoads: [],
         files: [],
         streaming: true,
         taskId,
@@ -1138,6 +1139,35 @@ function _handbackCompleted(state, p) {
     return { ...next, streaming: false };
 }
 
+function _skillLoaded(state, p) {
+    if (!p || typeof p !== 'object') return state;
+    const taskId = typeof p.task_id === 'string' ? p.task_id : null;
+    const skillId = typeof p.agent_skill_id === 'string' ? p.agent_skill_id.trim() : '';
+    if (!taskId || skillId.length === 0) return state;
+    const ctxHint = typeof p.context_id === 'string' ? p.context_id : null;
+    const name = typeof p.name === 'string' && p.name.trim().length > 0 ? p.name.trim() : skillId;
+    const depth = typeof p.depth === 'number' ? p.depth : 0;
+    const toolsUnlocked = Array.isArray(p.tools_unlocked)
+        ? p.tools_unlocked.filter((item) => typeof item === 'string')
+        : [];
+    const entry = {
+        agentSkillId: skillId,
+        name,
+        depth,
+        toolsUnlocked,
+    };
+    return _applyToBucketMessages(state, taskId, (messages) => {
+        const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
+        return _replaceMessage(nextMsgs, idx, (m) => {
+            const existing = Array.isArray(m.skillLoads) ? m.skillLoads : [];
+            if (existing.some((row) => row && row.agentSkillId === skillId)) {
+                return m;
+            }
+            return { ...m, skillLoads: [...existing, entry] };
+        });
+    }, ctxHint);
+}
+
 /**
  * Применить одно chat-runtime событие к состоянию.
  *
@@ -1200,6 +1230,8 @@ export function applyChatRuntimeEvent(state, verb, payload) {
             return _handoffInitiated(state, payload);
         case 'handback_completed':
             return _handbackCompleted(state, payload);
+        case 'skill_loaded':
+            return _skillLoaded(state, payload);
         default:
             return state;
     }

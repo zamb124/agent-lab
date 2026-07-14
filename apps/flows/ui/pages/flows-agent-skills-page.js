@@ -164,7 +164,7 @@ export class FlowsAgentSkillsPage extends PlatformPage {
             return;
         }
         if (action === 'example') {
-            this.navigate('flow_chat', { flowId: 'platform_assistant' });
+            this.navigate('flow_chat', { flowId: 'lara' });
         }
     }
 
@@ -179,6 +179,18 @@ export class FlowsAgentSkillsPage extends PlatformPage {
     _onDeleted() {
         this._selectedId = '';
         this._selectedSkill = null;
+    }
+
+    _onDuplicated(e) {
+        const toId = e?.detail?.toId;
+        const skill = e?.detail?.skill;
+        if (typeof toId === 'string' && toId.length > 0) {
+            if (skill && typeof skill === 'object') {
+                this._selectedSkill = skill;
+                this._selectedId = toId;
+            }
+            void this._selectSkill(toId);
+        }
     }
 
     render() {
@@ -217,6 +229,7 @@ export class FlowsAgentSkillsPage extends PlatformPage {
                                 .catalogItems=${items}
                                 @skills-saved=${this._onSaved}
                                 @skills-deleted=${this._onDeleted}
+                                @skills-duplicated=${this._onDuplicated}
                             ></flows-agent-skill-editor>
                         `
                         : html`

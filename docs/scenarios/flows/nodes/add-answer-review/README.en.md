@@ -18,10 +18,16 @@ Review the critic policy block: set minimum confidence and criteria that block t
 
 ![Configure review criteria](add-answer-review--02-reflection-policy-visible.png)
 
-## Step 3. Publish the graph with review
+## Step 3. Verify the node wiring on the canvas
+
+The canvas shows both the agent and review node connected by an edge. The reply passes through reflection before reaching the customer.
+
+![Verify the node wiring on the canvas](add-answer-review--03-reflection-wired-on-canvas.png)
+
+## Step 4. Publish the graph with review
 
 **Result demonstration.** The self-review node is saved in the graph — weak answers can be rejected before reaching the customer.
 
 **Summary.** You can add a reflection node and configure answer quality control.
 
-![Publish the graph with review](add-answer-review--03-reflection-published.png)
+![Publish the graph with review](add-answer-review--04-reflection-published.png)

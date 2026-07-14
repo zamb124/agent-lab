@@ -17,3 +17,9 @@ Create a suite and add a case from a template. Before running, make sure the rig
 Click Run. Evaluation Lab submits the check in the background and shows status in the top toolbar and results matrix.
 
 ![Run the first evaluation](eval-run-compare--02-evaluation-first-run.png)
+
+## Step 3. Run a second evaluation for comparison
+
+Run again with the same case. The matrix shows two runs — you can compare them and pick a baseline.
+
+![Run a second evaluation for comparison](eval-run-compare--03-evaluation-second-run.png)

@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import re
-from typing import ClassVar, Literal
+from typing import ClassVar
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from apps.flows.src.models.tool_reference import ToolReference
 from core.files.file_ref import FileRef
 from core.models import StrictBaseModel
+from core.types import JsonObject, parse_json_object
 
 _AGENT_SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-AgentSkillActivation = Literal["auto", "explicit"]
 
 
 class AgentSkillIndexEntry(StrictBaseModel):
@@ -46,7 +46,10 @@ class AgentSkill(StrictBaseModel):
     )
     depends_on: list[str] = Field(
         default_factory=list,
-        description="agent_skill_id dependencies; runtime depth limit 1",
+        description=(
+            "agent_skill_id children loadable after this skill; "
+            "arbitrary depth; cycles allowed; reload idempotent"
+        ),
     )
     references: list[FileRef] = Field(
         default_factory=list,
@@ -55,10 +58,6 @@ class AgentSkill(StrictBaseModel):
     assets: list[FileRef] = Field(
         default_factory=list,
         description="Templates and other assets",
-    )
-    activation: AgentSkillActivation = Field(
-        default="explicit",
-        description="auto|explicit — metadata for discovery; load is always via tool",
     )
 
     @field_validator("agent_skill_id", "name")
@@ -110,8 +109,15 @@ class AgentSkill(StrictBaseModel):
         )
 
 
+def parse_stored_agent_skill(data: str) -> AgentSkill:
+    """Deserialize AgentSkill from storage JSON; drop obsolete `activation` if present."""
+    payload: JsonObject = parse_json_object(data, "agent_skill")
+    _ = payload.pop("activation", None)
+    return AgentSkill.model_validate(payload)
+
+
 __all__ = [
     "AgentSkill",
-    "AgentSkillActivation",
     "AgentSkillIndexEntry",
+    "parse_stored_agent_skill",
 ]

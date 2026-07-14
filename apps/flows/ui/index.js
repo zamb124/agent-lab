@@ -47,6 +47,7 @@ import './modals/flows-trigger-editor-modal.js';
 import './modals/flows-triggers-modal.js';
 import './modals/flows-integrations-modal.js';
 import './modals/flows-agent-skill-create-modal.js';
+import './modals/flows-agent-skill-edit-modal.js';
 import './modals/flows-agent-skill-import-modal.js';
 import './modals/flows-agent-skill-picker-modal.js';
 import './modals/flows-embedded-tool-config-modal.js';

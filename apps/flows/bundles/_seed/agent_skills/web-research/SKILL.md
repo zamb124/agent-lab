@@ -2,7 +2,6 @@
 name: web-research
 description: Web and platform index search plus page markdown snapshots. Use for external facts, SERP-style research, or reading public pages.
 allowed-tools: web_search index_search browser_duckduckgo_links browser_page_markdown
-activation: explicit
 ---
 
 # Web research

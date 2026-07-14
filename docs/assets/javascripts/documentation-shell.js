@@ -130,6 +130,28 @@
     }
   };
 
+  const platformUiOrigin = () => {
+    const meta = document.querySelector('meta[name="docs-platform-ui-origin"]');
+    const fromMeta = meta && typeof meta.content === "string" ? meta.content.trim() : "";
+    if (fromMeta) {
+      return fromMeta.replace(/\/+$/, "");
+    }
+    return window.location.origin;
+  };
+
+  const assertJavascriptModuleUrl = async (url) => {
+    const response = await fetch(url, { method: "GET", cache: "no-store" });
+    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    if (!response.ok) {
+      throw new Error(`docs assistant script HTTP ${response.status}`);
+    }
+    if (!contentType.includes("javascript") && !contentType.includes("ecmascript")) {
+      throw new Error(
+        `docs assistant script MIME ${contentType || "unknown"} (нужен /static/core на origin платформы, не zensical serve)`,
+      );
+    }
+  };
+
   const ensureDocsAssistantLoaded = async () => {
     if (window.humanitecEmbed && window.humanitecEmbed.element) {
       configureDocsAssistantMetadata(window.humanitecEmbed);
@@ -141,38 +163,49 @@
       return embed;
     }
 
-    window.__docsAssistantLoading = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.type = "module";
-      script.src = "/static/core/lib/embed-chat/humanitec-embed-autoload.js";
-      script.dataset.embedId = "docs_assistant";
-      script.dataset.flowId = "lara";
-      script.dataset.branchId = "docs";
-      script.dataset.assistantTitle = "Ask AI";
-      script.dataset.theme = "light";
-      script.dataset.locale = docsLanguage();
-      script.dataset.showLauncher = "false";
-      script.dataset.initialOpen = "false";
-      script.dataset.flowsBaseUrl = "/flows";
-      script.dataset.platformUiOrigin = window.location.origin;
-      script.dataset.chatTokenUrl = "/frontend/api/public/docs-assistant/session";
-      script.dataset.tokenExpiresSeconds = "600";
-      script.dataset.eventNamespace = "docs-assistant";
-      script.dataset.toggleEventName = "humanitec-docs-assistant-toggle";
-      script.onload = async () => {
-        try {
-          const embed = await waitForDocsAssistant();
-          configureDocsAssistantMetadata(embed);
-          resolve(embed);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      script.onerror = () => reject(new Error("cannot load docs assistant script"));
-      document.head.appendChild(script);
-    });
+    const origin = platformUiOrigin();
+    const scriptUrl = `${origin}/static/core/lib/embed-chat/humanitec-embed-autoload.js`;
 
-    return window.__docsAssistantLoading;
+    window.__docsAssistantLoading = (async () => {
+      await assertJavascriptModuleUrl(scriptUrl);
+      const embed = await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.type = "module";
+        script.src = scriptUrl;
+        script.dataset.embedId = "docs_assistant";
+        script.dataset.flowId = "lara";
+        script.dataset.branchId = "docs";
+        script.dataset.assistantTitle = "Ask AI";
+        script.dataset.theme = "light";
+        script.dataset.locale = docsLanguage();
+        script.dataset.showLauncher = "false";
+        script.dataset.initialOpen = "false";
+        script.dataset.flowsBaseUrl = `${origin}/flows`;
+        script.dataset.platformUiOrigin = origin;
+        script.dataset.chatTokenUrl = `${origin}/frontend/api/public/docs-assistant/session`;
+        script.dataset.tokenExpiresSeconds = "600";
+        script.dataset.eventNamespace = "docs-assistant";
+        script.dataset.toggleEventName = "humanitec-docs-assistant-toggle";
+        script.onload = async () => {
+          try {
+            resolve(await waitForDocsAssistant());
+          } catch (error) {
+            reject(error);
+          }
+        };
+        script.onerror = () => reject(new Error("cannot load docs assistant script"));
+        document.head.appendChild(script);
+      });
+      configureDocsAssistantMetadata(embed);
+      return embed;
+    })();
+
+    try {
+      return await window.__docsAssistantLoading;
+    } catch (error) {
+      window.__docsAssistantLoading = null;
+      throw error;
+    }
   };
 
   const bindDocsAssistant = () => {

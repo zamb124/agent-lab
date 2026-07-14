@@ -978,6 +978,35 @@
   },
   "components": {
     "schemas": {
+      "ActAsResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "impersonated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impersonated By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "company_id"
+        ],
+        "title": "ActAsResponse"
+      },
       "ActivityLifecyclePayload": {
         "properties": {
           "activity_id": {
@@ -1270,6 +1299,240 @@
           "data"
         ],
         "title": "AgentOpenAIModelsResponse"
+      },
+      "AgentSkill": {
+        "properties": {
+          "agent_skill_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Skill Id",
+            "description": "Стабильный id (slug)"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "description": "agentskills name"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Description",
+            "description": "Tier-1: what the skill does and when to use it"
+          },
+          "body_markdown": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Body Markdown",
+            "description": "Tier-2 procedure markdown"
+          },
+          "tool_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ToolReference"
+            },
+            "type": "array",
+            "title": "Tool Refs",
+            "description": "Tools materialized into llm_node on load_agent_skill"
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Depends On",
+            "description": "agent_skill_id children loadable after this skill; arbitrary depth; cycles allowed; reload idempotent"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/FileRef"
+            },
+            "type": "array",
+            "title": "References",
+            "description": "Tier-3 reference docs"
+          },
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/FileRef"
+            },
+            "type": "array",
+            "title": "Assets",
+            "description": "Templates and other assets"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_skill_id",
+          "name",
+          "description",
+          "body_markdown"
+        ],
+        "title": "AgentSkill",
+        "description": "Catalog skill: procedure body + optional tools/files/depends_on.",
+        "storage_prefix": "agent_skill"
+      },
+      "AgentSkillCreateRequest": {
+        "properties": {
+          "agent_skill_id": {
+            "type": "string",
+            "title": "Agent Skill Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "body_markdown": {
+            "type": "string",
+            "title": "Body Markdown"
+          },
+          "tool_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ToolReference"
+            },
+            "type": "array",
+            "title": "Tool Refs",
+            "default": []
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Depends On",
+            "default": []
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/FileRef"
+            },
+            "type": "array",
+            "title": "References",
+            "default": []
+          },
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/FileRef"
+            },
+            "type": "array",
+            "title": "Assets",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_skill_id",
+          "name",
+          "description",
+          "body_markdown"
+        ],
+        "title": "AgentSkillCreateRequest"
+      },
+      "AgentSkillEnsureSeedResponse": {
+        "properties": {
+          "seeded": {
+            "type": "integer",
+            "title": "Seeded"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "seeded"
+        ],
+        "title": "AgentSkillEnsureSeedResponse"
+      },
+      "AgentSkillImportRequest": {
+        "properties": {
+          "markdown": {
+            "type": "string",
+            "title": "Markdown"
+          },
+          "agent_skill_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Skill Id"
+          },
+          "persist": {
+            "type": "boolean",
+            "title": "Persist",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "markdown"
+        ],
+        "title": "AgentSkillImportRequest"
+      },
+      "AgentSkillUpdateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "body_markdown": {
+            "type": "string",
+            "title": "Body Markdown"
+          },
+          "tool_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ToolReference"
+            },
+            "type": "array",
+            "title": "Tool Refs",
+            "default": []
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Depends On",
+            "default": []
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/FileRef"
+            },
+            "type": "array",
+            "title": "References",
+            "default": []
+          },
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/FileRef"
+            },
+            "type": "array",
+            "title": "Assets",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "body_markdown"
+        ],
+        "title": "AgentSkillUpdateRequest"
       },
       "AgentToolkitCatalogItem": {
         "properties": {
@@ -4041,6 +4304,132 @@
         ],
         "title": "ControlPointerTextBody"
       },
+      "ConversationMessageAppendedPayload": {
+        "properties": {
+          "author_role": {
+            "type": "string",
+            "enum": [
+              "operator",
+              "user"
+            ],
+            "title": "Author Role"
+          },
+          "author_user_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Author User Id"
+          },
+          "work_item_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Work Item Id"
+          },
+          "message_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "author_role",
+          "author_user_id",
+          "work_item_id",
+          "message_id",
+          "idempotency_key"
+        ],
+        "title": "ConversationMessageAppendedPayload",
+        "description": "Внешний turn (оператор/пользователь), дописанный в лог сессии HITL.\n\n`message_id` детерминирован для идемпотентности повторной доставки."
+      },
+      "ConversationSnapshot": {
+        "properties": {
+          "work_item_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Work Item Id"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationTurn"
+            },
+            "type": "array",
+            "title": "Turns"
+          },
+          "cursor": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Cursor",
+            "description": "Курсор последнего turn (0 = пусто)",
+            "default": 0
+          },
+          "policy": {
+            "$ref": "#/components/schemas/WorkItemInteractionPolicy"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "work_item_id",
+          "policy"
+        ],
+        "title": "ConversationSnapshot",
+        "description": "Снимок разговора для карточки задачи: turns + курсор + политика композера."
+      },
+      "ConversationTurn": {
+        "properties": {
+          "cursor": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Cursor",
+            "description": "Монотонный индекс turn (1-based)"
+          },
+          "message_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message Id"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ConversationTurnRole"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "default": ""
+          },
+          "file_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "File Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cursor",
+          "message_id",
+          "role"
+        ],
+        "title": "ConversationTurn",
+        "description": "Один turn разговора в проекции чата HITL-задачи."
+      },
+      "ConversationTurnRole": {
+        "type": "string",
+        "enum": [
+          "user",
+          "operator",
+          "agent",
+          "system"
+        ],
+        "title": "ConversationTurnRole"
+      },
       "CredentialInfo": {
         "properties": {
           "provider": {
@@ -4066,6 +4455,106 @@
         ],
         "title": "CredentialInfo",
         "description": "Публичная проекция credential для UI (без токенов)."
+      },
+      "CriticCriterion": {
+        "properties": {
+          "criterion_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Criterion Id"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Description"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error",
+              "critical"
+            ],
+            "title": "Severity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "criterion_id",
+          "description",
+          "severity"
+        ],
+        "title": "CriticCriterion",
+        "description": "Один явный критерий, который критик обязан оценить."
+      },
+      "CriticPolicy": {
+        "properties": {
+          "policy_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Policy Id"
+          },
+          "gate": {
+            "type": "string",
+            "enum": [
+              "final_answer",
+              "transaction",
+              "quality"
+            ],
+            "title": "Gate"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ReflectionTarget"
+          },
+          "instruction": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Instruction"
+          },
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/CriticCriterion"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Criteria"
+          },
+          "min_confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Confidence"
+          },
+          "block_on_severities": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "info",
+                "warning",
+                "error",
+                "critical"
+              ]
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Block On Severities"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "policy_id",
+          "gate",
+          "target",
+          "instruction",
+          "criteria",
+          "min_confidence",
+          "block_on_severities"
+        ],
+        "title": "CriticPolicy",
+        "description": "Строгая политика: когда рефлексия одобряет или блокирует gate."
       },
       "DataPart": {
         "properties": {
@@ -10042,7 +10531,19 @@
           "user_id": {
             "type": "string",
             "title": "User Id",
-            "description": "ID пользователя"
+            "description": "ID актора выполнения (сотрудник-агент или инициатор)"
+          },
+          "initiator_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiator User Id",
+            "description": "Кто инициировал запуск: человек/собеседник. Для flow-сотрудника отличается от user_id (актор). Используется для уведомлений, эскалаций и prompt-переменных собеседника."
           },
           "session_id": {
             "type": "string",
@@ -10222,6 +10723,18 @@
             ],
             "title": "Hitl Handoff Correlation Id",
             "description": "При resume после operator handoff: correlation_id задачи до сброса interrupt, чтобы hitl_node один раз завершилась и граф пошёл дальше по рёбрам"
+          },
+          "hitl_streamed_closing_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hitl Streamed Closing Text",
+            "description": "Текст closing operator reply, уже отправленный в Redis как operator_reply. Если final_response совпадает — emit_complete не дублирует его в UI completed."
           },
           "node_history": {
             "additionalProperties": {
@@ -10472,7 +10985,19 @@
           "user_id": {
             "type": "string",
             "title": "User Id",
-            "description": "ID пользователя"
+            "description": "ID актора выполнения (сотрудник-агент или инициатор)"
+          },
+          "initiator_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiator User Id",
+            "description": "Кто инициировал запуск: человек/собеседник. Для flow-сотрудника отличается от user_id (актор). Используется для уведомлений, эскалаций и prompt-переменных собеседника."
           },
           "session_id": {
             "type": "string",
@@ -10652,6 +11177,18 @@
             ],
             "title": "Hitl Handoff Correlation Id",
             "description": "При resume после operator handoff: correlation_id задачи до сброса interrupt, чтобы hitl_node один раз завершилась и граф пошёл дальше по рёбрам"
+          },
+          "hitl_streamed_closing_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hitl Streamed Closing Text",
+            "description": "Текст closing operator reply, уже отправленный в Redis как operator_reply. Если final_response совпадает — emit_complete не дублирует его в UI completed."
           },
           "node_history": {
             "additionalProperties": {
@@ -11280,6 +11817,12 @@
             "description": "Показывать строку активности агента (текущая нода/инструмент)",
             "default": true
           },
+          "show_skill_loads": {
+            "type": "boolean",
+            "title": "Show Skill Loads",
+            "description": "Показывать в чате события активации Agent Skill (load_agent_skill)",
+            "default": true
+          },
           "errors_display": {
             "type": "string",
             "enum": [
@@ -11451,6 +11994,9 @@
               }
             ]
           },
+          "employee": {
+            "$ref": "#/components/schemas/FlowEmployeeConfig"
+          },
           "agent_toolkit_ids": {
             "items": {
               "type": "string"
@@ -11552,6 +12098,60 @@
         "type": "object",
         "title": "FlowDataflowInspectRequest",
         "description": "Запрос статического анализа state до/после нод редактора."
+      },
+      "FlowEmployeeConfig": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "description": "Активировать runtime-identity: flow становится сотрудником компании",
+            "default": false
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles",
+            "description": "Роли сотрудника в компании (RBAC). Задаются явно, без дефолта-угадывания"
+          },
+          "curator_user_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Curator User Ids",
+            "description": "user_id кураторов-людей. Обязателен минимум один при enabled=True"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name",
+            "description": "Отображаемое имя сотрудника. None = FlowConfig.name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url",
+            "description": "URL аватара сотрудника для team UI и user-chip"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowEmployeeConfig",
+        "description": "Конфигурация flow как сотрудника платформы (runtime-identity).\n\nВключённый режим делает flow полноценным ``User`` компании: он действует от\nсобственного имени во всех сервисах (RBAC, ACL, sync, worktracker, биллинг),\nи платформа диспатчит ему работу так же, как человеку. У каждого сотрудника\nобязателен куратор-человек (``curator_user_ids``) — нет AI-сотрудника без\nответственного."
       },
       "FlowFunctionInfo": {
         "properties": {
@@ -12074,6 +12674,9 @@
           },
           "chat": {
             "$ref": "#/components/schemas/FlowChatSettings"
+          },
+          "employee": {
+            "$ref": "#/components/schemas/FlowEmployeeConfig"
           },
           "agent_toolkit_ids": {
             "items": {
@@ -12705,6 +13308,14 @@
             "title": "Tools",
             "description": "Tools llm_node"
           },
+          "agent_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Agent Skills",
+            "description": "Attached Agent Skill ids for llm_node"
+          },
           "llm": {
             "anyOf": [
               {
@@ -13174,6 +13785,17 @@
               }
             ],
             "title": "Handoff User Message"
+          },
+          "critic_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CriticPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Typed ReflectionNode policy: target, criteria and gate decision contract."
           },
           "save_to_messages": {
             "type": "boolean",
@@ -15216,6 +15838,81 @@
         ],
         "title": "ListResponse[str]"
       },
+      "LlmContextResolveParentRequest": {
+        "properties": {
+          "llm_context_resource_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Context Resource Key"
+          },
+          "flow_resources": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Flow Resources",
+            "default": {}
+          },
+          "node_resources": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Node Resources",
+            "default": {}
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LlmContextResolveParentRequest",
+        "description": "Черновик ресурсов редактора + optional resource key (без node overlay)."
+      },
+      "LlmContextResolveParentResponse": {
+        "properties": {
+          "resolved": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Resolved"
+          },
+          "profiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Profiles"
+          },
+          "budgets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Budgets"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "resolved",
+          "profiles",
+          "budgets"
+        ],
+        "title": "LlmContextResolveParentResponse",
+        "description": "Public shape как settings llm_context: resolved + catalogs."
+      },
       "MCPCatalogStoreItemResponse": {
         "properties": {
           "catalog_id": {
@@ -16700,6 +17397,37 @@
         "title": "OAuthInterrupt",
         "description": "Пауза до завершения OAuth-авторизации пользователя во внешнем сервисе."
       },
+      "OffsetPage_AgentSkill_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSkill"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[AgentSkill]"
+      },
       "OffsetPage_FlowResponse_": {
         "properties": {
           "items": {
@@ -16916,6 +17644,33 @@
           "offset"
         ],
         "title": "OffsetPage[ToolResponse]"
+      },
+      "OperatorMessageRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "default": ""
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "file_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "File Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key"
+        ],
+        "title": "OperatorMessageRequest"
       },
       "OperatorTaskInterrupt": {
         "properties": {
@@ -18983,6 +19738,52 @@
         "title": "SwitchCompanyRequest",
         "description": "Переключение активной компании пользователя"
       },
+      "SyncMessageInbox": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "const": "sync_message",
+            "title": "Source",
+            "default": "sync_message"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "employee_user_id": {
+            "type": "string",
+            "title": "Employee User Id"
+          },
+          "sender_user_id": {
+            "type": "string",
+            "title": "Sender User Id"
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id",
+          "employee_user_id",
+          "sender_user_id",
+          "channel_id",
+          "message_id",
+          "text"
+        ],
+        "title": "SyncMessageInbox",
+        "description": "Входящее сообщение sync (mention или DM) сотруднику-агенту."
+      },
       "Task": {
         "properties": {
           "artifacts": {
@@ -19213,6 +20014,29 @@
               }
             ],
             "title": "Avatar Url"
+          },
+          "is_flow_employee": {
+            "type": "boolean",
+            "title": "Is Flow Employee",
+            "default": false
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "curator_user_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Curator User Ids"
           }
         },
         "type": "object",
@@ -21143,45 +21967,51 @@
         ],
         "title": "WorkItemAssignedBody"
       },
-      "WorkItemCommentBody": {
+      "WorkItemAssignedInbox": {
         "properties": {
-          "event": {
+          "source": {
             "type": "string",
-            "title": "Event",
-            "default": "comment"
-          },
-          "work_item_id": {
-            "type": "string",
-            "title": "Work Item Id"
+            "const": "work_item_assigned",
+            "title": "Source",
+            "default": "work_item_assigned"
           },
           "company_id": {
             "type": "string",
             "title": "Company Id"
           },
-          "comment": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "type": "object",
-            "title": "Comment"
+          "employee_user_id": {
+            "type": "string",
+            "title": "Employee User Id"
           },
-          "binding": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "type": "object",
-            "title": "Binding"
+          "sender_user_id": {
+            "type": "string",
+            "title": "Sender User Id"
+          },
+          "work_item_id": {
+            "type": "string",
+            "title": "Work Item Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id",
+            "default": "default"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "work_item_id",
           "company_id",
-          "comment",
-          "binding"
+          "employee_user_id",
+          "sender_user_id",
+          "work_item_id",
+          "text"
         ],
-        "title": "WorkItemCommentBody"
+        "title": "WorkItemAssignedInbox",
+        "description": "Назначение задачи worktracker сотруднику-агенту."
       },
       "WorkItemCompletedBody": {
         "properties": {
@@ -21214,6 +22044,13 @@
             "type": "array",
             "title": "Resolution Files"
           },
+          "resolution_file_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Resolution File Ids"
+          },
           "binding": {
             "additionalProperties": {
               "$ref": "#/components/schemas/JsonValue"
@@ -21231,6 +22068,93 @@
           "binding"
         ],
         "title": "WorkItemCompletedBody"
+      },
+      "WorkItemConversationRef": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "flow_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Branch Id",
+            "default": "default"
+          },
+          "a2a_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "A2A Task Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "session_id",
+          "context_id",
+          "flow_id"
+        ],
+        "title": "WorkItemConversationRef",
+        "description": "Ссылка на разговор flows-сессии для встроенного чата в карточке задачи."
+      },
+      "WorkItemInteractionMode": {
+        "type": "string",
+        "enum": [
+          "none",
+          "single_reply",
+          "takeover"
+        ],
+        "title": "WorkItemInteractionMode",
+        "description": "Как оператор взаимодействует с задачей в её карточке."
+      },
+      "WorkItemInteractionPolicy": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/WorkItemInteractionMode",
+            "default": "none"
+          },
+          "can_send": {
+            "type": "boolean",
+            "title": "Can Send",
+            "default": false
+          },
+          "can_complete": {
+            "type": "boolean",
+            "title": "Can Complete",
+            "default": false
+          },
+          "conversation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkItemConversationRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WorkItemInteractionPolicy",
+        "description": "Вычисляемая политика композера для карточки задачи (проекция, не персист)."
       },
       "WorkflowBranchRecord": {
         "properties": {
@@ -21474,6 +22398,9 @@
               },
               {
                 "$ref": "#/components/schemas/FlowHandbackCompletedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/ConversationMessageAppendedPayload"
               }
             ],
             "title": "Payload"
@@ -21553,7 +22480,8 @@
           "HandoffInitiated",
           "HandoffAccepted",
           "HandbackRequested",
-          "HandbackCompleted"
+          "HandbackCompleted",
+          "ConversationMessageAppended"
         ],
         "title": "WorkflowEventType"
       },

@@ -124,6 +124,13 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 min-width: 0;
                 min-height: 0;
             }
+            :host([focusMode]) .panel-main {
+                overflow: visible;
+            }
+            :host([focusMode]) .panel-main.focus-main {
+                overflow: auto;
+                padding-bottom: var(--space-8);
+            }
             .panel-main > .section {
                 flex-shrink: 0;
             }

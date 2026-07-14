@@ -77,7 +77,15 @@
 Изменения: тег `chat` схлопывается в `execution`; тег `agent-download` удаляется.
 
 Learning path **flows** (простое → сложное):
-`flows-home-tour` → `create-first-agent` → `configure-agent-answers` → `test-agent-in-chat` → `add-agent-tools` → `publish-and-operate`.
+`flows-home-tour` → `create-first-agent` → `agent-focus-vs-canvas` →
+`configure-agent-answers` → `attach-skills-to-agent` → `test-agent-in-chat` →
+`skills-unlock-in-chat` → `add-agent-tools` → `publish-and-operate`.
+
+Learning path **flows-skills**:
+`manage-agent-skills` → `attach-skills-to-agent` → `skills-unlock-in-chat` →
+`duplicate-and-edit-skill`.
+
+Skills остаются в тегах `nodes` и `execution` (отдельный taxonomy-tag `skills` не вводим).
 
 Кросс-сервисный блок «Операторы и HITL» (раздел 4a) частично живёт в сервисе
 **worktracker**: карточки B1–B5 получают `service: worktracker` и новый tag `operators`
@@ -118,7 +126,23 @@ Learning path **flows** (простое → сложное):
 - Демонстрация: редактор с готовой канвой нового агента.
 - Фичи: мастер создания, пресеты (react/graph/multi/code/external), Store bundles, поля id/name/description.
 
+#### 1.3 `getting-started/chat-with-lara`
+- Title: «Чат с Lara — помощником платформы» / "Chat with Lara — the platform assistant"
+- Для чего: спросить у Lara про платформу, не настраивая своего агента.
+- Результат: ответ Lara в чате.
+- Шаги: 1) открыть главную Flows; 2) открыть чат Lara; 3) задать простой вопрос; 4) увидеть ответ (и при необходимости чипы Skill).
+- Демонстрация: диалог с ответом Lara.
+- Фичи: route `/flows/chat/lara`, platform-chat, skill load chips (опционально).
+
 ### Этап 2. Редактор графа (editor)
+
+#### 2.0 `editor/agent-focus-vs-canvas`
+- Title: «Студия и схема: два режима редактора» / "Studio and canvas: two editor modes"
+- Для чего: понять разницу студии и канвы и переключаться между ними.
+- Результат: одно изменение промпта видно в обоих режимах.
+- Шаги: 1) открыть single-llm агента в студии; 2) изменить промпт; 3) переключить на канву; 4) открыть ту же ноду; 5) вернуться в студию.
+- Демонстрация: промпт сохранён после переключения режимов.
+- Фичи: `flows-agent-focus-studio`, layout toggle, `flows-flow-canvas` (только eligible single-llm).
 
 #### 2.1 `editor/configure-agent-answers` (merge add-llm-node + edit-llm-flow)
 - Title: «Настраиваем ответы агента: промпт и модель» / "Shape agent answers: prompt and model"
@@ -148,6 +172,27 @@ Learning path **flows** (простое → сложное):
 - Фичи: sticky notes, zoom/fit/100%, undo/redo, select/pan, smart guides, data wires toggle, dataflow problems flyout → jump to node, авто-раскладка, shortcuts.
 
 ### Этап 3. Возможности агента / типы нод (nodes)
+
+#### 3.0a `nodes/manage-agent-skills`
+- Title: «Создаём Skill «Возврат заказа»» / "Create the Order return Skill"
+- Для чего: завести процедуру в библиотеке Skills.
+- Результат: Skill с name/description/body в библиотеке.
+- Шаги: 1) открыть Skills; 2) создать; 3) заполнить id/name/description; 4) написать body; 5) сохранить и увидеть в списке.
+- Фичи: `/flows/skills`, create modal, skill editor, how-it-works.
+
+#### 3.0b `nodes/attach-skills-to-agent`
+- Title: «Подключаем Skill к агенту» / "Attach a Skill to the agent"
+- Для чего: привязать Skill к ноде в режиме Инструменты.
+- Результат: чип Skill на ноде; в Структурированном секция скрыта.
+- Шаги: 1) Tools mode; 2) Add skill; 3) чип; 4) edit modal с чипа; 5) Structured hides Skills; 6) вернуться в Tools.
+- Фичи: agent_skills на llm_node, picker, meta-tools load не в standing Tools.
+
+#### 3.0c `nodes/duplicate-and-edit-skill`
+- Title: «Дублируем и правим Skill» / "Duplicate and edit a Skill"
+- Для чего: скопировать процедуру под другой кейс.
+- Результат: копия в библиотеке с новым id.
+- Шаги: 1) открыть Skill; 2) Duplicate; 3) новый id/name; 4) править body; 5) увидеть копию в списке.
+- Фичи: duplicate panel, replace attach (опционально с chip modal).
 
 #### 3.1 `nodes/add-agent-tools`
 - Title: «Даём агенту инструменты» / "Give the agent tools"
@@ -248,6 +293,14 @@ Learning path **flows** (простое → сложное):
 - Демонстрация: ответ агента с подставленными переменными.
 - Фичи: flow variables modal (value/secret/public/title/order), company variables panel, `@var:` в промпте/заголовках.
 
+#### 4.3 `data/llm-context-resource`
+- Title: «Подключаем ресурс контекста модели» / "Attach a model context resource"
+- Для чего: общий ресурс политик контекста на ветке.
+- Результат: нода ответа с выбранным llm_context ресурсом.
+- Шаги: 1) открыть канву; 2) дропнуть llm_context; 3) назвать ресурс; 4) привязать к ноде; 5) опубликовать.
+- Фичи: resource type llm_context, `llm_context_resource_key`, platform-llm-context-editor.
+- Не покрывает backend memory/RAG e2e — только UI-контракт.
+
 ### Этап 5. Тестирование и отладка (execution)
 
 #### 5.1 `execution/test-agent-in-chat` (rewrite run-flow-chat)
@@ -257,6 +310,13 @@ Learning path **flows** (простое → сложное):
 - Шаги: 1) открыть чат агента; 2) отправить вопрос о доставке; 3) приложить файл заказа; 4) дождаться потокового ответа; 5) переключить сохранение контекста и задать уточняющий вопрос.
 - Демонстрация: содержательный ответ агента в ленте чата.
 - Фичи: chat SPA (streaming, cancel, файлы, voice), persist context toggle, header actions.
+
+#### 5.1a `execution/skills-unlock-in-chat`
+- Title: «Skill активируется в чате» / "A Skill unlocks in chat"
+- Для чего: увидеть загрузку Skill и unlocked tool в диалоге.
+- Результат: chip skill loaded + ответ с расчётом.
+- Шаги: 1) открыть чат; 2) вопрос; 3) chip; 4) ответ. Mute show_skill_loads → 8.2a.
+- Фичи: platform.skill_loaded → `.skill-load-chip`, MockLLM load_agent_skill → calculator.
 
 #### 5.2 `execution/debug-with-breakpoints`
 - Title: «Отлаживаем агента по шагам» / "Debug the agent step by step"
@@ -308,6 +368,13 @@ Learning path **flows** (простое → сложное):
 - Демонстрация: подтверждённая проверка триггера и настроенный автоответ.
 - Фичи: telegram trigger (bot token `@var:`), verify, reregister webhook, output actions.
 
+#### 6.3 `triggers/webhook-trigger`
+- Title: «Запускаем агента по webhook» / "Run the agent from a webhook"
+- Для чего: принимать внешний HTTP-вызов без Telegram/cron.
+- Результат: webhook-триггер сохранён в агенте.
+- Шаги: 1) открыть триггеры; 2) создать; 3) тип webhook; 4) сохранить; 5) увидеть в списке.
+- Фичи: trigger type webhook в редакторе триггеров.
+
 ### Этап 7. API и доступ (api)
 
 #### 7.1 `api/api-first-request` (split api-console, часть 1)
@@ -334,6 +401,14 @@ Learning path **flows** (простое → сложное):
 - Демонстрация: рабочий гостевой чат по ссылке.
 - Фичи: preview share modal (guest link, guest_max, copy).
 
+#### 7.4 `api/embed-agent-on-site`
+- Title: «Встраиваем агента на сайт» / "Embed the agent on a site"
+- Для чего: показать чат на внешнем сайте магазина (не гостевая ссылка).
+- Результат: виджет чата на host page отвечает покупателю.
+- Шаги: 1) создать embed-конфиг; 2) получить snippet; 3) открыть host page; 4) открыть чат; 5) получить ответ.
+- Отличие от `share-demo-link`: embed — snippet/host page; share — гостевая ссылка.
+- Фичи: frontend embed configs, humanitec-embed-autoload, platform-chat на внешнем origin.
+
 ### Этап 8. Публикация и управление (operations)
 
 #### 8.1 `operations/experiment-with-branches`
@@ -359,6 +434,20 @@ Learning path **flows** (простое → сложное):
 - Шаги: 1) открыть настройки агента; 2) выбрать профиль речи (распознавание/синтез/голос/язык); 3) задать лимит времени; 4) переопределить голос в ветке; 5) проверить голос в чате.
 - Демонстрация: голосовой ответ агента в чате.
 - Фичи: flow property panel (STT/TTS/VAD, voice/language/sample_rate/VAD threshold, timeout), branch override.
+
+#### 8.2a `operations/chat-settings-for-customers`
+- Title: «Настройки чата для покупателей» / "Chat settings for customers"
+- Для чего: управлять видимостью активаций Skill и смежными рычагами чата.
+- Результат: show_skill_loads включён/выключен с видимым эффектом в чате.
+- Шаги: 1) открыть настройки чата; 2) переключить show_skill_loads; 3) сохранить; 4) прогон чата.
+- Фичи: platform-chat-settings-fields, show_skill_loads.
+
+#### 8.4 `operations/enable-flow-employee`
+- Title: «Включаем агента как AI-сотрудника» / "Enable the agent as an AI employee"
+- Для чего: агент появляется в команде компании как сотрудник.
+- Результат: бейдж AI-сотрудника на `/team`.
+- Шаги: 1) опубликовать агента с ролью сотрудника; 2) открыть команду; 3) найти сотрудника; 4) увидеть бейдж.
+- Фичи: flow `employee` provisioning, team page badge (service сценария = flows, демо на frontend `/team`).
 
 ### Этап 9. Проверка качества (evaluation)
 
@@ -602,9 +691,17 @@ Learning path **flows** (простое → сложное):
 | MCP серверы (управление компании) | 10.1 |
 | OAuth интеграции | 10.2 |
 | Handoff между агентами | 11.1 |
-| Lara / AI-помощник по ноде | упоминается в 2.1 и 3.1 (не самостоятельная задача) |
+| Lara / AI-помощник платформы | 1.3 |
+| Agent Focus Studio ↔ канва | 2.0 |
+| Agent Skills (библиотека / attach / chat / duplicate) | 3.0a–c, 5.1a |
+| llm_context resource | 4.3 |
+| Webhook trigger | 6.3 |
+| Embed на сайт | 7.4 |
+| Chat settings show_skill_loads | 8.2a |
+| Flow employee / AI-сотрудник | 8.4 |
+| Handoff между агентами | 11.1 |
 
-Триггеры email/redis и webhook-канал покрываются как варианты в 6.1/6.2 и 3.6 (тот же редактор, другой тип) — отдельные инструкции не нужны.
+Триггеры email/redis покрываются как варианты в 6.1/6.2 и 3.6 (тот же редактор, другой тип) — отдельные инструкции не нужны. Webhook-триггер — карточка 6.3.
 
 ## 6. Пробелы UI (инструкции не создаём, фиксируем)
 
@@ -626,7 +723,7 @@ Learning path **flows** (простое → сложное):
 **Документация (README RU+EN + PNG):** 45/45 — все обязательные slug'и §3 и §4a имеют полный комплект.
 
 **Taxonomy:** теги `flows` и сервис `worktracker` — готовы; learning paths `flows`,
-`worktracker-operators` и исправленные href developer path — в `docs/scenarios/taxonomy.yaml`.
+`flows-skills`, `worktracker-operators` и developer (+ embed) — в `docs/scenarios/taxonomy.yaml`.
 
 ### Хелперы
 

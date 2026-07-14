@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 import pytest
 
-from apps.flows.src.models.agent_skill import AgentSkill
+from apps.flows.src.models.agent_skill import AgentSkill, parse_stored_agent_skill
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.runtime.agent_skill_runtime import (
     AgentSkillRuntimeHost,
@@ -15,8 +15,10 @@ from apps.flows.src.runtime.agent_skill_runtime import (
 )
 from apps.flows.src.services.agent_skill_service import (
     AgentSkillCreateInput,
+    AgentSkillUpdateInput,
     parse_skill_md,
 )
+from apps.flows.src.services.platform_assistant_skills import _SEED_SKILL_DIRS
 from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from core.context import Context, clear_context, get_context, set_context
 from core.files.create_spec import FileCreateSpec
@@ -71,7 +73,19 @@ activation: explicit
     assert "checklist" in skill.description
     assert "Read the diff" in skill.body_markdown
     assert [ref.tool_id for ref in skill.tool_refs] == ["calculator", "finish"]
-    assert skill.activation == "explicit"
+    assert "activation" not in skill.model_dump()
+
+
+def test_parse_stored_agent_skill_strips_obsolete_activation() -> None:
+    raw = (
+        '{"agent_skill_id":"legacy-skill","name":"legacy-skill",'
+        '"description":"Stored row with activation",'
+        '"body_markdown":"## Body","tool_refs":[],"depends_on":[],'
+        '"references":[],"assets":[],"activation":"auto"}'
+    )
+    skill = parse_stored_agent_skill(raw)
+    assert skill.agent_skill_id == "legacy-skill"
+    assert "activation" not in skill.model_dump()
 
 
 def test_parse_skill_md_rejects_missing_frontmatter() -> None:
@@ -145,12 +159,12 @@ async def test_agent_skills_api_crud(client, unique_id: str) -> None:
             "depends_on": [],
             "references": [],
             "assets": [],
-            "activation": "explicit",
         },
     )
     assert create_resp.status_code == 201, create_resp.text
     body = create_resp.json()
     assert body["agent_skill_id"] == skill_id
+    assert "activation" not in body
 
     get_resp = await client.get(f"/flows/api/v1/agent-skills/{skill_id}")
     assert get_resp.status_code == 200
@@ -188,13 +202,14 @@ Body via import API
 @pytest.mark.asyncio
 async def test_agent_skills_api_ensure_seed_idempotent(client, unique_id: str) -> None:
     _ = unique_id
+    expected_seed_count = len(_SEED_SKILL_DIRS)
     first = await client.post("/flows/api/v1/agent-skills/ensure-seed", json={})
     assert first.status_code == 200, first.text
-    assert first.json()["seeded"] == 7
+    assert first.json()["seeded"] == expected_seed_count
 
     second = await client.post("/flows/api/v1/agent-skills/ensure-seed", json={})
     assert second.status_code == 200, second.text
-    assert second.json()["seeded"] == 7
+    assert second.json()["seeded"] == expected_seed_count
 
     list_resp = await client.get("/flows/api/v1/agent-skills", params={"limit": 200})
     assert list_resp.status_code == 200, list_resp.text
@@ -266,10 +281,23 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
         )
         assert len(host.pending_tool_refs) == 1
         assert host.pending_tool_refs[0].tool_id == "calculator"
+        assert len(state.ui_events_pending) == 1
+        skill_event = state.ui_events_pending[0]
+        assert skill_event.event_type == "platform.skill_loaded"
+        assert skill_event.payload["agent_skill_id"] == root_id
+        assert skill_event.payload["name"] == root_id
+        assert skill_event.payload["tools_unlocked"] == ["calculator"]
 
         with agent_skill_runtime_host_scope(host):
             dep_result = await load_agent_skill.run({"agent_skill_id": dep_id}, state)
         assert dep_result["depth"] == 1
+        assert len(state.ui_events_pending) == 2
+        assert state.ui_events_pending[1].payload["agent_skill_id"] == dep_id
+
+        with agent_skill_runtime_host_scope(host):
+            reload = await load_agent_skill.run({"agent_skill_id": root_id}, state)
+        assert reload["already_loaded"] is True
+        assert len(state.ui_events_pending) == 2
 
         foreign_id = f"skill-foreign-{unique_id}"
         await container.agent_skill_service.create(
@@ -290,17 +318,27 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
 
 
 @pytest.mark.asyncio
-async def test_depends_on_depth_two_rejected(container, unique_id: str) -> None:
+async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) -> None:
     a_id = f"skill-a-{unique_id}"
     b_id = f"skill-b-{unique_id}"
     c_id = f"skill-c-{unique_id}"
+    d_id = f"skill-d-{unique_id}"
     async with _company_scope(unique_id):
+        await container.agent_skill_service.create(
+            AgentSkillCreateInput(
+                agent_skill_id=d_id,
+                name=d_id,
+                description="D",
+                body_markdown="D body",
+            )
+        )
         await container.agent_skill_service.create(
             AgentSkillCreateInput(
                 agent_skill_id=c_id,
                 name=c_id,
                 description="C",
                 body_markdown="C body",
+                depends_on=[d_id],
             )
         )
         await container.agent_skill_service.create(
@@ -321,6 +359,15 @@ async def test_depends_on_depth_two_rejected(container, unique_id: str) -> None:
                 depends_on=[b_id],
             )
         )
+        await container.agent_skill_service.update(
+            b_id,
+            AgentSkillUpdateInput(
+                name=b_id,
+                description="B",
+                body_markdown="B body",
+                depends_on=[c_id, a_id],
+            ),
+        )
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset({a_id}),
             index_entries=tuple(
@@ -334,14 +381,23 @@ async def test_depends_on_depth_two_rejected(container, unique_id: str) -> None:
             session_id=f"flow_{unique_id}:ctx_{unique_id}",
         )
         with agent_skill_runtime_host_scope(host):
-            await load_agent_skill.run({"agent_skill_id": a_id}, state)
-            await load_agent_skill.run({"agent_skill_id": b_id}, state)
-            with pytest.raises(ValueError, match="not attached"):
-                await load_agent_skill.run({"agent_skill_id": c_id}, state)
+            a_result = await load_agent_skill.run({"agent_skill_id": a_id}, state)
+            b_result = await load_agent_skill.run({"agent_skill_id": b_id}, state)
+            c_result = await load_agent_skill.run({"agent_skill_id": c_id}, state)
+            d_result = await load_agent_skill.run({"agent_skill_id": d_id}, state)
+            cycle_a = await load_agent_skill.run({"agent_skill_id": a_id}, state)
+
+        assert a_result["depth"] == 0
+        assert b_result["depth"] == 1
+        assert c_result["depth"] == 2
+        assert d_result["depth"] == 3
+        assert cycle_a["already_loaded"] is True
+        assert cycle_a["depth"] == 0
 
         await container.agent_skill_service.delete(a_id)
         await container.agent_skill_service.delete(b_id)
         await container.agent_skill_service.delete(c_id)
+        await container.agent_skill_service.delete(d_id)
 
 
 def test_agent_skill_model_rejects_self_dependency() -> None:
@@ -478,7 +534,6 @@ async def test_agent_skills_live_catalog_update_http(client, unique_id: str) -> 
             "depends_on": [],
             "references": [],
             "assets": [],
-            "activation": "explicit",
         },
     )
     assert created.status_code == 201, created.text
@@ -493,7 +548,6 @@ async def test_agent_skills_live_catalog_update_http(client, unique_id: str) -> 
             "depends_on": [],
             "references": [],
             "assets": [],
-            "activation": "explicit",
         },
     )
     assert updated.status_code == 200, updated.text
@@ -540,7 +594,6 @@ async def test_agent_skills_unknown_tool_ref_rejected(client, unique_id: str) ->
             "depends_on": [],
             "references": [],
             "assets": [],
-            "activation": "explicit",
         },
     )
     assert response.status_code == 400

@@ -17,11 +17,3 @@ On the Flows home open MCP, go to the catalog, find the server and click Install
 In the editor drop MCP onto the canvas and pick a tool in the library dialog. A dedicated MCP node with that tool appears on the graph.
 
 ![Add an MCP tool to the canvas](connect-mcp-tool--02-mcp-node-on-canvas.png)
-
-## Step 3. Publish the agent with MCP
-
-**Result demonstration.** The MCP node is visible on the canvas and the saved graph includes the server tool.
-
-**Summary.** You can install an MCP server and add its tools to the Green Garden agent.
-
-![Publish the agent with MCP](connect-mcp-tool--03-mcp-tool-published.png)

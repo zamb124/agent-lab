@@ -2,7 +2,6 @@
 name: knowledge-rag
 description: Search and write company RAG knowledge and platform documentation. Use when the user asks about internal knowledge, docs portal, or storing text in a vector namespace.
 allowed-tools: rag_search rag_add_text rag_create_namespace docs_search docs_prepare_context
-activation: explicit
 ---
 
 # Knowledge and RAG

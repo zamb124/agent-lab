@@ -13,12 +13,16 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_api_create_flow,
     flows_api_get_flow,
     flows_click_llm_output_mode,
+    flows_close_floating_panel,
     flows_doc_flow_id,
-    flows_llm_add_tool_from_library,
+    flows_e2e_ensure_canvas_layout,
+    flows_execution_send_message,
+    flows_llm_add_named_tool_from_library,
     flows_llm_payload,
     flows_open_editor,
     flows_open_node_editor,
     flows_publish_editor,
+    flows_seed_mock_llm,
     flows_set_selected_llm_prompt,
 )
 from tests.ui.harness import AppUI
@@ -39,8 +43,8 @@ _ORDER_SCHEMA_SNIPPET = '"order_id"'
         "чтобы он мог выполнять действия, а не только отвечать текстом.\n\n"
         "**Какие проблемы решает:** без инструментов агент ограничен словами и не может "
         "обращаться к внешним сервисам или внутренним операциям магазина.\n\n"
-        "**Результат:** у «Помощника Зелёного сада» появится инструмент из библиотеки "
-        "и опубликованная версия агента."
+        "**Результат:** у «Помощника Зелёного сада» появится калькулятор из библиотеки, "
+        "и в тестовом запуске будет виден вызов инструмента."
     ),
     title_en="Give the agent tools",
     description_en=(
@@ -48,7 +52,8 @@ _ORDER_SCHEMA_SNIPPET = '"order_id"'
         "actions, not only reply in text.\n\n"
         "**Problems it solves:** without tools the agent is limited to words and cannot "
         "call store services or internal operations.\n\n"
-        "**Result:** the Green Garden Assistant gets a library tool and a published version."
+        "**Result:** the Green Garden Assistant gets a calculator from the library, and "
+        "a test run shows the tool call."
     ),
 )
 @pytest.mark.asyncio
@@ -62,8 +67,9 @@ async def test_flows_add_agent_tools(
     unique_id: str,
     secrets_service,
     taskiq_worker,
+    flows_service,
 ) -> None:
-    _ = secrets_service, taskiq_worker
+    _ = secrets_service, taskiq_worker, flows_service
     flow_id = flows_doc_flow_id("add_tools", unique_id)
     await flows_api_create_flow(
         flows_ui.origin,
@@ -71,12 +77,16 @@ async def test_flows_add_agent_tools(
         flows_llm_payload(
             flow_id,
             name=GREEN_GARDEN_AGENT_NAME,
-            prompt="Помогай покупателю «Зелёного сада» и при необходимости вызывай инструменты.",
+            prompt=(
+                "Помогай покупателю «Зелёного сада». Если нужна арифметика — "
+                "вызови calculator."
+            ),
         ),
     )
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
+    await flows_e2e_ensure_canvas_layout(page)
     await flows_open_node_editor(page, "agent")
     await scenario.step(
         "Откройте агента в редакторе",
@@ -84,12 +94,14 @@ async def test_flows_add_agent_tools(
         screenshot_name="agent-editor-opened",
         label_en="Open the agent in the editor",
         details=(
-            "Откройте агента на канве и перейдите в его настройки. Здесь задаётся поведение "
-            "и список инструментов, которые агент может вызывать сам."
+            "Откройте агента на канве и перейдите в настройки. Здесь задаётся поведение "
+            "и список инструментов. Skills (процедуры) — отдельная секция рядом; "
+            "их подключение описано в инструкции про Skills."
         ),
         details_en=(
-            "Open the agent on the canvas and go to its settings. This is where you set "
-            "behavior and the list of tools the agent can call on its own."
+            "Open the agent on the canvas and open settings. Here you set behavior and "
+            "tools. Skills (procedures) are a separate section nearby; attaching them is "
+            "covered in the Skills guide."
         ),
     )
 
@@ -104,17 +116,19 @@ async def test_flows_add_agent_tools(
         screenshot_name="tools-mode-active",
         label_en="Switch the node to tools mode",
         details=(
-            "В блоке «Режим вывода» оставьте «Инструменты». В этом режиме агент может "
-            "вызывать подключённые операции и использовать их результат в ответе."
+            "В блоке «Режим вывода» выберите «Инструменты». В этом режиме агент может "
+            "вызывать операции. Режим «Структурированный» для tools и Skills не подходит."
         ),
         details_en=(
-            "In the Output mode block keep Tools selected. In this mode the agent can "
-            "call attached operations and use their results in the reply."
+            "In Output mode choose Tools. In this mode the agent can call operations. "
+            "Structured mode is not for tools or Skills."
         ),
     )
 
-    await flows_llm_add_tool_from_library(page)
-    tool_chip = page.locator("flows-llm-node-editor .chip").first
+    await flows_llm_add_named_tool_from_library(page, "calculator")
+    tool_chip = page.locator("flows-llm-node-editor .chip").filter(
+        has_text=re.compile(r"calculator", re.I)
+    ).first
     await expect(tool_chip).to_be_visible(timeout=30_000)
     await scenario.step(
         "Добавьте инструмент из библиотеки",
@@ -122,35 +136,48 @@ async def test_flows_add_agent_tools(
         screenshot_name="tool-added-from-library",
         label_en="Add a tool from the library",
         details=(
-            "Нажмите «Из библиотеки» и выберите подходящий инструмент. После выбора "
-            "он появится чипом в списке инструментов ноды."
+            "Нажмите «Из библиотеки» и выберите calculator. После выбора он появится "
+            "чипом в списке инструментов ноды."
         ),
         details_en=(
-            "Click From library and pick a suitable tool. After selection it appears "
-            "as a chip in the node tool list."
+            "Click From library and pick calculator. After selection it appears as a "
+            "chip in the node tool list."
         ),
     )
 
     await flows_publish_editor(page)
-    persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
-    tools = persisted["nodes"]["agent"].get("tools") or []
-    assert len(tools) >= 1, f"expected at least one tool, got {tools!r}"
+    await flows_close_floating_panel(page)
+    await flows_seed_mock_llm(
+        [
+            {
+                "type": "tool_call",
+                "tool": "calculator",
+                "args": {"expression": "2+2"},
+            },
+            {"type": "text", "content": "Сумма заказа с доставкой: 4."},
+        ]
+    )
+    await flows_execution_send_message(page, "Посчитай 2+2 для скидки")
+    reply = page.locator("flows-execution-panel platform-chat").get_by_text(
+        re.compile(r"4|Сумма"), exact=False
+    ).first
+    await expect(reply).to_be_visible(timeout=120_000)
     await scenario.step(
-        "Опубликуйте агента с инструментом",
+        "Запустите агента и увидьте вызов инструмента",
         page,
-        screenshot_name="agent-tools-published",
-        label_en="Publish the agent with the tool",
+        screenshot_name="tool-call-in-run",
+        label_en="Run the agent and see the tool call",
         details=(
-            "**Демонстрация результата.** Нажмите «Опубликовать» — инструмент остаётся "
-            "в списке ноды, а сохранённая версия агента содержит подключённый tool.\n\n"
-            "**Итог.** Теперь вы умеете включать режим инструментов, выбирать tool из "
-            "библиотеки и публиковать рабочую версию агента."
+            "**Демонстрация результата.** Перейдите в режим запуска, задайте вопрос с "
+            "расчётом — агент вызовет calculator, и в ответе появится результат.\n\n"
+            "**Итог.** Теперь вы умеете включать режим инструментов, добавлять tool из "
+            "библиотеки и проверять вызов в тестовом запуске."
         ),
         details_en=(
-            "**Result demonstration.** Click Publish — the tool stays in the node list "
-            "and the saved agent version includes the attached tool.\n\n"
-            "**Summary.** You can enable tools mode, pick a tool from the library, "
-            "and publish a working agent version."
+            "**Result demonstration.** Switch to Run mode, ask a calculation question — "
+            "the agent calls calculator and the reply shows the result.\n\n"
+            "**Summary.** You can enable tools mode, add a library tool, and verify the "
+            "call in a test run."
         ),
     )
 
@@ -199,6 +226,7 @@ async def test_flows_structured_answer(
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
+    await flows_e2e_ensure_canvas_layout(page)
     await flows_open_node_editor(page, "agent")
     await scenario.step(
         "Откройте настройки агента",
@@ -206,30 +234,36 @@ async def test_flows_structured_answer(
         screenshot_name="structured-editor-opened",
         label_en="Open agent settings",
         details=(
-            "В редакторе ноды найдите блок «Режим вывода». Именно он определяет, "
-            "будет ли ответ обычным текстом или строгим JSON."
+            "В редакторе ноды найдите блок «Режим вывода». Он определяет, будет ли ответ "
+            "обычным текстом с инструментами или строгим JSON."
         ),
         details_en=(
-            "In the node editor find the Output mode block. It decides whether the "
-            "reply is plain text or strict JSON."
+            "In the node editor find the Output mode block. It decides whether the reply "
+            "is plain text with tools or strict JSON."
         ),
     )
 
     await flows_click_llm_output_mode(page, "structured")
     schema_editor = page.locator("flows-llm-node-editor platform-json-editor").first
     await expect(schema_editor).to_be_visible(timeout=15_000)
+    skills_heading = page.locator("flows-llm-node-editor").get_by_text(
+        re.compile(r"^Skills$|Agent Skills")
+    )
+    await expect(skills_heading).to_have_count(0)
     await scenario.step(
         "Включите структурированный вывод",
         page,
         screenshot_name="structured-mode-enabled",
         label_en="Enable structured output",
         details=(
-            "Переключите режим на «Структурированный». Появится редактор JSON-схемы — "
-            "в нём задаются поля, которые агент обязан вернуть."
+            "Переключите режим на «Структурированный». Появится редактор JSON-схемы. "
+            "Секция Skills в этом режиме скрыта — процедуры и meta-tools работают только "
+            "в режиме «Инструменты»."
         ),
         details_en=(
-            "Switch the mode to Structured. A JSON schema editor appears where you "
-            "define the fields the agent must return."
+            "Switch the mode to Structured. A JSON schema editor appears. The Skills "
+            "section is hidden in this mode — procedures and meta-tools work only in "
+            "Tools mode."
         ),
     )
 
@@ -266,13 +300,13 @@ async def test_flows_structured_answer(
         details=(
             "**Демонстрация результата.** После публикации режим структурированного вывода "
             "и JSON-схема сохранены в агенте — их видно при повторном открытии ноды.\n\n"
-            "**Итог.** Теперь вы умеете включать structured output и задавать схему ответа "
-            "для автоматической обработки данных заказа."
+            "**Итог.** Теперь вы умеете включать структурированный вывод и задавать схему "
+            "ответа для автоматической обработки данных заказа."
         ),
         details_en=(
-            "**Result demonstration.** After publishing, structured output mode and the "
-            "JSON schema are saved on the agent and visible when you reopen the node.\n\n"
-            "**Summary.** You can enable structured output and define a response schema "
+            "**Result demonstration.** After publishing, structured mode and the JSON "
+            "schema are saved on the agent and visible when you reopen the node.\n\n"
+            "**Summary.** You can enable structured replies and define a response schema "
             "for automatic order data processing."
         ),
     )

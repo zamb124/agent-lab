@@ -18,10 +18,16 @@ A modal opens with search and a table: provider, service, status, and actions. Y
 
 ![Open the integrations list](connect-oauth-integrations--02-integrations-modal-opened.png)
 
-## Step 3. Review the connect UI
+## Step 3. Review the connections table columns
+
+Confirm the table has provider, service, and status columns. They show which external account is connected and its state.
+
+![Review the connections table columns](connect-oauth-integrations--03-integrations-table-columns.png)
+
+## Step 4. Review the connected accounts list
 
 **Result demonstration.** Search, table columns, and rows or a clear empty state are visible — the UI is ready for connecting external accounts.
 
 **Summary.** You now know where to open company integrations and how to check connected service status.
 
-![Review the connect UI](connect-oauth-integrations--03-integrations-list-ui.png)
+![Review the connected accounts list](connect-oauth-integrations--04-integrations-list-ui.png)

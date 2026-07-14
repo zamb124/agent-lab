@@ -20,10 +20,42 @@ export class FlowsLlmContextResourceEditor extends PlatformElement {
         this.resourceId = '';
         this.resource = null;
         this.compactHeader = false;
+        this._llmContextParent = this.useOp('flows/llm_context_resolve_parent');
+        this._parentLoaded = false;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        if (!this._parentLoaded) {
+            this._parentLoaded = true;
+            void this._llmContextParent.run({
+                llm_context_resource_key: null,
+                flow_resources: {},
+                node_resources: {},
+            });
+        }
     }
 
     _emitConfig(config) {
         this.emit('change', { resourceId: this.resourceId, patch: { config } });
+    }
+
+    _parentResolved() {
+        const result = this._llmContextParent.lastResult;
+        if (!isPlainObject(result) || !isPlainObject(result.resolved)) {
+            return {};
+        }
+        return result.resolved;
+    }
+
+    _parentProfiles() {
+        const result = this._llmContextParent.lastResult;
+        return Array.isArray(result?.profiles) ? result.profiles : [];
+    }
+
+    _parentBudgets() {
+        const result = this._llmContextParent.lastResult;
+        return Array.isArray(result?.budgets) ? result.budgets : [];
     }
 
     render() {
@@ -39,7 +71,10 @@ export class FlowsLlmContextResourceEditor extends PlatformElement {
                 <div slot="settings">
                     <platform-llm-context-editor
                         .config=${cfg}
-                        @change=${(e) => this._emitConfig(isPlainObject(e.detail?.config) ? e.detail.config : {})}
+                        .resolved=${this._parentResolved()}
+                        .profiles=${this._parentProfiles()}
+                        .budgets=${this._parentBudgets()}
+                        @change=${(e) => this._emitConfig(e.detail.config)}
                     ></platform-llm-context-editor>
                 </div>
             </flows-base-resource-editor>

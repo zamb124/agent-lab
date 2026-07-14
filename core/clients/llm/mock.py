@@ -228,12 +228,13 @@ class MockLLM:
         tools: list[JsonObject] | None,
         response_format: JsonObject | None,
         model: str | None = None,
+        llm_context: JsonObject | None = None,
     ) -> None:
         """
         Пишет в журнал `mock_llm:capture:<test_scope>` запись об одном вызове
-        MockLLM (`messages`, `tools`, `response_format`, `model`). Scope
-        берётся из лог-контекста текущего запроса; вне test scope журнал
-        не ведётся.
+        MockLLM (`messages`, `tools`, `response_format`, `model`, optional
+        `llm_context` trace metadata). Scope берётся из лог-контекста текущего
+        запроса; вне test scope журнал не ведётся.
 
         `messages` нормализуются как plain text + role + metadata (ключи
         tool_calls / tool_call_id / system / usage). FilePart-ы выписываются
@@ -255,6 +256,8 @@ class MockLLM:
             "tools": tools or [],
             "response_format": response_format,
         }
+        if llm_context is not None:
+            record["llm_context"] = llm_context
         try:
             _ = await self._redis_client.rpush(
                 mock_llm_capture_key(scope),
@@ -509,6 +512,7 @@ class MockLLM:
             tools=tools,
             response_format=response_format,
             model=model,
+            llm_context=context_metadata,
         )
 
         # Используем async метод для поддержки Redis
@@ -646,6 +650,7 @@ class MockLLM:
             llm_context_source_registry=llm_context_source_registry,
         )
         normalized_messages = prepared_context.messages
+        context_metadata = llm_context_trace_metadata(prepared_context.compiled_context)
         response_format: JsonObject | None = None
         if json_output:
             response_format = {"type": "json_object"}
@@ -653,6 +658,7 @@ class MockLLM:
             messages=normalized_messages,
             tools=None,
             response_format=response_format,
+            llm_context=context_metadata,
         )
         mock_response = await self._get_response_async(normalized_messages)
         content_raw = mock_response.get("content", "")

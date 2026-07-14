@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 from playwright.async_api import Page, expect
@@ -32,7 +33,6 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_set_code_node_source,
     flows_set_external_api_url,
     flows_set_remote_flow_url,
-    flows_set_platform_field,
 )
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
@@ -108,6 +108,8 @@ async def test_flows_process_with_code(
         "    return state\n"
     )
     await flows_set_code_node_source(page, echo_code)
+    code_editor = page.locator("flows-code-workbench").first
+    await expect(code_editor).to_contain_text("echo:", timeout=15_000)
     await scenario.step(
         "Напишите код обработки",
         page,
@@ -120,6 +122,23 @@ async def test_flows_process_with_code(
         details_en=(
             "On the Code tab define run: it reads input and writes the result to "
             "state['response'] so the next node gets a ready value."
+        ),
+    )
+
+    await flows_open_node_editor(page, code_node_id)
+    await expect(page.locator("flows-code-workbench").first).to_contain_text("echo:", timeout=15_000)
+    await scenario.step(
+        "Проверьте код перед публикацией",
+        page,
+        screenshot_name="code-source-reviewed",
+        label_en="Review the code before publishing",
+        details=(
+            "Снова откройте ноду кода и убедитесь, что логика echo на месте. "
+            "Так вы проверяете черновик до сохранения в опубликованную версию."
+        ),
+        details_en=(
+            "Reopen the code node and confirm the echo logic is still there. "
+            "This verifies the draft before saving to the published version."
         ),
     )
 
@@ -205,6 +224,8 @@ async def test_flows_call_order_tracking_api(
     _ = await flows_open_node_editor(page, api_node_id)
     await expect(page.locator("flows-external-api-editor")).to_be_visible(timeout=30_000)
     await flows_set_external_api_url(page, _TRACKER_URL)
+    url_field = page.locator("flows-external-api-editor platform-field").first
+    await expect(url_field).to_be_visible(timeout=15_000)
     await scenario.step(
         "Укажите адрес сервиса заказов",
         page,
@@ -217,6 +238,23 @@ async def test_flows_call_order_tracking_api(
         details_en=(
             "Enter the tracking service URL. You can insert variables in curly braces, "
             "for example the order number from the chat."
+        ),
+    )
+
+    await flows_open_node_editor(page, api_node_id)
+    await expect(page.locator("flows-external-api-editor")).to_contain_text("order_id", timeout=15_000)
+    await scenario.step(
+        "Проверьте URL с переменной заказа",
+        page,
+        screenshot_name="tracker-url-with-variable",
+        label_en="Verify the URL with order variable",
+        details=(
+            "Убедитесь, что в адресе есть placeholder {order_id} — агент подставит "
+            "номер заказа из диалога при вызове сервиса доставки."
+        ),
+        details_en=(
+            "Confirm the address includes the {order_id} placeholder — the agent will "
+            "insert the order number from the chat when calling the delivery service."
         ),
     )
 
@@ -341,6 +379,26 @@ async def test_flows_connect_mcp_tool(
         ),
     )
 
+    mcp_node = page.locator("flows-flow-canvas g.node[data-node-type='mcp']").first
+    await mcp_node.click()
+    await expect(page.locator("flows-mcp-node-editor, flows-base-node-editor").first).to_be_visible(
+        timeout=30_000
+    )
+    await scenario.step(
+        "Откройте настройки MCP-ноды",
+        page,
+        screenshot_name="mcp-node-settings-open",
+        label_en="Open the MCP node settings",
+        details=(
+            "Кликните MCP-ноду на канве и проверьте панель свойств — там видно, какой "
+            "инструмент сервера подключён к графу."
+        ),
+        details_en=(
+            "Click the MCP node on the canvas and review the properties panel — it shows "
+            "which server tool is wired into the graph."
+        ),
+    )
+
     await flows_publish_editor(page)
     persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
     mcp_nodes = [n for n in persisted["nodes"].values() if n.get("type") == "mcp"]
@@ -425,6 +483,9 @@ async def test_flows_notify_in_telegram(
     token_field = editor.locator("platform-variable-input, platform-field").first
     await expect(token_field).to_be_visible(timeout=15_000)
     await flows_ensure_channel_node_telegram(page)
+    await expect(editor.get_by_text(re.compile(r"Telegram|телеграм", re.I)).first).to_be_visible(
+        timeout=15_000
+    )
     await scenario.step(
         "Выберите Telegram и укажите бота",
         page,
@@ -437,6 +498,23 @@ async def test_flows_notify_in_telegram(
         details_en=(
             f"Keep Telegram as the channel and set the bot token (in this tutorial — "
             f"«{GREEN_GARDEN_TELEGRAM_BOT}»). The agent then knows where to send notifications."
+        ),
+    )
+
+    await flows_open_node_editor(page, channel_node_id)
+    await expect(page.locator("flows-channel-node-editor")).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Проверьте настройки канала перед публикацией",
+        page,
+        screenshot_name="telegram-channel-reviewed",
+        label_en="Review channel settings before publishing",
+        details=(
+            "Снова откройте ноду канала и убедитесь, что выбран Telegram и указан токен "
+            "через переменную — доставка ответов пойдёт в бот магазина."
+        ),
+        details_en=(
+            "Reopen the channel node and confirm Telegram is selected with the token "
+            "via a variable — replies will route to the store bot."
         ),
     )
 
@@ -522,6 +600,7 @@ async def test_flows_call_remote_agent(
 
     editor = page.locator("flows-remote-flow-editor").first
     await flows_set_remote_flow_url(page, _REMOTE_AGENT_URL)
+    await expect(editor).to_contain_text("partner.example.com", timeout=15_000)
     await scenario.step(
         "Укажите адрес партнёрского агента",
         page,
@@ -534,6 +613,26 @@ async def test_flows_call_remote_agent(
         details_en=(
             "In URL mode enter the partner agent address and branch if needed. "
             "Your agent then knows where to forward the customer request."
+        ),
+    )
+
+    await flows_open_node_editor(page, remote_node_id)
+    await expect(page.locator("flows-remote-flow-editor")).to_contain_text(
+        "partner.example.com",
+        timeout=15_000,
+    )
+    await scenario.step(
+        "Проверьте адрес перед публикацией",
+        page,
+        screenshot_name="remote-agent-url-reviewed",
+        label_en="Review the address before publishing",
+        details=(
+            "Откройте ноду снова и убедитесь, что URL партнёра сохранён в черновике — "
+            "граф готов делегировать запрос внешнему агенту."
+        ),
+        details_en=(
+            "Reopen the node and confirm the partner URL is in the draft — "
+            "the graph is ready to delegate requests to an external agent."
         ),
     )
 

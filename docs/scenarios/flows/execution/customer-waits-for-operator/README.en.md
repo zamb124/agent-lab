@@ -18,10 +18,8 @@ Send a complex question. A waiting banner and task badge appear; the chat did no
 
 ![Wait for operator handoff](customer-waits-for-operator--02-waiting-banner-visible.png)
 
-## Step 3. Receive the operator reply in chat
+## Step 3. Check the waiting message for the customer
 
-**Result demonstration.** After operator Marina replies, the waiting banner disappears and her text appears in the chat feed; the customer sees a human answer and can continue the dialog.
+Make sure the chat shows a clear waiting message — the customer understands the request was passed to a live specialist and the reply will appear here.
 
-**Summary.** You now understand what the customer sees during operator handoff and how a human reply returns to the agent chat.
-
-![Receive the operator reply in chat](customer-waits-for-operator--03-operator-reply-in-chat.png)
+![Check the waiting message for the customer](customer-waits-for-operator--03-waiting-message-visible.png)

@@ -904,6 +904,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                     await check_cancellation(state)
 
+                    if tools_schema is not None:
+                        tools_schema = self._build_tools_schema()
+
                     logger.debug(f"[llm_node:{llm_node_label}] ReAct iteration {iteration} (streaming)")
 
                     messages = self._messages_for_llm_context(state)

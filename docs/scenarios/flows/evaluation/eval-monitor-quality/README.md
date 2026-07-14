@@ -18,10 +18,16 @@ Evaluation Lab — единое место и для ручных проверо
 
 ![Откройте панель мониторинга](eval-monitor-quality--02-monitoring-panel-opened.png)
 
-## Шаг 3. Проверьте статус мониторинга
+## Шаг 3. Найдите блок gate policies
+
+На панели найдите раздел gate policies и baselines. Здесь задаются пороги качества, при нарушении которых система сигнализирует о деградации.
+
+![Найдите блок gate policies](eval-monitor-quality--03-monitoring-gate-policies.png)
+
+## Шаг 4. Проверьте статус мониторинга
 
 **Демонстрация результата.** На панели видны baselines и статус мониторинга — значит, контур наблюдения за качеством доступен для настройки.
 
 **Итог.** Теперь вы знаете, где открыть мониторинг качества и что искать перед настройкой gate policies.
 
-![Проверьте статус мониторинга](eval-monitor-quality--03-monitoring-status-visible.png)
+![Проверьте статус мониторинга](eval-monitor-quality--04-monitoring-status-visible.png)

@@ -2,6 +2,10 @@
 
 Сборка: **`make doc`** — `scripts/check_scenario_docs_quality.py` → `scripts/docs_prepare.py` (деревья **`build/documentation-ru/`** и **`build/documentation-en/`**) → два прохода **`uv run --group docs zensical build`**. Артефакт: **`documentation-dist/`** (RU) и **`documentation-dist/en/`** (EN), раздача **`/documentation/`** и **`/documentation/en/`**.
 
+Логотип документации — тот же файл, что у SPA: `core/frontend/static/assets/service_logos/frontend_logo.svg`. `docs_prepare` копирует его в `docs/assets/logo.svg` при каждой сборке (zensical `logo` / `favicon`).
+
+**Ask AI:** грузит `/static/core/lib/embed-chat/humanitec-embed-autoload.js` и session API `/frontend/api/public/docs-assistant/session`. Работает только там, где есть mount платформы (`/documentation/` на frontend или `make doc-serve` → `scripts/docs_dev_server.py`). Голый `zensical serve` (`make doc-serve-zensical`) отдаёт HTML на `/static/core/*` → MIME error у module script.
+
 ## Разделы сайта
 
 | Раздел | Источник |
@@ -14,9 +18,9 @@
 
 ## Навигация инструкций
 
-- **Sidebar (primary):** `scripts/docs_prepare.py` генерирует для каждого сервиса `.pages` с вложенными секциями по тегам из taxonomy; внутри секции — все slug-страницы. UI Kit (`platform/ui-kit`) — отдельная вложенная секция с hub `ui-kit/index.md` и всеми component-slugs.
+- **Sidebar (primary):** `scripts/docs_prepare.py` публикует инструкции как плоские `scenarios/<service>/<slug>.md` (не `slug/index.md`) и пишет `.pages` с titled leaves (`"Title": slug.md`). Так Zensical не делает из каждой папки отдельное меню. UI Kit — секция тега с hub `ui-kit/index.md` (`navigation.indexes`) и плоским списком компонентов.
 - **Hub-страницы (secondary):** `scenarios/index.md`, `scenarios/<service>/index.md` — обзорные карточки; прямые ссылки на инструкции, без единственного tag-hub-only маршрута.
-- Zensical: `navigation.expand` — автораскрытие активной ветки sidebar.
+- Zensical: `navigation.indexes` — кликабельный заголовок секции на hub; **без** `navigation.expand` (секции свёрнуты, кроме активной ветки).
 
 ## Локали документации
 

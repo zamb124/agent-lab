@@ -3,18 +3,17 @@
     "id": "platform_assistant_main",
     "type": "llm_node",
     "name": "Платформенный ассистент",
-    "description": "Ассистент с progressive disclosure реальных platform Agent Skills",
+    "description": "Deprecated alias of Lara skill roots — prefer flow_id lara",
     "prompt": "prompts/main.md",
     "tools": [
       "ask_user"
     ],
     "agent_skills": [
-      "document-workspace",
-      "diagrams-viz",
-      "knowledge-rag",
-      "web-research",
-      "crm-notes",
-      "work-tracking"
+      "networkle",
+      "flows-platform",
+      "flows-code",
+      "docs-knowledge",
+      "platform-workspace"
     ],
     "llm": {
       "model": "auto",

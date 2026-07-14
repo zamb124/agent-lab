@@ -97,12 +97,9 @@ body[data-md-color-scheme="slate"] .md-header {
 .docs-brand-logo img,
 .docs-brand-logo svg {
   display: block;
-  width: 1.45rem;
-  height: 1.45rem;
-}
-
-.docs-brand-logo svg path {
-  fill: var(--docs-accent);
+  width: 1.55rem;
+  height: 1.75rem;
+  object-fit: contain;
 }
 
 [data-md-component="header"] .docs-platform-home svg {
@@ -777,7 +774,8 @@ body[data-md-color-scheme="slate"] .docs-endpoint-panel code {
   font-weight: 700;
 }
 
-.md-nav__link {
+/* md-nav__container (navigation.indexes) тоже имеет класс md-nav__link — не красить его как пункт. */
+.md-nav__link:not(.md-nav__container) {
   display: flex;
   align-items: center;
   min-height: 2.2rem;
@@ -797,16 +795,31 @@ body[data-md-color-scheme="slate"] .docs-endpoint-panel code {
   align-self: center;
 }
 
-.md-nav__link:hover {
+.md-nav__link:not(.md-nav__container):hover {
   color: var(--docs-ink);
   background: var(--docs-bg-soft);
 }
 
-.md-nav__link--active,
-.md-nav__item .md-nav__link--active {
+.md-nav--primary .md-nav__item > .md-nav__link--active:not(.md-nav__container) {
   color: var(--docs-accent-strong);
   font-weight: 400;
   background: rgba(153, 166, 249, 0.15);
+}
+
+/* Indexes: один фон на строке-контейнере; у <a> и <label> внутри --active фон снимаем. */
+.md-nav--primary .md-nav__item--active > .md-nav__container {
+  background: rgba(153, 166, 249, 0.15);
+  border-radius: 1.1rem;
+}
+
+.md-nav--primary .md-nav__item .md-nav__container > .md-nav__link--active {
+  color: var(--docs-accent-strong);
+  font-weight: 400;
+  background: transparent;
+}
+
+.md-nav--primary .md-nav__container > .md-nav__link:hover {
+  background: transparent;
 }
 
 @media screen and (max-width: 76.1875em) {

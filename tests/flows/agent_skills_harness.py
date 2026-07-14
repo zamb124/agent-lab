@@ -10,6 +10,7 @@ from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.flows_loader import FlowsLoader
 from apps.flows.src.services.platform_assistant_skills import (
+    LARA_PLATFORM_SKILL_ROOTS,
     PLATFORM_ASSISTANT_ATTACHED_SKILL_IDS,
 )
 from core.context import Context, clear_context, get_context, set_context
@@ -114,9 +115,14 @@ def node_tool_ids(main_node: JsonObject | object) -> list[str]:
 
 
 async def ensure_platform_assistant_flow(container: FlowContainer) -> FlowConfig:
-    existing = await container.flow_repository.get("platform_assistant")
-    if existing is not None:
-        return existing
+    return await ensure_flow_bundle(container, "platform_assistant")
+
+
+async def ensure_lara_flow(container: FlowContainer) -> FlowConfig:
+    return await ensure_flow_bundle(container, "lara")
+
+
+async def ensure_flow_bundle(container: FlowContainer, flow_id: str) -> FlowConfig:
     loader = FlowsLoader(
         bundles_dir=_BUNDLES_DIR,
         flow_repository=container.flow_repository,
@@ -125,24 +131,64 @@ async def ensure_platform_assistant_flow(container: FlowContainer) -> FlowConfig
         registry_path=_REGISTRY_PATH,
     )
     loader.load_registry_yaml()
-    await loader.preload_nodes_to_cache("platform_assistant")
-    flow_id = await loader._load_flow_bundle("platform_assistant")
-    if flow_id is None:
-        raise AssertionError("Failed to load platform_assistant bundle")
-    loaded = await container.flow_repository.get("platform_assistant")
+    await loader.preload_nodes_to_cache(flow_id)
+    loaded_id = await loader._load_flow_bundle(flow_id)
+    if loaded_id is None:
+        raise AssertionError(f"Failed to load {flow_id} bundle")
+    loaded = await container.flow_repository.get(flow_id)
     if loaded is None:
-        raise AssertionError("platform_assistant missing after bundle load")
+        raise AssertionError(f"{flow_id} missing after bundle load")
     return loaded
 
 
 def assert_platform_assistant_attach(flow: FlowConfig) -> None:
+    _assert_skill_roots_attach(flow, flow_id_label="platform_assistant")
+
+
+def assert_lara_attach(flow: FlowConfig) -> None:
+    _assert_skill_roots_attach(flow, flow_id_label="lara")
+    forbidden_tools = {
+        "crm_search_entities",
+        "crm_create_entity",
+        "flows_patch_node",
+        "flows_patch_flow",
+        "flows_read_context",
+        "create_file",
+        "read_file",
+        "push_embed_blocks",
+        "create_viz",
+        "docs_search",
+    }
     nodes = flow.nodes
     if nodes is None:
-        raise AssertionError("platform_assistant has no nodes")
+        raise AssertionError("lara has no nodes")
     main = nodes.get("main")
     if main is None:
-        raise AssertionError("platform_assistant missing main node")
-    assert node_agent_skills(main) == list(PLATFORM_ASSISTANT_ATTACHED_SKILL_IDS)
+        raise AssertionError("lara missing main node")
+    tool_ids = set(node_tool_ids(main))
+    assert tool_ids == {"ask_user"}
+    assert not (tool_ids & forbidden_tools)
+    for branch_id, branch in (flow.branches or {}).items():
+        if branch.nodes is None:
+            continue
+        branch_main = branch.nodes.get("main")
+        if branch_main is None:
+            continue
+        branch_tools = set(node_tool_ids(branch_main))
+        if branch_tools and branch_tools != {"ask_user"}:
+            raise AssertionError(
+                f"lara branch {branch_id} has standing domain tools: {sorted(branch_tools)}"
+            )
+
+def _assert_skill_roots_attach(flow: FlowConfig, *, flow_id_label: str) -> None:
+    nodes = flow.nodes
+    if nodes is None:
+        raise AssertionError(f"{flow_id_label} has no nodes")
+    main = nodes.get("main")
+    if main is None:
+        raise AssertionError(f"{flow_id_label} missing main node")
+    assert node_agent_skills(main) == list(LARA_PLATFORM_SKILL_ROOTS)
+    assert list(PLATFORM_ASSISTANT_ATTACHED_SKILL_IDS) == list(LARA_PLATFORM_SKILL_ROOTS)
     tool_ids = node_tool_ids(main)
     assert "ask_user" in tool_ids
     assert "create_file" not in tool_ids
@@ -151,8 +197,11 @@ def assert_platform_assistant_attach(flow: FlowConfig) -> None:
 
 
 __all__ = [
+    "assert_lara_attach",
     "assert_platform_assistant_attach",
     "company_scope",
+    "ensure_flow_bundle",
+    "ensure_lara_flow",
     "ensure_platform_assistant_flow",
     "make_skill_state",
     "mock_load_skill_then_calculator",

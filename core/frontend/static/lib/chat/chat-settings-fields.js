@@ -141,6 +141,7 @@ export class PlatformChatSettingsFields extends PlatformElement {
                 ></platform-field>
                 ${this._renderBoolean('show_reasoning')}
                 ${this._renderBoolean('show_activity')}
+                ${this._renderBoolean('show_skill_loads')}
                 ${this._renderBoolean('show_run_trace')}
                 ${this._renderBoolean('show_trace_actions')}
                 ${this._renderBoolean('show_browser_previews')}

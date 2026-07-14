@@ -20,8 +20,14 @@ Go to the same agent editor. The sessions list is available from the overflow me
 
 ## Step 3. Open the sessions list
 
-**Result demonstration.** In the ⋯ menu choose Sessions — a table of past dialogs opens with last activity dates. Your recent test dialog is visible in the list.
+In the ⋯ menu choose Sessions. A table of past dialogs opens with last activity dates.
+
+![Open the sessions list](find-past-sessions--03-sessions-modal-open.png)
+
+## Step 4. Find the recent dialog in the table
+
+**Result demonstration.** The table has at least one row with recent activity — your test session was saved and you can reopen it.
 
 **Summary.** You can now find past Green Garden dialogs and return to them from the editor.
 
-![Open the sessions list](find-past-sessions--03-sessions-modal-open.png)
+![Find the recent dialog in the table](find-past-sessions--04-session-row-visible.png)

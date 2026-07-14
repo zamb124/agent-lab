@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models.agent_skill import AgentSkill, AgentSkillActivation
+from apps.flows.src.models.agent_skill import AgentSkill
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.services.agent_skill_service import (
     AgentSkillCreateInput,
@@ -38,7 +38,6 @@ class AgentSkillCreateRequest(StrictBaseModel):
     depends_on: list[str] = []
     references: list[FileRef] = []
     assets: list[FileRef] = []
-    activation: AgentSkillActivation = "explicit"
 
 
 class AgentSkillUpdateRequest(StrictBaseModel):
@@ -49,7 +48,6 @@ class AgentSkillUpdateRequest(StrictBaseModel):
     depends_on: list[str] = []
     references: list[FileRef] = []
     assets: list[FileRef] = []
-    activation: AgentSkillActivation = "explicit"
 
 
 class AgentSkillImportRequest(StrictBaseModel):

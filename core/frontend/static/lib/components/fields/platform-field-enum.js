@@ -58,6 +58,7 @@ export class PlatformFieldEnum extends PlatformElement {
         placeholder: { type: String },
         _filterQuery: { type: String, state: true },
         _listOpen: { type: Boolean, state: true },
+        _openUpward: { type: Boolean, state: true },
     };
 
     static styles = [
@@ -92,6 +93,7 @@ export class PlatformFieldEnum extends PlatformElement {
         this.placeholder = '';
         this._filterQuery = '';
         this._listOpen = false;
+        this._openUpward = false;
         this._skipBlurSync = false;
         this._deferOptionFilter = false;
         this._listDomId = `pf-enum-${Math.random().toString(36).slice(2, 11)}`;
@@ -182,6 +184,7 @@ export class PlatformFieldEnum extends PlatformElement {
         if (this.disabled) return;
         this._skipBlurSync = true;
         this._listOpen = false;
+        this._openUpward = false;
         this._deferOptionFilter = false;
         this._filterQuery = opt.label;
         const nextDetail = typeof opt.value === 'string' ? opt.value : String(opt.value);
@@ -193,10 +196,85 @@ export class PlatformFieldEnum extends PlatformElement {
         this.requestUpdate();
     }
 
-    _onFocus() {
+    _estimateListHeight() {
+        const count = this._filteredDisplayOptions.length;
+        const rowPx = 36;
+        const chromePx = 8;
+        const estimated = chromePx + Math.max(1, count) * rowPx;
+        const maxPx = Math.min(280, Math.round(window.innerHeight * 0.46));
+        return Math.min(estimated, maxPx);
+    }
+
+    /**
+     * Ближайший предок с overflow, который реально клипает absolute-список.
+     * @param {HTMLElement} from
+     * @returns {DOMRect}
+     */
+    _clippingBounds(from) {
+        let node = from.parentElement;
+        while (node) {
+            if (node instanceof HTMLElement) {
+                const style = window.getComputedStyle(node);
+                const overflowY = style.overflowY;
+                const overflow = style.overflow;
+                const clips = overflowY === 'auto'
+                    || overflowY === 'scroll'
+                    || overflowY === 'hidden'
+                    || overflow === 'auto'
+                    || overflow === 'scroll'
+                    || overflow === 'hidden';
+                if (clips) {
+                    return node.getBoundingClientRect();
+                }
+            }
+            const root = node.getRootNode();
+            if (root instanceof ShadowRoot && root.host instanceof HTMLElement) {
+                node = root.host;
+                continue;
+            }
+            node = node.parentElement;
+        }
+        return new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+    }
+
+    _syncListPlacement() {
+        if (!this._listOpen || this.disabled) {
+            this._openUpward = false;
+            return;
+        }
+        const wrap = this.renderRoot?.querySelector?.('.field-pill-enum-wrap');
+        if (!(wrap instanceof HTMLElement)) {
+            this._openUpward = false;
+            return;
+        }
+        const rect = wrap.getBoundingClientRect();
+        const gap = 4;
+        const listHeight = this._estimateListHeight();
+        const clip = this._clippingBounds(wrap);
+        const spaceBelow = Math.min(
+            window.innerHeight - rect.bottom - gap,
+            clip.bottom - rect.bottom - gap,
+        );
+        const spaceAbove = Math.min(
+            rect.top - gap,
+            rect.top - clip.top - gap,
+        );
+        this._openUpward = spaceBelow < listHeight && spaceAbove > spaceBelow;
+    }
+
+    _openList() {
         if (this.disabled) return;
         this._listOpen = true;
         this._deferOptionFilter = true;
+        this.updateComplete.then(() => {
+            this._syncListPlacement();
+            this.requestUpdate();
+        });
+    }
+
+    _onFocus() {
+        if (this.disabled) return;
+        this._openList();
     }
 
     /** @param {MouseEvent} e */
@@ -209,13 +287,11 @@ export class PlatformFieldEnum extends PlatformElement {
         e.preventDefault();
         e.stopPropagation();
         if (this.disabled) return;
-        this._listOpen = true;
-        this._deferOptionFilter = true;
+        this._openList();
         const input = this.renderRoot.querySelector('input.field-pill-enum-input');
         if (input instanceof HTMLInputElement) {
             input.focus();
         }
-        this.requestUpdate();
     }
 
     /** @param {FocusEvent & { relatedTarget?: EventTarget | null }} e */
@@ -229,6 +305,7 @@ export class PlatformFieldEnum extends PlatformElement {
             }
             this._deferOptionFilter = false;
             this._listOpen = false;
+            this._openUpward = false;
             const q = normalizedQuery(this._filterQuery);
             if (q.length > 0) {
                 const exact = this._displayOptions.filter(
@@ -257,6 +334,10 @@ export class PlatformFieldEnum extends PlatformElement {
         this._deferOptionFilter = false;
         this._filterQuery = t.value;
         this._listOpen = true;
+        this.updateComplete.then(() => {
+            this._syncListPlacement();
+            this.requestUpdate();
+        });
     }
 
     /** @param {KeyboardEvent} e */
@@ -266,6 +347,7 @@ export class PlatformFieldEnum extends PlatformElement {
             e.stopPropagation();
             this._filterQuery = this._displayTextSyncedToValue();
             this._listOpen = false;
+            this._openUpward = false;
             this._deferOptionFilter = false;
             const t = e.target;
             if (t instanceof HTMLElement) t.blur();
@@ -284,9 +366,7 @@ export class PlatformFieldEnum extends PlatformElement {
         }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             if (!this._listOpen) {
-                this._listOpen = true;
-                this._deferOptionFilter = true;
-                this.requestUpdate();
+                this._openList();
             }
         }
     }
@@ -358,7 +438,7 @@ export class PlatformFieldEnum extends PlatformElement {
                     ? html`
                           <ul
                               id=${this._listDomId}
-                              class="field-pill-enum-list"
+                              class=${`field-pill-enum-list${this._openUpward ? ' field-pill-enum-list--up' : ''}`}
                               role="listbox"
                               aria-label=${ariaList}
                           >

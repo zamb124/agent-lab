@@ -209,3 +209,20 @@ def test_company_context_patch_reader_handles_absent_and_invalid_metadata() -> N
             resolve_company_llm_context_patch()
     finally:
         clear_context()
+
+
+def test_company_llm_context_invalid_patch_shape() -> None:
+    clear_context()
+    try:
+        company = Company(
+            company_id="c1",
+            name="Company",
+            metadata={METADATA_KEY: {"llm_context": "not-an-object"}},
+        )
+        user = User(user_id="u1", name="User", active_company_id="c1")
+        set_context(Context(user=user, active_company=company, channel="test"))
+
+        with pytest.raises(ValueError):
+            resolve_company_llm_context_patch()
+    finally:
+        clear_context()

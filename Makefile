@@ -450,7 +450,7 @@ include mk/test.mk
 include mk/migrate.mk
 
 # Документация
-.PHONY: doc doc-serve doc-docker doc-clean docs-build docs-serve docs-clean docs-docker-build
+.PHONY: doc doc-serve doc-serve-zensical doc-docker doc-clean docs-build docs-serve docs-clean docs-docker-build
 
 doc:
 	@echo "Локальная сборка документации (Zensical RU + EN)..."
@@ -469,7 +469,14 @@ doc:
 	@echo "Документация: documentation-dist/ и documentation-dist/en/ (монтирование /documentation/)"
 
 doc-serve:
-	@echo "Предпросмотр RU-сайта: docs_prepare + zensical serve (zensical.ru.toml)"
+	@echo "Предпросмотр документации в топологии платформы: /documentation + /static/core + proxy API"
+	@echo "Нужны: make doc (артефакт documentation-dist/) и make app (frontend + flows)."
+	@echo "Откройте http://127.0.0.1:8000/documentation/"
+	@test -d documentation-dist || (echo "Сначала выполните: make doc" && exit 1)
+	uv run python scripts/docs_dev_server.py --host 127.0.0.1 --port 8000
+
+doc-serve-zensical:
+	@echo "Только вёрстка Zensical (без /static/core — Ask AI не работает)."
 	uv run python scripts/generate_ui_kit_docs.py
 	uv run python scripts/docs_prepare.py
 	uv run --group docs zensical serve --config-file zensical.ru.toml

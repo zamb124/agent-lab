@@ -18,10 +18,16 @@ In the call type block choose Handoff (ownership transfer). In this mode the sub
 
 ![Enable handoff mode](agent-handoff--02-handoff-mode-enabled.png)
 
-## Step 3. Publish the handoff setup
+## Step 3. Add a handoff rule to the instruction
+
+In the agent instruction describe when to hand off to the returns agent — for example on any product return question.
+
+![Add a handoff rule to the instruction](agent-handoff--03-handoff-prompt-rule-set.png)
+
+## Step 4. Publish the handoff setup
 
 **Result demonstration.** The sub-agent tool is saved with handoff mode — the main agent can transfer the customer to the Returns Agent.
 
 **Summary.** You can configure dialog handoff between agents without involving a human operator.
 
-![Publish the handoff setup](agent-handoff--03-handoff-published.png)
+![Publish the handoff setup](agent-handoff--04-handoff-published.png)

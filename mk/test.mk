@@ -366,3 +366,20 @@ test-agent-desktop-e2e: test-up
 
 test-agent-ui-e2e: test-up
 	UI_E2E_USE_LVH_ME=1 RUN_UI_IN_TEST=1 uv run pytest tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=300
+
+# LLM context layer: unit + adapter + flows wiring + e2e (MockLLM only)
+test-llm-context: test-up
+	@echo "Запуск LLM context layer coverage suite..."
+	uv run pytest \
+		tests/core/llm_context \
+		tests/core/clients/llm/test_context_layer.py \
+		tests/core/rag/test_llm_context_memory_store.py \
+		tests/core/rag/test_llm_context_source.py \
+		tests/flows/core/resources/test_llm_context_memory.py \
+		tests/flows/core/resources/test_llm_context_rag.py \
+		tests/flows/core/resources/test_llm_context_resource.py \
+		tests/flows/core/resources/test_llm_context_runtime.py \
+		tests/flows/core/llm_nodes/test_llm_context_config.py \
+		tests/flows/core/llm_nodes/test_llm_context_wiring.py \
+		tests/flows/e2e/llm_context \
+		-q --tb=short

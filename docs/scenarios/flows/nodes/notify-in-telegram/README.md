@@ -18,10 +18,16 @@
 
 ![Выберите Telegram и укажите бота](notify-in-telegram--02-telegram-channel-configured.png)
 
-## Шаг 3. Опубликуйте канал Telegram
+## Шаг 3. Проверьте настройки канала перед публикацией
+
+Снова откройте ноду канала и убедитесь, что выбран Telegram и указан токен через переменную — доставка ответов пойдёт в бот магазина.
+
+![Проверьте настройки канала перед публикацией](notify-in-telegram--03-telegram-channel-reviewed.png)
+
+## Шаг 4. Опубликуйте канал Telegram
 
 **Демонстрация результата.** Нода канала Telegram сохранена в графе — агент может отправлять ответы в бот магазина.
 
 **Итог.** Теперь вы умеете добавлять channel-ноду и настраивать доставку сообщений в Telegram.
 
-![Опубликуйте канал Telegram](notify-in-telegram--03-telegram-channel-published.png)
+![Опубликуйте канал Telegram](notify-in-telegram--04-telegram-channel-published.png)

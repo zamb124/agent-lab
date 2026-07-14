@@ -42,7 +42,7 @@ import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-switch.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { resolveResourceForPanel } from '../../_helpers/flows-branch-resource.js';
-import { AGENT_SKILL_ICON } from '../../_helpers/agent-skill-map.js';
+import { AGENT_SKILL_ICON, replaceAttachedAgentSkillId } from '../../_helpers/agent-skill-map.js';
 import { getNodeTypeMeta } from '../../constants/node-icons.js';
 import {
     getToolRefVisualMeta,
@@ -235,6 +235,9 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 gap: var(--space-3);
                 padding: var(--space-3);
             }
+            :host([focusMode]) .block-card.content-panel {
+                overflow: visible;
+            }
             .block-hint {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
@@ -337,6 +340,8 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this._editor = this.useOp('flows/editor');
         this._resources = this.useResource('flows/resources');
         this._agentSkills = this.useResource('flows/agent_skills', { autoload: true });
+        this._llmContextParent = this.useOp('flows/llm_context_resolve_parent');
+        this._parentContextFingerprint = '';
         this._branchResourcesSlice = this.select((s) => {
             const bd = s.flowsEditor?.branchData;
             if (!bd || typeof bd.resources !== 'object') {
@@ -360,6 +365,54 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     updated(changedProperties) {
         super.updated(changedProperties);
         this._consumePendingCanvasTool();
+        this._scheduleParentContextRefresh();
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._scheduleParentContextRefresh();
+    }
+
+    _parentContextPayload() {
+        const keyRaw = this.nodeConfig?.llm_context_resource_key;
+        const key = typeof keyRaw === 'string' && keyRaw.length > 0 ? keyRaw : null;
+        const branchResources = this._branchResourcesSlice.value;
+        const flow_resources = isPlainObject(branchResources) ? branchResources : {};
+        const nodeRes = this.nodeConfig?.resources;
+        const node_resources = isPlainObject(nodeRes) ? nodeRes : {};
+        return {
+            llm_context_resource_key: key,
+            flow_resources,
+            node_resources,
+        };
+    }
+
+    _scheduleParentContextRefresh() {
+        const payload = this._parentContextPayload();
+        const fingerprint = JSON.stringify(payload);
+        if (fingerprint === this._parentContextFingerprint) {
+            return;
+        }
+        this._parentContextFingerprint = fingerprint;
+        void this._llmContextParent.run(payload);
+    }
+
+    _parentContextResolved() {
+        const result = this._llmContextParent.lastResult;
+        if (!isPlainObject(result) || !isPlainObject(result.resolved)) {
+            return {};
+        }
+        return result.resolved;
+    }
+
+    _parentContextProfiles() {
+        const result = this._llmContextParent.lastResult;
+        return Array.isArray(result?.profiles) ? result.profiles : [];
+    }
+
+    _parentContextBudgets() {
+        const result = this._llmContextParent.lastResult;
+        return Array.isArray(result?.budgets) ? result.budgets : [];
     }
 
     _consumePendingCanvasTool() {
@@ -864,7 +917,32 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         });
     }
 
+    _onEditAgentSkill(agentSkillId) {
+        const id = typeof agentSkillId === 'string' ? agentSkillId.trim() : '';
+        if (id.length === 0) {
+            throw new Error('flows-llm-node-editor: agentSkillId required');
+        }
+        this.openModal('flows.agent_skill_edit', {
+            agentSkillId: id,
+            onDuplicated: ({ fromId, toId }) => {
+                if (typeof fromId !== 'string' || typeof toId !== 'string') {
+                    return;
+                }
+                if (fromId.length === 0 || toId.length === 0 || fromId === toId) {
+                    return;
+                }
+                const attached = Array.isArray(this.nodeConfig?.agent_skills)
+                    ? this.nodeConfig.agent_skills.filter((sid) => typeof sid === 'string' && sid.length > 0)
+                    : [];
+                this._emitPatch({
+                    agent_skills: replaceAttachedAgentSkillId(attached, fromId, toId),
+                });
+            },
+        });
+    }
+
     _renderAgentSkillsSection() {
+        if (this.nodeConfig?.structured_output) return '';
         const skills = Array.isArray(this.nodeConfig?.agent_skills)
             ? this.nodeConfig.agent_skills.filter((id) => typeof id === 'string' && id.length > 0)
             : [];
@@ -877,7 +955,18 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 <div class="block-card content-panel">
                     <div class="row">
                         ${skills.map((skillId) => html`
-                            <span class="chip">
+                            <span
+                                class="chip"
+                                role="button"
+                                tabindex="0"
+                                @click=${() => this._onEditAgentSkill(skillId)}
+                                @keydown=${(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        this._onEditAgentSkill(skillId);
+                                    }
+                                }}
+                            >
                                 <platform-icon name=${AGENT_SKILL_ICON} size="14"></platform-icon>
                                 <span class="chip-label">${this._agentSkillLabel(skillId)}</span>
                                 <platform-button
@@ -885,7 +974,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                                     icon-only
                                     density="compact"
                                     aria-label=${this.t('llm_node_editor.agent_skills_remove')}
-                                    @click=${() => this._onRemoveAgentSkill(skillId)}
+                                    @click=${(e) => {
+                                        e.stopPropagation();
+                                        this._onRemoveAgentSkill(skillId);
+                                    }}
                                 >
                                     <platform-icon name="x" size="12"></platform-icon>
                                 </platform-button>
@@ -1105,6 +1197,9 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     <platform-llm-context-editor
                         compact
                         .config=${cfg}
+                        .resolved=${this._parentContextResolved()}
+                        .profiles=${this._parentContextProfiles()}
+                        .budgets=${this._parentContextBudgets()}
                         .clearable=${Object.keys(cfg).length > 0}
                         @change=${this._onLlmContextChange}
                         @clear=${this._clearLlmContext}

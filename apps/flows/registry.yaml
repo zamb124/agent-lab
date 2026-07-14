@@ -20,7 +20,7 @@ flows:
 
   - id: platform_assistant
     public: true
-    description: "Платформенный ассистент: progressive Agent Skills (documents, viz, RAG, web, CRM, work)"
+    description: "Deprecated alias of Lara skill roots (prefer flow_id lara)"
   
   # Внешние агенты
   - id: example_external
@@ -56,7 +56,7 @@ flows:
 
   - id: lara
     public: true
-    description: "Lara: ассистент CRM (заметки, анализ, файлы, UI-блоки в чате)"
+    description: "Lara: единый ассистент платформы на Agent Skills (CRM, Flows, docs, workspace)"
 
   - id: psychologist_assistant
     public: true

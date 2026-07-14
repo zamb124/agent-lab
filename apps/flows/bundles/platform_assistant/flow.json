@@ -1,12 +1,12 @@
 {
   "flow_id": "platform_assistant",
   "name": "Платформенный ассистент",
-  "description": "Универсальный ассистент с progressive Agent Skills: документы, диаграммы, RAG, web, CRM, задачи.",
+  "description": "Alias Lara skills catalog (deprecated product entry — use flow lara).",
   "tags": [
     "assistant",
     "skills",
-    "store",
-    "demo"
+    "deprecated",
+    "alias"
   ],
   "permission": [
     "admin",
@@ -18,12 +18,11 @@
       "type": "llm_node",
       "node_id": "platform_assistant_main",
       "agent_skills": [
-        "document-workspace",
-        "diagrams-viz",
-        "knowledge-rag",
-        "web-research",
-        "crm-notes",
-        "work-tracking"
+        "networkle",
+        "flows-platform",
+        "flows-code",
+        "docs-knowledge",
+        "platform-workspace"
       ],
       "llm": {
         "provider": "humanitec_llm",

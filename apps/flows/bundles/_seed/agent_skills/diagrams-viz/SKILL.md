@@ -2,7 +2,6 @@
 name: diagrams-viz
 description: Create and update platform visualizations (.viz) — ECharts charts/timelines and Mermaid flowcharts/sequences/gantt. Use when the user wants a diagram, chart, or process map in chat.
 allowed-tools: create_viz update_viz export_viz viz_open_file
-activation: explicit
 ---
 
 # Diagrams and visualizations

@@ -29,11 +29,12 @@ Host API компонента: getter `runtimeState`, методы `loadSession(
 
 ## Политика поведения чата
 
-Канон конфигурации — **`FlowChatSettings`** (`core/models/flow_chat_settings.py`, re-export в `apps/flows/src/models/flow_chat_settings.py`): `show_reasoning`, `tool_calls_display (hidden|compact|detailed)`, `show_activity`, `errors_display (generic|detailed)`, `show_run_trace`, `show_trace_actions`, `show_browser_previews`, `show_files_panel`, `allow_cancel`, `greeting_message`, `suggested_prompts`.
+Канон конфигурации — **`FlowChatSettings`** (`core/models/flow_chat_settings.py`, re-export в `apps/flows/src/models/flow_chat_settings.py`): `show_reasoning`, `tool_calls_display (hidden|compact|detailed)`, `show_activity`, `show_skill_loads`, `errors_display (generic|detailed)`, `show_run_trace`, `show_trace_actions`, `show_browser_previews`, `show_files_panel`, `allow_cancel`, `greeting_message`, `suggested_prompts`.
 
 - Базовая policy — **`FlowConfig.chat`** (настраивается в `flows-flow-edit-modal.js`, точки входа: кнопка «Настройки агента» в `flows-editor-header.js` и `chat-page.js` → `openModal('flows.flow_edit')`).
 - Embed override — **`EmbedConfig.chat_override: EmbedChatPolicyOverride | null`**: `null` = полное наследование flow; non-null = partial patch только явно заданных полей (`bool false` — валидное переопределение). Effective policy для embed: `resolve_effective_flow_chat(flow.chat, embed.chat_override)` на backend в chat-profile.
 - Политика применяется **на клиенте** при рендере через `viewConfig`; в `editor_test` игнорируется.
+- Активация Agent Skill (`load_agent_skill`) публикует stream ui_event `platform.skill_loaded` → chat-runtime verb `skill_loaded` → чипы на assistant-bubble. Mute — `show_skill_loads: false` в `FlowChatSettings` / embed override.
 - Доставка — единый chat-profile handler (один handler, два auth-пути, симметрично A2A):
   - `GET /flows/api/v1/{flow_id}/chat-profile` (session/API key) → `{ chat: FlowConfig.chat, viewer, look: null }`;
   - `GET /flows/api/v1/embed/{embed_id}/chat-profile` (embed_session) → `{ chat: effective, viewer, look }`; `look` из EmbedConfig (`theme`, `assistant_title`, `placeholder`, `voice_*`, `interface_locale`, `position`, `primary_color`).

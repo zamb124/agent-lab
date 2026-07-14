@@ -14,7 +14,7 @@ import '../common/flows-code-language-icon.js';
 import './flows-agent-skills-how-it-works.js';
 import { asArray, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { buildPlatformAuxiliaryFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
-import { AGENT_SKILL_ICON, mapAgentSkillItem } from '../../_helpers/agent-skill-map.js';
+import { AGENT_SKILL_ICON, mapAgentSkillItem, buildAgentSkillDuplicatePayload, suggestAgentSkillCopyId, isValidAgentSkillId } from '../../_helpers/agent-skill-map.js';
 import {
     getToolLabel,
     getToolRefVisualMeta,
@@ -42,7 +42,6 @@ function _cloneSkill(skill) {
             ? skill.references.map((ref) => ({ ...ref }))
             : [],
         assets: Array.isArray(skill.assets) ? skill.assets.map((ref) => ({ ...ref })) : [],
-        activation: skill.activation === 'auto' ? 'auto' : 'explicit',
     };
 }
 
@@ -78,6 +77,10 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         catalogItems: { type: Array, attribute: false },
         _draft: { state: true },
         _dirty: { state: true },
+        _duplicateOpen: { state: true },
+        _duplicateId: { state: true },
+        _duplicateName: { state: true },
+        _duplicateBusy: { state: true },
     };
 
     static styles = [
@@ -178,53 +181,6 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                 gap: var(--space-2);
                 margin-top: var(--space-2);
             }
-            .activation-row {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-            }
-            .activation-cards {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: var(--space-2);
-            }
-            .activation-card {
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-                align-items: flex-start;
-                text-align: left;
-                padding: var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle);
-                background: var(--bg-elevated);
-                cursor: pointer;
-                color: inherit;
-                font: inherit;
-                transition: border-color var(--duration-fast, 0.15s) ease, box-shadow var(--duration-fast, 0.15s) ease;
-            }
-            .activation-card:hover {
-                border-color: var(--accent);
-            }
-            .activation-card[aria-pressed='true'] {
-                border-color: var(--accent);
-                box-shadow: 0 0 0 1px var(--accent);
-                background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
-            }
-            .activation-card-title {
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-                font-size: var(--text-sm);
-                font-weight: 600;
-                color: var(--text-primary);
-            }
-            .activation-card-desc {
-                margin: 0;
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-                line-height: 1.4;
-            }
             .files {
                 display: flex;
                 flex-direction: column;
@@ -260,6 +216,21 @@ export class FlowsAgentSkillEditor extends PlatformElement {
             .attach-label input {
                 display: none;
             }
+            .duplicate-panel {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                padding: var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-subtle);
+                background: var(--bg-elevated);
+            }
+            .duplicate-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                justify-content: flex-end;
+            }
         `,
     ];
 
@@ -269,6 +240,10 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         this.catalogItems = [];
         this._draft = null;
         this._dirty = false;
+        this._duplicateOpen = false;
+        this._duplicateId = '';
+        this._duplicateName = '';
+        this._duplicateBusy = false;
         this._updateOp = this.useOp('flows/agent_skill_update');
         this._skills = this.useResource('flows/agent_skills');
         this._fileUpload = this.useOp('platform/file_create');
@@ -280,6 +255,7 @@ export class FlowsAgentSkillEditor extends PlatformElement {
             if (!this._draft || this._draft.agent_skill_id !== next.agent_skill_id || !this._dirty) {
                 this._draft = next;
                 this._dirty = false;
+                this._duplicateOpen = false;
             }
         }
     }
@@ -461,7 +437,6 @@ export class FlowsAgentSkillEditor extends PlatformElement {
             depends_on: this._draft.depends_on,
             references: this._draft.references,
             assets: this._draft.assets,
-            activation: this._draft.activation,
         };
         const result = await this._updateOp.run({
             agent_skill_id: this._draft.agent_skill_id,
@@ -490,6 +465,144 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         const requested = this._skills.remove(this._draft.agent_skill_id);
         if (!requested) return;
         this.emit('skills-deleted', { agent_skill_id: this._draft.agent_skill_id });
+    }
+
+    _existingSkillIds() {
+        const ids = new Set();
+        for (const item of asArray(this.catalogItems)) {
+            const id = asString(item?.agent_skill_id);
+            if (id.length > 0) ids.add(id);
+        }
+        for (const item of asArray(this._skills.items)) {
+            const id = asString(item?.agent_skill_id);
+            if (id.length > 0) ids.add(id);
+        }
+        if (this._draft?.agent_skill_id) {
+            ids.add(this._draft.agent_skill_id);
+        }
+        return ids;
+    }
+
+    _openDuplicate() {
+        if (!this._draft) return;
+        const sourceId = this._draft.agent_skill_id;
+        this._duplicateId = suggestAgentSkillCopyId(sourceId, this._existingSkillIds());
+        this._duplicateName = `${this._draft.name} (copy)`;
+        this._duplicateOpen = true;
+    }
+
+    _closeDuplicate() {
+        this._duplicateOpen = false;
+        this._duplicateBusy = false;
+    }
+
+    _canConfirmDuplicate() {
+        return (
+            isValidAgentSkillId(this._duplicateId)
+            && this._duplicateId !== this._draft?.agent_skill_id
+            && typeof this._duplicateName === 'string'
+            && this._duplicateName.trim().length > 0
+            && !this._duplicateBusy
+            && !this._skills.createInFlight
+        );
+    }
+
+    _waitCreated(requestedId) {
+        const bus = this._skills.bus;
+        const successType = this._skills.resource.events.CREATED;
+        const failedType = this._skills.resource.events.CREATE_FAILED;
+        return new Promise((resolve, reject) => {
+            let offSuccess = null;
+            let offFailed = null;
+            const cleanup = () => {
+                if (typeof offSuccess === 'function') offSuccess();
+                if (typeof offFailed === 'function') offFailed();
+            };
+            offSuccess = bus.subscribeType(successType, (event) => {
+                if (!event.meta || event.meta.causation_id !== requestedId) return;
+                cleanup();
+                const item = event.payload && typeof event.payload.item === 'object'
+                    ? event.payload.item
+                    : null;
+                resolve(item);
+            });
+            offFailed = bus.subscribeType(failedType, (event) => {
+                if (!event.meta || event.meta.causation_id !== requestedId) return;
+                cleanup();
+                const message = event.payload && typeof event.payload.message === 'string'
+                    ? event.payload.message
+                    : 'create failed';
+                reject(new Error(message));
+            });
+        });
+    }
+
+    async _confirmDuplicate() {
+        if (!this._draft || !this._canConfirmDuplicate()) return;
+        const fromId = this._draft.agent_skill_id;
+        const payload = buildAgentSkillDuplicatePayload(this._draft, {
+            agent_skill_id: this._duplicateId.trim(),
+            name: this._duplicateName.trim(),
+        });
+        this._duplicateBusy = true;
+        const requested = this._skills.create(payload);
+        if (!requested || typeof requested.id !== 'string') {
+            this._duplicateBusy = false;
+            return;
+        }
+        const rawItem = await this._waitCreated(requested.id).finally(() => {
+            this._duplicateBusy = false;
+        });
+        const item = mapAgentSkillItem(rawItem);
+        this._duplicateOpen = false;
+        this.emit('skills-duplicated', {
+            fromId,
+            toId: item.agent_skill_id,
+            skill: item,
+        });
+        void this._skills.load({ limit: 200, offset: 0 });
+    }
+
+    _renderDuplicatePanel() {
+        if (!this._duplicateOpen) {
+            return nothing;
+        }
+        return html`
+            <div class="duplicate-panel" data-testid="agent-skill-duplicate-panel">
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('agent_skills.duplicate_field_id')}
+                    .hint=${this.t('agent_skills.duplicate_field_id_hint')}
+                    .value=${this._duplicateId}
+                    @change=${(e) => {
+                        this._duplicateId = typeof e.detail?.value === 'string' ? e.detail.value.trim() : '';
+                    }}
+                ></platform-field>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('agent_skills.duplicate_field_name')}
+                    .value=${this._duplicateName}
+                    @change=${(e) => {
+                        this._duplicateName = typeof e.detail?.value === 'string' ? e.detail.value : '';
+                    }}
+                ></platform-field>
+                <div class="duplicate-actions">
+                    <platform-button variant="ghost" density="compact" @click=${this._closeDuplicate}>
+                        ${this.t('common.action_cancel')}
+                    </platform-button>
+                    <platform-button
+                        variant="primary"
+                        density="compact"
+                        ?disabled=${!this._canConfirmDuplicate()}
+                        @click=${this._confirmDuplicate}
+                    >
+                        ${this.t('agent_skills.duplicate_confirm')}
+                    </platform-button>
+                </div>
+            </div>
+        `;
     }
 
     _renderFiles(kind) {
@@ -567,6 +680,14 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                 <span class="toolbar-id">${draft.agent_skill_id}</span>
                 <div class="toolbar-actions">
                     <platform-button
+                        variant="secondary"
+                        density="compact"
+                        ?disabled=${this._duplicateBusy || this._skills.createInFlight}
+                        @click=${this._openDuplicate}
+                    >
+                        ${this.t('agent_skills.action_duplicate')}
+                    </platform-button>
+                    <platform-button
                         variant="primary"
                         density="compact"
                         ?disabled=${!this._dirty || this._updateOp.busy}
@@ -584,6 +705,8 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                     </platform-button>
                 </div>
             </div>
+
+            ${this._renderDuplicatePanel()}
 
             <div class="strip">
                 <flows-agent-skills-how-it-works compact></flows-agent-skills-how-it-works>
@@ -610,53 +733,6 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                 .value=${draft.description}
                 @change=${(e) => this._patchDraft({ description: e.detail.value })}
             ></platform-field>
-
-            <div class="activation-row">
-                <div class="field-label-row">
-                    <span class="field-label">${this.t('agent_skills.field_activation')}</span>
-                    <platform-help-hint .text=${this.t('agent_skills.field_activation_hint')}></platform-help-hint>
-                </div>
-                <div class="activation-cards" role="group" aria-label=${this.t('agent_skills.field_activation')}>
-                    <article
-                        class="activation-card"
-                        tabindex="0"
-                        role="button"
-                        aria-pressed=${draft.activation === 'explicit' ? 'true' : 'false'}
-                        @click=${() => this._patchDraft({ activation: 'explicit' })}
-                        @keydown=${(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                this._patchDraft({ activation: 'explicit' });
-                            }
-                        }}
-                    >
-                        <span class="activation-card-title">
-                            <platform-icon name="target" size="16"></platform-icon>
-                            ${this.t('agent_skills.activation_explicit')}
-                        </span>
-                        <p class="activation-card-desc">${this.t('agent_skills.activation_explicit_desc')}</p>
-                    </article>
-                    <article
-                        class="activation-card"
-                        tabindex="0"
-                        role="button"
-                        aria-pressed=${draft.activation === 'auto' ? 'true' : 'false'}
-                        @click=${() => this._patchDraft({ activation: 'auto' })}
-                        @keydown=${(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                this._patchDraft({ activation: 'auto' });
-                            }
-                        }}
-                    >
-                        <span class="activation-card-title">
-                            <platform-icon name=${AGENT_SKILL_ICON} size="16"></platform-icon>
-                            ${this.t('agent_skills.activation_auto')}
-                        </span>
-                        <p class="activation-card-desc">${this.t('agent_skills.activation_auto_desc')}</p>
-                    </article>
-                </div>
-            </div>
 
             <div class="field">
                 <div class="field-label-row">

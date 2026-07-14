@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
 
 from core.ai.company_settings import METADATA_KEY
 from core.clients.llm.context_layer import (
@@ -151,6 +152,154 @@ async def test_context_layer_mode_off_does_not_collect_sources() -> None:
     assert prepared.compiled_context is not None
     assert prepared.compiled_context.selected_blocks == []
     assert prepared.openai_messages == [{"role": "user", "content": "current question"}]
+
+
+@pytest.mark.asyncio
+async def test_context_layer_multimodal_bypasses_compile() -> None:
+    messages = normalize_messages(
+        [
+            {"role": "system", "content": "keep rules"},
+            {"role": "user", "content": "old one two three four"},
+            {"role": "assistant", "content": "old reply"},
+        ]
+    )
+    messages.append(
+        Message(
+            message_id="image-message",
+            role=Role.user,
+            parts=[
+                Part(root=TextPart(text="current image request")),
+                Part(
+                    root=FilePart(
+                        file=FileWithBytes(
+                            bytes="aW1hZ2U=",
+                            name="image.png",
+                            mime_type="image/png",
+                        )
+                    )
+                ),
+            ],
+        )
+    )
+    original_openai_messages = messages_to_openai(messages)
+
+    prepared = await prepare_messages_for_context_layer(
+        messages,
+        llm_context=_profile(active_window_tokens=3),
+        compiler=_compiler(),
+    )
+
+    assert prepared.compiled_context is None
+    assert prepared.openai_messages == original_openai_messages
+
+
+@pytest.mark.asyncio
+async def test_context_layer_mode_off_drops_llm_context_blocks() -> None:
+    messages = normalize_messages([{"role": "user", "content": "current question"}])
+    off_policy = _profile().model_copy(update={"mode": "off"})
+
+    prepared = await prepare_messages_for_context_layer(
+        messages,
+        llm_context=off_policy,
+        llm_context_blocks=[
+            LLMContextBlock(
+                kind="custom",
+                budget_scope="custom",
+                content="must not be sent",
+                stable_key="custom:excluded",
+            )
+        ],
+        compiler=_compiler(),
+    )
+
+    assert prepared.compiled_context is not None
+    assert "must not be sent" not in [
+        message["content"] for message in prepared.openai_messages
+    ]
+
+
+@pytest.mark.asyncio
+async def test_context_layer_pre_resolved_profile_ignores_company_patch() -> None:
+    clear_context()
+    try:
+        company = Company(
+            company_id="c1",
+            name="Company",
+            metadata={
+                METADATA_KEY: {
+                    "llm_context": {
+                        "budget": {
+                            "max_input_tokens": 40,
+                            "output_reserve_tokens": 2,
+                            "reasoning_reserve_tokens": 0,
+                            "safety_buffer_tokens": 1,
+                            "active_window_tokens": 3,
+                        }
+                    }
+                }
+            },
+        )
+        user = User(user_id="u1", name="User", active_company_id="c1")
+        set_context(Context(user=user, active_company=company, channel="test"))
+        messages = normalize_messages(
+            [
+                {"role": "system", "content": "keep rules"},
+                {"role": "user", "content": "old one two"},
+                {"role": "assistant", "content": "old reply"},
+                {"role": "user", "content": "now"},
+            ]
+        )
+
+        prepared = await prepare_messages_for_context_layer(
+            messages,
+            llm_context=_profile(active_window_tokens=20),
+            compiler=_compiler(),
+        )
+    finally:
+        clear_context()
+
+    assert prepared.compiled_context is not None
+    assert prepared.openai_messages == messages_to_openai(messages)
+
+
+@pytest.mark.asyncio
+async def test_context_layer_no_inputs_pass_through() -> None:
+    clear_context()
+    messages = normalize_messages(
+        [
+            {"role": "system", "content": "keep rules"},
+            {"role": "user", "content": "old one two"},
+            {"role": "assistant", "content": "old reply"},
+            {"role": "user", "content": "now"},
+        ]
+    )
+    original_openai_messages = messages_to_openai(messages)
+
+    prepared = await prepare_messages_for_context_layer(messages, compiler=_compiler())
+
+    assert prepared.compiled_context is None
+    assert prepared.openai_messages == original_openai_messages
+
+
+@pytest.mark.asyncio
+async def test_context_layer_empty_blocks_list_with_profile_still_compiles() -> None:
+    messages = normalize_messages(
+        [
+            {"role": "user", "content": "old one two"},
+            {"role": "assistant", "content": "old reply"},
+            {"role": "user", "content": "now"},
+        ]
+    )
+
+    prepared = await prepare_messages_for_context_layer(
+        messages,
+        llm_context=_profile(active_window_tokens=3),
+        llm_context_blocks=[],
+        compiler=_compiler(),
+    )
+
+    assert prepared.compiled_context is not None
+    assert prepared.openai_messages == [{"role": "user", "content": "now"}]
 
 
 @pytest.mark.asyncio

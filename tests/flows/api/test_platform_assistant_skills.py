@@ -35,11 +35,14 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
             container.files_service,
             company_id,
         )
-        assert first == 7
-        assert second == 7
+        assert first == 17
+        assert second == 17
         for skill_id in PLATFORM_ASSISTANT_ATTACHED_SKILL_IDS:
             skill = await container.agent_skill_service.get(skill_id)
             assert skill.agent_skill_id == skill_id
+        networkle = await container.agent_skill_service.get("networkle")
+        assert "crm-entities" in networkle.depends_on
+        assert "crm-notes" in networkle.depends_on
         addon = await container.agent_skill_service.get("docx-templates")
         assert addon.depends_on == []
         assert "fill_docx_template" in [ref.tool_id for ref in addon.tool_refs]
@@ -84,11 +87,19 @@ async def test_platform_assistant_skill_load_docs_viz_and_depends_on(
 
         state = make_skill_state(flow_id="platform_assistant", unique_id=unique_id)
         with agent_skill_runtime_host_scope(host):
+            workspace_result = await load_agent_skill.run(
+                {"agent_skill_id": "platform-workspace"},
+                state,
+            )
+            assert workspace_result["success"] is True
+            assert workspace_result["depth"] == 0
+
             docs_result = await load_agent_skill.run(
                 {"agent_skill_id": "document-workspace"},
                 state,
             )
             assert docs_result["success"] is True
+            assert docs_result["depth"] == 1
             assert "create_file" in docs_result["tools_unlocked"]
             assert any(
                 b.stable_key == "agent_skills.body.document-workspace"
@@ -109,13 +120,14 @@ async def test_platform_assistant_skill_load_docs_viz_and_depends_on(
                 {"agent_skill_id": "docx-templates"},
                 state,
             )
-            assert addon_result["depth"] == 1
+            assert addon_result["depth"] == 2
             assert "fill_docx_template" in addon_result["tools_unlocked"]
 
             viz_result = await load_agent_skill.run(
                 {"agent_skill_id": "diagrams-viz"},
                 state,
             )
+            assert viz_result["depth"] == 1
             assert "create_viz" in viz_result["tools_unlocked"]
 
             with pytest.raises(ValueError, match="not attached"):

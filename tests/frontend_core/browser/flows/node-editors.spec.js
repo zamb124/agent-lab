@@ -26,6 +26,10 @@ import { mcpServersResource, mcpServerSyncOp, mcpServerUpdateOp, mcpServerTestOp
 import { promptRenderOp } from '../../../../apps/flows/ui/events/resources/prompts.resource.js';
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
 import { toolsResource } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
+import {
+    agentSkillsResource,
+} from '../../../../apps/flows/ui/events/resources/agent-skills.resource.js';
+import { llmContextResolveParentOp } from '../../../../apps/flows/ui/events/resources/llm-context.resource.js';
 import { exceptionAbsorbAllowNamesOp, executionLimitsOp } from '../../../../apps/flows/ui/events/resources/metadata.resource.js';
 
 import '../../../../apps/flows/ui/components/nodes/flows-base-node-editor.js';
@@ -52,6 +56,8 @@ const FACTORIES = [
     promptRenderOp,
     secretsVariablesResource,
     toolsResource,
+    agentSkillsResource,
+    llmContextResolveParentOp,
     exceptionAbsorbAllowNamesOp,
     executionLimitsOp,
 ];
@@ -98,6 +104,12 @@ describe('node editors — top-level NodeConfig contract', () => {
         fetchMock = installFetchMock();
         fetchMock.respondJson('POST', (url) => url.endsWith('/flows/api/v1/code/validate'), { valid: true, warnings: [] });
         fetchMock.respondJson('GET', (url) => url.includes('/flows/api/v1/code/editor-state'), { variables: {} });
+        fetchMock.respondJson('GET', (url) => /\/flows\/api\/v1\/agent-skills(\?|$)/.test(url), {
+            items: [],
+            total: 0,
+            limit: 200,
+            offset: 0,
+        });
     });
     afterEach(() => {
         fetchMock.uninstall();
@@ -131,9 +143,29 @@ describe('node editors — top-level NodeConfig contract', () => {
         await elementUpdated(el);
         const base = el.shadowRoot.querySelector('flows-base-node-editor');
         const titles = Array.from(base.querySelectorAll('section.block .block-title')).map((s) => s.textContent);
-        expect(titles.length).to.be.lessThanOrEqual(6);
+        expect(titles.length).to.be.lessThanOrEqual(7);
         expect(titles.some((title) => title.includes('section_react') || title.includes('ReAct'))).to.equal(false);
         expect(base.querySelector('platform-llm-context-editor')).to.not.be.null;
+    });
+
+    it('flows-llm-node-editor structured_output скрывает Skills секцию', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'llm_node',
+            name: 'A',
+            structured_output: true,
+            agent_skills: ['networkle'],
+        };
+        const el = await fixture(html`
+            <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+            </flows-llm-node-editor>
+        `);
+        await elementUpdated(el);
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const titles = Array.from(base.querySelectorAll('section.block .block-title')).map((s) => s.textContent);
+        expect(titles.some((title) => title.includes('Skills') || title.includes('section_agent_skills'))).to.equal(false);
+        expect(base.querySelector('.chip')).to.be.null;
     });
 
     it('flows-base-node-editor очищает llm_context_resource_key при удалении context resource', async () => {
@@ -270,6 +302,42 @@ describe('node editors — top-level NodeConfig contract', () => {
         el._onPickTool();
 
         expect(last.patch.tools).to.deep.equal([{ tool_id: 'ts_tool', language: 'typescript' }]);
+    });
+
+    it('flows-llm-node-editor — клик по skill chip открывает flows.agent_skill_edit', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'llm_node',
+            name: 'A',
+            prompt: 'hi',
+            tools: [],
+            agent_skills: ['networkle'],
+        };
+        const el = await fixture(html`
+            <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+            </flows-llm-node-editor>
+        `);
+        await elementUpdated(el);
+        let opened = null;
+        el.openModal = (kind, props) => {
+            opened = { kind, props };
+        };
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const skillChip = [...base.querySelectorAll('.chip')].find((chip) =>
+            chip.textContent.includes('networkle'),
+        );
+        expect(skillChip).to.not.be.undefined;
+        skillChip.click();
+        expect(opened).to.not.be.null;
+        expect(opened.kind).to.equal('flows.agent_skill_edit');
+        expect(opened.props.agentSkillId).to.equal('networkle');
+        expect(typeof opened.props.onDuplicated).to.equal('function');
+
+        let last = null;
+        el.addEventListener('change', (e) => { last = e.detail; });
+        opened.props.onDuplicated({ fromId: 'networkle', toId: 'networkle-copy' });
+        expect(last.patch.agent_skills).to.deep.equal(['networkle-copy']);
     });
 
     it('flows-llm-node-editor — выбранный MCP tool сохраняет server/tool metadata', async () => {

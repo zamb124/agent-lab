@@ -230,10 +230,27 @@ async def test_flows_connect_oauth_integrations(
     )
     await expect(headers.filter(has_text=re.compile(r"Service|Сервис"))).to_be_visible(timeout=15_000)
     await scenario.step(
-        "Проверьте интерфейс подключений",
+        "Проверьте колонки таблицы подключений",
+        page,
+        screenshot_name="integrations-table-columns",
+        label_en="Review the connections table columns",
+        details=(
+            "Убедитесь, что в таблице есть колонки провайдера, сервиса и статуса. "
+            "По ним видно, какой внешний аккаунт подключён и в каком он состоянии."
+        ),
+        details_en=(
+            "Confirm the table has provider, service, and status columns. "
+            "They show which external account is connected and its state."
+        ),
+    )
+
+    search_field = modal.locator("platform-modal-search-field").first
+    await expect(search_field).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Проверьте список подключённых аккаунтов",
         page,
         screenshot_name="integrations-list-ui",
-        label_en="Review the connect UI",
+        label_en="Review the connected accounts list",
         details=(
             "**Демонстрация результата.** Видны поиск, колонки таблицы и список записей "
             "или понятное пустое состояние — интерфейс готов для подключения внешних "

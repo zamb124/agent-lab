@@ -175,12 +175,6 @@ export class FlowsAgentSkillPickerModal extends PlatformModal {
         const depsCount = asArray(item.depends_on).length;
         const refsCount = asArray(item.references).length;
         const assetsCount = asArray(item.assets).length;
-        const activation = asString(item.activation);
-        const activationKey = activation === 'auto'
-            ? 'agent_skills.activation_auto'
-            : activation === 'explicit'
-                ? 'agent_skills.activation_explicit'
-                : '';
         return html`
             <div class="card-meta">
                 <span class="badge"><platform-icon name="wrench" size="12"></platform-icon>${this.t('agent_skills.badge_tools', { n: toolsCount })}</span>
@@ -192,9 +186,6 @@ export class FlowsAgentSkillPickerModal extends PlatformModal {
                     : nothing}
                 ${assetsCount > 0
                     ? html`<span class="badge"><platform-icon name="paperclip" size="12"></platform-icon>${this.t('agent_skills.badge_assets', { n: assetsCount })}</span>`
-                    : nothing}
-                ${activationKey.length > 0
-                    ? html`<span class="badge"><platform-icon name="target" size="12"></platform-icon>${this.t(activationKey)}</span>`
                     : nothing}
             </div>
         `;

@@ -160,6 +160,97 @@ async def test_llm_runner_load_skill_unlocks_and_runs_calculator(
 
 
 @pytest.mark.asyncio
+async def test_llm_runner_rebuilds_tools_schema_after_skill_load(
+    app: FastAPI,
+    mock_llm_with_queue,
+    mock_llm_capture,
+    unique_id: str,
+) -> None:
+    """Doctrine: call[0] без unlocked tool, call[1] с ним после load_agent_skill."""
+    company_id = f"company_schema_{unique_id}"
+    skill_id = f"schema-skill-{unique_id}"
+    flow_id = f"skill_schema_{unique_id}"
+
+    def _captured_tool_names(call: JsonObject) -> set[str]:
+        names: set[str] = set()
+        raw_tools = call.get("tools")
+        if not isinstance(raw_tools, list):
+            return names
+        for tool in raw_tools:
+            if not isinstance(tool, dict):
+                continue
+            direct = tool.get("name")
+            if isinstance(direct, str) and direct.strip():
+                names.add(direct)
+                continue
+            function = tool.get("function")
+            if isinstance(function, dict):
+                function_name = function.get("name")
+                if isinstance(function_name, str) and function_name.strip():
+                    names.add(function_name)
+        return names
+
+    async with company_scope(company_id, unique_id):
+        container = _runtime_container(app)
+        await container.agent_skill_service.create(
+            AgentSkillCreateInput(
+                agent_skill_id=skill_id,
+                name=skill_id,
+                description="Unlock calculator for schema rebuild doctrine",
+                body_markdown="## Math\n\nUse calculator after load.",
+                tool_refs=[
+                    ToolReference(
+                        tool_id="calculator",
+                        description="calc",
+                        parameters_schema=dict(_CALC_SCHEMA),
+                    )
+                ],
+            )
+        )
+        mock_llm_with_queue(
+            mock_load_skill_then_calculator(
+                agent_skill_id=skill_id,
+                expression="2+2",
+                final_text="four",
+            )
+        )
+        node_config = NodeConfig(
+            node_id=f"node_{unique_id}",
+            type=NodeType.LLM_NODE,
+            name="Skill schema rebuild",
+            description="",
+            prompt="Load the skill then calculate.",
+            tools=[],
+            agent_skills=[skill_id],
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
+        )
+        state = make_skill_state(flow_id=flow_id, unique_id=unique_id, content="compute")
+        container = await _persist_runner_state(app, state)
+        await ensure_workflow_started(
+            container=container,
+            state=state,
+            flow_id=flow_id,
+            branch_id=state.branch_id,
+        )
+        node = LlmNode(
+            node_id=node_config.node_id,
+            config=cast(JsonObject, node_config.model_dump(mode="json")),
+            node_config=node_config,
+            container=container,
+        )
+        runner = await node.get_runner(state)
+        await _consume_runner(runner, state, content="compute")
+
+        calls = await mock_llm_capture()
+        assert len(calls) >= 2
+        first_tools = _captured_tool_names(calls[0])
+        second_tools = _captured_tool_names(calls[1])
+        assert "load_agent_skill" in first_tools
+        assert "calculator" not in first_tools
+        assert "calculator" in second_tools
+
+
+@pytest.mark.asyncio
 async def test_no_agent_skills_does_not_inject_meta_tools(
     app: FastAPI,
     unique_id: str,
@@ -334,7 +425,6 @@ async def test_live_catalog_update_seen_on_next_load(
                 depends_on=[],
                 references=[],
                 assets=[],
-                activation="explicit",
             ),
         )
         host2 = AgentSkillRuntimeHost(

@@ -8,32 +8,38 @@
 
 ## Step 1. Open the agent in the editor
 
-The editor canvas contains the agent answer node. It defines how the agent talks to the customer.
+Open the Green Garden Assistant in the editor. The answer node defines how the agent talks to the customer. A single-LLM agent also has Studio mode — covered in a separate guide.
 
 ![Open the agent in the editor](configure-agent-answers--01-editor-opened.png)
 
 ## Step 2. Write the agent instruction
 
-In the node editor, type the instruction (prompt). You can insert variables such as the customer name in curly braces, and the agent uses them in its reply. This is the main way to set the tone and rules of communication.
+Type the instruction (prompt). You can insert variables such as the customer name in curly braces; the agent uses them in its reply.
 
 ![Write the agent instruction](configure-agent-answers--02-prompt-first-version.png)
 
-## Step 3. Publish the draft
+## Step 3. Choose the model and reply limits
 
-Click Publish. The draft becomes the live version, so the agent now answers using the new instruction.
+In the model block set the provider, model, temperature, and reply length limit. This controls tone and length without changing the graph.
 
-![Publish the draft](configure-agent-answers--03-published-first.png)
+![Choose the model and reply limits](configure-agent-answers--03-model-and-limits-set.png)
 
-## Step 4. Change the instruction and publish again
+## Step 4. Publish the draft
 
-Extend the instruction (for example, ask it to always clarify delivery) and publish again. This is how you refine the agent's behavior over time.
+Click Publish. The draft becomes the live version, so the agent answers using the new instruction and model.
 
-![Change the instruction and publish again](configure-agent-answers--04-published-second.png)
+![Publish the draft](configure-agent-answers--04-published-first.png)
 
-## Step 5. Reopen the agent and verify settings
+## Step 5. Change the instruction and publish again
 
-**Result demonstration.** Close and reopen the node — the updated instruction is still there, which means the setting was saved.
+Extend the instruction (for example, always clarify delivery) and publish again. This is how you refine behavior over time.
 
-**Summary.** You can now set and change the agent instruction and publish changes.
+![Change the instruction and publish again](configure-agent-answers--05-published-second.png)
 
-![Reopen the agent and verify settings](configure-agent-answers--05-reopened-prompt-persisted.png)
+## Step 6. Reopen the agent and verify settings
+
+**Result demonstration.** Reopen the node — the updated instruction and model settings are still there, so the configuration was saved.
+
+**Summary.** You can set the agent prompt and model and publish changes.
+
+![Reopen the agent and verify settings](configure-agent-answers--06-reopened-prompt-persisted.png)

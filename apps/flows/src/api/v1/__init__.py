@@ -15,6 +15,7 @@ from .internal_company import router as internal_company_router
 from .internal_employee_inbox import router as internal_employee_inbox_router
 from .internal_work_items import router as internal_work_items_router
 from .lara_actions import router as lara_actions_router
+from .llm_context import router as llm_context_router
 from .mcp import router as mcp_router
 from .metadata import router as metadata_router
 from .nodes import router as nodes_router
@@ -35,6 +36,7 @@ api_v1_router.include_router(agent_skills_router)
 api_v1_router.include_router(agent_toolkits_router)
 api_v1_router.include_router(flows_voice_providers_catalog_router)
 api_v1_router.include_router(lara_actions_router)
+api_v1_router.include_router(llm_context_router)
 api_v1_router.include_router(flows_router, prefix="/flows")
 api_v1_router.include_router(certificate_router, prefix="/certificate")
 api_v1_router.include_router(evaluation_router, prefix="/evaluation")

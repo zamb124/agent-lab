@@ -43,6 +43,7 @@ const CHAT_POLICY_FIELD_KEYS = Object.freeze([
     'show_reasoning',
     'tool_calls_display',
     'show_activity',
+    'show_skill_loads',
     'errors_display',
     'show_run_trace',
     'show_trace_actions',

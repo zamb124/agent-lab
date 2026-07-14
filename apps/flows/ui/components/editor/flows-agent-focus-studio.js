@@ -170,8 +170,9 @@ export class FlowsAgentFocusStudio extends PlatformElement {
                 background: color-mix(in srgb, var(--glass-solid-medium) 70%, transparent);
                 border: 1px solid var(--border-subtle);
                 box-shadow: var(--glass-shadow-subtle);
-                overflow: hidden;
+                overflow: auto;
                 padding: var(--space-4);
+                padding-bottom: var(--space-8);
             }
 
             .studio-stage-inner[data-section='prompt'] {

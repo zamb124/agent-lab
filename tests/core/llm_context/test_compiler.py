@@ -326,6 +326,36 @@ def test_compiler_packs_memory_budget_chronologically_after_retrieval() -> None:
     ]
 
 
+def test_skill_block_packs_into_remaining_without_scope_cap() -> None:
+    compiled = _compiler().compile(
+        LLMContextCompileRequest(
+            messages=[{"role": "user", "content": "current"}],
+            candidate_blocks=[
+                LLMContextBlock(
+                    kind="memory",
+                    budget_scope="memory",
+                    content="memory one two",
+                    stable_key="memory:full",
+                    token_count=3,
+                ),
+                LLMContextBlock(
+                    kind="skill",
+                    budget_scope="skill",
+                    content="skill one two",
+                    stable_key="skill:remaining",
+                    token_count=3,
+                ),
+            ],
+            policy=_policy(max_input_tokens=14, memory_tokens=3),
+        )
+    )
+
+    assert [block.stable_key for block in compiled.selected_blocks] == [
+        "memory:full",
+        "skill:remaining",
+    ]
+
+
 def test_block_explicit_token_count_is_authoritative() -> None:
     compiled = _compiler().compile(
         LLMContextCompileRequest(

@@ -2,7 +2,6 @@
 name: docx-templates
 description: Fill Word (.docx) Jinja2 templates from state.files. Use after document-workspace when the user has a .docx template with placeholders.
 allowed-tools: fill_docx_template
-activation: explicit
 ---
 
 # DOCX templates

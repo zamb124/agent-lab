@@ -18,10 +18,16 @@ The Start tab shows where to send the first request: agent endpoint, selected br
 
 ![Review the Start tab](api-first-request--02-api-start-tab.png)
 
-## Step 3. Run a streaming request and check the reply
+## Step 3. Switch to the Run tab
+
+Open the Run tab. Here you set the message text, variables, and call mode before sending a request to the agent.
+
+![Switch to the Run tab](api-first-request--03-api-run-tab-opened.png)
+
+## Step 4. Run a streaming request and check the reply
 
 **Result demonstration.** On the Run tab, send a message and wait for a reply with the verification text — this confirms API Console sent a real request to the agent.
 
 **Summary.** You now know where to open API Console, what to read on the Start tab, and how to run your first streaming request.
 
-![Run a streaming request and check the reply](api-first-request--03-api-streaming-result.png)
+![Run a streaming request and check the reply](api-first-request--04-api-streaming-result.png)

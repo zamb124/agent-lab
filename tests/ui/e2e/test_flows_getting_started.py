@@ -18,6 +18,8 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_chat_send_message,
     flows_click_platform_button,
     flows_doc_flow_id,
+    flows_e2e_open_lara_chat,
+    flows_seed_mock_llm,
     flows_set_platform_field,
 )
 from tests.ui.harness import AppUI
@@ -134,6 +136,31 @@ async def test_flows_home_tour(
     )
     await page.keyboard.press("Escape")
     await expect(sessions_modal).to_be_hidden(timeout=15_000)
+
+    connect_grid = page.locator("flows-home-page .connect-grid").first
+    await expect(connect_grid).to_be_visible(timeout=15_000)
+    skills_card = connect_grid.locator(".connect-card").filter(
+        has_text=re.compile(r"Skills")
+    ).first
+    await expect(skills_card).to_be_visible(timeout=15_000)
+    await skills_card.scroll_into_view_if_needed()
+    await scenario.step(
+        "Посмотрите карточку Skills и помощника платформы",
+        page,
+        screenshot_name="home-skills-and-assistant",
+        label_en="Review the Skills card and platform assistant",
+        details=(
+            "Ниже на главной есть блок подключений: среди карточек — Skills (библиотека "
+            "процедур для агентов). Отсюда можно перейти в каталог Skills. Встроенный "
+            "помощник Lara открывается из чата или отдельной инструкции «Чат с Lara»."
+        ),
+        details_en=(
+            "Lower on the home page is a connections block; among the cards is Skills "
+            "(the procedure library for agents). From here you can open the Skills "
+            "catalog. The built-in Lara assistant opens from chat or the Chat with Lara "
+            "guide."
+        ),
+    )
 
     catalog = page.locator("flows-catalog-list").first
     await expect(catalog).to_be_visible(timeout=30_000)
@@ -333,25 +360,161 @@ async def test_flows_create_first_agent(
     )
 
     await flows_click_platform_button(modal, "Создать", "Create", "Готово", "Done")
-    await expect(page.locator("flows-flow-canvas svg.canvas-host")).to_be_visible(timeout=30_000)
-    await expect(page.locator("flows-flow-canvas g.node")).to_have_count(1, timeout=30_000)
+    studio_sections = page.get_by_role(
+        "group", name=re.compile(r"Agent editor sections", re.I)
+    )
+    canvas = page.locator("flows-flow-canvas").first
+    try:
+        await expect(studio_sections.first).to_be_visible(timeout=15_000)
+        opened_studio = True
+    except AssertionError:
+        opened_studio = False
+    if not opened_studio:
+        await expect(canvas.locator("svg.canvas-host")).to_be_visible(timeout=30_000)
+        await expect(canvas.locator("g.node")).to_have_count(1, timeout=30_000)
     await scenario.step(
         "Проверьте нового агента в редакторе",
         page,
         screenshot_name="new-agent-in-editor",
         label_en="Check the new agent in the editor",
         details=(
-            "**Демонстрация результата.** После создания вы сразу попадаете в редактор, а "
-            "на канве уже есть стартовая нода ответа — значит агент создан и готов к "
-            "настройке.\n\n"
-            "**Итог.** Теперь вы умеете создавать агента из шаблона и понимаете, какие "
-            "поля заполнять."
+            "**Демонстрация результата.** После создания вы попадаете в редактор: для "
+            "шаблона с одной LLM-нодой чаще открывается студия (промпт, модель, Skills и "
+            "tools в одном экране). Переключение на схему (канву) — в отдельной "
+            "инструкции про два режима редактора.\n\n"
+            "**Итог.** Теперь вы умеете создавать агента из шаблона и понимаете, какой "
+            "редактор открылся."
         ),
         details_en=(
-            "**Result demonstration.** After creation you land in the editor and the "
-            "canvas already has a starter answer node, which means the agent is created "
-            "and ready to configure.\n\n"
-            "**Summary.** You can now create an agent from a template and know which "
-            "fields to fill in."
+            "**Result demonstration.** After creation you land in the editor: a "
+            "single-LLM template usually opens Studio (prompt, model, Skills and tools "
+            "on one screen). Switching to the canvas graph is covered in the two editor "
+            "modes guide.\n\n"
+            "**Summary.** You can create an agent from a template and recognize which "
+            "editor opened."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="flows",
+    tag="getting-started",
+    doc_slug="chat-with-lara",
+    title="Чат с Lara — помощником платформы",
+    description=(
+        "**Для чего:** эта инструкция поможет спросить у Lara, как устроена платформа, "
+        "не настраивая своего агента.\n\n"
+        "**Какие проблемы решает:** новичок не знает, куда обратиться за подсказкой по "
+        "Flows и сервисам.\n\n"
+        "**Результат:** вы получите ответ Lara в чате."
+    ),
+    title_en="Chat with Lara — the platform assistant",
+    description_en=(
+        "**What for:** this guide helps you ask Lara how the platform works without "
+        "configuring your own agent.\n\n"
+        "**Problems it solves:** a beginner does not know where to get help about Flows "
+        "and services.\n\n"
+        "**Result:** you get a Lara reply in chat."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(240)
+async def test_flows_chat_with_lara(
+    scenario: ScenarioRecorder,
+    flows_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+    secrets_service,
+    taskiq_worker,
+    flows_service,
+) -> None:
+    _ = secrets_service, taskiq_worker, flows_service, unique_id
+    page = ui_page_system
+    await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
+    await expect(page.locator("flows-home-page")).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте главную Flows",
+        page,
+        screenshot_name="lara-from-home",
+        label_en="Open the Flows home page",
+        details=(
+            "Начните с главной Flows. Отсюда удобно перейти в чат и открыть встроенного "
+            "помощника платформы Lara."
+        ),
+        details_en=(
+            "Start from Flows home. From here open chat and launch the built-in Lara "
+            "platform assistant."
+        ),
+    )
+
+    await flows_e2e_open_lara_chat(page, flows_ui)
+    chat = page.locator('platform-chat[flow-id="lara"]').first
+    await expect(chat).to_be_attached(timeout=30_000)
+    await expect(chat).to_have_attribute("open", "", timeout=15_000)
+    await scenario.step(
+        "Откройте чат Lara из шапки",
+        page,
+        screenshot_name="lara-chat-opened",
+        label_en="Open Lara chat from the header",
+        details=(
+            "Откройте чат Flows и нажмите кнопку Lara (иконка AI в шапке). Откроется "
+            "встроенный помощник платформы — он отвечает на вопросы о продукте, а не о "
+            "заказах магазина."
+        ),
+        details_en=(
+            "Open Flows chat and click the Lara button (AI icon in the header). The "
+            "built-in platform assistant opens — it answers product questions, not store "
+            "orders."
+        ),
+    )
+
+    await flows_seed_mock_llm(
+        [
+            {
+                "type": "text",
+                "content": (
+                    "Lara: Skills — это библиотека процедур для агентов. "
+                    "Откройте раздел Skills в Flows."
+                ),
+            }
+        ]
+    )
+    await scenario.step(
+        "Подготовьте вопрос про платформу",
+        page,
+        screenshot_name="lara-ready-to-ask",
+        label_en="Prepare a platform question",
+        details=(
+            "Сформулируйте простой вопрос, например про Skills. Если Lara подгрузит "
+            "процедуру, в чате могут появиться чипы активации — это нормально."
+        ),
+        details_en=(
+            "Ask a simple question, for example about Skills. If Lara loads a procedure, "
+            "activation chips may appear — that is expected."
+        ),
+    )
+
+    await flows_chat_send_message(
+        page,
+        "Где библиотека Skills?",
+        chat_selector='platform-chat[flow-id="lara"]',
+    )
+    reply = chat.get_by_text(re.compile(r"Skills|процедур", re.I), exact=False).first
+    await expect(reply).to_be_visible(timeout=120_000)
+    await scenario.step(
+        "Прочитайте ответ Lara",
+        page,
+        screenshot_name="lara-answered",
+        label_en="Read Lara's reply",
+        details=(
+            "**Демонстрация результата.** В ленте виден ответ Lara про Skills — помощник "
+            "платформы работает в чате.\n\n"
+            "**Итог.** Вы умеете открывать Lara и задавать вопросы о платформе."
+        ),
+        details_en=(
+            "**Result demonstration.** The feed shows Lara's reply about Skills — the "
+            "platform assistant works in chat.\n\n"
+            "**Summary.** You can open Lara and ask platform questions."
         ),
     )

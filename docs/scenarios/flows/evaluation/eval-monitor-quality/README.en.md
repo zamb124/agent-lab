@@ -18,10 +18,16 @@ In the Workspace block, choose Monitoring. Gate policies, baselines, and online 
 
 ![Open the monitoring panel](eval-monitor-quality--02-monitoring-panel-opened.png)
 
-## Step 3. Check monitoring status
+## Step 3. Find the gate policies block
+
+On the panel find the gate policies and baselines section. Here you set quality thresholds that trigger alerts when answers degrade.
+
+![Find the gate policies block](eval-monitor-quality--03-monitoring-gate-policies.png)
+
+## Step 4. Check monitoring status
 
 **Result demonstration.** The panel shows baselines and monitoring status — the quality observation layer is ready to configure.
 
 **Summary.** You now know where to open quality monitoring and what to look for before configuring gate policies.
 
-![Check monitoring status](eval-monitor-quality--03-monitoring-status-visible.png)
+![Check monitoring status](eval-monitor-quality--04-monitoring-status-visible.png)

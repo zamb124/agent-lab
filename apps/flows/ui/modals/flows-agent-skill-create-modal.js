@@ -91,7 +91,6 @@ export class FlowsAgentSkillCreateModal extends PlatformFormModal {
             depends_on: [],
             references: [],
             assets: [],
-            activation: 'explicit',
         };
         const requested = this._skills.create(payload);
         if (!requested || typeof requested.id !== 'string') {

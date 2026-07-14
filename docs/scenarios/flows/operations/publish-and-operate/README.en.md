@@ -12,22 +12,28 @@ Click Publish in the editor header. After that, user chat, API, and guest links 
 
 ![Publish the agent](publish-and-operate--01-agent-published.png)
 
-## Step 2. Update the agent card
+## Step 2. Enable showing Skill activations in chat
 
-In the editor menu, open Agent settings and change the name and description. These fields appear in the catalog and chat.
+In Agent settings find chat options and enable showing Skill activations. Then the dialog shows chips for loaded procedures. Full chat setup is in a separate guide.
 
-![Update the agent card](publish-and-operate--02-agent-card-updated.png)
+![Enable showing Skill activations in chat](publish-and-operate--02-chat-skill-loads-setting.png)
 
-## Step 3. Open the sessions list
+## Step 3. Update the agent card
+
+In the same settings window change the name and description. These fields appear in the catalog and chat.
+
+![Update the agent card](publish-and-operate--03-agent-card-updated.png)
+
+## Step 4. Open the sessions list
 
 From the editor menu, open Sessions. Here you can find past conversations and return to problematic requests.
 
-![Open the sessions list](publish-and-operate--03-sessions-modal-opened.png)
+![Open the sessions list](publish-and-operate--04-sessions-modal-opened.png)
 
-## Step 4. Export the JSON configuration
+## Step 5. Export the JSON configuration
 
 **Result demonstration.** The agent is published, the card is updated, sessions are available, and the JSON config can be saved as a backup.
 
 **Summary.** You can now release an agent, manage its card, and use the editor's operational tools.
 
-![Export the JSON configuration](publish-and-operate--04-raw-json-export.png)
+![Export the JSON configuration](publish-and-operate--05-raw-json-export.png)

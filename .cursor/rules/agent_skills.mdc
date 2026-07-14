@@ -39,9 +39,11 @@ alwaysApply: false
 - Catalog: `AgentSkill` → `AgentSkillRepository` (`agent_skill:{id}`)
 - Attach: `NodeConfig.agent_skills: list[agent_skill_id]`
 - Runtime: Tier-1 index в `llm_context` (`kind=skill`); Tier-2/3 через builtin `load_agent_skill` / `read_agent_skill_reference`
-- При load: inject body block + materialize `tool_refs` в active tools runner
+- При непустом `NodeConfig.agent_skills` runtime **автоматически** добавляет meta-tools (`load_agent_skill`, `read_agent_skill_reference`); они **не** показываются в standing Tools chips
+- Load всегда через `load_agent_skill` (поля activation нет)
+- При load: inject body block + materialize `tool_refs` в active tools runner; `tools_schema` пересобирается на каждой ReAct-итерации
 - Несколько load в одном run — **accumulate** (union body + tools), не replace
-- `depends_on`: depth ≤ 1
+- `depends_on`: произвольная глубина (child от любого уже загруженного parent); циклы допустимы; reload idempotent; engineering safety stop depth ≥ 64
 - Scripts: не in-process FS; только через существующие tools / code-runner
 - Magic tools **не** перечислять в JSON `tools` ноды — runtime добавляет их при непустом `agent_skills`
 
@@ -49,20 +51,26 @@ alwaysApply: false
 
 - Route `agent_skills` (`/flows/skills`) — Skill Library master-detail page.
 - Factories: `flows/agent_skills` (CRUD list/get/create/remove), `flows/agent_skill_update` (PUT), `flows/agent_skill_import` (preview/persist), `flows/agent_skills_ensure_seed` (idempotent platform seed for existing companies).
-- Modals: `flows.agent_skill_create`, `flows.agent_skill_import`, `flows.agent_skill_picker`, tool view/edit via `flows.embedded_tool_config`.
-- llm_node editor: separate **Skills** section (chips + picker) before **Tools**; magic tools never appear in tools chips.
-- Skill editor: tool chip → `flows.embedded_tool_config` (Save пишет в `tool_refs`); depends_on через `flows.agent_skill_picker` (поиск); Activation — `platform-switch` (explicit/auto); references/assets — `openFile` → `platform.file_viewer`.
+- Modals: `flows.agent_skill_create`, `flows.agent_skill_edit` (shared editor), `flows.agent_skill_import`, `flows.agent_skill_picker`, tool view/edit via `flows.embedded_tool_config`.
+- llm_node editor: секция **Skills** только в режиме Tools (`structured_output=false`); в Structured скрыта (attach в конфиге сохраняется). Magic tools never appear in tools chips.
+- Skill chip click → `flows.agent_skill_edit` (тот же `<flows-agent-skill-editor>`, что Skill Library). X на чипе — detach.
+- Duplicate в editor: create с новым `agent_skill_id` + клон полей; из chip-модалки `onDuplicated` заменяет attach на копию.
+- Skill editor: tool chip → `flows.embedded_tool_config` (Save пишет в `tool_refs`); depends_on через `flows.agent_skill_picker` (поиск); references/assets — `openFile` → `platform.file_viewer`.
 - Entry points: sidebar Skills, home connect card, llm_node «Manage skills».
 - UI copy: **Skill**; поля API остаются `agent_skill_id` / `agent_skills`.
 - Platform icon для Skill везде один: `AGENT_SKILL_ICON` (`sparkles`) из `apps/flows/ui/_helpers/agent-skill-map.js` — chips, list, picker, sidebar, llm_node.
 - Tool chips в Skill editor используют тот же visual meta, что llm_node (`getToolRefVisualMeta` / language icon).
 - Skill Library page и skill picker при открытии вызывают `ensure-seed`, затем list — backfill каталога без полного company re-init.
+- Chat: `load_agent_skill` → ui_event `platform.skill_loaded` → чипы в `<platform-chat>` (SPA/embed/editor). Mute: `FlowChatSettings.show_skill_loads` / embed `chat_override`.
 
-## Эталонный flow
+## Lara (канон)
 
-- `platform_assistant` (`public`) — ассистент со standing `ask_user` и skill packs реальных platform builtins (documents, viz, RAG, web, CRM, work).
-- Seed: `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` в company init; для уже существующих компаний — `POST /flows/api/v1/agent-skills/ensure-seed` (`ensure_platform_assistant_skills_for_company`).
-- `docx-templates` не в attach list — только как `depends_on` child у `document-workspace` (parent lists child).
+- `flow_id: lara` — единый ассистент; `LARA_PLATFORM_SKILL_ROOTS` на base `main` (`networkle`, `flows-platform`, `flows-code`, `docs-knowledge`, `platform-workspace`).
+- Branch = thin entry focus (prompt + `ask_user`); **не** режет catalog; standing domain tools запрещены.
+- Methodology бывших Lara prompts — в skill bodies + `references/*-lara-methodology.md`.
+- Skill Library CTA → `flow_chat` / `lara`. `platform_assistant` — deprecated alias с теми же roots.
+- Seed: `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` / `ensure-seed`; capability packs под `platform-workspace` (`document-workspace` → `docx-templates`, viz, RAG, web, work).
+
 
 ## Запреты
 

@@ -2,7 +2,6 @@
 name: work-tracking
 description: Create and complete WorkItems and manage one-time schedules. Use for tasks, follow-ups, reminders, and work lists.
 allowed-tools: work_item_create work_item_list work_item_complete schedule_one_time_task list_scheduled_tasks cancel_scheduled_task
-activation: explicit
 ---
 
 # Work tracking

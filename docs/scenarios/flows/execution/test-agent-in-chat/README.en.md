@@ -24,10 +24,16 @@ Wait until the reply appears in the chat feed. A streaming reply shows the agent
 
 ![Wait for the reply in the feed](test-agent-in-chat--03-reply-streaming-done.png)
 
-## Step 4. Verify the meaningful reply
+## Step 4. Start a new conversation
 
-**Result demonstration.** An agent reply appeared in the feed, which means the dialog works and the Green Garden Assistant accepts messages.
+Clear the feed or start a new chat — this checks a fresh-start scenario, like a customer after a previous request. Skill load chips in the dialog are covered in a separate guide.
 
-**Summary.** You can now open the Green Garden agent chat and verify its answer to a customer question.
+![Start a new conversation](test-agent-in-chat--04-new-chat-cleared.png)
 
-![Verify the meaningful reply](test-agent-in-chat--04-agent-replied.png)
+## Step 5. Verify the meaningful reply
+
+**Result demonstration.** After the new message an agent reply appears again — the Green Garden Assistant dialog works.
+
+**Summary.** You can open the Green Garden agent chat, send a question, and start a new conversation.
+
+![Verify the meaningful reply](test-agent-in-chat--05-agent-replied.png)

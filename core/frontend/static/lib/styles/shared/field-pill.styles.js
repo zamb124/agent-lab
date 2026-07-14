@@ -603,6 +603,11 @@ export const fieldPillStyles = css`
         -webkit-backdrop-filter: blur(var(--glass-blur-subtle));
     }
 
+    .field-pill-enum-list--up {
+        top: auto;
+        bottom: calc(100% + 4px);
+    }
+
     .field-pill-enum-opt {
         margin: 0;
         padding: var(--space-2) var(--space-3);

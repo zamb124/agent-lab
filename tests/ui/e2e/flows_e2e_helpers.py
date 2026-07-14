@@ -104,6 +104,8 @@ def flows_llm_payload(
     name: str,
     prompt: str,
     description: str = "",
+    tools: list[dict[str, Any]] | None = None,
+    agent_skills: list[str] | None = None,
 ) -> dict[str, Any]:
     return {
         "flow_id": flow_id,
@@ -115,7 +117,8 @@ def flows_llm_payload(
                 "type": "llm_node",
                 "name": "Agent",
                 "prompt": prompt,
-                "tools": [],
+                "tools": tools if tools is not None else [],
+                "agent_skills": agent_skills if agent_skills is not None else [],
                 "llm": {
                     "provider": "humanitec_llm",
                     "model": "auto",
@@ -214,8 +217,11 @@ async def flows_drop_llm_node(page: Page, *, x: int = 700, y: int = 330) -> None
 
 
 async def flows_set_selected_llm_prompt(page: Page, prompt: str) -> None:
-    panel = page.locator("flows-floating-panel[show-backdrop]").first
-    editor = panel.locator("flows-llm-node-editor").first
+    editor = page.locator(
+        "flows-floating-panel[show-backdrop] flows-llm-node-editor, "
+        "flows-agent-focus-studio flows-llm-node-editor, "
+        "flows-property-panel flows-llm-node-editor"
+    ).first
     await expect(editor).to_be_visible(timeout=30_000)
     prompt_editor = editor.locator("prompt-editor").first
     await expect(prompt_editor).to_be_visible(timeout=30_000)
@@ -237,7 +243,9 @@ async def flows_set_selected_llm_prompt(page: Page, prompt: str) -> None:
 
 async def flows_set_selected_llm_config(page: Page, config: dict[str, Any]) -> None:
     editor = page.locator(
-        "flows-floating-panel flows-llm-node-editor, flows-property-panel flows-llm-node-editor"
+        "flows-floating-panel flows-llm-node-editor, "
+        "flows-property-panel flows-llm-node-editor, "
+        "flows-agent-focus-studio flows-llm-node-editor"
     ).first
     llm_config = editor.locator("flows-llm-config-editor").first
     await expect(llm_config).to_be_visible(timeout=30_000)
@@ -346,8 +354,14 @@ async def flows_open_chat_page(
     await expect(page.locator("chat-page platform-chat")).to_be_visible(timeout=30_000)
 
 
-async def flows_chat_send_message(page: Page, text: str) -> None:
-    root = page.locator("chat-page platform-chat")
+async def flows_chat_send_message(
+    page: Page,
+    text: str,
+    *,
+    chat_selector: str = "chat-page platform-chat",
+) -> None:
+    root = page.locator(chat_selector).first
+    await expect(root).to_be_attached(timeout=30_000)
     textarea = root.locator("flows-chat-input textarea")
     await expect(textarea).to_be_visible(timeout=30_000)
     await textarea.fill(text)
@@ -364,7 +378,6 @@ async def flows_chat_click_clear(page: Page) -> None:
 
 async def flows_publish_editor(page: Page) -> None:
     await flows_close_floating_panel(page)
-    await expect(page.locator("flows-flow-canvas svg.canvas-host")).to_be_visible(timeout=30_000)
     publish_pattern = re.compile(r"^\s*(?:Publish|Опубликовать)\s*$")
     button = page.locator("flows-editor-header platform-button").filter(
         has_text=publish_pattern
@@ -580,7 +593,7 @@ async def flows_dismiss_pwa_install_banner(page: Page) -> None:
 
 
 async def flows_open_editor(page: Page, flows_ui: AppUI, flow_id: str, *, branch_id: str = "base") -> None:
-    """Единая точка входа в редактор flow с ожиданием готовности канвы."""
+    """Единая точка входа в редактор flow (Studio или канва)."""
     if branch_id in {"", "base", "default"}:
         url = f"{flows_ui.origin}/flows/{flow_id}/editor"
     else:
@@ -591,7 +604,20 @@ async def flows_open_editor(page: Page, flows_ui: AppUI, flow_id: str, *, branch
     await page.goto(url, wait_until="domcontentloaded")
     await expect(page.locator("flows-app")).to_be_visible(timeout=30_000)
     await flows_dismiss_pwa_install_banner(page)
-    await expect(page.locator("flows-flow-canvas svg.canvas-host")).to_be_visible(timeout=30_000)
+    await expect(page.locator("flows-editor-header")).to_be_visible(timeout=30_000)
+    studio_sections = page.get_by_role(
+        "group", name=re.compile(r"Agent editor sections", re.I)
+    )
+    canvas = page.locator("flows-flow-canvas svg.canvas-host").first
+    for _ in range(60):
+        if await canvas.count() > 0 and await canvas.is_visible():
+            return
+        if await studio_sections.count() > 0 and await studio_sections.first.is_visible():
+            return
+        await page.wait_for_timeout(500)
+    raise AssertionError(
+        "flows_open_editor: neither Studio nor canvas became ready"
+    )
 
 
 async def flows_canvas_node_ids_of_type(page: Page, node_type: str) -> list[str]:
@@ -672,6 +698,7 @@ async def flows_drop_node(
 
     Возвращает node_id только что добавленной ноды.
     """
+    await flows_e2e_ensure_canvas_layout(page)
     await expect(page.locator("flows-flow-canvas svg.canvas-host").first).to_be_visible(timeout=30_000)
     palette_item = page.locator(
         f"flows-node-types-sidebar .node-item[data-node-type='{node_type}']"
@@ -728,6 +755,7 @@ async def flows_drop_node(
 
 async def flows_select_canvas_node(page: Page, node_id: str) -> None:
     """Выбирает ноду на канве (programmatic selectNode + dblclick fallback)."""
+    await flows_e2e_ensure_canvas_layout(page)
     node = page.locator(f"flows-flow-canvas g.node[data-node-id='{node_id}']").first
     await expect(node).to_be_visible(timeout=15_000)
     canvas = page.locator("flows-flow-canvas").first
@@ -858,6 +886,7 @@ async def flows_close_floating_panel(page: Page) -> None:
 
 async def flows_open_node_editor(page: Page, node_id: str) -> Locator:
     """Открывает floating-панель редактора выбранной ноды."""
+    await flows_e2e_ensure_canvas_layout(page)
     await flows_close_floating_panel(page)
     floating = page.locator(f"flows-floating-panel[panel-id='{node_id}']").first
     deadline = time.monotonic() + 15.0
@@ -1570,16 +1599,19 @@ async def flows_open_raw_json_modal(page: Page) -> Locator:
 
 
 async def flows_click_llm_output_mode(page: Page, mode: Literal["tools", "structured"]) -> None:
-    panel = page.locator("flows-floating-panel[show-backdrop]").first
-    await expect(panel).to_be_visible(timeout=30_000)
-    editor = panel.locator("flows-llm-node-editor").first
+    editor = page.locator(
+        "flows-floating-panel[show-backdrop] flows-llm-node-editor, "
+        "flows-agent-focus-studio flows-llm-node-editor, "
+        "flows-property-panel flows-llm-node-editor"
+    ).first
     await expect(editor).to_be_visible(timeout=30_000)
     tools_pattern = re.compile(r"Tools|Инструменты", re.I)
     structured_pattern = re.compile(r"Structured|Структурирован", re.I)
     if mode == "tools":
         mode_pattern = tools_pattern
         ready_probe = editor.get_by_role(
-            "button", name=re.compile(r"From library|Из библиотеки", re.I)
+            "button",
+            name=re.compile(r"From library|Из библиотеки|Add skill|Добавить skill", re.I),
         ).first
     else:
         mode_pattern = structured_pattern
@@ -1639,6 +1671,7 @@ async def flows_drop_resource_type(
     x: int = 480,
     y: int = 520,
 ) -> None:
+    await flows_e2e_ensure_canvas_layout(page)
     canvas = page.locator("flows-flow-canvas").first
     await expect(canvas).to_be_visible(timeout=30_000)
     await canvas.evaluate(
@@ -1700,6 +1733,7 @@ async def flows_trigger_editor_select_type(page: Page, trigger_type: str) -> Non
     type_labels = {
         "telegram": re.compile(r"Telegram"),
         "cron": re.compile(r"Cron|Расписан"),
+        "webhook": re.compile(r"Webhook"),
     }
     label = type_labels.get(trigger_type)
     if label is None:
@@ -1965,3 +1999,310 @@ def flows_multi_orchestrator_payload(flow_id: str, *, name: str) -> dict[str, An
         "resources": {},
     }
 
+
+
+# --------------------------------------------------------------------------------------
+# Agent Skills, Focus Studio layout, Lara, chat settings (docs revision helpers).
+# --------------------------------------------------------------------------------------
+
+
+async def flows_e2e_seed_agent_skill(
+    origin: str,
+    auth_token: str,
+    *,
+    agent_skill_id: str,
+    name: str,
+    description: str,
+    body_markdown: str,
+    tool_refs: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """HTTP create Agent Skill for UI/E2E scenarios."""
+    payload: dict[str, Any] = {
+        "agent_skill_id": agent_skill_id,
+        "name": name,
+        "description": description,
+        "body_markdown": body_markdown,
+        "tool_refs": tool_refs or [],
+        "depends_on": [],
+        "references": [],
+        "assets": [],
+    }
+    async with _flows_client(origin, auth_token) as client:
+        delete = await client.delete(f"/flows/api/v1/agent-skills/{agent_skill_id}")
+        if delete.status_code not in (200, 204, 404):
+            delete.raise_for_status()
+        response = await client.post("/flows/api/v1/agent-skills", json=payload)
+        if response.status_code not in (200, 201):
+            raise AssertionError(
+                f"create agent skill failed: {response.status_code} {response.text}"
+            )
+        body = response.json()
+        if not isinstance(body, dict):
+            raise AssertionError(f"agent skill response must be object, got {type(body)}")
+        return body
+
+
+async def flows_e2e_set_skill_body(page: Page, body_markdown: str) -> None:
+    editor = page.locator("flows-agent-skill-editor").first
+    await expect(editor).to_be_visible(timeout=30_000)
+    code_editor = editor.locator("flows-code-editor").first
+    await expect(code_editor).to_be_visible(timeout=15_000)
+    await code_editor.evaluate(
+        """
+        (el, value) => {
+            if (el._editorView) {
+                el._editorView.dispatch({
+                    changes: {
+                        from: 0,
+                        to: el._editorView.state.doc.length,
+                        insert: value,
+                    },
+                });
+            }
+            el.value = value;
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+            el.dispatchEvent(new CustomEvent('change', {
+                detail: { value },
+                bubbles: true,
+                composed: true,
+            }));
+        }
+        """,
+        body_markdown,
+    )
+
+
+async def flows_e2e_save_skill_editor(page: Page) -> None:
+    editor = page.locator("flows-agent-skill-editor").first
+    await flows_click_platform_button(editor, "Сохранить", "Save")
+
+
+async def flows_e2e_open_skill_library(page: Page, flows_ui: AppUI) -> None:
+    await page.goto(f"{flows_ui.origin}/flows/skills", wait_until="domcontentloaded")
+    await expect(page.locator("flows-agent-skills-page")).to_be_visible(timeout=30_000)
+
+
+async def flows_e2e_set_llm_output_mode(
+    page: Page,
+    mode: Literal["tools", "structured"],
+) -> None:
+    await flows_click_llm_output_mode(page, mode)
+
+
+async def flows_e2e_switch_editor_layout(
+    page: Page,
+    layout: Literal["agent", "canvas"],
+) -> None:
+    """Переключает Agent Focus Studio <-> канва."""
+    canvas = page.locator("flows-flow-canvas").first
+    canvas_host = page.locator("flows-flow-canvas svg.canvas-host").first
+    if layout == "canvas":
+        if await canvas_host.count() > 0 and await canvas_host.is_visible():
+            return
+        toggle = page.get_by_role(
+            "button",
+            name=re.compile(r"Switch to graph canvas editor|Переключ.*схем|канв", re.I),
+        ).first
+        await expect(toggle).to_be_visible(timeout=15_000)
+        await toggle.click(force=True)
+        await expect(canvas_host).to_be_visible(timeout=30_000)
+        return
+    await flows_close_floating_panel(page)
+    if await canvas.count() > 0 and await canvas_host.is_visible():
+        float_toggle = page.get_by_role(
+            "button",
+            name=re.compile(r"Switch to agent|студи|Studio|Agent focus", re.I),
+        ).first
+        if await float_toggle.count() == 0:
+            float_toggle = page.locator("platform-button.layout-toggle-float").first
+            await expect(float_toggle).to_be_visible(timeout=15_000)
+            await float_toggle.locator("button").first.click(force=True)
+        else:
+            await float_toggle.click(force=True)
+    await expect(
+        page.get_by_role("group", name=re.compile(r"Agent editor sections", re.I))
+    ).to_be_visible(timeout=30_000)
+
+
+async def flows_e2e_ensure_canvas_layout(page: Page) -> None:
+    """Гарантирует канву для helpers, которые кликают g.node / floating panel."""
+    canvas_host = page.locator("flows-flow-canvas svg.canvas-host").first
+    if await canvas_host.count() > 0 and await canvas_host.is_visible():
+        return
+    await flows_e2e_switch_editor_layout(page, "canvas")
+    if await canvas_host.is_visible():
+        return
+    # Fallback: preference + reload editor route (Studio host может оставаться в DOM).
+    flow_id_raw = await page.evaluate(
+        """
+        () => {
+            const m = location.pathname.match(/\\/flows\\/([^/]+)\\/editor/);
+            return m ? m[1] : '';
+        }
+        """
+    )
+    if not isinstance(flow_id_raw, str) or not flow_id_raw:
+        raise AssertionError("flows_e2e_ensure_canvas_layout: cannot parse flow_id from URL")
+    flow_id = flow_id_raw
+    _ = await page.evaluate(
+        """
+        (flowId) => {
+            const segment = flowId
+                .toLowerCase()
+                .replace(/[^a-z0-9_]+/g, '_')
+                .replace(/^_+|_+$/g, '')
+                .replace(/_+/g, '_');
+            const key = `platform:flows:editor_layout.${segment}`;
+            localStorage.setItem(key, 'canvas');
+        }
+        """,
+        flow_id,
+    )
+    _ = await page.reload(wait_until="domcontentloaded")
+    await expect(page.locator("flows-editor-header")).to_be_visible(timeout=30_000)
+    await expect(canvas_host).to_be_visible(timeout=30_000)
+
+
+async def flows_e2e_attach_skill_to_llm_node(page: Page, skill_query: str) -> None:
+    editor = page.locator(
+        "flows-floating-panel flows-llm-node-editor, "
+        "flows-property-panel flows-llm-node-editor, "
+        "flows-agent-focus-studio flows-llm-node-editor"
+    ).first
+    await expect(editor).to_be_visible(timeout=30_000)
+    await flows_click_platform_button(editor, "Добавить skill", "Add skill")
+    picker = page.locator("flows-agent-skill-picker-modal").first
+    await expect(picker).to_be_visible(timeout=30_000)
+    search = picker.locator("platform-modal-search-field").first
+    if await search.count() > 0:
+        await search.evaluate(
+            """
+            (el, value) => {
+                el.value = value;
+                if (typeof el.requestUpdate === 'function') el.requestUpdate();
+                el.dispatchEvent(new CustomEvent('change', {
+                    detail: { value },
+                    bubbles: true,
+                    composed: true,
+                }));
+            }
+            """,
+            skill_query,
+        )
+    card = picker.locator("platform-picker-card").filter(
+        has_text=re.compile(re.escape(skill_query), re.I)
+    ).first
+    await expect(card).to_be_visible(timeout=30_000)
+    await card.click(force=True)
+    confirm = picker.locator("platform-button").filter(
+        has_text=re.compile(r"^\s*(?:Добавить|Add)(?:\s*\(\d+\))?\s*$", re.I)
+    ).first
+    await expect(confirm).to_be_visible(timeout=30_000)
+    await confirm.locator("button").first.click(no_wait_after=True)
+    await expect(picker).to_be_hidden(timeout=30_000)
+
+
+async def flows_e2e_expect_skill_load_chip(page: Page, skill_name: str) -> Locator:
+    chat = page.locator("chat-page platform-chat, platform-chat").first
+    chip = chat.get_by_role(
+        "group",
+        name=re.compile(
+            rf"(?:Activated skills|Активированн\w* Skill)[s]?:.*{re.escape(skill_name)}",
+            re.I,
+        ),
+    ).first
+    if await chip.count() == 0:
+        chip = chat.get_by_text(
+            re.compile(rf"Skill\s*[«\"]?{re.escape(skill_name)}", re.I)
+        ).first
+    await expect(chip).to_be_visible(timeout=120_000)
+    return chip
+
+
+async def flows_e2e_open_lara_chat(page: Page, flows_ui: AppUI) -> None:
+    """Открывает drawer Lara из шапки чата (toggle flows-lara-open)."""
+    await page.goto(f"{flows_ui.origin}/flows/chat", wait_until="domcontentloaded")
+    await expect(page.locator("flows-app")).to_be_visible(timeout=30_000)
+    lara_btn = page.locator("chat-page platform-button, flows-app platform-button").filter(
+        has=page.locator('platform-icon[name="ai"]')
+    ).first
+    await expect(lara_btn).to_be_visible(timeout=30_000)
+    await lara_btn.locator("button").first.click()
+    chat = page.locator('platform-chat[flow-id="lara"]').first
+    await expect(chat).to_be_attached(timeout=30_000)
+    await chat.evaluate(
+        """
+        (el) => {
+            el.open = true;
+            el.setAttribute('open', '');
+            el.removeAttribute('hidden');
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+        }
+        """
+    )
+    await expect(chat).to_have_attribute("open", "", timeout=15_000)
+    await expect(chat.locator("flows-chat-input textarea")).to_be_visible(timeout=30_000)
+
+
+async def flows_e2e_open_chat_settings(page: Page) -> Locator:
+    """Открывает настройки агента и возвращает блок chat settings."""
+    modal = await flows_open_flow_edit_modal(page)
+    settings = modal.locator("platform-chat-settings-fields").first
+    await expect(settings).to_be_visible(timeout=30_000)
+    return settings
+
+
+async def flows_e2e_set_show_skill_loads(page: Page, *, enabled: bool) -> None:
+    settings = await flows_e2e_open_chat_settings(page)
+    field = settings.locator('platform-field[data-chat-field="show_skill_loads"]').first
+    await expect(field).to_be_visible(timeout=15_000)
+    await field.evaluate(
+        """
+        (el, enabled) => {
+            el.value = enabled;
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+            el.dispatchEvent(new CustomEvent('change', {
+                detail: { value: enabled },
+                bubbles: true,
+                composed: true,
+            }));
+        }
+        """,
+        enabled,
+    )
+
+
+async def flows_pick_library_card_by_text(page: Page, text: str) -> None:
+    picker = page.locator("flows-library-picker-modal").first
+    await expect(picker).to_be_visible(timeout=30_000)
+    search = picker.locator("platform-modal-search-field").first
+    if await search.count() > 0:
+        await search.evaluate(
+            """
+            (el, value) => {
+                el.value = value;
+                if (typeof el.requestUpdate === 'function') el.requestUpdate();
+                el.dispatchEvent(new CustomEvent('change', {
+                    detail: { value },
+                    bubbles: true,
+                    composed: true,
+                }));
+            }
+            """,
+            text,
+        )
+    card = picker.locator("platform-picker-card").filter(
+        has_text=re.compile(re.escape(text), re.I)
+    ).first
+    await expect(card).to_be_visible(timeout=30_000)
+    card_button = card.locator("article.picker-card").first
+    await card_button.click(force=True)
+    await expect(picker).to_be_hidden(timeout=30_000)
+
+
+async def flows_llm_add_named_tool_from_library(page: Page, tool_name: str) -> None:
+    panel = page.locator("flows-floating-panel[show-backdrop]").first
+    llm_editor = panel.locator("flows-llm-node-editor").first
+    await expect(llm_editor).to_be_visible(timeout=30_000)
+    await flows_click_platform_button(llm_editor, "Из библиотеки", "From library")
+    await flows_pick_library_card_by_text(page, tool_name)

@@ -9,6 +9,7 @@ from core.llm_context import (
     LLMContextProfile,
     LLMContextRetrievalPolicy,
     SimpleTokenCounter,
+    build_llm_context_memory_episode,
     close_llm_context_memory_window,
     compact_llm_context_memory_episode,
     llm_context_memory_cursor_key,
@@ -145,6 +146,34 @@ async def test_compaction_respects_disabled_policy_and_empty_content() -> None:
         token_counter=SimpleTokenCounter(),
     ) == 1
     assert store.episodes == []
+
+
+def test_build_memory_episode_returns_none_when_compaction_or_memory_is_off() -> None:
+    messages = [
+        {"role": "user", "content": "old message one two three"},
+        {"role": "assistant", "content": "old response four five"},
+        {"role": "user", "content": "current"},
+    ]
+
+    memory_off_episode, memory_off_cursor = build_llm_context_memory_episode(
+        messages=messages,
+        policy=_policy(memory="off", active_window_tokens=2),
+        cursor=0,
+        session_id="flow:ctx",
+        token_counter=SimpleTokenCounter(),
+    )
+    compaction_off_episode, compaction_off_cursor = build_llm_context_memory_episode(
+        messages=messages,
+        policy=_policy(compaction="off", active_window_tokens=2),
+        cursor=0,
+        session_id="flow:ctx",
+        token_counter=SimpleTokenCounter(),
+    )
+
+    assert memory_off_episode is None
+    assert memory_off_cursor == 0
+    assert compaction_off_episode is None
+    assert compaction_off_cursor == 0
 
 
 @pytest.mark.asyncio

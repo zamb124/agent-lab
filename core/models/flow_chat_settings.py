@@ -39,6 +39,10 @@ class FlowChatSettings(StrictBaseModel):
         default=True,
         description="Показывать строку активности агента (текущая нода/инструмент)",
     )
+    show_skill_loads: bool = Field(
+        default=True,
+        description="Показывать в чате события активации Agent Skill (load_agent_skill)",
+    )
     errors_display: ChatErrorsDisplay = Field(
         default="generic",
         description="Ошибки выполнения: generic (обезличенный текст) или detailed (текст ошибки)",
@@ -93,6 +97,10 @@ class EmbedChatPolicyOverride(StrictBaseModel):
     show_activity: bool | None = Field(
         default=None,
         description="Переопределить строку активности; None — наследовать",
+    )
+    show_skill_loads: bool | None = Field(
+        default=None,
+        description="Переопределить показ активации Agent Skills; None — наследовать",
     )
     errors_display: ChatErrorsDisplay | None = Field(
         default=None,

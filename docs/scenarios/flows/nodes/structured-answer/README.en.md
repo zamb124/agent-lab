@@ -8,13 +8,13 @@
 
 ## Step 1. Open agent settings
 
-In the node editor find the Output mode block. It decides whether the reply is plain text or strict JSON.
+In the node editor find the Output mode block. It decides whether the reply is plain text with tools or strict JSON.
 
 ![Open agent settings](structured-answer--01-structured-editor-opened.png)
 
 ## Step 2. Enable structured output
 
-Switch the mode to Structured. A JSON schema editor appears where you define the fields the agent must return.
+Switch the mode to Structured. A JSON schema editor appears. The Skills section is hidden in this mode — procedures and meta-tools work only in Tools mode.
 
 ![Enable structured output](structured-answer--02-structured-mode-enabled.png)
 
@@ -26,8 +26,8 @@ Review the output schema and extend the instruction with the fields the store ne
 
 ## Step 4. Publish and verify the setting
 
-**Result demonstration.** After publishing, structured output mode and the JSON schema are saved on the agent and visible when you reopen the node.
+**Result demonstration.** After publishing, structured mode and the JSON schema are saved on the agent and visible when you reopen the node.
 
-**Summary.** You can enable structured output and define a response schema for automatic order data processing.
+**Summary.** You can enable structured replies and define a response schema for automatic order data processing.
 
 ![Publish and verify the setting](structured-answer--04-structured-output-published.png)

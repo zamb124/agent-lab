@@ -1,4 +1,4 @@
-"""Idempotent seed Agent Skills for platform_assistant (real platform builtins)."""
+"""Idempotent seed Agent Skills for Lara / platform assistant (real platform builtins)."""
 
 from __future__ import annotations
 
@@ -22,15 +22,17 @@ _SEED_ROOT = (
     Path(__file__).resolve().parent.parent.parent / "bundles" / "_seed" / "agent_skills"
 )
 
-# Attached on platform_assistant main llm_node (docx-templates via depends_on only).
-PLATFORM_ASSISTANT_ATTACHED_SKILL_IDS: tuple[str, ...] = (
-    "document-workspace",
-    "diagrams-viz",
-    "knowledge-rag",
-    "web-research",
-    "crm-notes",
-    "work-tracking",
+# Tier-1 attach on every Lara entry (and platform_assistant after cutover).
+LARA_PLATFORM_SKILL_ROOTS: tuple[str, ...] = (
+    "networkle",
+    "flows-platform",
+    "flows-code",
+    "docs-knowledge",
+    "platform-workspace",
 )
+
+# Alias kept for older tests/imports that still reference the previous name.
+PLATFORM_ASSISTANT_ATTACHED_SKILL_IDS: tuple[str, ...] = LARA_PLATFORM_SKILL_ROOTS
 
 # Seed order: depends_on targets before parents that list them.
 _SEED_SKILL_DIRS: tuple[str, ...] = (
@@ -40,7 +42,17 @@ _SEED_SKILL_DIRS: tuple[str, ...] = (
     "knowledge-rag",
     "web-research",
     "crm-notes",
+    "crm-entities",
     "work-tracking",
+    "flows-editor",
+    "flows-node-edit",
+    "code-node",
+    "llm-node-config",
+    "flows-code",
+    "flows-platform",
+    "docs-knowledge",
+    "networkle",
+    "platform-workspace",
 )
 
 
@@ -49,7 +61,7 @@ async def seed_platform_assistant_skills(
     files_service: FilesService,
     company_id: str,
 ) -> int:
-    """Upsert platform_assistant AgentSkills. Returns number of skills processed."""
+    """Upsert platform/Lara AgentSkills. Returns number of skills processed."""
     if not _SEED_ROOT.is_dir():
         raise FileNotFoundError(f"Agent skills seed root missing: {_SEED_ROOT}")
 
@@ -83,7 +95,6 @@ async def seed_platform_assistant_skills(
                     depends_on=parsed.depends_on,
                     references=references,
                     assets=[],
-                    activation=parsed.activation,
                 )
             )
         else:
@@ -97,7 +108,6 @@ async def seed_platform_assistant_skills(
                     depends_on=parsed.depends_on,
                     references=references,
                     assets=[],
-                    activation=parsed.activation,
                 ),
             )
         seeded += 1
@@ -169,6 +179,7 @@ async def _resolve_reference_files(
 
 
 __all__ = [
+    "LARA_PLATFORM_SKILL_ROOTS",
     "PLATFORM_ASSISTANT_ATTACHED_SKILL_IDS",
     "ensure_platform_assistant_skills_for_company",
     "seed_platform_assistant_skills",

@@ -589,6 +589,35 @@
         "title": "AccessRequestUpdate",
         "description": "Обновление статуса запроса"
       },
+      "ActAsResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "impersonated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impersonated By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "company_id"
+        ],
+        "title": "ActAsResponse"
+      },
       "AuthorizeResponse": {
         "properties": {
           "authorize_url": {
@@ -6634,6 +6663,29 @@
               }
             ],
             "title": "Avatar Url"
+          },
+          "is_flow_employee": {
+            "type": "boolean",
+            "title": "Is Flow Employee",
+            "default": false
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "curator_user_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Curator User Ids"
           }
         },
         "type": "object",

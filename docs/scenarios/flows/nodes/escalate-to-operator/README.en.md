@@ -20,8 +20,14 @@ Open the operator handoff node. Set the Customer Support queue (demo queue examp
 
 ## Step 3. Run test chat until handoff
 
-**Result demonstration.** Send a chat message that triggers operator handoff. A waiting banner and task badge appear, which means the dialog is paused until a reply from the Customer Support queue.
+Send a chat message that triggers operator handoff. A waiting banner appears — the dialog is paused until a reply from the Customer Support queue.
+
+![Run test chat until handoff](escalate-to-operator--03-hitl-chat-waiting.png)
+
+## Step 4. Check the task badge in chat
+
+**Result demonstration.** A task badge appears next to the waiting banner — the request reached the queue and waits for an operator.
 
 **Summary.** You can now configure the operator handoff node and see how the customer waits for a live specialist.
 
-![Run test chat until handoff](escalate-to-operator--03-hitl-chat-waiting.png)
+![Check the task badge in chat](escalate-to-operator--04-hitl-task-badge-visible.png)

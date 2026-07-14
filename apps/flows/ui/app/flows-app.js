@@ -66,6 +66,7 @@ import { codeCompletionsOp, codeDocumentationOp, codeTemplatesOp,
          codeExecuteOp } from '../events/resources/code.resource.js';
 import { promptRenderOp } from '../events/resources/prompts.resource.js';
 import { dataflowInspectOp } from '../events/resources/dataflow.resource.js';
+import { llmContextResolveParentOp } from '../events/resources/llm-context.resource.js';
 import { integrationsListOp, integrationsRemoveOp } from '../events/resources/integrations.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { apiConsoleRunOp } from '../events/resources/api-console.resource.js';
@@ -235,6 +236,7 @@ export class FlowsApp extends PlatformApp {
         codeValidateOp,
         codeExecuteOp,
         dataflowInspectOp,
+        llmContextResolveParentOp,
         promptRenderOp,
         integrationsListOp,
         integrationsRemoveOp,

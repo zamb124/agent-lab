@@ -18,6 +18,7 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_background_task_payload,
     flows_chat_send_message,
     flows_doc_flow_id,
+    flows_e2e_ensure_canvas_layout,
     flows_open_chat_page,
     flows_open_durable_history_modal,
     flows_open_editor,
@@ -130,22 +131,40 @@ async def test_flows_escalate_to_operator(
 
     _ = await hitl_open_react_branch_chat(page, flows_ui, branch_id=HITL_BRANCH_NODE)
     await hitl_trigger_deterministic(page, "Нужен оператор по доставке в Воронеж")
+    banner = page.locator("chat-page .input-required-banner").first
+    await expect(banner).to_be_visible(timeout=30_000)
     await scenario.step(
         "Запустите тестовый чат и доведите до передачи",
         page,
         screenshot_name="hitl-chat-waiting",
         label_en="Run test chat until handoff",
         details=(
-            "**Демонстрация результата.** Отправьте в чате сообщение, которое запускает "
-            "передачу оператору. Появится плашка ожидания и карточка задачи — значит "
-            "диалог поставлен на паузу до ответа из очереди «Поддержка клиентов».\n\n"
+            "Отправьте в чате сообщение, которое запускает передачу оператору. "
+            "Появится плашка ожидания — диалог поставлен на паузу до ответа из очереди "
+            "«Поддержка клиентов»."
+        ),
+        details_en=(
+            "Send a chat message that triggers operator handoff. A waiting banner appears — "
+            "the dialog is paused until a reply from the Customer Support queue."
+        ),
+    )
+
+    task_badge = page.locator("chat-page platform-work-item-badge[work-item-id]").first
+    await expect(task_badge).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Проверьте карточку задачи в чате",
+        page,
+        screenshot_name="hitl-task-badge-visible",
+        label_en="Check the task badge in chat",
+        details=(
+            "**Демонстрация результата.** Рядом с плашкой ожидания видна карточка задачи — "
+            "значит, обращение попало в очередь и ждёт оператора.\n\n"
             "**Итог.** Теперь вы умеете настроить ноду передачи оператору и увидеть, как "
             "покупатель ждёт ответа живого специалиста."
         ),
         details_en=(
-            "**Result demonstration.** Send a chat message that triggers operator handoff. "
-            "A waiting banner and task badge appear, which means the dialog is paused until "
-            "a reply from the Customer Support queue.\n\n"
+            "**Result demonstration.** A task badge appears next to the waiting banner — "
+            "the request reached the queue and waits for an operator.\n\n"
             "**Summary.** You can now configure the operator handoff node and see how the "
             "customer waits for a live specialist."
         ),
@@ -205,29 +224,60 @@ async def test_flows_agent_decides_to_escalate(
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, EXAMPLE_REACT_ID, branch_id=HITL_BRANCH_REACT)
+    await flows_e2e_ensure_canvas_layout(page)
     react_node = page.locator(
         f"flows-flow-canvas g.node[data-node-id='{HITL_REACT_NODE}']"
     ).first
     await expect(react_node).to_be_visible(timeout=30_000)
-    _ = await flows_open_node_editor(page, HITL_REACT_NODE)
     await scenario.step(
-        "Откройте агента с инструментом передачи",
+        "Откройте ветку агента с инструментами",
         page,
-        screenshot_name="hitl-tool-node-opened",
-        label_en="Open the agent with the handoff tool",
+        screenshot_name="hitl-tools-branch-opened",
+        label_en="Open the agent branch with tools",
         details=(
-            "В ветке ReAct откройте ноду агента. В списке инструментов есть «передать "
-            "оператору» — агент вызывает его сам, когда вопрос слишком сложный. В "
-            "инструкции опишите, при каких случаях звать человека (возврат, спор, жалоба)."
+            "Откройте ветку, где агент работает в режиме «Инструменты». На канве видна "
+            "нода ответа с подключёнными операциями."
         ),
         details_en=(
-            "In the ReAct branch, open the agent node. The tool list includes hand-off to "
-            "operator; the agent calls it when the question is too complex. In the "
-            "instruction, describe when to call a human (return, dispute, complaint)."
+            "Open the branch where the agent runs in Tools mode. The canvas shows the "
+            "answer node with attached operations."
+        ),
+    )
+
+    _ = await flows_open_node_editor(page, HITL_REACT_NODE)
+    await scenario.step(
+        "Проверьте инструмент передачи оператору",
+        page,
+        screenshot_name="hitl-tool-node-opened",
+        label_en="Check the handoff-to-operator tool",
+        details=(
+            "Откройте ноду агента. В списке инструментов есть «передать оператору» — "
+            "агент вызывает его сам, когда вопрос слишком сложный. В инструкции опишите, "
+            "при каких случаях звать человека (возврат, спор, жалоба)."
+        ),
+        details_en=(
+            "Open the agent node. The tool list includes hand-off to operator; the agent "
+            "calls it when the question is too complex. In the instruction, describe when "
+            "to call a human (return, dispute, complaint)."
         ),
     )
 
     _ = await hitl_open_react_branch_chat(page, flows_ui, branch_id=HITL_BRANCH_REACT)
+    await scenario.step(
+        "Откройте тестовый чат этой ветки",
+        page,
+        screenshot_name="hitl-branch-chat-opened",
+        label_en="Open this branch test chat",
+        details=(
+            "Откройте чат выбранной ветки. Так вы проверяете поведение именно этой "
+            "конфигурации агента, а не другой экспериментальной ветки."
+        ),
+        details_en=(
+            "Open the selected branch chat. This tests this agent configuration, not "
+            "another experimental branch."
+        ),
+    )
+
     await hitl_trigger_deterministic(page, GREEN_GARDEN_HITL_MESSAGE)
     await scenario.step(
         "Задайте сложный вопрос в чате",
@@ -322,6 +372,24 @@ async def test_flows_customer_waits_for_operator(
         details_en=(
             "Send a complex question. A waiting banner and task badge appear; the chat did "
             "not freeze but waits for a reply from the Customer Support queue."
+        ),
+    )
+
+    await expect(page.get_by_text(re.compile(r"оператор|operator|ожидан|waiting", re.I)).first).to_be_visible(
+        timeout=30_000
+    )
+    await scenario.step(
+        "Проверьте текст ожидания для покупателя",
+        page,
+        screenshot_name="waiting-message-visible",
+        label_en="Check the waiting message for the customer",
+        details=(
+            "Убедитесь, что в чате виден понятный текст ожидания — покупатель понимает, "
+            "что запрос передан живому специалисту и ответ придёт в эту же ленту."
+        ),
+        details_en=(
+            "Make sure the chat shows a clear waiting message — the customer understands "
+            "the request was passed to a live specialist and the reply will appear here."
         ),
     )
 
@@ -471,23 +539,40 @@ async def test_flows_agent_logs_background_task(
     if not matched:
         raise AssertionError(f"Background task {task_title!r} not found in worktracker")
     background_work_item_id = str(matched[0]["work_item_id"])
+    await worktracker_open_inbox(page, worktracker_ui)
+    await expect(page.get_by_text(task_title, exact=False).first).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте входящие задач команды",
+        page,
+        screenshot_name="background-task-in-inbox-list",
+        label_en="Open the team task inbox",
+        details=(
+            "Перейдите во входящие раздела задач. В списке должно появиться новое поручение "
+            "«Перезвонить по доставке» — агент создал его, не прерывая чат с покупателем."
+        ),
+        details_en=(
+            "Open inbox in the tasks section. The new callback assignment should appear — "
+            "the agent created it without stopping the customer chat."
+        ),
+    )
+
     await worktracker_open_task_page(page, worktracker_ui, background_work_item_id)
     await scenario.step(
-        "Найдите фоновую задачу в разделе задач",
+        "Откройте карточку фоновой задачи",
         page,
         screenshot_name="background-task-in-inbox",
-        label_en="Find the background task in tasks",
+        label_en="Open the background task card",
         details=(
-            "**Демонстрация результата.** Откройте входящие в разделе задач — там лежит "
-            "новое поручение «Перезвонить по доставке» для очереди «Поддержка клиентов», "
-            "хотя чат агента уже продолжил отвечать покупателю.\n\n"
+            "**Демонстрация результата.** Карточка задачи открыта — видны заголовок, очередь "
+            "«Поддержка клиентов» и описание перезвона, хотя чат агента уже продолжил "
+            "отвечать покупателю.\n\n"
             "**Итог.** Теперь вы отличаете фоновую задачу от паузы HITL: покупатель не "
             "ждёт, а команда получает поручение в очередь."
         ),
         details_en=(
-            "**Result demonstration.** Open inbox in tasks; the new callback task for the "
-            "Customer Support queue is there even though the agent chat already continued "
-            "with the customer.\n\n"
+            "**Result demonstration.** The task card is open — title, Customer Support queue, "
+            "and callback description are visible even though the agent chat already "
+            "continued with the customer.\n\n"
             "**Summary.** You can now tell a background task from an HITL pause: the "
             "customer does not wait, and the team gets the assignment in the queue."
         ),
@@ -583,16 +668,35 @@ async def test_flows_trace_operator_handoff(
         screenshot_name="handoff-resumed-event",
         label_en="Find the resume event after the reply",
         details=(
-            "**Демонстрация результата.** Событие HandoffResumed показывает, что оператор "
-            "ответил и агент продолжил диалог. Вместе с HandoffRequested это полная "
-            "картина передачи человеку.\n\n"
+            "Прокрутите список до HandoffResumed — это момент, когда оператор ответил "
+            "и управление вернулось агенту."
+        ),
+        details_en=(
+            "Scroll the list to HandoffResumed — that is when the operator replied "
+            "and control returned to the agent."
+        ),
+    )
+
+    await expect(modal.get_by_text("HandoffRequested", exact=True).first).to_be_visible(
+        timeout=15_000
+    )
+    await expect(modal.get_by_text("HandoffResumed", exact=True).first).to_be_visible(
+        timeout=15_000
+    )
+    await scenario.step(
+        "Сверьте цепочку передачи и возврата",
+        page,
+        screenshot_name="handoff-chain-visible",
+        label_en="Review the handoff and resume chain",
+        details=(
+            "**Демонстрация результата.** В одном списке видны HandoffRequested и "
+            "HandoffResumed — полная картина передачи человеку и возобновления диалога.\n\n"
             "**Итог.** Теперь вы умеете читать историю выполнения и находить передачу "
             "оператору и возврат диалога агенту."
         ),
         details_en=(
-            "**Result demonstration.** The HandoffResumed event shows the operator replied "
-            "and the agent continued the dialog. Together with HandoffRequested it is the "
-            "full picture of human handoff.\n\n"
+            "**Result demonstration.** HandoffRequested and HandoffResumed appear in one "
+            "list — the full picture of human handoff and dialog resume.\n\n"
             "**Summary.** You can now read run history and find operator handoff and "
             "dialog resume events."
         ),

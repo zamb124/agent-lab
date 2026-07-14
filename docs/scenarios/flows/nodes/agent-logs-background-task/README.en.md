@@ -18,10 +18,16 @@ Ask for a callback. The agent replies immediately, without a waiting banner, and
 
 ![Request a callback and get an instant reply](agent-logs-background-task--02-agent-replied-without-pause.png)
 
-## Step 3. Find the background task in tasks
+## Step 3. Open the team task inbox
 
-**Result demonstration.** Open inbox in tasks; the new callback task for the Customer Support queue is there even though the agent chat already continued with the customer.
+Open inbox in the tasks section. The new callback assignment should appear — the agent created it without stopping the customer chat.
+
+![Open the team task inbox](agent-logs-background-task--03-background-task-in-inbox-list.png)
+
+## Step 4. Open the background task card
+
+**Result demonstration.** The task card is open — title, Customer Support queue, and callback description are visible even though the agent chat already continued with the customer.
 
 **Summary.** You can now tell a background task from an HITL pause: the customer does not wait, and the team gets the assignment in the queue.
 
-![Find the background task in tasks](agent-logs-background-task--03-background-task-in-inbox.png)
+![Open the background task card](agent-logs-background-task--04-background-task-in-inbox.png)

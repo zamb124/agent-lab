@@ -12,7 +12,6 @@ from apps.flows.src.db.agent_skill_repository import AgentSkillRepository
 from apps.flows.src.db.tool_repository import ToolRepository
 from apps.flows.src.models.agent_skill import (
     AgentSkill,
-    AgentSkillActivation,
     AgentSkillIndexEntry,
 )
 from apps.flows.src.models.enums import CodeMode
@@ -46,7 +45,6 @@ class AgentSkillCreateInput(StrictBaseModel):
     depends_on: list[str] = []
     references: list[FileRef] = []
     assets: list[FileRef] = []
-    activation: AgentSkillActivation = "explicit"
 
 
 class AgentSkillUpdateInput(StrictBaseModel):
@@ -57,7 +55,6 @@ class AgentSkillUpdateInput(StrictBaseModel):
     depends_on: list[str] = []
     references: list[FileRef] = []
     assets: list[FileRef] = []
-    activation: AgentSkillActivation = "explicit"
 
 
 class AgentSkillService:
@@ -109,7 +106,6 @@ class AgentSkillService:
                 "depends_on": payload.depends_on,
                 "references": payload.references,
                 "assets": payload.assets,
-                "activation": payload.activation,
             }
         )
         skill = AgentSkill.model_validate(skill.model_dump(mode="python"))
@@ -202,7 +198,8 @@ def parse_skill_md(markdown: str, *, agent_skill_id: str | None = None) -> Agent
     name = _require_frontmatter_str(frontmatter, "name")
     description = _require_frontmatter_str(frontmatter, "description")
     resolved_id = (agent_skill_id or name).strip()
-    activation = _parse_activation(frontmatter.get("activation"))
+    # Obsolete frontmatter key `activation` is ignored (load is always via load_agent_skill).
+    _ = frontmatter.pop("activation", None)
     depends_on = _parse_string_list(frontmatter.get("depends_on"), field_name="depends_on")
     tool_refs = _parse_allowed_tools(frontmatter.get("allowed-tools"))
 
@@ -216,7 +213,6 @@ def parse_skill_md(markdown: str, *, agent_skill_id: str | None = None) -> Agent
             depends_on=depends_on,
             references=[],
             assets=[],
-            activation=activation,
         )
     except ValidationError as exc:
         raise ValueError(f"Invalid AgentSkill from SKILL.md: {exc}") from exc
@@ -227,19 +223,6 @@ def _require_frontmatter_str(frontmatter: JsonObject, key: str) -> str:
     if not isinstance(raw, str) or not raw.strip():
         raise ValueError(f"SKILL.md frontmatter.{key} is required non-empty string")
     return raw.strip()
-
-
-def _parse_activation(raw: JsonValue | None) -> AgentSkillActivation:
-    if raw is None:
-        return "explicit"
-    if not isinstance(raw, str):
-        raise ValueError("SKILL.md frontmatter.activation must be a string")
-    value = raw.strip()
-    if value == "auto":
-        return "auto"
-    if value == "explicit":
-        return "explicit"
-    raise ValueError("SKILL.md frontmatter.activation must be auto|explicit")
 
 
 def _parse_string_list(raw: JsonValue | None, *, field_name: str) -> list[str]:

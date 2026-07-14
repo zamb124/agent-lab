@@ -18,10 +18,16 @@ Keep Telegram as the channel and set the bot token (in this tutorial — «@zele
 
 ![Choose Telegram and set the bot](notify-in-telegram--02-telegram-channel-configured.png)
 
-## Step 3. Publish the Telegram channel
+## Step 3. Review channel settings before publishing
+
+Reopen the channel node and confirm Telegram is selected with the token via a variable — replies will route to the store bot.
+
+![Review channel settings before publishing](notify-in-telegram--03-telegram-channel-reviewed.png)
+
+## Step 4. Publish the Telegram channel
 
 **Result demonstration.** The Telegram channel node is saved in the graph — the agent can send replies to the store bot.
 
 **Summary.** You can add a channel node and configure Telegram message delivery.
 
-![Publish the Telegram channel](notify-in-telegram--03-telegram-channel-published.png)
+![Publish the Telegram channel](notify-in-telegram--04-telegram-channel-published.png)

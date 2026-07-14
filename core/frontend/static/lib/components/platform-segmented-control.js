@@ -155,9 +155,9 @@ export class PlatformSegmentedControl extends PlatformElement {
                 color: var(--text-primary);
             }
             .segment[data-active='true'] {
-                background: var(--glass-solid-strong);
+                background: var(--accent-subtle);
                 color: var(--accent);
-                box-shadow: var(--glass-shadow-subtle);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
             }
             .segment:disabled {
                 opacity: 0.45;

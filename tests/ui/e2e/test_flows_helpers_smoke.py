@@ -18,7 +18,6 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_doc_flow_id,
     flows_drop_node,
     flows_graph_payload,
-    flows_open_edge_condition_modal,
     flows_open_editor,
     flows_publish_editor,
     flows_save_edge_condition_modal,

@@ -308,6 +308,7 @@ def _find_slug_readme(repo_root: Path, service: str, slug: str) -> bool:
 
 
 def _check_learning_path_hrefs(repo_root: Path) -> list[str]:
+    """Публичный канон: scenarios/<service>/<slug>/ — без уровня tag из репозитория."""
     taxonomy = load_scenario_taxonomy(repo_root)
     errors: list[str] = []
     for path in taxonomy.learning_paths:
@@ -315,8 +316,11 @@ def _check_learning_path_hrefs(repo_root: Path) -> list[str]:
             href = step.href.rstrip("/")
             if href.startswith("scenarios/"):
                 parts = href.split("/")
-                if len(parts) < 3:
-                    errors.append(f"learning_paths.{path.path_id}: некорректный href {step.href!r}")
+                if len(parts) != 3 or not parts[1] or not parts[2]:
+                    errors.append(
+                        f"learning_paths.{path.path_id}: href {step.href!r} — "
+                        "ожидается scenarios/<service>/<slug>/ (без tag)"
+                    )
                     continue
                 service = parts[1]
                 slug = parts[2]

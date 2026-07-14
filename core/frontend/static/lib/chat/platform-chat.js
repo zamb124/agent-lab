@@ -3218,6 +3218,9 @@ export class PlatformChat extends LitElement {
         if (!vc.showActivity) {
             projected.activity = '';
         }
+        if (!vc.showSkillLoads) {
+            projected.skillLoads = [];
+        }
         if (vc.toolCallsDisplay === 'hidden') {
             projected.toolCalls = [];
             projected.toolResults = [];
@@ -3298,6 +3301,7 @@ export class PlatformChat extends LitElement {
                 .toolCalls=${Array.isArray(m.toolCalls) ? m.toolCalls : []}
                 .toolResults=${Array.isArray(m.toolResults) ? m.toolResults : []}
                 .browserPreviews=${Array.isArray(m.browserPreviews) ? m.browserPreviews : []}
+                .skillLoads=${Array.isArray(m.skillLoads) ? m.skillLoads : []}
                 .inputRequired=${m.inputRequired || null}
                 .handoff=${m.handoff || null}
                 .handback=${m.handback || null}

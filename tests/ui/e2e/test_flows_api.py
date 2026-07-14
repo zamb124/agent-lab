@@ -120,6 +120,24 @@ async def test_flows_api_first_request(
     )
 
     await flows_api_console_click_nav(modal, r"Запуск|Run")
+    await expect(modal.get_by_text(re.compile(r"Запуск|Run", re.I)).first).to_be_visible(
+        timeout=15_000
+    )
+    await scenario.step(
+        "Перейдите на вкладку «Запуск»",
+        page,
+        screenshot_name="api-run-tab-opened",
+        label_en="Switch to the Run tab",
+        details=(
+            "Откройте вкладку «Запуск». Здесь задаются текст сообщения, переменные и режим "
+            "вызова перед отправкой запроса к агенту."
+        ),
+        details_en=(
+            "Open the Run tab. Here you set the message text, variables, and call mode "
+            "before sending a request to the agent."
+        ),
+    )
+
     await flows_api_console_set_run_variables(
         modal,
         {
@@ -224,6 +242,9 @@ async def test_flows_api_sync_async(
         {"customer_name": "Anna", "extra": "sync-mode"},
     )
     await flows_api_console_run_and_wait(modal)
+    await expect(modal.get_by_text(re.compile(r"API_DOC_OK|completed|заверш", re.I)).first).to_be_visible(
+        timeout=120_000
+    )
     await scenario.step(
         "Проверьте синхронный режим",
         page,
@@ -234,6 +255,23 @@ async def test_flows_api_sync_async(
     )
 
     await flows_api_console_click_mode(modal, r"Async")
+    await expect(modal.get_by_text(re.compile(r"Async|Асинх", re.I)).first).to_be_visible(
+        timeout=15_000
+    )
+    await scenario.step(
+        "Переключитесь на асинхронный режим",
+        page,
+        screenshot_name="api-async-mode-selected",
+        label_en="Switch to async mode",
+        details=(
+            "Выберите режим Async. В этом режиме API сразу возвращает задачу, а итоговый "
+            "ответ можно получить отдельным опросом статуса."
+        ),
+        details_en=(
+            "Choose Async mode. The API returns a task immediately and you fetch the final "
+            "reply with a separate status poll."
+        ),
+    )
     await flows_api_console_run_and_wait(modal)
     polls_tab = modal.locator(".response-tabs button").filter(
         has_text=re.compile(r"Async опросы|Async polls")
@@ -349,6 +387,21 @@ async def test_flows_share_demo_link(
         """,
         5,
     )
+    await scenario.step(
+        "Задайте лимит сообщений для гостя",
+        page,
+        screenshot_name="share-guest-limit-set",
+        label_en="Set the guest message limit",
+        details=(
+            "Укажите, сколько сообщений может отправить гость по ссылке — например 5. "
+            "Так вы ограничиваете демо-чат без выдачи полного доступа к аккаунту."
+        ),
+        details_en=(
+            "Set how many messages a guest may send via the link — for example 5. "
+            "This limits the demo chat without granting full account access."
+        ),
+    )
+
     await flows_click_platform_button(modal, "Create link", "Создать ссылку")
     share_url = modal.get_by_text(re.compile(r"https?://")).first
     await expect(share_url).to_be_visible(timeout=60_000)

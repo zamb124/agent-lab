@@ -130,6 +130,21 @@ async def test_flows_compose_orchestrator(
     await flows_llm_add_tool_from_library(page)
     tool_chip = page.locator("flows-llm-node-editor .chip").first
     await expect(tool_chip).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Подключите под-агента в списке tools",
+        page,
+        screenshot_name="orchestrator-tool-attached",
+        label_en="Attach the sub-agent in the tools list",
+        details=(
+            "Добавьте из библиотеки агента возвратов. В списке tools появится чип с его "
+            "именем — оркестратор сможет делегировать ему соответствующие вопросы."
+        ),
+        details_en=(
+            "Add the returns agent from the library. A chip with its name appears in the "
+            "tools list — the orchestrator can delegate matching questions to it."
+        ),
+    )
+
     await flows_publish_editor(page)
     persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, orchestrator_id)
     tools = persisted["nodes"]["orchestrator"].get("tools") or []
@@ -240,6 +255,29 @@ async def test_flows_add_answer_review(
     assert reflection_node_id in branch_ids, (
         f"reflection node missing from editor draft before publish: {branch_ids!r}"
     )
+    agent_node = page.locator(
+        "flows-flow-canvas g.node[data-node-id='agent']"
+    ).first
+    reflection_node = page.locator(
+        f"flows-flow-canvas g.node[data-node-id='{reflection_node_id}']"
+    ).first
+    await expect(agent_node).to_be_visible(timeout=15_000)
+    await expect(reflection_node).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Проверьте связь нод на канве",
+        page,
+        screenshot_name="reflection-wired-on-canvas",
+        label_en="Verify the node wiring on the canvas",
+        details=(
+            "На канве видны и агент, и нода проверки, соединённые стрелкой. Ответ "
+            "сначала проходит через reflection, и только потом уходит покупателю."
+        ),
+        details_en=(
+            "The canvas shows both the agent and review node connected by an edge. "
+            "The reply passes through reflection before reaching the customer."
+        ),
+    )
+
     await flows_publish_editor(page)
     persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
     nodes = persisted.get("nodes") or {}
@@ -362,6 +400,25 @@ async def test_flows_agent_handoff(
         details_en=(
             "In the call type block choose Handoff (ownership transfer). In this mode "
             "the sub-agent receives the full dialog, not a single request."
+        ),
+    )
+
+    handoff_prompt = page.locator("flows-llm-node-editor").get_by_text(
+        re.compile(r"возврат|return|handoff", re.I)
+    ).first
+    await expect(handoff_prompt).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Добавьте правило передачи в инструкцию",
+        page,
+        screenshot_name="handoff-prompt-rule-set",
+        label_en="Add a handoff rule to the instruction",
+        details=(
+            "В инструкции агента опишите, когда передавать диалог агенту возвратов — "
+            "например, при любом вопросе о возврате товара."
+        ),
+        details_en=(
+            "In the agent instruction describe when to hand off to the returns agent — "
+            "for example on any product return question."
         ),
     )
 

@@ -26,8 +26,8 @@ Enter an identifier, the name Green Garden Assistant, and a short description. T
 
 ## Step 4. Check the new agent in the editor
 
-**Result demonstration.** After creation you land in the editor and the canvas already has a starter answer node, which means the agent is created and ready to configure.
+**Result demonstration.** After creation you land in the editor: a single-LLM template usually opens Studio (prompt, model, Skills and tools on one screen). Switching to the canvas graph is covered in the two editor modes guide.
 
-**Summary.** You can now create an agent from a template and know which fields to fill in.
+**Summary.** You can create an agent from a template and recognize which editor opened.
 
 ![Check the new agent in the editor](create-first-agent--04-new-agent-in-editor.png)

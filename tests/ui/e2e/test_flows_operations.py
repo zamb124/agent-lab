@@ -13,17 +13,22 @@ from tests.ui.e2e.flows_e2e_helpers import (
     GREEN_GARDEN_BRANCH,
     flows_api_create_flow,
     flows_api_get_flow,
+    flows_chat_send_message,
     flows_click_platform_button,
     flows_create_branch,
     flows_doc_flow_id,
+    flows_e2e_expect_skill_load_chip,
+    flows_e2e_seed_agent_skill,
+    flows_e2e_set_show_skill_loads,
     flows_llm_payload,
+    flows_open_chat_page,
     flows_open_editor,
-    flows_open_flow_edit_modal,
     flows_open_flow_property_panel,
     flows_open_node_editor,
     flows_open_raw_json_modal,
     flows_open_sessions_modal,
     flows_publish_editor,
+    flows_seed_mock_llm,
     flows_select_branch_tab,
     flows_set_platform_field,
     flows_set_selected_llm_prompt,
@@ -231,7 +236,28 @@ async def test_flows_publish_and_operate(
         ),
     )
 
-    modal = await flows_open_flow_edit_modal(page)
+    await flows_e2e_set_show_skill_loads(page, enabled=True)
+    skill_loads_field = page.locator(
+        'flows-flow-edit-modal platform-field[data-chat-field="show_skill_loads"]'
+    ).first
+    await expect(skill_loads_field).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Включите показ активации Skills в чате",
+        page,
+        screenshot_name="chat-skill-loads-setting",
+        label_en="Enable showing Skill activations in chat",
+        details=(
+            "В «Настройках агента» найдите параметры чата и включите показ активации "
+            "Skills. Тогда в диалоге видны чипы загруженных процедур. Полная настройка "
+            "чата — в отдельной инструкции."
+        ),
+        details_en=(
+            "In Agent settings find chat options and enable showing Skill activations. "
+            "Then the dialog shows chips for loaded procedures. Full chat setup is in a "
+            "separate guide."
+        ),
+    )
+    modal = page.locator("flows-flow-edit-modal").first
     fields = modal.locator("platform-field")
     await flows_set_platform_field(fields.nth(0), "Помощник Зелёного сада — опубликован")
     await flows_set_platform_field(
@@ -246,12 +272,12 @@ async def test_flows_publish_and_operate(
         screenshot_name="agent-card-updated",
         label_en="Update the agent card",
         details=(
-            "В меню редактора откройте «Настройки агента» и измените название с описанием. "
-            "Эти поля видны в каталоге и в чате."
+            "В том же окне настроек измените название и описание. Эти поля видны в "
+            "каталоге и в чате."
         ),
         details_en=(
-            "In the editor menu, open Agent settings and change the name and description. "
-            "These fields appear in the catalog and chat."
+            "In the same settings window change the name and description. These fields "
+            "appear in the catalog and chat."
         ),
     )
 
@@ -399,6 +425,25 @@ async def test_flows_voice_and_limits(
 
     await flows_create_branch(page, branch_id, GREEN_GARDEN_BRANCH)
     await flows_select_branch_tab(page, re.escape(GREEN_GARDEN_BRANCH))
+    branch_tab = page.locator("flows-editor-page").get_by_text(
+        re.compile(GREEN_GARDEN_BRANCH, re.I)
+    ).first
+    await expect(branch_tab).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Создайте ветку для отдельных настроек",
+        page,
+        screenshot_name="branch-tab-created",
+        label_en="Create a branch for separate settings",
+        details=(
+            "Добавьте ветку «Летние скидки» и переключитесь на неё. Для разных сценариев "
+            "можно задавать свои лимиты и профиль речи поверх настроек всего агента."
+        ),
+        details_en=(
+            "Add the Summer sale branch and switch to it. Different scenarios can have "
+            "their own limits and speech profile on top of agent-wide settings."
+        ),
+    )
+
     branch_panel = await flows_open_flow_property_panel(page)
     branch_speech = branch_panel.get_by_text(re.compile(r"Речь ветки|Branch speech", re.I)).first
     await expect(branch_speech).to_be_visible(timeout=30_000)
@@ -420,3 +465,167 @@ async def test_flows_voice_and_limits(
             "the speech profile at branch level."
         ),
     )
+
+
+@pytest.mark.scenario(
+    service="flows",
+    tag="operations",
+    doc_slug="chat-settings-for-customers",
+    title="Настройки чата для покупателей",
+    description=(
+        "**Для чего:** эта инструкция поможет управлять тем, видит ли покупатель "
+        "активации Skills в чате.\n\n"
+        "**Какие проблемы решает:** чипы процедур отвлекают клиента или, наоборот, "
+        "нужны для прозрачности — рычаг в настройках чата.\n\n"
+        "**Результат:** параметр показа активаций Skills переключён и проверен в чате."
+    ),
+    title_en="Chat settings for customers",
+    description_en=(
+        "**What for:** this guide helps you control whether customers see Skill "
+        "activations in chat.\n\n"
+        "**Problems it solves:** procedure chips distract customers or, conversely, are "
+        "needed for transparency — the toggle lives in chat settings.\n\n"
+        "**Result:** the Skill activation visibility setting is toggled and verified in "
+        "chat."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(300)
+async def test_flows_chat_settings_for_customers(
+    scenario: ScenarioRecorder,
+    flows_ui: AppUI,
+    ui_page_system: Page,
+    auth_token_system: str,
+    unique_id: str,
+    secrets_service,
+    taskiq_worker,
+    flows_service,
+) -> None:
+    _ = secrets_service, taskiq_worker, flows_service
+    skill_id = f"chat-set-{unique_id[:8]}".lower().replace("_", "-")
+    skill_name = skill_id
+    await flows_e2e_seed_agent_skill(
+        flows_ui.origin,
+        auth_token_system,
+        agent_skill_id=skill_id,
+        name=skill_id,
+        description="For chat skill-load chip checks",
+        body_markdown="# Return\n\n1. Ask for the order id.\n",
+    )
+    flow_id = flows_doc_flow_id("chat_settings", unique_id)
+    await flows_api_create_flow(
+        flows_ui.origin,
+        auth_token_system,
+        flows_llm_payload(
+            flow_id,
+            name=GREEN_GARDEN_AGENT_NAME,
+            prompt="Помогай с возвратами.",
+            agent_skills=[skill_id],
+        ),
+    )
+
+    page = ui_page_system
+    await flows_open_editor(page, flows_ui, flow_id)
+    await flows_e2e_set_show_skill_loads(page, enabled=True)
+    field_on = page.locator(
+        'flows-flow-edit-modal platform-field[data-chat-field="show_skill_loads"]'
+    ).first
+    await expect(field_on).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Включите показ активаций Skills",
+        page,
+        screenshot_name="skill-loads-enabled",
+        label_en="Enable Skill activation chips",
+        details=(
+            "В настройках агента откройте параметры чата и включите показ активации "
+            "Skills. Покупатель увидит чипы загруженных процедур."
+        ),
+        details_en=(
+            "In agent settings open chat options and enable Skill activation chips. "
+            "Customers will see chips for loaded procedures."
+        ),
+    )
+
+    await flows_click_platform_button(
+        page.locator("flows-flow-edit-modal").first,
+        "Сохранить",
+        "Save",
+    )
+    await flows_publish_editor(page)
+    await scenario.step(
+        "Сохраните и опубликуйте агента",
+        page,
+        screenshot_name="chat-settings-published",
+        label_en="Save and publish the agent",
+        details=(
+            "Сохраните карточку и опубликуйте черновик — настройка чата попадёт в "
+            "рабочую версию."
+        ),
+        details_en=(
+            "Save the card and publish the draft so the chat setting applies to the live "
+            "version."
+        ),
+    )
+
+    await flows_open_chat_page(page, flows_ui, flow_id)
+    chat = page.locator("chat-page platform-chat").first
+    await expect(chat).to_be_visible(timeout=30_000)
+    await flows_seed_mock_llm(
+        [
+            {
+                "type": "tool_call",
+                "tool": "load_agent_skill",
+                "args": {"agent_skill_id": skill_id},
+            },
+            {"type": "text", "content": "Приняли заявку на возврат."},
+        ]
+    )
+    await flows_chat_send_message(page, "Нужен возврат заказа")
+    chip = await flows_e2e_expect_skill_load_chip(page, skill_name)
+    await expect(chip).to_be_visible(timeout=5_000)
+    await scenario.step(
+        "Проверьте чат с видимыми чипами",
+        page,
+        screenshot_name="chat-with-skill-chips",
+        label_en="Check chat with visible chips",
+        details=(
+            "Задайте вопрос о возврате — в ленте появится чип активации Skill. Так "
+            "покупатель видит, какая процедура сработала."
+        ),
+        details_en=(
+            "Ask about a return — a Skill activation chip appears in the feed so the "
+            "customer sees which procedure ran."
+        ),
+    )
+
+    await flows_open_editor(page, flows_ui, flow_id)
+    await flows_e2e_set_show_skill_loads(page, enabled=False)
+    await flows_click_platform_button(
+        page.locator("flows-flow-edit-modal").first,
+        "Сохранить",
+        "Save",
+    )
+    await flows_publish_editor(page)
+    field_off = page.locator(
+        'flows-flow-edit-modal platform-field[data-chat-field="show_skill_loads"]'
+    )
+    # modal may close after save
+    await scenario.step(
+        "Выключите показ чипов и опубликуйте снова",
+        page,
+        screenshot_name="skill-loads-disabled",
+        label_en="Disable chips and publish again",
+        details=(
+            "**Демонстрация результата.** Отключите показ активаций Skills и опубликуйте — "
+            "чат для покупателей станет без чипов процедур.\n\n"
+            "**Итог.** Вы умеете включать и выключать видимость активаций Skills в "
+            "настройках чата."
+        ),
+        details_en=(
+            "**Result demonstration.** Turn off Skill activation chips and publish — "
+            "customer chat hides procedure chips.\n\n"
+            "**Summary.** You can toggle Skill activation visibility in chat settings."
+        ),
+    )
+    _ = field_off

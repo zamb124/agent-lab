@@ -16,6 +16,7 @@ from tests.ui.e2e.flows_e2e_helpers import (
     GREEN_GARDEN_STORE,
     GREEN_GARDEN_STORE_EN,
     flows_api_create_flow,
+    flows_chat_click_clear,
     flows_chat_echo_payload,
     flows_chat_send_message,
     flows_continue_breakpoint,
@@ -132,22 +133,46 @@ async def test_flows_test_agent_in_chat(
         ),
     )
 
+    await flows_chat_click_clear(page)
+    await expect(page.get_by_text(re.compile(r"chat-ok:"), exact=False)).to_have_count(
+        0, timeout=30_000
+    )
+    await scenario.step(
+        "Начните новый диалог",
+        page,
+        screenshot_name="new-chat-cleared",
+        label_en="Start a new conversation",
+        details=(
+            "Очистите ленту или начните новый чат — так проверяют сценарий «с чистого "
+            "листа», как покупатель после прошлого обращения. Чипы загрузки Skills в "
+            "диалоге описаны в отдельной инструкции."
+        ),
+        details_en=(
+            "Clear the feed or start a new chat — this checks a fresh-start scenario, "
+            "like a customer after a previous request. Skill load chips in the dialog "
+            "are covered in a separate guide."
+        ),
+    )
+
+    await flows_chat_send_message(page, "Ещё раз: когда доставка в Воронеж?")
+    second = page.get_by_text(re.compile(r"chat-ok:"), exact=False).first
+    await expect(second).to_be_visible(timeout=120_000)
     await scenario.step(
         "Проверьте содержательный ответ",
         page,
         screenshot_name="agent-replied",
         label_en="Verify the meaningful reply",
         details=(
-            "**Демонстрация результата.** В ленте появился ответ агента — значит "
-            "диалог работает и «Помощник Зелёного сада» принимает сообщения.\n\n"
-            f"**Итог.** Теперь вы умеете открыть чат агента «{GREEN_GARDEN_STORE}» "
-            "и проверить его ответ на вопрос покупателя."
+            "**Демонстрация результата.** После нового сообщения в ленте снова появился "
+            "ответ агента — диалог работает для «Помощника Зелёного сада».\n\n"
+            f"**Итог.** Теперь вы умеете открыть чат агента «{GREEN_GARDEN_STORE}», "
+            "отправить вопрос и начать новый диалог."
         ),
         details_en=(
-            "**Result demonstration.** An agent reply appeared in the feed, which "
-            "means the dialog works and the Green Garden Assistant accepts messages.\n\n"
-            f"**Summary.** You can now open the {GREEN_GARDEN_STORE_EN} agent chat "
-            "and verify its answer to a customer question."
+            "**Result demonstration.** After the new message an agent reply appears "
+            "again — the Green Garden Assistant dialog works.\n\n"
+            f"**Summary.** You can open the {GREEN_GARDEN_STORE_EN} agent chat, send a "
+            "question, and start a new conversation."
         ),
     )
 
@@ -602,16 +627,32 @@ async def test_flows_find_past_sessions(
         screenshot_name="sessions-modal-open",
         label_en="Open the sessions list",
         details=(
-            "**Демонстрация результата.** В меню «⋯» выберите «Сессии» — откроется "
-            "таблица прошлых диалогов с датой последней активности. Недавний тестовый "
-            "диалог виден в списке.\n\n"
+            "В меню «⋯» выберите «Сессии». Откроется таблица прошлых диалогов "
+            "с датой последней активности."
+        ),
+        details_en=(
+            "In the ⋯ menu choose Sessions. A table of past dialogs opens with "
+            "last activity dates."
+        ),
+    )
+
+    await expect(session_rows.first).to_be_visible(timeout=30_000)
+    row_count = await session_rows.count()
+    assert row_count >= 1, "sessions table must list at least one dialog"
+    await scenario.step(
+        "Найдите недавний диалог в таблице",
+        page,
+        screenshot_name="session-row-visible",
+        label_en="Find the recent dialog in the table",
+        details=(
+            "**Демонстрация результата.** В таблице есть хотя бы одна строка с недавней "
+            "активностью — значит, тестовая сессия сохранилась и её можно открыть снова.\n\n"
             f"**Итог.** Теперь вы умеете находить прошлые диалоги «{GREEN_GARDEN_STORE}» "
             "и возвращаться к ним из редактора."
         ),
         details_en=(
-            "**Result demonstration.** In the ⋯ menu choose Sessions — a table of "
-            "past dialogs opens with last activity dates. Your recent test dialog "
-            "is visible in the list.\n\n"
+            "**Result demonstration.** The table has at least one row with recent activity — "
+            "your test session was saved and you can reopen it.\n\n"
             f"**Summary.** You can now find past {GREEN_GARDEN_STORE_EN} dialogs and "
             "return to them from the editor."
         ),

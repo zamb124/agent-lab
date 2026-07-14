@@ -27,6 +27,7 @@ const DEFAULT_CHAT_POLICY = Object.freeze({
     show_reasoning: false,
     tool_calls_display: 'compact',
     show_activity: true,
+    show_skill_loads: true,
     errors_display: 'generic',
     show_run_trace: false,
     show_trace_actions: true,

@@ -5,7 +5,12 @@ import unittest
 from pathlib import Path
 
 from scripts.check_scenario_docs_quality import check_readme_quality
-from scripts.docs_prepare import copy_scenario_images
+from scripts.docs_prepare import (
+    _page_title,
+    _render_pages_yaml,
+    _titled_nav_link,
+    copy_scenario_images,
+)
 from tests.ui.scenario_doc import build_screenshot_filename, prepare_flat_screenshot_output
 
 
@@ -122,16 +127,47 @@ class ScenarioScreenshotLayoutTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             src_dir = root / "source" / "send-message"
-            dst_dir = root / "build" / "send-message"
+            dst_dir = root / "build" / "platform"
             src_dir.mkdir(parents=True)
             dst_dir.mkdir(parents=True)
             image = src_dir / "send-message--01-open-channel.png"
+            other = dst_dir / "other-slug--01-keep.png"
+            stale = dst_dir / "send-message--99-old.png"
             _ = image.write_bytes(b"png")
+            _ = other.write_bytes(b"keep")
+            _ = stale.write_bytes(b"old")
 
-            copy_scenario_images(src_dir, dst_dir)
+            copy_scenario_images(src_dir, dst_dir, slug="send-message")
 
             self.assertEqual((dst_dir / image.name).read_bytes(), b"png")
+            self.assertEqual(other.read_bytes(), b"keep")
+            self.assertFalse(stale.exists())
             self.assertFalse((dst_dir / "screenshots").exists())
+
+
+class ScenarioSidebarNavTest(unittest.TestCase):
+    def test_pages_yaml_uses_titled_leaves_for_slug_pages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp) / "platform-cron-field.md"
+            _ = page.write_text('---\ntitle: "Cron Field"\n---\n\nbody\n', encoding="utf-8")
+
+            self.assertEqual(_page_title(page), "Cron Field")
+            rendered = _render_pages_yaml(
+                [
+                    "index.md",
+                    (
+                        "UI Kit",
+                        [
+                            "ui-kit/index.md",
+                            _titled_nav_link(page, "platform-cron-field.md"),
+                        ],
+                    ),
+                ]
+            )
+
+        self.assertIn("- ui-kit/index.md\n", rendered)
+        self.assertIn('- "Cron Field": platform-cron-field.md\n', rendered)
+        self.assertNotIn("platform-cron-field/index.md", rendered)
 
 
 if __name__ == "__main__":

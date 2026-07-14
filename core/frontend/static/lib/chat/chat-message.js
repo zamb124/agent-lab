@@ -52,6 +52,9 @@ const DEFAULT_LABELS = {
     breakpoint_continue: 'Continue',
     breakpoint_view_state: 'View state',
     download_file: 'Download',
+    skill_loaded: 'Skill «{name}»',
+    skill_loads_aria: 'Activated skills: {names}',
+    skill_load_hint: 'Agent Skill: {id}',
 };
 
 function asArray(value) {
@@ -94,6 +97,7 @@ export class FlowsChatMessage extends PlatformElement {
         toolCalls: { type: Array },
         toolResults: { type: Array },
         browserPreviews: { type: Array },
+        skillLoads: { type: Array },
         error: { type: String },
         errorI18nKey: { type: String },
         inputRequired: { type: Object },
@@ -484,6 +488,36 @@ export class FlowsChatMessage extends PlatformElement {
             border-radius: 10px;
         }
 
+        .skill-loads {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .skill-load-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--flows-chat-border);
+            background: var(--flows-chat-surface-subtle);
+            color: var(--flows-chat-secondary);
+            font-size: 12px;
+            line-height: 1.3;
+        }
+
+        .skill-load-chip-inner {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .skill-load-chip platform-icon {
+            color: var(--flows-chat-accent);
+        }
+
         .thinking-row-compact {
             display: inline-flex;
             margin-top: 12px;
@@ -867,6 +901,7 @@ export class FlowsChatMessage extends PlatformElement {
         this.toolCalls = [];
         this.toolResults = [];
         this.browserPreviews = [];
+        this.skillLoads = [];
         this.error = '';
         this.errorI18nKey = '';
         this.inputRequired = null;
@@ -997,6 +1032,7 @@ export class FlowsChatMessage extends PlatformElement {
             asArray(this.toolCalls).length > 0 ||
             asArray(this.toolResults).length > 0 ||
             asArray(this.browserPreviews).length > 0 ||
+            asArray(this.skillLoads).length > 0 ||
             asArray(this.files).length > 0 ||
             asArray(this.blocks).length > 0
         );
@@ -1088,7 +1124,15 @@ export class FlowsChatMessage extends PlatformElement {
     }
 
     _renderToolOrbs() {
-        const rows = pairFlowChatToolCallsAndResults(this.toolCalls, this.toolResults);
+        const skillLoads = asArray(this.skillLoads);
+        const hideLoadAgentSkill = skillLoads.length > 0;
+        const rows = pairFlowChatToolCallsAndResults(this.toolCalls, this.toolResults).filter((row) => {
+            if (!hideLoadAgentSkill) {
+                return true;
+            }
+            const name = flowChatToolRowDisplayName(row.call, row.result, '');
+            return name !== 'load_agent_skill';
+        });
         if (rows.length === 0) {
             return nothing;
         }
@@ -1169,6 +1213,41 @@ export class FlowsChatMessage extends PlatformElement {
             <div class="activity-line">
                 <platform-icon name="search" size="16"></platform-icon>
                 <span>${value}</span>
+            </div>
+        `;
+    }
+
+    _renderSkillLoads() {
+        const loads = asArray(this.skillLoads).filter((row) => isPlainObject(row));
+        if (this.role !== 'assistant' || loads.length === 0) {
+            return nothing;
+        }
+        const names = loads
+            .map((row) => asString(row.name || row.agentSkillId))
+            .filter((name) => name.length > 0)
+            .join(', ');
+        return html`
+            <div
+                class="skill-loads"
+                role="group"
+                aria-label=${this._label('skill_loads_aria', 'Activated skills: {names}', { names })}
+            >
+                ${loads.map((row) => {
+                    const skillId = asString(row.agentSkillId);
+                    const name = asString(row.name || skillId);
+                    const hint = this._label('skill_load_hint', 'Agent Skill: {id}', { id: skillId || name });
+                    const label = this._label('skill_loaded', 'Skill «{name}»', { name });
+                    return html`
+                        <span class="skill-load-chip">
+                            <platform-help-hint .text=${hint} .label=${label}>
+                                <span class="skill-load-chip-inner">
+                                    <platform-icon name="sparkles" size="14"></platform-icon>
+                                    <span>${label}</span>
+                                </span>
+                            </platform-help-hint>
+                        </span>
+                    `;
+                })}
             </div>
         `;
     }
@@ -1825,6 +1904,7 @@ export class FlowsChatMessage extends PlatformElement {
                         ${this._renderFiles()}
                         ${this._renderOperatorFiles()}
                         ${this._renderActivity()}
+                        ${this._renderSkillLoads()}
                         ${this._renderToolOrbs()}
                         ${this._renderReasoning()}
                         ${this._renderMainText(role, text)}

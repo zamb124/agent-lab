@@ -113,6 +113,7 @@ describe('resolveChatViewConfig: policy ∩ capabilities', () => {
             show_reasoning: false,
             tool_calls_display: 'hidden',
             show_activity: false,
+            show_skill_loads: false,
             errors_display: 'generic',
             show_run_trace: false,
             show_trace_actions: false,
@@ -125,6 +126,7 @@ describe('resolveChatViewConfig: policy ∩ capabilities', () => {
             showReasoning: true,
             toolCallsDisplay: 'detailed',
             showActivity: true,
+            showSkillLoads: true,
             errorsDisplay: 'detailed',
             showRunTrace: true,
             showTraceActions: true,
@@ -132,6 +134,15 @@ describe('resolveChatViewConfig: policy ∩ capabilities', () => {
             showFilesPanel: true,
             allowCancel: true,
         });
+    });
+
+    it('spa уважает show_skill_loads из policy', () => {
+        const muted = resolveChatViewConfig(createChatProfile({ kind: 'spa' }), {
+            show_skill_loads: false,
+        });
+        expect(muted.showSkillLoads).toBe(false);
+        const enabled = resolveChatViewConfig(createChatProfile({ kind: 'spa' }), null);
+        expect(enabled.showSkillLoads).toBe(true);
     });
 
     it('greeting и suggested_prompts проходят и в editor_test', () => {

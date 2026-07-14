@@ -440,4 +440,52 @@ describe('chat-state: handoff', () => {
         expect(handbackMsg).toBeTruthy();
         expect(handbackMsg.response).toBe('resolved by child');
     });
+
+    it('skill_loaded добавляет chip на assistant bubble без дублей', () => {
+        const s = reduce(
+            ['session_init', { flowId: 'demo', contextId: 'ctx1' }],
+            ['task_started', { task_id: 'tsk1', context_id: 'ctx1' }],
+            ['skill_loaded', {
+                task_id: 'tsk1',
+                context_id: 'ctx1',
+                agent_skill_id: 'crm-entities',
+                name: 'CRM Entities',
+                depth: 1,
+                tools_unlocked: ['crm_search'],
+            }],
+            ['skill_loaded', {
+                task_id: 'tsk1',
+                context_id: 'ctx1',
+                agent_skill_id: 'crm-entities',
+                name: 'CRM Entities',
+                depth: 1,
+                tools_unlocked: ['crm_search'],
+            }],
+            ['skill_loaded', {
+                task_id: 'tsk1',
+                context_id: 'ctx1',
+                agent_skill_id: 'flows-editor',
+                name: 'Flows Editor',
+                depth: 0,
+                tools_unlocked: [],
+            }],
+        );
+        const assistant = s.messagesByContextId.ctx1.messages.find(
+            (m) => m.role === 'assistant' && m.taskId === 'tsk1',
+        );
+        expect(assistant.skillLoads).toEqual([
+            {
+                agentSkillId: 'crm-entities',
+                name: 'CRM Entities',
+                depth: 1,
+                toolsUnlocked: ['crm_search'],
+            },
+            {
+                agentSkillId: 'flows-editor',
+                name: 'Flows Editor',
+                depth: 0,
+                toolsUnlocked: [],
+            },
+        ]);
+    });
 });

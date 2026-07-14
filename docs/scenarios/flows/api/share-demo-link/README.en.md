@@ -18,10 +18,16 @@ In the editor menu, choose Guest preview. Here you set a guest message limit and
 
 ![Open guest preview](share-demo-link--02-share-modal-opened.png)
 
-## Step 3. Create and copy the guest link
+## Step 3. Set the guest message limit
+
+Set how many messages a guest may send via the link — for example 5. This limits the demo chat without granting full account access.
+
+![Set the guest message limit](share-demo-link--03-share-guest-limit-set.png)
+
+## Step 4. Create and copy the guest link
 
 **Result demonstration.** After creation, a ready link appears on screen — you can send it to a guest to try the agent.
 
 **Summary.** You can now issue a guest demo link with a message limit directly from the editor.
 
-![Create and copy the guest link](share-demo-link--03-share-link-created.png)
+![Create and copy the guest link](share-demo-link--04-share-link-created.png)

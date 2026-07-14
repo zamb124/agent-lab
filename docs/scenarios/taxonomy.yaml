@@ -43,10 +43,13 @@ learning_paths:
         href: quickstart/
       - label_ru: Flows — знакомство и первый агент
         label_en: Flows — home tour and first agent
-        href: scenarios/flows/getting-started/flows-home-tour/
+        href: scenarios/flows/flows-home-tour/
       - label_ru: Flows — первый запрос через API Console
         label_en: Flows — first request via API Console
-        href: scenarios/flows/api/api-first-request/
+        href: scenarios/flows/api-first-request/
+      - label_ru: Flows — встраивание агента на сайт
+        label_en: Flows — embed the agent on a site
+        href: scenarios/flows/embed-agent-on-site/
       - label_ru: UI Kit — каталог core-компонентов
         label_en: UI Kit — core component catalog
         href: scenarios/platform/ui-kit/
@@ -81,30 +84,62 @@ learning_paths:
     label_ru: Flows — агенты и графы
     label_en: Flows — agents and graphs
     intro_ru: >-
-      Путь от знакомства с главной Flows до первого опубликованного агента с инструментами:
-      каталог, создание, настройка ответов, тест в чате и публикация.
+      Путь от знакомства с главной Flows до опубликованного агента: каталог, создание,
+      студия и канва, настройка ответов, Skills, тест в чате, инструменты и публикация.
     intro_en: >-
-      From the Flows home tour to a published agent with tools: catalog, creation,
-      answer setup, chat testing, and publishing.
+      From the Flows home tour to a published agent: catalog, creation, Studio vs canvas,
+      answer setup, Skills, chat testing, tools, and publishing.
     steps:
       - label_ru: Знакомство с главной и каталогом
         label_en: Home tour and agent catalog
-        href: scenarios/flows/getting-started/flows-home-tour/
+        href: scenarios/flows/flows-home-tour/
       - label_ru: Создание первого агента
         label_en: Create your first agent
-        href: scenarios/flows/getting-started/create-first-agent/
+        href: scenarios/flows/create-first-agent/
+      - label_ru: Студия и схема редактора
+        label_en: Studio and canvas editor modes
+        href: scenarios/flows/agent-focus-vs-canvas/
       - label_ru: Настройка ответов агента
         label_en: Shape agent answers
-        href: scenarios/flows/editor/configure-agent-answers/
+        href: scenarios/flows/configure-agent-answers/
+      - label_ru: Подключение Skills к агенту
+        label_en: Attach Skills to the agent
+        href: scenarios/flows/attach-skills-to-agent/
       - label_ru: Тест агента в чате
         label_en: Test the agent in chat
-        href: scenarios/flows/execution/test-agent-in-chat/
+        href: scenarios/flows/test-agent-in-chat/
+      - label_ru: Активация Skill в чате
+        label_en: Skill unlocks in chat
+        href: scenarios/flows/skills-unlock-in-chat/
       - label_ru: Инструменты агента
         label_en: Agent tools
-        href: scenarios/flows/nodes/add-agent-tools/
+        href: scenarios/flows/add-agent-tools/
       - label_ru: Публикация и управление
         label_en: Publish and operate
-        href: scenarios/flows/operations/publish-and-operate/
+        href: scenarios/flows/publish-and-operate/
+
+  - id: flows-skills
+    label_ru: Flows — Skills
+    label_en: Flows — Skills
+    intro_ru: >-
+      Короткий путь по процедурам агента: библиотека Skills, подключение к ноде,
+      активация в чате и копия Skill.
+    intro_en: >-
+      A short path through agent procedures: Skills library, node attach, chat unlock,
+      and Skill duplication.
+    steps:
+      - label_ru: Создаём Skill в библиотеке
+        label_en: Create a Skill in the library
+        href: scenarios/flows/manage-agent-skills/
+      - label_ru: Подключаем Skill к агенту
+        label_en: Attach a Skill to the agent
+        href: scenarios/flows/attach-skills-to-agent/
+      - label_ru: Skill активируется в чате
+        label_en: Skill unlocks in chat
+        href: scenarios/flows/skills-unlock-in-chat/
+      - label_ru: Дублируем и правим Skill
+        label_en: Duplicate and edit a Skill
+        href: scenarios/flows/duplicate-and-edit-skill/
 
   - id: worktracker-operators
     label_ru: Операторы и HITL
@@ -118,34 +153,34 @@ learning_paths:
     steps:
       - label_ru: Передача сложного случая оператору
         label_en: Escalate a hard case to an operator
-        href: scenarios/flows/nodes/escalate-to-operator/
+        href: scenarios/flows/escalate-to-operator/
       - label_ru: Настройка очереди операторов
         label_en: Set up an operator queue
-        href: scenarios/worktracker/operators/setup-operator-queue/
+        href: scenarios/worktracker/setup-operator-queue/
       - label_ru: Входящие и ответ клиенту
         label_en: Operator inbox and customer reply
-        href: scenarios/worktracker/operators/operator-inbox-single-reply/
+        href: scenarios/worktracker/operator-inbox-single-reply/
       - label_ru: Что видит покупатель при ожидании
         label_en: What the customer sees while waiting
-        href: scenarios/flows/execution/customer-waits-for-operator/
+        href: scenarios/flows/customer-waits-for-operator/
       - label_ru: Перехват диалога оператором
         label_en: Operator dialog takeover
-        href: scenarios/worktracker/operators/operator-takeover-dialog/
+        href: scenarios/worktracker/operator-takeover-dialog/
       - label_ru: Встроенный чат в задаче HITL
         label_en: Embedded chat in an HITL task
-        href: scenarios/worktracker/operators/hitl-embedded-operator-chat/
+        href: scenarios/worktracker/hitl-embedded-operator-chat/
       - label_ru: Один ответ оператора и завершение
         label_en: Single operator reply and complete
-        href: scenarios/worktracker/operators/hitl-single-reply-complete/
+        href: scenarios/worktracker/hitl-single-reply-complete/
       - label_ru: Маршрутизация и переназначение
         label_en: Route and reassign tasks
-        href: scenarios/worktracker/operators/route-and-reassign-tasks/
+        href: scenarios/worktracker/route-and-reassign-tasks/
       - label_ru: Фоновая задача от агента
         label_en: Agent background task
-        href: scenarios/flows/nodes/agent-logs-background-task/
+        href: scenarios/flows/agent-logs-background-task/
       - label_ru: Передача в истории выполнения
         label_en: Operator handoff in run history
-        href: scenarios/flows/execution/trace-operator-handoff/
+        href: scenarios/flows/trace-operator-handoff/
 
   - id: office-documents
     label_ru: Документы Office

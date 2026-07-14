@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 from playwright.async_api import Page, expect
@@ -130,25 +131,43 @@ async def test_flows_schedule_daily_run(
     )
 
     await flows_trigger_editor_save(page)
-    await flows_publish_editor(page)
+    trigger_row = page.locator("flows-triggers-modal").get_by_text(
+        re.compile(r"Ежедневная|daily|сводк", re.I)
+    ).first
+    await expect(trigger_row).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Сохраните триггер в списке",
+        page,
+        screenshot_name="cron-trigger-saved",
+        label_en="Save the trigger in the list",
+        details=(
+            "Нажмите «Сохранить» в редакторе триггера. Новая строка «Ежедневная сводка "
+            "заказов» появится в списке автозапусков агента."
+        ),
+        details_en=(
+            "Click Save in the trigger editor. The new Daily order summary row appears "
+            "in the agent automatic runs list."
+        ),
+    )
+
     persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
     triggers = persisted.get("triggers") or {}
     assert trigger_id in triggers or len(triggers) >= 1
     await scenario.step(
-        "Сохраните и опубликуйте расписание",
+        "Убедитесь, что расписание сохранено",
         page,
         screenshot_name="cron-trigger-published",
-        label_en="Save and publish the schedule",
+        label_en="Confirm the schedule is saved",
         details=(
             "**Демонстрация результата.** Триггер cron появился в списке и сохранён "
             "в агенте — ежедневная сводка будет запускаться автоматически.\n\n"
-            "**Итог.** Теперь вы умеете открывать триггеры, задавать cron и публиковать "
+            "**Итог.** Теперь вы умеете открывать триггеры, задавать cron и сохранять "
             "расписание для «Помощника Зелёного сада»."
         ),
         details_en=(
             "**Result demonstration.** The cron trigger appears in the list and is saved "
             "on the agent — the daily summary will run automatically.\n\n"
-            "**Summary.** You can open triggers, set a cron schedule, and publish it "
+            "**Summary.** You can open triggers, set a cron schedule, and save it "
             "for the Green Garden Assistant."
         ),
     )
@@ -209,6 +228,21 @@ async def test_flows_telegram_auto_reply(
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
     await flows_open_triggers_modal(page)
+    await scenario.step(
+        "Откройте список триггеров",
+        page,
+        screenshot_name="telegram-triggers-modal-opened",
+        label_en="Open the triggers list",
+        details=(
+            "В меню редактора выберите «Триггеры». Здесь настраиваются автозапуски "
+            "агента — в том числе входящие сообщения Telegram-бота."
+        ),
+        details_en=(
+            "In the editor menu choose Triggers. Here you configure automatic agent runs — "
+            "including incoming Telegram bot messages."
+        ),
+    )
+
     await flows_triggers_click_create(page)
     await flows_trigger_editor_select_type(page, "telegram")
     trigger_id = f"telegram_{unique_id[:8]}"
@@ -273,7 +307,10 @@ async def test_flows_telegram_auto_reply(
     )
 
     await flows_trigger_editor_save(page)
-    await flows_publish_editor(page)
+    await expect(page.locator("flows-triggers-modal")).to_contain_text(
+        re.compile(r"Автоответ|Telegram", re.I),
+        timeout=30_000,
+    )
     persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
     triggers = persisted.get("triggers") or {}
     assert len(triggers) >= 1
@@ -285,13 +322,142 @@ async def test_flows_telegram_auto_reply(
         details=(
             "**Демонстрация результата.** Триггер Telegram сохранён с ссылкой на секрет — "
             f"агент готов отвечать в {GREEN_GARDEN_TELEGRAM_BOT}.\n\n"
-            "**Итог.** Теперь вы умеете настраивать Telegram-триггер, хранить токен "
-            "в секрете и публиковать автоответ."
+            "**Итог.** Теперь вы умеете настраивать Telegram-триггер и хранить токен "
+            "в секрете."
         ),
         details_en=(
             "**Result demonstration.** The Telegram trigger is saved with a secret reference — "
             f"the agent is ready to reply in {GREEN_GARDEN_TELEGRAM_BOT}.\n\n"
-            "**Summary.** You can configure a Telegram trigger, store the token as a secret, "
-            "and publish auto-reply."
+            "**Summary.** You can configure a Telegram trigger and store the token as a "
+            "secret."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="flows",
+    tag="triggers",
+    doc_slug="webhook-trigger",
+    title="Запускаем агента по webhook",
+    description=(
+        "**Для чего:** эта инструкция настроит запуск агента по HTTP webhook от "
+        "внешней системы магазина.\n\n"
+        "**Какие проблемы решает:** нужно принимать события склада или CRM без "
+        "Telegram и без ручного старта.\n\n"
+        "**Результат:** webhook-триггер сохранён у «Помощника Зелёного сада»."
+    ),
+    title_en="Run the agent from a webhook",
+    description_en=(
+        "**What for:** this guide configures an agent run from an HTTP webhook from an "
+        "external store system.\n\n"
+        "**Problems it solves:** warehouse or CRM events must arrive without Telegram "
+        "and without a manual start.\n\n"
+        "**Result:** a webhook trigger is saved on the Green Garden Assistant."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(240)
+async def test_flows_webhook_trigger(
+    scenario: ScenarioRecorder,
+    flows_ui: AppUI,
+    ui_page_system: Page,
+    auth_token_system: str,
+    unique_id: str,
+    secrets_service,
+    taskiq_worker,
+) -> None:
+    _ = secrets_service, taskiq_worker
+    flow_id = flows_doc_flow_id("webhook_trig", unique_id)
+    await flows_api_create_flow(
+        flows_ui.origin,
+        auth_token_system,
+        flows_llm_payload(
+            flow_id,
+            name=GREEN_GARDEN_AGENT_NAME,
+            prompt="Обработай событие склада и кратко подтверди.",
+        ),
+    )
+
+    page = ui_page_system
+    await flows_open_editor(page, flows_ui, flow_id)
+    await flows_open_triggers_modal(page)
+    await scenario.step(
+        "Откройте список триггеров",
+        page,
+        screenshot_name="webhook-triggers-modal",
+        label_en="Open the triggers list",
+        details=(
+            "В меню редактора выберите «Триггеры». Здесь же создают webhook — рядом с "
+            "расписанием и Telegram."
+        ),
+        details_en=(
+            "In the editor menu choose Triggers. Create a webhook here alongside "
+            "schedule and Telegram."
+        ),
+    )
+
+    await flows_triggers_click_create(page)
+    await flows_trigger_editor_select_type(page, "webhook")
+    await scenario.step(
+        "Выберите тип Webhook",
+        page,
+        screenshot_name="webhook-type-selected",
+        label_en="Choose the Webhook type",
+        details=(
+            "Нажмите создание и выберите Webhook. Платформа примет HTTP POST на "
+            "endpoint агента."
+        ),
+        details_en=(
+            "Click create and choose Webhook. The platform will accept an HTTP POST on "
+            "the agent endpoint."
+        ),
+    )
+
+    trigger_id = f"wh_{unique_id[:8]}"
+    await flows_trigger_editor_fill_identity(
+        page,
+        trigger_id=trigger_id,
+        name="События склада",
+    )
+    await scenario.step(
+        "Задайте идентификатор и название",
+        page,
+        screenshot_name="webhook-identity-filled",
+        label_en="Set id and name",
+        details=(
+            "Укажите короткий id и понятное имя вроде «События склада», чтобы найти "
+            "триггер среди других автозапусков."
+        ),
+        details_en=(
+            "Set a short id and a clear name such as Warehouse events so you can find "
+            "the trigger among other autos."
+        ),
+    )
+
+    await flows_trigger_editor_save(page)
+    trigger_row = page.locator("flows-triggers-modal").get_by_text(
+        re.compile(r"События склада|webhook|Warehouse", re.I)
+    ).first
+    await expect(trigger_row).to_be_visible(timeout=30_000)
+    persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
+    triggers = persisted.get("triggers") or {}
+    assert trigger_id in triggers or any(
+        isinstance(v, dict) and v.get("type") == "webhook" for v in triggers.values()
+    ), f"webhook trigger missing: {triggers!r}"
+    await scenario.step(
+        "Сохраните и найдите webhook в списке",
+        page,
+        screenshot_name="webhook-saved-in-list",
+        label_en="Save and find the webhook in the list",
+        details=(
+            "**Демонстрация результата.** Webhook «События склада» виден в списке "
+            "триггеров — внешняя система может вызывать агента по HTTP.\n\n"
+            "**Итог.** Вы умеете создавать webhook-триггер для внешних событий магазина."
+        ),
+        details_en=(
+            "**Result demonstration.** The Warehouse events webhook appears in the "
+            "triggers list — an external system can call the agent over HTTP.\n\n"
+            "**Summary.** You can create a webhook trigger for external store events."
         ),
     )

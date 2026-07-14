@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html as html_stdlib
 import json
+import re
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -26,6 +27,7 @@ from playwright.async_api import Page, expect
 
 from core.logging import get_logger
 from tests.ui.harness import AppUI
+from tests.ui.scenario_doc import ScenarioRecorder
 
 _HTTP_TIMEOUT = Timeout(20.0)
 _log = get_logger(__name__)
@@ -361,6 +363,170 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
             await _send_embed_message(page, user_line, network_events, errors)
             if errors:
                 pytest.fail("embed браузер: ошибки страницы/консоли:\n" + "\n".join(errors))
+    finally:
+        if embed_id is not None:
+            await _delete_embed_config(frontend_origin, auth_headers, embed_id)
+
+
+@pytest.mark.scenario(
+    service="flows",
+    tag="api",
+    doc_slug="embed-agent-on-site",
+    title="Встраиваем агента на сайт",
+    description=(
+        "**Для чего:** эта инструкция покажет, как разместить чат агента на внешнем "
+        "сайте магазина через embed-виджет.\n\n"
+        "**Какие проблемы решает:** гостевая ссылка открывает отдельную страницу, а "
+        "нужен чат прямо на витрине «Зелёного сада».\n\n"
+        "**Результат:** на странице сайта открыт виджет чата и получен ответ агента."
+    ),
+    title_en="Embed the agent on a site",
+    description_en=(
+        "**What for:** this guide shows how to place the agent chat on an external store "
+        "site via an embed widget.\n\n"
+        "**Problems it solves:** a guest link opens a separate page, but you need chat "
+        "on the Green Garden storefront itself.\n\n"
+        "**Result:** the site page shows the chat widget and receives an agent reply."
+    ),
+)
+@pytest.mark.timeout(300)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+async def test_flows_embed_agent_on_site(
+    scenario: ScenarioRecorder,
+    page: Page,
+    embed_browser_http_stack_ready,
+    taskiq_worker,
+    frontend_ui: AppUI,
+    flows_ui: AppUI,
+    embed_test_auth,
+    unique_id: str,
+) -> None:
+    _ = embed_browser_http_stack_ready, taskiq_worker
+    page.set_default_timeout(45_000)
+    auth_headers, flow_id, company_id, _user_part = embed_test_auth
+    user_line = f"embed-site-{unique_id}"
+
+    frontend_origin = _frontend_api_origin(frontend_ui).rstrip("/")
+    flows_public_base = _flows_api_origin(flows_ui).rstrip("/")
+    script_src = f"{frontend_origin}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
+    flows_base = f"{flows_public_base}/flows"
+
+    embed_id: str | None = None
+    errors, network_events = await _attach_embed_page_diagnostics(page)
+    try:
+        embed_id = await _create_embed_config(
+            frontend_origin,
+            auth_headers,
+            flow_id=flow_id,
+            unique_id=unique_id,
+            show_launcher=True,
+        )
+        await scenario.step(
+            "Создайте embed-конфиг для агента",
+            page,
+            screenshot_name="embed-config-created",
+            label_en="Create an embed config for the agent",
+            details=(
+                "В настройках платформы создайте конфиг встраиваемого виджета и "
+                "привяжите его к агенту магазина. Это не гостевая ссылка из редактора — "
+                "виджет живёт на вашем сайте."
+            ),
+            details_en=(
+                "In platform settings create an embed widget config and link it to the "
+                "store agent. This is not the editor guest link — the widget lives on "
+                "your site."
+            ),
+        )
+
+        async with AsyncClient(
+            base_url=frontend_origin,
+            follow_redirects=True,
+            timeout=_HTTP_TIMEOUT,
+        ) as fc:
+            mint = await fc.post(
+                f"/frontend/api/embed/configs/{embed_id}/session-token",
+                headers=auth_headers,
+                json={"expires_in_seconds": 300},
+            )
+            assert mint.status_code == 200, mint.text
+            token_payload_for_host = {"token": mint.json()["token"]}
+
+        page_html = _build_embed_page_html(
+            script_src=script_src,
+            embed_id=embed_id,
+            flows_base=flows_base,
+            frontend_origin=frontend_origin,
+            company_id=company_id,
+            show_launcher=True,
+        )
+        await scenario.step(
+            "Подготовьте страницу сайта со скриптом",
+            page,
+            screenshot_name="embed-host-ready",
+            label_en="Prepare the site page with the script",
+            details=(
+                "На сайт магазина добавьте snippet autoload-скрипта с id виджета. "
+                "Чат смонтируется на внешней странице витрины."
+            ),
+            details_en=(
+                "Add the autoload script snippet with the widget id to the store site. "
+                "Chat mounts on the external storefront page."
+            ),
+        )
+
+        with _external_embed_origin(
+            html_page_utf8=page_html,
+            token_payload=token_payload_for_host,
+        ) as host_origin:
+            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=60_000)
+            await _wait_humanitec_embed(page, errors, network_events)
+            await expect(page.locator("platform-chat")).to_be_attached(timeout=30_000)
+            fab = page.locator("platform-chat").locator("button.fab").first
+            await expect(fab).to_be_visible(timeout=30_000)
+            await scenario.step(
+                "Откройте виджет чата на сайте",
+                page,
+                screenshot_name="embed-fab-on-host",
+                label_en="Open the chat widget on the site",
+                details=(
+                    "На странице сайта видна кнопка чата. Нажмите её — откроется диалог "
+                    "с агентом прямо на витрине."
+                ),
+                details_en=(
+                    "The site page shows a chat button. Click it — the agent dialog opens "
+                    "on the storefront."
+                ),
+            )
+
+            await fab.click()
+            await _send_embed_message(page, user_line, network_events, errors)
+            if errors:
+                pytest.fail("embed браузер: ошибки страницы/консоли:\n" + "\n".join(errors))
+            reply = page.locator("platform-chat").get_by_text(
+                re.compile(rf"embed-ok:{re.escape(user_line)}", re.I)
+            ).first
+            await expect(reply).to_be_visible(timeout=120_000)
+            await scenario.step(
+                "Получите ответ агента во встроенном чате",
+                page,
+                screenshot_name="embed-reply-on-host",
+                label_en="Get the agent reply in the embedded chat",
+                details=(
+                    "**Демонстрация результата.** Покупатель пишет на сайте магазина и "
+                    "получает ответ агента во встроенном виджете — это embed, а не "
+                    "гостевая ссылка.\n\n"
+                    "**Итог.** Вы умеете создать embed-конфиг и проверить чат на "
+                    "внешней странице."
+                ),
+                details_en=(
+                    "**Result demonstration.** The customer writes on the store site and "
+                    "gets an agent reply in the embedded widget — this is embed, not a "
+                    "guest link.\n\n"
+                    "**Summary.** You can create an embed config and verify chat on an "
+                    "external page."
+                ),
+            )
     finally:
         if embed_id is not None:
             await _delete_embed_config(frontend_origin, auth_headers, embed_id)

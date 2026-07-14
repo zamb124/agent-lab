@@ -213,6 +213,10 @@ async def test_flows_eval_run_compare(
 
     await flows_eval_run(page)
     await flows_eval_wait_run_finished(page)
+    run_status = page.locator("flows-evaluation-page").get_by_text(
+        re.compile(r"pass|fail|успех|ошиб|done|готов", re.I)
+    ).first
+    await expect(run_status).to_be_visible(timeout=60_000)
     await scenario.step(
         "Запустите первый прогон",
         page,
@@ -230,6 +234,23 @@ async def test_flows_eval_run_compare(
 
     await flows_eval_run(page)
     await flows_eval_wait_run_finished(page)
+    results_matrix = page.locator("flows-evaluation-results-matrix").first
+    await expect(results_matrix).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Запустите второй прогон для сравнения",
+        page,
+        screenshot_name="evaluation-second-run",
+        label_en="Run a second evaluation for comparison",
+        details=(
+            "Повторите запуск с тем же кейсом. В матрице появятся два прогона — "
+            "их можно сравнить и выбрать эталон."
+        ),
+        details_en=(
+            "Run again with the same case. The matrix shows two runs — "
+            "you can compare them and pick a baseline."
+        ),
+    )
+
     await flows_eval_compare_runs(page)
     await flows_eval_set_baseline(page)
     compare_panel = page.locator("flows-evaluation-compare-panel").first
@@ -331,6 +352,23 @@ async def test_flows_eval_monitor_quality(
         details_en=(
             "In the Workspace block, choose Monitoring. Gate policies, baselines, and online "
             "monitors for quality observation are collected here."
+        ),
+    )
+
+    gate_section = monitoring.get_by_text(re.compile(r"gate|гейт", re.I)).first
+    await expect(gate_section).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Найдите блок gate policies",
+        page,
+        screenshot_name="monitoring-gate-policies",
+        label_en="Find the gate policies block",
+        details=(
+            "На панели найдите раздел gate policies и baselines. Здесь задаются пороги "
+            "качества, при нарушении которых система сигнализирует о деградации."
+        ),
+        details_en=(
+            "On the panel find the gate policies and baselines section. Here you set "
+            "quality thresholds that trigger alerts when answers degrade."
         ),
     )
 

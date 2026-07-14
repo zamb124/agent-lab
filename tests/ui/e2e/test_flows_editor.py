@@ -21,6 +21,8 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_canvas_toolbar_action,
     flows_dataflow_problems_payload,
     flows_doc_flow_id,
+    flows_e2e_ensure_canvas_layout,
+    flows_e2e_switch_editor_layout,
     flows_execution_send_message,
     flows_llm_payload,
     flows_open_editor,
@@ -28,6 +30,7 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_publish_editor,
     flows_save_edge_condition_modal,
     flows_set_edge_condition_simple,
+    flows_set_selected_llm_config,
     flows_set_selected_llm_prompt,
     flows_switch_editor_mode,
     flows_toggle_data_wires,
@@ -89,18 +92,21 @@ async def test_flows_configure_agent_answers(
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
+    await flows_e2e_ensure_canvas_layout(page)
     await scenario.step(
         "Откройте агента в редакторе",
         page,
         screenshot_name="editor-opened",
         label_en="Open the agent in the editor",
         details=(
-            "На канве редактора находится нода ответа агента. Именно она определяет, как "
-            "агент разговаривает с покупателем."
+            "Откройте «Помощника Зелёного сада» в редакторе. Нода ответа задаёт, как "
+            "агент разговаривает с покупателем. Для агента с одной LLM-нодой доступен "
+            "и режим студии — о нём отдельная инструкция."
         ),
         details_en=(
-            "The editor canvas contains the agent answer node. It defines how the agent "
-            "talks to the customer."
+            "Open the Green Garden Assistant in the editor. The answer node defines how "
+            "the agent talks to the customer. A single-LLM agent also has Studio mode — "
+            "covered in a separate guide."
         ),
     )
 
@@ -112,14 +118,36 @@ async def test_flows_configure_agent_answers(
         screenshot_name="prompt-first-version",
         label_en="Write the agent instruction",
         details=(
-            "В редакторе ноды впишите инструкцию (промпт). Здесь можно подставлять "
-            "переменные вроде имени покупателя в фигурных скобках — агент использует их в "
-            "ответе. Это главный способ задать тон и правила общения."
+            "Впишите инструкцию (промпт). Можно подставлять переменные вроде имени "
+            "покупателя в фигурных скобках — агент использует их в ответе."
         ),
         details_en=(
-            "In the node editor, type the instruction (prompt). You can insert variables "
-            "such as the customer name in curly braces, and the agent uses them in its "
-            "reply. This is the main way to set the tone and rules of communication."
+            "Type the instruction (prompt). You can insert variables such as the "
+            "customer name in curly braces; the agent uses them in its reply."
+        ),
+    )
+
+    await flows_set_selected_llm_config(
+        page,
+        {
+            "provider": "humanitec_llm",
+            "model": "auto",
+            "temperature": 0.4,
+            "max_tokens": 800,
+        },
+    )
+    await scenario.step(
+        "Выберите модель и параметры ответа",
+        page,
+        screenshot_name="model-and-limits-set",
+        label_en="Choose the model and reply limits",
+        details=(
+            "В блоке модели задайте провайдера, модель, температуру и лимит длины ответа. "
+            "Так вы управляете стилем и объёмом ответа магазина, не меняя граф."
+        ),
+        details_en=(
+            "In the model block set the provider, model, temperature, and reply length "
+            "limit. This controls tone and length without changing the graph."
         ),
     )
 
@@ -130,12 +158,12 @@ async def test_flows_configure_agent_answers(
         screenshot_name="published-first",
         label_en="Publish the draft",
         details=(
-            "Нажмите «Опубликовать». Черновик становится рабочей версией — теперь агент "
-            "отвечает по новой инструкции."
+            "Нажмите «Опубликовать». Черновик становится рабочей версией — агент отвечает "
+            "по новой инструкции и модели."
         ),
         details_en=(
-            "Click Publish. The draft becomes the live version, so the agent now answers "
-            "using the new instruction."
+            "Click Publish. The draft becomes the live version, so the agent answers "
+            "using the new instruction and model."
         ),
     )
 
@@ -148,20 +176,25 @@ async def test_flows_configure_agent_answers(
         screenshot_name="published-second",
         label_en="Change the instruction and publish again",
         details=(
-            "Дополните инструкцию (например, попросите всегда уточнять доставку) и снова "
-            "опубликуйте. Так вы дорабатываете поведение агента по мере необходимости."
+            "Дополните инструкцию (например, всегда уточнять доставку) и снова "
+            "опубликуйте. Так вы дорабатываете поведение по мере необходимости."
         ),
         details_en=(
-            "Extend the instruction (for example, ask it to always clarify delivery) and "
-            "publish again. This is how you refine the agent's behavior over time."
+            "Extend the instruction (for example, always clarify delivery) and publish "
+            "again. This is how you refine behavior over time."
         ),
     )
 
     persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
-    agent_prompt = persisted["nodes"]["agent"]["prompt"]
+    agent_node = persisted["nodes"]["agent"]
+    agent_prompt = agent_node["prompt"]
     assert "доставки" in agent_prompt, f"updated prompt not persisted: {agent_prompt!r}"
+    llm_cfg = agent_node.get("llm") or {}
+    assert float(llm_cfg.get("temperature", -1)) == 0.4, f"temperature not saved: {llm_cfg!r}"
+    assert int(llm_cfg.get("max_tokens", 0)) == 800, f"max_tokens not saved: {llm_cfg!r}"
 
     await flows_open_editor(page, flows_ui, flow_id)
+    await flows_e2e_ensure_canvas_layout(page)
     editor = await flows_open_node_editor(page, "agent")
     await expect(editor).to_contain_text("доставки", timeout=15_000)
     await scenario.step(
@@ -170,16 +203,15 @@ async def test_flows_configure_agent_answers(
         screenshot_name="reopened-prompt-persisted",
         label_en="Reopen the agent and verify settings",
         details=(
-            "**Демонстрация результата.** Закройте и снова откройте ноду — обновлённая "
-            "инструкция на месте, значит настройка сохранилась.\n\n"
-            "**Итог.** Теперь вы умеете задавать и менять инструкцию агента и публиковать "
+            "**Демонстрация результата.** Снова откройте ноду — обновлённая инструкция "
+            "и параметры модели на месте, значит настройка сохранилась.\n\n"
+            "**Итог.** Теперь вы умеете задавать промпт и модель агента и публиковать "
             "изменения."
         ),
         details_en=(
-            "**Result demonstration.** Close and reopen the node — the updated "
-            "instruction is still there, which means the setting was saved.\n\n"
-            "**Summary.** You can now set and change the agent instruction and publish "
-            "changes."
+            "**Result demonstration.** Reopen the node — the updated instruction and "
+            "model settings are still there, so the configuration was saved.\n\n"
+            "**Summary.** You can set the agent prompt and model and publish changes."
         ),
     )
 
@@ -482,5 +514,145 @@ async def test_flows_organize_large_graph(
             "a missing variable.\n\n"
             f"**Summary.** You can now annotate the graph with notes, show data links, "
             f"and fix problematic blocks for {GREEN_GARDEN_STORE_EN}."
+        ),
+    )
+
+
+_STUDIO_PROMPT = (
+    "Ты — помощник «Зелёного сада». Кратко подскажи по выбору комнатных растений."
+)
+
+
+@pytest.mark.scenario(
+    service="flows",
+    tag="editor",
+    doc_slug="agent-focus-vs-canvas",
+    title="Студия и схема: два режима редактора",
+    description=(
+        "**Для чего:** эта инструкция покажет, чем режим студии отличается от схемы "
+        "(канвы) и как переключаться между ними.\n\n"
+        "**Какие проблемы решает:** после создания агента непонятно, куда пропала "
+        "канва или зачем два экрана для одной ноды.\n\n"
+        "**Результат:** одно изменение промпта видно и в студии, и на схеме."
+    ),
+    title_en="Studio and canvas: two editor modes",
+    description_en=(
+        "**What for:** this guide shows how Studio differs from the canvas graph and "
+        "how to switch between them.\n\n"
+        "**Problems it solves:** after creating an agent it is unclear where the canvas "
+        "went or why there are two screens for one node.\n\n"
+        "**Result:** one prompt change is visible both in Studio and on the canvas."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_flows_agent_focus_vs_canvas(
+    scenario: ScenarioRecorder,
+    flows_ui: AppUI,
+    ui_page_system: Page,
+    auth_token_system: str,
+    unique_id: str,
+) -> None:
+    flow_id = flows_doc_flow_id("focus_canvas", unique_id)
+    await flows_api_create_flow(
+        flows_ui.origin,
+        auth_token_system,
+        flows_llm_payload(
+            flow_id,
+            name=GREEN_GARDEN_AGENT_NAME,
+            prompt="Отвечай кратко.",
+        ),
+    )
+
+    page = ui_page_system
+    await flows_open_editor(page, flows_ui, flow_id)
+    studio = page.locator("flows-agent-focus-studio").first
+    await expect(studio).to_be_visible(timeout=30_000)
+    await expect(studio.locator("platform-segmented-control").first).to_be_visible(
+        timeout=15_000
+    )
+    await scenario.step(
+        "Откройте агента в режиме студии",
+        page,
+        screenshot_name="studio-opened",
+        label_en="Open the agent in Studio mode",
+        details=(
+            "Для агента с одной нодой ответа по умолчанию открывается студия: секции "
+            "промпт, модель, Skills и tools, дополнительно. Это удобный экран без "
+            "схемы графа."
+        ),
+        details_en=(
+            "For a single answer-node agent, Studio opens by default: prompt, model, "
+            "Skills and tools, advanced. A focused screen without the graph canvas."
+        ),
+    )
+
+    await flows_set_selected_llm_prompt(page, _STUDIO_PROMPT)
+    await expect(studio).to_contain_text("Зелёного сада", timeout=15_000)
+    await scenario.step(
+        "Измените промпт в студии",
+        page,
+        screenshot_name="studio-prompt-edited",
+        label_en="Change the prompt in Studio",
+        details=(
+            "В секции промпта задайте инструкцию для «Зелёного сада». Изменение сразу "
+            "попадает в черновик агента."
+        ),
+        details_en=(
+            "In the prompt section set the Green Garden instruction. The change goes "
+            "into the agent draft immediately."
+        ),
+    )
+
+    await flows_e2e_switch_editor_layout(page, "canvas")
+    canvas = page.locator("flows-flow-canvas").first
+    await expect(canvas.locator("g.node")).to_have_count(1, timeout=30_000)
+    await scenario.step(
+        "Переключитесь на схему (канву)",
+        page,
+        screenshot_name="switched-to-canvas",
+        label_en="Switch to the canvas graph",
+        details=(
+            "Нажмите переключатель схемы (иконка графа). Откроется канва с той же "
+            "нодой — удобно, когда появятся ветки и несколько блоков."
+        ),
+        details_en=(
+            "Click the canvas switch (graph icon). The canvas opens with the same node — "
+            "useful when you add branches and more blocks."
+        ),
+    )
+
+    await expect(canvas.locator("g.node")).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Убедитесь, что нода на схеме",
+        page,
+        screenshot_name="canvas-node-visible",
+        label_en="Confirm the node is on the canvas",
+        details=(
+            "На канве видна та же нода ответа. Это один агент — другой экран редактора."
+        ),
+        details_en=(
+            "The same answer node is on the canvas. One agent — a different editor screen."
+        ),
+    )
+
+    await flows_e2e_switch_editor_layout(page, "agent")
+    await expect(studio).to_be_visible(timeout=30_000)
+    await expect(studio).to_contain_text("Зелёного сада", timeout=15_000)
+    await scenario.step(
+        "Вернитесь в студию и проверьте изменение",
+        page,
+        screenshot_name="back-to-studio-persisted",
+        label_en="Return to Studio and verify the change",
+        details=(
+            "**Демонстрация результата.** Снова студия — текст про «Зелёный сад» на "
+            "месте. Переключение режимов не теряет настройки.\n\n"
+            "**Итог.** Вы умеете работать в студии и на схеме и переключаться между ними."
+        ),
+        details_en=(
+            "**Result demonstration.** Back in Studio the Green Garden text is still "
+            "there. Switching modes does not lose settings.\n\n"
+            "**Summary.** You can work in Studio and on the canvas and switch between them."
         ),
     )

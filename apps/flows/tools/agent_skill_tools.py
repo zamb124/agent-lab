@@ -10,6 +10,7 @@ from apps.flows.src.runtime.agent_skill_runtime import (
     AgentSkillRuntimeHost,
     require_agent_skill_runtime_host,
 )
+from apps.flows.src.runtime_helpers.state_utils import push_ui_event
 from apps.flows.src.services.platform_facades import get_agent_skill_service, get_file_bytes
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
@@ -56,19 +57,22 @@ class ReadAgentSkillReferenceArgs(BaseModel):
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def load_agent_skill(agent_skill_id: str, *, state: "ExecutionState") -> JsonObject:
-    _ = state
     host = require_agent_skill_runtime_host()
     skill_id = agent_skill_id.strip()
     if not skill_id:
         raise ValueError("agent_skill_id is required")
 
     if skill_id in host.loaded_depths:
-        return {
+        payload: JsonObject = {
             "success": True,
             "agent_skill_id": skill_id,
             "already_loaded": True,
             "depth": host.loaded_depths[skill_id],
         }
+        loaded = host.loaded_skills.get(skill_id)
+        if loaded is not None:
+            payload["name"] = loaded.name
+        return payload
 
     depth = _resolve_load_depth(host, skill_id)
     skill = await get_agent_skill_service().get(skill_id)
@@ -99,7 +103,7 @@ async def load_agent_skill(agent_skill_id: str, *, state: "ExecutionState") -> J
 
     host.loaded_depths[skill_id] = depth
     host.loaded_skills[skill_id] = skill
-    return {
+    result: JsonObject = {
         "success": True,
         "agent_skill_id": skill_id,
         "name": skill.name,
@@ -110,6 +114,34 @@ async def load_agent_skill(agent_skill_id: str, *, state: "ExecutionState") -> J
         "references": [_file_ref_brief(ref) for ref in skill.references],
         "assets": [_file_ref_brief(ref) for ref in skill.assets],
     }
+    _push_skill_loaded_ui_event(state, result)
+    return result
+
+
+def _push_skill_loaded_ui_event(state: "ExecutionState", load_payload: JsonObject) -> None:
+    skill_id = load_payload.get("agent_skill_id")
+    if not isinstance(skill_id, str) or not skill_id.strip():
+        raise ValueError("skill_loaded ui_event requires agent_skill_id")
+    name_raw = load_payload.get("name")
+    name = name_raw if isinstance(name_raw, str) and name_raw.strip() else skill_id
+    depth_raw = load_payload.get("depth")
+    depth = depth_raw if isinstance(depth_raw, int) else 0
+    tools_raw = load_payload.get("tools_unlocked")
+    tools_unlocked: list[str] = []
+    if isinstance(tools_raw, list):
+        tools_unlocked = [str(item) for item in tools_raw if isinstance(item, str)]
+    _ = push_ui_event(
+        state,
+        event_type="platform.skill_loaded",
+        payload={
+            "agent_skill_id": skill_id,
+            "name": name,
+            "depth": depth,
+            "tools_unlocked": tools_unlocked,
+        },
+        source="agent_skills",
+        correlation_id=skill_id,
+    )
 
 
 @tool(
@@ -167,21 +199,37 @@ async def read_agent_skill_reference(
     }
 
 
+# Engineering safety stop for runaway nesting (not a product depth cap).
+_AGENT_SKILL_LOAD_DEPTH_SAFETY_STOP = 64
+
+
 def _resolve_load_depth(host: AgentSkillRuntimeHost, skill_id: str) -> int:
+    """Resolve load depth: attached=0; child of any loaded parent = parent_depth+1.
+
+    Cycles in depends_on are allowed: reload is idempotent at the call site.
+    """
     if skill_id in host.attached_ids:
         return 0
+    best_depth: int | None = None
     for loaded_id, loaded_depth in host.loaded_depths.items():
-        if loaded_depth != 0:
-            continue
         loaded_skill = host.loaded_skills.get(loaded_id)
         if loaded_skill is None:
             continue
-        if skill_id in loaded_skill.depends_on:
-            return 1
-    raise ValueError(
-        f"AgentSkill {skill_id!r} is not attached to this llm_node "
-        + "and is not a depends_on of a loaded depth-0 skill"
-    )
+        if skill_id not in loaded_skill.depends_on:
+            continue
+        candidate = loaded_depth + 1
+        if best_depth is None or candidate < best_depth:
+            best_depth = candidate
+    if best_depth is None:
+        raise ValueError(
+            f"AgentSkill {skill_id!r} is not attached to this llm_node "
+            + "and is not a depends_on of a loaded skill"
+        )
+    if best_depth >= _AGENT_SKILL_LOAD_DEPTH_SAFETY_STOP:
+        raise ValueError(
+            f"AgentSkill {skill_id!r} load depth {best_depth} exceeds safety stop {_AGENT_SKILL_LOAD_DEPTH_SAFETY_STOP}"
+        )
+    return best_depth
 
 
 def _match_file_ref(

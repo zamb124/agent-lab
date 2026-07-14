@@ -1,12 +1,12 @@
 {
   "flow_id": "lara",
   "name": "Lara",
-  "description": "Мультисервисный ассистент: навыки по сервисам, документации и редактору flows",
-  "version": "1.0.0",
+  "description": "Единый платформенный ассистент: полный набор Agent Skills; branch = точка входа/фокус",
+  "version": "2.0.0",
   "tags": [
     "lara",
     "assistant",
-    "multiservice",
+    "skills",
     "crm",
     "flows",
     "docs"
@@ -28,6 +28,13 @@
       },
       "tools": [
         "ask_user"
+      ],
+      "agent_skills": [
+        "networkle",
+        "flows-platform",
+        "flows-code",
+        "docs-knowledge",
+        "platform-workspace"
       ],
       "output_key": "response"
     }
@@ -54,7 +61,7 @@
   "branches": {
     "crm": {
       "name": "CRM NetWorkle",
-      "description": "Lara для CRM: сущности, заметки, файлы, UI-блоки в чате",
+      "description": "Lara entry: NetWorkle CRM focus; full platform skills attached",
       "tags": [
         "crm",
         "lara"
@@ -63,35 +70,23 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara CRM",
+          "name": "CRM NetWorkle",
           "prompt": "prompts/crm.md",
           "llm": {
             "model": "auto",
             "temperature": 0.2,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "ask_user",
-            "crm_search_entities",
-            "crm_create_entity",
-            "crm_get_entity",
-            "crm_create_relationship",
-            "crm_list_entity_types",
-            "crm_daily_summary",
-            "crm_create_note",
-            "crm_create_note_and_analyze",
-            "crm_analyze_note_text",
-            "create_file",
-            "read_file",
-            "push_embed_blocks"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
         }
       }
     },
     "flows": {
       "name": "Flows Builder",
-      "description": "Lara для работы с flow/branch/node и patch-изменениями редактора",
+      "description": "Lara entry: Flows editor focus; full platform skills attached",
       "tags": [
         "flows",
         "lara"
@@ -100,27 +95,23 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara Flows",
+          "name": "Flows Builder",
           "prompt": "prompts/flows.md",
           "llm": {
             "model": "auto",
             "temperature": 0.2,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "ask_user",
-            "flows_read_context",
-            "flows_patch_node",
-            "flows_patch_flow",
-            "push_embed_blocks"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
         }
       }
     },
     "code_helper": {
       "name": "Code Helper",
-      "description": "Lara для code-ноды Flows: аккуратные подсказки по inline-коду с полным кодовым контекстом branch",
+      "description": "Lara entry: code node focus; full platform skills attached",
       "tags": [
         "flows",
         "code",
@@ -130,23 +121,23 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara Code Helper",
+          "name": "Code Helper",
           "prompt": "prompts/code_helper.md",
           "llm": {
             "model": "auto",
             "temperature": 0.1,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "flows_patch_node"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
         }
       }
     },
     "llm_node_helper": {
       "name": "LLM Node Helper",
-      "description": "Lara для llm_node: prompt, tools, messages_filter, mappings и output_key",
+      "description": "Lara entry: LLM Node Helper; full platform skills attached",
       "tags": [
         "flows",
         "llm_node",
@@ -156,23 +147,23 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara LLM Node Helper",
+          "name": "LLM Node Helper",
           "prompt": "prompts/node_helper.md",
           "llm": {
             "model": "auto",
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "flows_patch_node"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
         }
       }
     },
     "flow_node_helper": {
       "name": "Flow Node Helper",
-      "description": "Lara для вложенной flow-ноды: контракт входов/выходов и mappings",
+      "description": "Lara entry: Flow Node Helper; full platform skills attached",
       "tags": [
         "flows",
         "flow_node",
@@ -182,23 +173,23 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara Flow Node Helper",
+          "name": "Flow Node Helper",
           "prompt": "prompts/node_helper.md",
           "llm": {
             "model": "auto",
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "flows_patch_node"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
         }
       }
     },
     "remote_flow_node_helper": {
       "name": "Remote Flow Node Helper",
-      "description": "Lara для remote_flow ноды: A2A contract, payload mapping и errors",
+      "description": "Lara entry: Remote Flow Node Helper; full platform skills attached",
       "tags": [
         "flows",
         "remote_flow",
@@ -208,23 +199,23 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara Remote Flow Helper",
+          "name": "Remote Flow Node Helper",
           "prompt": "prompts/node_helper.md",
           "llm": {
             "model": "auto",
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "flows_patch_node"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
         }
       }
     },
     "external_api_node_helper": {
       "name": "External API Node Helper",
-      "description": "Lara для external_api ноды: HTTP contract, auth/config и mappings",
+      "description": "Lara entry: External API Node Helper; full platform skills attached",
       "tags": [
         "flows",
         "external_api",
@@ -234,23 +225,23 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara External API Helper",
+          "name": "External API Node Helper",
           "prompt": "prompts/node_helper.md",
           "llm": {
             "model": "auto",
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "flows_patch_node"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
         }
       }
     },
     "mcp_node_helper": {
       "name": "MCP Node Helper",
-      "description": "Lara для MCP-ноды: server/tool selection, args и result mapping",
+      "description": "Lara entry: MCP Node Helper; full platform skills attached",
       "tags": [
         "flows",
         "mcp",
@@ -260,23 +251,23 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara MCP Helper",
+          "name": "MCP Node Helper",
           "prompt": "prompts/node_helper.md",
           "llm": {
             "model": "auto",
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "flows_patch_node"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
         }
       }
     },
     "channel_node_helper": {
       "name": "Channel Node Helper",
-      "description": "Lara для channel-ноды: channel settings и payload mapping",
+      "description": "Lara entry: Channel Node Helper; full platform skills attached",
       "tags": [
         "flows",
         "channel",
@@ -286,23 +277,23 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara Channel Helper",
+          "name": "Channel Node Helper",
           "prompt": "prompts/node_helper.md",
           "llm": {
             "model": "auto",
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "flows_patch_node"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
         }
       }
     },
     "hitl_node_helper": {
       "name": "HITL Node Helper",
-      "description": "Lara для hitl_node: operator queue, interrupt payload и resume mapping",
+      "description": "Lara entry: HITL Node Helper; full platform skills attached",
       "tags": [
         "flows",
         "hitl_node",
@@ -312,23 +303,23 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara HITL Helper",
+          "name": "HITL Node Helper",
           "prompt": "prompts/node_helper.md",
           "llm": {
             "model": "auto",
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "flows_patch_node"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
         }
       }
     },
     "resource_node_helper": {
       "name": "Resource Node Helper",
-      "description": "Lara для resource-ноды: binding и node-level overrides",
+      "description": "Lara entry: Resource Node Helper; full platform skills attached",
       "tags": [
         "flows",
         "resource_node",
@@ -338,23 +329,49 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara Resource Node Helper",
+          "name": "Resource Node Helper",
           "prompt": "prompts/node_helper.md",
           "llm": {
             "model": "auto",
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "flows_patch_node"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
+        }
+      }
+    },
+    "reflection_node_helper": {
+      "name": "Reflection Node Helper",
+      "description": "Lara entry: Reflection Node Helper; full platform skills attached",
+      "tags": [
+        "flows",
+        "reflection",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Reflection Node Helper",
+          "prompt": "prompts/node_helper.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.15,
+            "provider": "humanitec_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user"
+          ]
         }
       }
     },
     "node_helper": {
       "name": "Node Helper",
-      "description": "Lara для ноды неизвестного или нового типа",
+      "description": "Lara entry: Node Helper; full platform skills attached",
       "tags": [
         "flows",
         "node",
@@ -364,23 +381,23 @@
       "nodes_mode": "merge",
       "nodes": {
         "main": {
-          "name": "Lara Node Helper",
+          "name": "Node Helper",
           "prompt": "prompts/node_helper.md",
           "llm": {
             "model": "auto",
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
+          "output_key": "response",
           "tools": [
-            "flows_patch_node"
-          ],
-          "output_key": "response"
+            "ask_user"
+          ]
         }
       }
     },
     "docs": {
       "name": "Documentation Assistant",
-      "description": "Lara для публичной документации: поиск, простые объяснения и прямые ссылки на разделы",
+      "description": "Lara entry: docs focus with optional pre-lookup; full platform skills attached",
       "tags": [
         "docs",
         "documentation",
@@ -393,7 +410,7 @@
         "docs_lookup": {
           "type": "code",
           "name": "Documentation lookup",
-          "description": "Ищет по документации до LLM-ответа, чтобы не зависеть от tool-calling у провайдера модели.",
+          "description": "Optional latency pre-search; docs-knowledge skill remains available for cross-domain.",
           "language": "python",
           "code": "async def run(args, state):\n    content = str(state.get('content') or '').strip()\n    variables = state.get('variables') if isinstance(state.get('variables'), dict) else {}\n    query_parts = [content]\n    for key in ('page_title', 'docs_path', 'page_url'):\n        value = str(variables.get(key) or '').strip()\n        if value:\n            query_parts.append(value)\n    query = '\\n'.join(part for part in query_parts if part).strip() or 'Humanitec documentation'\n    language = variables.get('docs_language') or variables.get('interface_language_code') or variables.get('user_language') or 'ru'\n    result = await capability('tools.docs_prepare_context', query=query, limit=5, language=str(language))\n    if not isinstance(result, dict):\n        result = {'success': False, 'error': 'docs_prepare_context returned non-object'}\n    variables['docs_search_context'] = str(result.get('prompt_context') or '')\n    variables['docs_search_links'] = str(result.get('prompt_links') or '')\n    variables['docs_search_status'] = 'found' if result.get('results') else 'not_found'\n    if not result.get('success', False):\n        variables['docs_search_status'] = 'error'\n        variables['docs_search_error'] = str(result.get('error') or 'Documentation search failed')\n    state['variables'] = variables\n    state['docs_search_result'] = result\n    return {'variables': variables, 'docs_search_result': result}\n"
         },
@@ -405,8 +422,10 @@
             "temperature": 0.2,
             "provider": "humanitec_llm"
           },
-          "tools": [],
-          "output_key": "response"
+          "output_key": "response",
+          "tools": [
+            "ask_user"
+          ]
         }
       },
       "edges": [
