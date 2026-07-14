@@ -2,6 +2,7 @@
 Сборка иконок Linnex для PWA, iOS и Android (Capacitor + Google Play).
 
 Источник логотипа: core/frontend/static/assets/service_logos/frontend_logo.svg.
+Favicon (вкладки браузера): linnex_spinner_logo.png — без SVG blur, почти full-bleed.
 Фон: #0F0F0F (как background_color в PWA manifest и Splash Screen на iOS/Android).
 
 Запуск из корня репо: uv run python scripts/generate_linnex_pwa_icons.py
@@ -16,6 +17,8 @@ import skia
 
 ROOT = Path(__file__).resolve().parents[1]
 LOGO_SVG = ROOT / "core/frontend/static/assets/service_logos/frontend_logo.svg"
+SPINNER_PNG = ROOT / "core/frontend/static/assets/service_logos/linnex_spinner_logo.png"
+SERVICE_LOGOS_DIR = ROOT / "core/frontend/static/assets/service_logos"
 ICONS_DIR = ROOT / "core/frontend/static/pwa/icons"
 IOS_ICON = (
     ROOT
@@ -68,11 +71,42 @@ def _draw_logo(canvas: skia.Canvas, logo_bytes: bytes, inner: int, size: int) ->
 
 
 def render_png(logo_bytes: bytes, size: int, *, maskable: bool) -> bytes:
-    inner = max(1, int(size * (0.62 if maskable else 0.78)))
+    # В табе браузера слот ~16px: padding съедает читаемость — почти full-bleed.
+    inner = max(1, int(size * (0.72 if maskable else 0.92)))
     surface = skia.Surface(size, size)
     with surface as canvas:
         canvas.clear(skia.Color4f(*BACKGROUND))
         _draw_logo(canvas, logo_bytes, inner, size)
+    data = surface.makeImageSnapshot().encodeToData(skia.kPNG, 100)
+    return data.bytes()
+
+
+def render_favicon_from_spinner_png(size: int, *, fill: float = 0.94) -> bytes:
+    """
+    Favicon из растрового знака (без SVG blur): тёмный квадрат + логотип почти edge-to-edge.
+    SVG с gaussianBlur на 16px выглядит как мелкая клякса.
+    """
+    if not SPINNER_PNG.is_file():
+        raise FileNotFoundError(f"Нет spinner PNG: {SPINNER_PNG}")
+    image = skia.Image.MakeFromEncoded(skia.Data.MakeFromFileName(str(SPINNER_PNG)))
+    if image is None:
+        raise RuntimeError(f"Skia не разобрал {SPINNER_PNG}")
+    surface = skia.Surface(size, size)
+    with surface as canvas:
+        canvas.clear(skia.Color4f(*BACKGROUND))
+        src_w = float(image.width())
+        src_h = float(image.height())
+        target = float(size) * fill
+        scale = target / max(src_w, src_h)
+        draw_w = src_w * scale
+        draw_h = src_h * scale
+        dest = skia.Rect.MakeXYWH(
+            (size - draw_w) / 2.0,
+            (size - draw_h) / 2.0,
+            draw_w,
+            draw_h,
+        )
+        canvas.drawImageRect(image, dest)
     data = surface.makeImageSnapshot().encodeToData(skia.kPNG, 100)
     return data.bytes()
 
@@ -86,7 +120,7 @@ def render_round_png(logo_bytes: bytes, size: int) -> bytes:
         path.addCircle(size / 2.0, size / 2.0, size / 2.0)
         canvas.clipPath(path, skia.ClipOp.kIntersect, True)
         canvas.clear(skia.Color4f(*BACKGROUND))
-        inner = max(1, int(size * 0.78))
+        inner = max(1, int(size * 0.92))
         _draw_logo(canvas, logo_bytes, inner, size)
     data = surface.makeImageSnapshot().encodeToData(skia.kPNG, 100)
     return data.bytes()
@@ -126,8 +160,6 @@ def render_play_feature_graphic(logo_bytes: bytes) -> bytes:
 
         logo_size = 320
         _draw_logo(canvas, logo_bytes, logo_size, 2 * 96 + logo_size)
-        # Центрируем знак слева вертикально.
-        # (перерисовка выше даёт центрирование внутри квадрата; здесь дополнительно ничего не нужно)
 
         font = skia.Font(skia.Typeface("Helvetica", skia.FontStyle.Bold()), 96)
         text_paint = skia.Paint(AntiAlias=True, Color=skia.ColorWHITE)
@@ -186,6 +218,12 @@ def main() -> None:
     logo_bytes = LOGO_SVG.read_bytes()
 
     ICONS_DIR.mkdir(parents=True, exist_ok=True)
+    SERVICE_LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+
+    for s in (16, 32, 48):
+        path = SERVICE_LOGOS_DIR / f"favicon-{s}x{s}.png"
+        path.write_bytes(render_favicon_from_spinner_png(s))
+        print(f"OK: {path}")
 
     for s in (72, 96, 128, 144, 152, 180, 192, 384, 512):
         path = ICONS_DIR / f"icon-{s}x{s}.png"
