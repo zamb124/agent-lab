@@ -81,10 +81,10 @@ def render_png(logo_bytes: bytes, size: int, *, maskable: bool) -> bytes:
     return data.bytes()
 
 
-def render_favicon_from_spinner_png(size: int, *, fill: float = 0.94) -> bytes:
+def render_favicon_from_spinner_png(size: int, *, fill: float = 0.98) -> bytes:
     """
-    Favicon из растрового знака (без SVG blur): тёмный квадрат + логотип почти edge-to-edge.
-    SVG с gaussianBlur на 16px выглядит как мелкая клякса.
+    Favicon из растрового знака (без SVG blur): прозрачный фон + логотип почти edge-to-edge.
+    Тёмный квадрат на светлой вкладке Chrome выглядит как «чёрный квадрат» — фон не рисуем.
     """
     if not SPINNER_PNG.is_file():
         raise FileNotFoundError(f"Нет spinner PNG: {SPINNER_PNG}")
@@ -93,7 +93,7 @@ def render_favicon_from_spinner_png(size: int, *, fill: float = 0.94) -> bytes:
         raise RuntimeError(f"Skia не разобрал {SPINNER_PNG}")
     surface = skia.Surface(size, size)
     with surface as canvas:
-        canvas.clear(skia.Color4f(*BACKGROUND))
+        canvas.clear(skia.Color4f(0, 0, 0, 0))
         src_w = float(image.width())
         src_h = float(image.height())
         target = float(size) * fill
