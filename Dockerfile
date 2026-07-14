@@ -31,6 +31,7 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 COPY zensical.ru.toml zensical.en.toml ./
 COPY docs ./docs
+COPY core/frontend/static/assets/service_logos/frontend_logo.svg ./core/frontend/static/assets/service_logos/frontend_logo.svg
 COPY scripts/__init__.py scripts/docs_prepare.py scripts/scenario_taxonomy.py scripts/extract_openapi.py scripts/openapi_to_markdown.py ./scripts/
 RUN python scripts/docs_prepare.py && \
     zensical build --clean --config-file zensical.ru.toml && \
