@@ -1,0 +1,25 @@
+[
+  {
+    "id": "platform_assistant_main",
+    "type": "llm_node",
+    "name": "Платформенный ассистент",
+    "description": "Ассистент с progressive disclosure реальных platform Agent Skills",
+    "prompt": "prompts/main.md",
+    "tools": [
+      "ask_user"
+    ],
+    "agent_skills": [
+      "document-workspace",
+      "diagrams-viz",
+      "knowledge-rag",
+      "web-research",
+      "crm-notes",
+      "work-tracking"
+    ],
+    "llm": {
+      "model": "auto",
+      "temperature": 0.2,
+      "provider": "humanitec_llm"
+    }
+  }
+]

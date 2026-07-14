@@ -14,6 +14,7 @@ from apps.flows.src.container_state import (
     set_current_container,
 )
 from apps.flows.src.db import (
+    AgentSkillRepository,
     AgentToolkitRepository,
     EvaluationLabRepository,
     FlowRepository,
@@ -32,6 +33,7 @@ from apps.flows.src.evaluation.lab_service import EvaluationLabService
 from apps.flows.src.models import TriggerType
 from apps.flows.src.registry.nodes import NodeRegistry, create_default_node_registry
 from apps.flows.src.runners.remote import RemoteCodeRunner
+from apps.flows.src.services.agent_skill_service import AgentSkillService
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.services.handoff_context_service import (
@@ -96,6 +98,17 @@ class FlowContainer(BaseContainer):
     @lazy
     def tool_repository(self) -> ToolRepository:
         return ToolRepository(storage=self.storage)
+
+    @lazy
+    def agent_skill_repository(self) -> AgentSkillRepository:
+        return AgentSkillRepository(storage=self.storage)
+
+    @lazy
+    def agent_skill_service(self) -> AgentSkillService:
+        return AgentSkillService(
+            repository=self.agent_skill_repository,
+            tool_repository=self.tool_repository,
+        )
 
     @lazy
     def agent_toolkit_repository(self) -> AgentToolkitRepository:

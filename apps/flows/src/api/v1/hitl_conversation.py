@@ -10,7 +10,7 @@ worktracker, поэтому авторизует оператора по чле�
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.hitl_conversation import ConversationSnapshot, ConversationTurn
@@ -24,8 +24,18 @@ router = APIRouter(prefix="/hitl", tags=["hitl-conversation"])
 
 
 class OperatorMessageRequest(StrictBaseModel):
-    text: str = Field(..., min_length=1)
+    text: str = ""
     idempotency_key: str = Field(..., min_length=1)
+    file_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def require_text_or_files(self) -> OperatorMessageRequest:
+        clean = self.text.strip()
+        file_ids = [fid.strip() for fid in self.file_ids if fid.strip()]
+        if clean == "" and len(file_ids) == 0:
+            raise ValueError("Нужен text или file_ids")
+        self.file_ids = file_ids
+        return self
 
 
 @router.get("/{work_item_id}/conversation", response_model=ConversationSnapshot)
@@ -55,6 +65,7 @@ async def send_operator_message(
             operator_user_id=operator_user_id,
             text=body.text,
             idempotency_key=body.idempotency_key,
+            file_ids=body.file_ids,
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc

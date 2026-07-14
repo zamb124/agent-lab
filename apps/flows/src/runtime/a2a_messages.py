@@ -67,22 +67,28 @@ def build_operator_message(
     message_id: str,
     context_id: str | None = None,
     task_id: str | None = None,
+    file_ids: list[str] | None = None,
 ) -> Message:
     """Сообщение оператора в HITL: role=agent + metadata.hitl_role=operator.
 
     `message_id` детерминирован снаружи (идемпотентность durable append).
+    `file_ids` — уже загруженные платформенные файлы (attach в composer).
     """
+    resolved_file_ids = [fid for fid in (file_ids or []) if fid.strip()]
+    metadata: JsonObject = {
+        "node_id": source_node_id,
+        "hitl_role": "operator",
+        "operator_user_id": operator_user_id,
+    }
+    if resolved_file_ids:
+        metadata["hitl_file_ids"] = resolved_file_ids
     return Message(
         message_id=message_id,
         role=Role.agent,
         parts=[Part(root=TextPart(text=content))],
         context_id=context_id,
         task_id=task_id,
-        metadata={
-            "node_id": source_node_id,
-            "hitl_role": "operator",
-            "operator_user_id": operator_user_id,
-        },
+        metadata=metadata,
     )
 
 

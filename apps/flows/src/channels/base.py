@@ -1028,7 +1028,16 @@ class BaseChannel(ABC):
                     await emitter.emit_artifact(json.dumps(json_data, ensure_ascii=False))
                 await self._run_trigger_output_actions_if_applicable(params, state, flow_config)
                 await self._save_terminal_state(params.session_id, state, "completed")
-                await emitter.emit_complete(final_response, has_artifact=has_artifact)
+                # HITL closing уже ушёл как operator_reply — не дублировать тот же текст в completed.
+                streamed_closing = state.hitl_streamed_closing_text
+                complete_text = final_response
+                if (
+                    isinstance(streamed_closing, str)
+                    and streamed_closing.strip() != ""
+                    and final_response == streamed_closing
+                ):
+                    complete_text = ""
+                await emitter.emit_complete(complete_text, has_artifact=has_artifact)
                 await self._send_push_notification(
                     params.task_id, params.context_id, "completed", final_response
                 )

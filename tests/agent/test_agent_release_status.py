@@ -93,8 +93,8 @@ def test_release_status_ready_with_pending_macos_notarization_manifest() -> None
 
 def test_resolve_asset_url_ignores_internal_app_bundle_zip() -> None:
     version_sha = "077d469f78e574fe8b34f66adf77312402a3d5"
-    dmg_name = f"HumanitecAgent-macos-arm64-{version_sha}.dmg"
-    internal_name = f"HumanitecAgent-macos-arm64-{version_sha}.app-bundle.zip"
+    dmg_name = f"LinnexAgent-macos-arm64-{version_sha}.dmg"
+    internal_name = f"LinnexAgent-macos-arm64-{version_sha}.app-bundle.zip"
     payload: JsonObject = {
         "assets": [
             {
@@ -110,8 +110,8 @@ def test_resolve_asset_url_ignores_internal_app_bundle_zip() -> None:
     url = _resolve_asset_url_from_release(payload, "macos-arm64")
     assert url == "https://github.example/dmg"
     version_sha = "077d469f78e574fe8b34f66adf77312402a3d5"
-    appimage_name = f"HumanitecAgent-{version_sha}.AppImage"
-    dmg_name = f"HumanitecAgent-macos-arm64-{version_sha}.dmg"
+    appimage_name = f"LinnexAgent-{version_sha}.AppImage"
+    dmg_name = f"LinnexAgent-macos-arm64-{version_sha}.dmg"
     payload: JsonObject = {
         "assets": [
             {
@@ -130,8 +130,8 @@ def test_resolve_asset_url_ignores_internal_app_bundle_zip() -> None:
 
 def test_resolve_asset_url_appimage_not_macos_dmg() -> None:
     version_sha = "077d469f78e574fe8b34f66adf77312402a3d5"
-    appimage_name = f"HumanitecAgent-{version_sha}.AppImage"
-    dmg_name = f"HumanitecAgent-macos-arm64-{version_sha}.dmg"
+    appimage_name = f"LinnexAgent-{version_sha}.AppImage"
+    dmg_name = f"LinnexAgent-macos-arm64-{version_sha}.dmg"
     payload: JsonObject = {
         "assets": [
             {"name": dmg_name, "browser_download_url": "https://github.example/dmg"},
@@ -149,7 +149,7 @@ def test_resolve_asset_url_missing_platform() -> None:
     payload: JsonObject = {
         "assets": [
             {
-                "name": "HumanitecAgent-deadbeef.AppImage",
+                "name": "LinnexAgent-deadbeef.AppImage",
                 "browser_download_url": "https://github.example/appimage",
             },
         ],

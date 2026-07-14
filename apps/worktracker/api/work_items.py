@@ -104,6 +104,7 @@ async def mine_work_items_summary(container: ContainerDep) -> WorkItemMineSummar
     return WorkItemMineSummaryResponse(
         assigned_open_count=summary.assigned_open_count,
         queue_inbox_count=summary.queue_inbox_count,
+        work_queue_ids=summary.work_queue_ids,
     )
 
 

@@ -40,7 +40,6 @@ export class WorkItemDetailEditor extends PlatformElement {
         _titleDraft: { state: true },
         _descriptionDraft: { state: true },
         _commentDraft: { state: true },
-        _hitlReplyDraft: { state: true },
         _labelsDraft: { state: true },
         _dueDateDraft: { state: true },
         _attachmentsDraft: { state: true },
@@ -150,14 +149,9 @@ export class WorkItemDetailEditor extends PlatformElement {
                 flex: 1 1 auto;
                 min-width: 0;
             }
-            .wt-hitl-reply {
+            .wt-hitl-complete {
                 display: flex;
-                align-items: flex-end;
-                gap: var(--space-2);
-            }
-            .wt-hitl-reply platform-field {
-                flex: 1 1 auto;
-                min-width: 0;
+                justify-content: flex-end;
             }
         `,
     ];
@@ -170,7 +164,6 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._titleDraft = '';
         this._descriptionDraft = '';
         this._commentDraft = '';
-        this._hitlReplyDraft = '';
         this._labelsDraft = [];
         this._dueDateDraft = '';
         this._attachmentsDraft = [];
@@ -688,7 +681,8 @@ export class WorkItemDetailEditor extends PlatformElement {
         if (!policy || policy.mode === 'none') {
             return nothing;
         }
-        const singleReply = policy.mode === 'single_reply' && policy.can_complete === true;
+        const canComplete = policy.can_complete === true;
+        const isTakeover = policy.mode === 'takeover';
         const modeHint = policy.mode === 'single_reply'
             ? this.t('hitl_chat.hint_single_reply')
             : policy.mode === 'takeover'
@@ -699,6 +693,9 @@ export class WorkItemDetailEditor extends PlatformElement {
                 <h3 class="wt-hitl-title">${this.t('hitl_chat.title')}</h3>
                 ${modeHint
                     ? html`<p class="wt-hitl-hint">${modeHint}</p>`
+                    : nothing}
+                ${!canComplete && item && !TERMINAL_STATES.has(item.state)
+                    ? html`<p class="wt-hitl-hint">${this.t('hitl_chat.hint_need_queue_access')}</p>`
                     : nothing}
                 <div class="wt-hitl-chat">
                     <platform-chat
@@ -711,45 +708,19 @@ export class WorkItemDetailEditor extends PlatformElement {
                         ?use-credentials=${true}
                     ></platform-chat>
                 </div>
-                ${singleReply ? this._renderSingleReply() : nothing}
+                ${isTakeover && canComplete && item && !TERMINAL_STATES.has(item.state)
+                    ? html`
+                        <div class="wt-hitl-complete">
+                            <button
+                                type="button"
+                                class="btn btn-primary"
+                                @click=${() => this._complete()}
+                            >${this.t('hitl_chat.complete_takeover')}</button>
+                        </div>
+                    `
+                    : nothing}
             </section>
         `;
-    }
-
-    _renderSingleReply() {
-        const draft = typeof this._hitlReplyDraft === 'string' ? this._hitlReplyDraft.trim() : '';
-        return html`
-            <div class="wt-hitl-reply">
-                <platform-field
-                    type="text"
-                    mode="edit"
-                    pill-embed
-                    pill-density="dense"
-                    data-canon="composer"
-                    .label=${''}
-                    .placeholder=${this.t('hitl_chat.reply_placeholder')}
-                    .value=${this._hitlReplyDraft}
-                    @change=${(e) => {
-                        this._hitlReplyDraft = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
-                    }}
-                ></platform-field>
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    ?disabled=${draft.length === 0}
-                    @click=${() => this._completeHitlWithReply()}
-                >${this.t('hitl_chat.complete')}</button>
-            </div>
-        `;
-    }
-
-    _completeHitlWithReply() {
-        const text = typeof this._hitlReplyDraft === 'string' ? this._hitlReplyDraft.trim() : '';
-        if (!text || !this.workItemId) {
-            return;
-        }
-        this._completeOp.run({ work_item_id: this.workItemId, resolution_text: text });
-        this._hitlReplyDraft = '';
     }
 
     _renderActivity() {

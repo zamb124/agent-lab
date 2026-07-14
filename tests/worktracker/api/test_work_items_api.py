@@ -87,6 +87,7 @@ async def test_mine_summary_returns_counts(
     summary = response.json()
     assert summary["assigned_open_count"] >= 1
     assert summary["queue_inbox_count"] >= 0
+    assert isinstance(summary["work_queue_ids"], list)
 
 
 async def test_get_work_item_happy_and_404(worktracker_client, unique_id: str) -> None:

@@ -10,6 +10,7 @@ from core.documents.viewer.models import (
     MediaViewerKind,
     OnlyOfficeOpenPayload,
     TextOpenPayload,
+    VizOpenPayload,
 )
 from core.documents.viewer.resolver import (
     resolve_file_category_for_upload,
@@ -26,6 +27,7 @@ __all__ = [
     "MediaViewerKind",
     "OnlyOfficeOpenPayload",
     "TextOpenPayload",
+    "VizOpenPayload",
     "resolve_file_category_for_upload",
     "resolve_viewer_handler_id",
 ]

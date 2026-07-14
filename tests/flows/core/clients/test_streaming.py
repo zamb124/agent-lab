@@ -167,8 +167,23 @@ class TestIsFinalEvent:
         )
         assert is_final_event(event) is True
 
-    def test_operator_handoff_continue_input_required_not_final(self):
-        """Operator takeover: подписчик ждёт следующий раунд."""
+    def test_operator_task_input_required_is_final(self):
+        """HITL operator_task: подписчик message/stream закрывается; дальше live resubscribe."""
+        event = TaskStatusUpdateEvent(
+            contextId="ctx",
+            taskId="task",
+            status=TaskStatus(state=TaskState.input_required),
+            final=True,
+            metadata={
+                "platform_interrupt": {
+                    "body": {"kind": "operator_task"},
+                },
+            },
+        )
+        assert is_final_event(event) is True
+
+    def test_operator_task_input_required_final_even_when_legacy_continue_flag(self):
+        """Legacy platform_handoff_continue на operator_task всё равно final (resubscribe)."""
         event = TaskStatusUpdateEvent(
             contextId="ctx",
             taskId="task",
@@ -181,7 +196,7 @@ class TestIsFinalEvent:
                 },
             },
         )
-        assert is_final_event(event) is False
+        assert is_final_event(event) is True
 
 
 @pytest.mark.real_taskiq

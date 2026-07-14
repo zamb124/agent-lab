@@ -22,6 +22,8 @@ export class FlowsPropertyPanel extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeId: { type: String },
+        focusMode: { type: Boolean },
+        focusSection: { type: String },
     };
 
     static styles = [
@@ -53,6 +55,8 @@ export class FlowsPropertyPanel extends PlatformElement {
         this.flowId = '';
         this.branchId = 'base';
         this.nodeId = '';
+        this.focusMode = false;
+        this.focusSection = 'prompt';
         this._editor = this.useOp('flows/editor');
         this._bulkDelete = this.useOp('flows/editor_bulk_delete');
     }
@@ -148,6 +152,10 @@ export class FlowsPropertyPanel extends PlatformElement {
             previewExecutionState,
             dataflowNode,
             embedded: false,
+            focusMode: this.focusMode === true,
+            focusSection: typeof this.focusSection === 'string' && this.focusSection.length > 0
+                ? this.focusSection
+                : 'prompt',
             onChange: (e) => this._onChange(e),
             onDelete: (e) => this._onDeleteNode(e),
             onDuplicate: (e) => this._onDuplicateNode(e),

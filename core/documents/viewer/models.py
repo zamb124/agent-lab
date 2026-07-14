@@ -6,9 +6,13 @@ from typing import ClassVar, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-DocumentViewerHandlerId = Literal["onlyoffice", "media", "image", "text", "binary"]
+from core.types import JsonObject
+
+DocumentViewerHandlerId = Literal["onlyoffice", "media", "image", "text", "binary", "viz"]
 MediaViewerKind = Literal["audio", "video"]
 OfficeViewerBindingKind = Literal["document", "file"]
+VizViewerEngine = Literal["echarts", "mermaid"]
+VizViewerKind = Literal["chart", "flowchart", "gantt", "sequence", "timeline"]
 
 
 class DocumentOpenCapabilities(BaseModel):
@@ -54,6 +58,15 @@ class BinaryOpenPayload(BaseModel):
     file_size: int = Field(ge=0)
 
 
+class VizOpenPayload(BaseModel):
+    stream_url: str
+    content_type: str
+    kind: VizViewerKind
+    engine: VizViewerEngine
+    title: str
+    document: JsonObject
+
+
 class DocumentOpenConfigResponse(BaseModel):
     handler: DocumentViewerHandlerId
     binding_id: str
@@ -70,6 +83,7 @@ class DocumentOpenConfigResponse(BaseModel):
     image: ImageOpenPayload | None = None
     text: TextOpenPayload | None = None
     binary: BinaryOpenPayload | None = None
+    viz: VizOpenPayload | None = None
 
     @model_validator(mode="after")
     def payload_matches_handler(self) -> Self:
@@ -79,6 +93,7 @@ class DocumentOpenConfigResponse(BaseModel):
             "image": self.image,
             "text": self.text,
             "binary": self.binary,
+            "viz": self.viz,
         }
         active = payload_fields[self.handler]
         if active is None:

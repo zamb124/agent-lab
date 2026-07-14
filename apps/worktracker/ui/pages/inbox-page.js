@@ -1,12 +1,13 @@
 /**
- * InboxPage — назначенные задачи и очередь inbox.
+ * InboxPage — назначенные задачи и inbox очередей (только очереди, где юзер — member).
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { WorktrackerUiEvents } from '../events/worktracker-ui-events.js';
 import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '../components/worktracker-work-item-card.js';
 import '../components/worktracker-icon-action.js';
 import '../components/worktracker-list-section.js';
@@ -20,10 +21,13 @@ export class WorktrackerInboxPage extends PlatformPage {
         _assignedItems: { state: true },
         _queueItems: { state: true },
         _selectedWorkItemId: { state: true },
+        _memberQueueIds: { state: true },
+        _queuesLoaded: { state: true },
     };
 
     static styles = [
         PlatformPage.styles,
+        buttonStyles,
         worktrackerSurfacesStyles,
         css`
             :host {
@@ -33,6 +37,9 @@ export class WorktrackerInboxPage extends PlatformPage {
                 flex: 1;
                 width: 100%;
             }
+            .queue-empty-cta {
+                margin-top: var(--space-3);
+            }
         `,
     ];
 
@@ -41,6 +48,8 @@ export class WorktrackerInboxPage extends PlatformPage {
         this._assignedItems = [];
         this._queueItems = [];
         this._selectedWorkItemId = '';
+        this._memberQueueIds = [];
+        this._queuesLoaded = false;
         this._reloadGeneration = 0;
         this._workItems = this.useResource('worktracker/work_items');
         this._countsOp = this.useOp('platform/work_item_counts');
@@ -111,6 +120,17 @@ export class WorktrackerInboxPage extends PlatformPage {
         });
     }
 
+    _memberQueueIdsFromSummary(summary) {
+        if (!summary || typeof summary !== 'object') {
+            throw new Error('WorktrackerInboxPage: mine summary result required');
+        }
+        const ids = summary.work_queue_ids;
+        if (!Array.isArray(ids)) {
+            throw new Error('WorktrackerInboxPage: mine summary.work_queue_ids required');
+        }
+        return ids.filter((id) => typeof id === 'string' && id.length > 0);
+    }
+
     async _reload() {
         const user = this._userSel.value;
         if (!user || typeof user.user_id !== 'string' || user.user_id.length === 0) {
@@ -120,6 +140,7 @@ export class WorktrackerInboxPage extends PlatformPage {
         this._reloadGeneration = generation;
         this._assignedItems = [];
         this._queueItems = [];
+        this._queuesLoaded = false;
 
         const assignedRequested = this._workItems.load({
             assignee_user_id: user.user_id,
@@ -134,9 +155,26 @@ export class WorktrackerInboxPage extends PlatformPage {
         }
         this._assignedItems = assignedItems;
 
+        const summary = await this._countsOp.run({});
+        if (generation !== this._reloadGeneration) {
+            return;
+        }
+        if (summary === null) {
+            throw new Error('WorktrackerInboxPage: mine summary failed');
+        }
+        const memberQueueIds = this._memberQueueIdsFromSummary(summary);
+        this._memberQueueIds = memberQueueIds;
+        this._queuesLoaded = true;
+
+        if (memberQueueIds.length === 0) {
+            this._queueItems = [];
+            return;
+        }
+
         const queueRequested = this._workItems.load({
             queue_unclaimed_only: true,
             exclude_terminal: true,
+            work_queue_ids: memberQueueIds,
         });
         if (!queueRequested || typeof queueRequested.id !== 'string') {
             throw new Error('WorktrackerInboxPage: queue list dispatch returned no event id');
@@ -146,7 +184,6 @@ export class WorktrackerInboxPage extends PlatformPage {
             return;
         }
         this._queueItems = queueItems;
-        this._countsOp.run({});
     }
 
     _renderRow(item) {
@@ -174,6 +211,36 @@ export class WorktrackerInboxPage extends PlatformPage {
         `;
     }
 
+    _renderQueueSection() {
+        if (!this._queuesLoaded) {
+            return nothing;
+        }
+        if (this._memberQueueIds.length === 0) {
+            return html`
+                <div class="wt-empty">
+                    <platform-icon class="wt-empty-icon" name="inbox" size="48"></platform-icon>
+                    <p class="wt-empty-title">${this.t('inbox_page.empty_no_queue_membership')}</p>
+                    <button
+                        type="button"
+                        class="btn btn-primary queue-empty-cta"
+                        @click=${() => this.navigate('queues', {})}
+                    >${this.t('inbox_page.go_to_queues')}</button>
+                </div>
+            `;
+        }
+        if (this._queueItems.length > 0) {
+            return html`
+                <worktracker-list-section
+                    title=${this.t('inbox_page.section_queue')}
+                    .count=${this._queueItems.length}
+                >
+                    ${this._queueItems.map((item) => this._renderRow(item))}
+                </worktracker-list-section>
+            `;
+        }
+        return this._renderEmpty('inbox_page.empty_queue');
+    }
+
     _openCreateTask() {
         this.openModal('worktracker.work_item_create', {});
     }
@@ -197,14 +264,7 @@ export class WorktrackerInboxPage extends PlatformPage {
                         ${this._assignedItems.map((item) => this._renderRow(item))}
                     </worktracker-list-section>
                 ` : this._renderEmpty('inbox_page.empty_assigned')}
-                ${this._queueItems.length > 0 ? html`
-                    <worktracker-list-section
-                        title=${this.t('inbox_page.section_queue')}
-                        .count=${this._queueItems.length}
-                    >
-                        ${this._queueItems.map((item) => this._renderRow(item))}
-                    </worktracker-list-section>
-                ` : this._renderEmpty('inbox_page.empty_queue')}
+                ${this._renderQueueSection()}
             </div>
         `;
     }

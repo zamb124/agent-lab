@@ -24,6 +24,12 @@ alwaysApply: false
 
 Не смешивать с внешним «агентом» в смысле спецификации A2A (agent card, удалённый endpoint): там допустимы термины спеки, но платформенная сущность — **flow**.
 
+## Agent Skill (не путать с branch)
+
+**Agent Skill** (`agent_skill_id`, `AgentSkill`) — progressive procedure pack для `llm_node` (methodology + optional `tool_refs` / `FileRef`). UI copy — «Skill».
+
+Не использовать `skill_id` для этой сущности и не смешивать с `branch_id` (legacy flow «skills» = branches) или `AgentToolkit` (MCP-группы desktop). Канон → **`agent_skills.mdc`**.
+
 ## Handoff (не путать)
 
 | Термин | Канон |

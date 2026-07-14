@@ -7,7 +7,7 @@
  * - Если объект с полем `blocks` (массив) — используется `blocks`.
  * - Если объект с полем `files` (массив) — каждый элемент мапится в блок `file_card`
  *   (`file_id`, `name`, `mime_type`, `url`, `preview_url`).
- * Типы `card` / `table` / `actions` / `text`: см. `flows-chat-builtin-blocks.js`
+ * Типы `card` / `table` / `actions` / `text` / `viz`: см. `flows-chat-builtin-blocks.js`
  * и `flows-chat-block-renderer.js`
  * (у `table` поле JSON `title` → свойство `caption` у Lit-компонента).
  * Невалидный JSON не даёт блоков; рендерер показывает fallback для неизвестного `type`.

@@ -28,6 +28,8 @@ import '../nodes/flows-base-node-editor.js';
  * @param {object} ctx.previewExecutionState
  * @param {object|null} [ctx.dataflowNode]
  * @param {boolean} [ctx.embedded]
+ * @param {boolean} [ctx.focusMode]
+ * @param {string} [ctx.focusSection]
  * @param {(e: CustomEvent) => void} ctx.onChange
  * @param {(e: CustomEvent) => void} ctx.onDelete
  * @param {(e: CustomEvent) => void} ctx.onDuplicate
@@ -48,6 +50,10 @@ export function renderFlowsNodeEditorSurface(ctx) {
     const preview = ctx.previewExecutionState;
     const dataflowNode = isPlainObject(ctx.dataflowNode) ? ctx.dataflowNode : null;
     const embedded = ctx.embedded === true;
+    const focusMode = ctx.focusMode === true;
+    const focusSection = typeof ctx.focusSection === 'string' && ctx.focusSection.length > 0
+        ? ctx.focusSection
+        : 'prompt';
     const onChange = ctx.onChange;
     const onDelete = ctx.onDelete;
     const onDuplicate = ctx.onDuplicate;
@@ -70,6 +76,8 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
                 ?embedded=${embedded}
+                ?focusMode=${focusMode}
+                .focusSection=${focusSection}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-llm-node-editor>`;

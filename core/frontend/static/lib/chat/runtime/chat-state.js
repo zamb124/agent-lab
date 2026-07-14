@@ -724,7 +724,8 @@ function _activity(state, p) {
         state,
         taskId,
         (messages) => {
-            const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
+            const withPlaceholder = _ensurePlaceholderAssistant(messages, taskId);
+            const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(withPlaceholder, taskId);
             return _replaceMessage(nextMsgs, idx, (m) => ({ ...m, activity: text }));
         },
     );
@@ -735,7 +736,41 @@ function _chunk(state, p, field) {
     const taskId = typeof p.task_id === 'string' ? p.task_id : null;
     const text = typeof p.text === 'string' ? p.text : '';
     if (!taskId) return state;
-    return _applyToBucketMessages(state, taskId, _appendChunk(field, text));
+    return _applyToBucketMessages(state, taskId, (messages) => {
+        const withPlaceholder = _ensurePlaceholderAssistant(messages, taskId);
+        return _appendChunk(field, text)(withPlaceholder, taskId);
+    });
+}
+
+function _replyContentMatches(message, text) {
+    return Boolean(
+        message
+        && (message.role === 'operator' || message.role === 'assistant')
+        && typeof message.content === 'string'
+        && message.content === text,
+    );
+}
+
+/** Индекс последнего operator/assistant с тем же текстом (для HITL dedupe). */
+function _findMatchingReplyIndex(messages, text) {
+    if (!Array.isArray(messages) || typeof text !== 'string' || text.length === 0) {
+        return -1;
+    }
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+        if (_replyContentMatches(messages[i], text)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+function _mergeFileIds(existing, incoming) {
+    const base = Array.isArray(existing) ? existing : [];
+    const next = Array.isArray(incoming) ? incoming : [];
+    if (next.length === 0) {
+        return base;
+    }
+    return [...base, ...next];
 }
 
 function _operatorReply(state, p) {
@@ -744,14 +779,24 @@ function _operatorReply(state, p) {
     const text = typeof p.text === 'string' ? p.text : '';
     if (!taskId || !text) return state;
     return _applyToBucketMessages(state, taskId, (messages) => {
-        const last = messages.length > 0 ? messages[messages.length - 1] : null;
-        if (
-            last
-            && last.role === 'operator'
-            && typeof last.content === 'string'
-            && last.content === text
-        ) {
+        const matchIdx = _findMatchingReplyIndex(messages, text);
+        if (matchIdx >= 0) {
             return messages;
+        }
+        // files → reply: дописать текст в пустой operator bubble с fileIds.
+        for (let i = messages.length - 1; i >= 0; i -= 1) {
+            const m = messages[i];
+            if (
+                m
+                && m.role === 'operator'
+                && typeof m.content === 'string'
+                && m.content.trim() === ''
+            ) {
+                return _replaceMessage(messages, i, (cur) => ({
+                    ...cur,
+                    content: text,
+                }));
+            }
         }
         const operatorMsg = {
             id: `operator_${taskId}_${Date.now()}`,
@@ -775,9 +820,22 @@ function _operatorFiles(state, p) {
             if (m && m.role === 'operator') {
                 return _replaceMessage(messages, i, (cur) => ({
                     ...cur,
-                    fileIds: [...(Array.isArray(cur.fileIds) ? cur.fileIds : []), ...fileIds],
+                    fileIds: _mergeFileIds(cur.fileIds, fileIds),
                 }));
             }
+        }
+        // completed раньше reply: повесить files на last assistant с текстом.
+        const last = messages.length > 0 ? messages[messages.length - 1] : null;
+        if (
+            last
+            && last.role === 'assistant'
+            && typeof last.content === 'string'
+            && last.content.trim() !== ''
+        ) {
+            return _replaceMessage(messages, messages.length - 1, (cur) => ({
+                ...cur,
+                fileIds: _mergeFileIds(cur.fileIds, fileIds),
+            }));
         }
         return [
             ...messages,
@@ -955,15 +1013,35 @@ function _completed(state, p) {
         state,
         taskId,
         (messages) => {
+            const terminalPatch = {
+                streaming: false,
+                inputRequired: null,
+                activity: '',
+                error: '',
+                errorI18nKey: null,
+            };
+            // HITL: тот же текст уже как operator/assistant — только stamp, без нового bubble.
+            const matchIdx = content ? _findMatchingReplyIndex(messages, content) : -1;
+            if (matchIdx >= 0) {
+                return _replaceMessage(messages, matchIdx, (m) => _stampTerminalTimestamp(m, terminalPatch));
+            }
+            const last = messages.length > 0 ? messages[messages.length - 1] : null;
+            // files-only operator: дописать content в него.
+            if (
+                content
+                && last
+                && last.role === 'operator'
+                && typeof last.content === 'string'
+                && last.content.trim() === ''
+            ) {
+                return _replaceMessage(messages, messages.length - 1, (m) => _stampTerminalTimestamp(m, {
+                    ...terminalPatch,
+                    content,
+                }));
+            }
             const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
             return _replaceMessage(nextMsgs, idx, (m) => {
-                const updated = _stampTerminalTimestamp(m, {
-                    streaming: false,
-                    inputRequired: null,
-                    activity: '',
-                    error: '',
-                    errorI18nKey: null,
-                });
+                const updated = _stampTerminalTimestamp(m, terminalPatch);
                 if (content && (!m.content || m.content.trim() === '')) {
                     updated.content = content;
                 }

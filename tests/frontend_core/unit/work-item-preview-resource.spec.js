@@ -42,6 +42,7 @@ describe('platformWorkItemCountsOp', () => {
             assigned_open_count: 0,
             queue_inbox_count: 0,
             total_open_count: 0,
+            work_queue_ids: [],
         };
         const next = platformWorkItemCountsOp.reducer(state, {
             type: platformWorkItemCountsOp.events.SUCCEEDED,
@@ -49,12 +50,14 @@ describe('platformWorkItemCountsOp', () => {
                 result: {
                     assigned_open_count: 2,
                     queue_inbox_count: 3,
+                    work_queue_ids: ['q1', 'q2'],
                 },
             },
         });
         expect(next.assigned_open_count).toBe(2);
         expect(next.queue_inbox_count).toBe(3);
         expect(next.total_open_count).toBe(5);
+        expect(next.work_queue_ids).toEqual(['q1', 'q2']);
     });
 });
 

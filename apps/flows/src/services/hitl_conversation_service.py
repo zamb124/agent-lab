@@ -25,7 +25,7 @@ from apps.flows.src.streaming.emitter import Emitter
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.state import ExecutionState
-from core.types import require_json_object
+from core.types import require_json_array, require_json_object
 from core.ui_events.dispatcher import publish_ui_event_to_company
 from core.worktracker.models import (
     WorkItemConversationRef,
@@ -48,6 +48,22 @@ def _message_text(message: Message) -> str:
         if isinstance(root, TextPart):
             parts.append(root.text)
     return "".join(parts)
+
+
+def _message_file_ids(message: Message) -> list[str]:
+    metadata = require_json_object(message.metadata or {}, "message.metadata")
+    raw = metadata.get("hitl_file_ids")
+    if raw is None:
+        return []
+    try:
+        entries = require_json_array(raw, "hitl_file_ids")
+    except ValueError:
+        return []
+    file_ids: list[str] = []
+    for entry in entries:
+        if isinstance(entry, str) and entry.strip():
+            file_ids.append(entry)
+    return file_ids
 
 
 def _turn_role(message: Message) -> ConversationTurnRole:
@@ -92,6 +108,7 @@ class HitlConversationService:
                     message_id=message.message_id,
                     role=role,
                     text=text,
+                    file_ids=_message_file_ids(message),
                 )
             )
         return turns
@@ -199,6 +216,7 @@ class HitlConversationService:
         operator_user_id: str,
         text: str,
         idempotency_key: str,
+        file_ids: list[str] | None = None,
     ) -> ConversationTurn:
         item = await self._work_items.get(company_id, work_item_id)
         if not await self._work_items.operator_authorized(item, operator_user_id):
@@ -210,7 +228,8 @@ class HitlConversationService:
         if ref is None:
             raise ValueError(f"WorkItem {work_item_id!r} без ссылки на разговор сессии")
         clean = text.strip()
-        if not clean:
+        resolved_file_ids = [fid.strip() for fid in (file_ids or []) if fid.strip()]
+        if clean == "" and len(resolved_file_ids) == 0:
             raise ValueError("Пустое сообщение оператора")
 
         message_id = f"hitl-op:{idempotency_key}"
@@ -221,6 +240,7 @@ class HitlConversationService:
             message_id=message_id,
             context_id=ref.context_id,
             task_id=ref.a2a_task_id,
+            file_ids=resolved_file_ids,
         )
         appended = await self._runtime.append_conversation_message(
             ref.session_id,
@@ -235,7 +255,10 @@ class HitlConversationService:
         )
         turn = await self._sync_after_append(ref, message)
         if appended:
-            await self._stream_to_user(ref, clean, artifact_name="operator_reply")
+            if clean:
+                await self._stream_to_user(ref, clean, artifact_name="operator_reply")
+            if resolved_file_ids:
+                await self._stream_operator_files(ref, resolved_file_ids)
             await self._publish_realtime(
                 company_id=company_id,
                 work_item_id=work_item_id,
@@ -300,14 +323,16 @@ class HitlConversationService:
         operator_user_id: str,
         text: str,
         idempotency_key: str,
+        file_ids: list[str] | None = None,
     ) -> ConversationTurn | None:
         """Закрывающая реплика оператора (single_reply complete / takeover complete).
 
         Тот же durable append + Emitter, что mid-dialog ask в takeover.
-        Пустой text — no-op (None).
+        Пустой text и пустые file_ids — no-op (None).
         """
         clean = text.strip()
-        if clean == "":
+        resolved_file_ids = [fid.strip() for fid in (file_ids or []) if fid.strip()]
+        if clean == "" and len(resolved_file_ids) == 0:
             return None
         item = await self._work_items.get(company_id, work_item_id)
         spec = item.interaction
@@ -334,6 +359,7 @@ class HitlConversationService:
             message_id=message_id,
             context_id=ref.context_id,
             task_id=ref.a2a_task_id,
+            file_ids=resolved_file_ids,
         )
         appended = await self._runtime.append_conversation_message(
             ref.session_id,
@@ -348,7 +374,10 @@ class HitlConversationService:
         )
         turn = await self._sync_after_append(ref, message)
         if appended:
-            await self._stream_to_user(ref, clean, artifact_name="operator_reply")
+            if clean:
+                await self._stream_to_user(ref, clean, artifact_name="operator_reply")
+            if resolved_file_ids:
+                await self._stream_operator_files(ref, resolved_file_ids)
             await self._publish_realtime(
                 company_id=company_id,
                 work_item_id=work_item_id,
@@ -390,6 +419,24 @@ class HitlConversationService:
         )
         emitter = Emitter(self._redis, state)
         await emitter.emit_text(text, append=True, last_chunk=False, artifact_name=artifact_name)
+
+    async def _stream_operator_files(
+        self, ref: WorkItemConversationRef, file_ids: list[str]
+    ) -> None:
+        task_id = ref.a2a_task_id
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise ValueError(
+                f"HITL stream requires a2a_task_id on conversation ref (session={ref.session_id!r})"
+            )
+        state = create_initial_state(
+            task_id=task_id.strip(),
+            context_id=ref.context_id,
+            user_id="",
+            session_id=ref.session_id,
+            branch_id=ref.branch_id,
+        )
+        emitter = Emitter(self._redis, state)
+        await emitter.emit_file_artifact(file_ids, artifact_name="operator_files")
 
     async def _publish_realtime(
         self,

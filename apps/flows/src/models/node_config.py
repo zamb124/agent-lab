@@ -214,6 +214,10 @@ class NodeConfig(StrictBaseModel):
     # Для llm_node
     prompt: str | None = Field(default=None, description="Системный промпт")
     tools: list[ToolReference] = Field(default_factory=list, description="Список инструментов")
+    agent_skills: list[str] = Field(
+        default_factory=list,
+        description="Attached Agent Skill ids from company catalog (progressive load)",
+    )
     llm: NodeLLMConfig | None = Field(
         default=None,
         description="LLM настройки ноды (если None - из global config)",
@@ -486,6 +490,8 @@ class NodeConfig(StrictBaseModel):
                 raise ValueError("reflection node: fallback_models are not allowed")
             if self.tools:
                 raise ValueError("reflection node: tools must be empty")
+            if self.agent_skills:
+                raise ValueError("reflection node: agent_skills must be empty")
             if self.prompt is not None and str(self.prompt).strip():
                 raise ValueError("reflection node: prompt must be empty")
             if self.react is not None:
@@ -495,11 +501,15 @@ class NodeConfig(StrictBaseModel):
             return self
 
         if self.type != NodeType.RESOURCE:
+            if self.agent_skills and self.type != NodeType.LLM_NODE:
+                raise ValueError("agent_skills are only allowed on llm_node")
             return self
         if self.prompt is not None and str(self.prompt).strip():
             raise ValueError("resource node: prompt must be empty")
         if self.tools:
             raise ValueError("resource node: tools must be empty")
+        if self.agent_skills:
+            raise ValueError("resource node: agent_skills must be empty")
         if self.react is not None:
             raise ValueError("resource node: react is not allowed")
         if self.structured_output:
@@ -535,6 +545,10 @@ class GraphNodeConfig(StrictBaseModel):
     prompt: str | None = Field(default=None, description="Системный промпт llm_node")
     tools: list[ToolReference | JsonObject | str] = Field(
         default_factory=list, description="Tools llm_node"
+    )
+    agent_skills: list[str] = Field(
+        default_factory=list,
+        description="Attached Agent Skill ids for llm_node",
     )
     llm: NodeLLMConfig | None = Field(default=None, description="LLM настройки ноды")
     llm_context: LLMContextPatch | None = Field(default=None, description="Патч контекстного слоя")
@@ -619,6 +633,8 @@ class GraphNodeConfig(StrictBaseModel):
                 raise ValueError("reflection node: fallback_models are not allowed")
             if self.tools:
                 raise ValueError("reflection node: tools must be empty")
+            if self.agent_skills:
+                raise ValueError("reflection node: agent_skills must be empty")
             if self.prompt is not None and str(self.prompt).strip():
                 raise ValueError("reflection node: prompt must be empty")
             if self.react is not None:
@@ -628,11 +644,15 @@ class GraphNodeConfig(StrictBaseModel):
             return self
 
         if self.type != NodeType.RESOURCE:
+            if self.agent_skills and self.type != NodeType.LLM_NODE:
+                raise ValueError("agent_skills are only allowed on llm_node")
             return self
         if self.prompt is not None and str(self.prompt).strip():
             raise ValueError("resource node: prompt must be empty")
         if self.tools:
             raise ValueError("resource node: tools must be empty")
+        if self.agent_skills:
+            raise ValueError("resource node: agent_skills must be empty")
         if self.react is not None:
             raise ValueError("resource node: react is not allowed")
         if self.structured_output:

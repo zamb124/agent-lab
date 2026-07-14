@@ -17,6 +17,7 @@ from typing import ClassVar, cast, override
 
 from a2a.types import (
     Message,
+    Role,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
     TextPart,
@@ -44,6 +45,11 @@ from apps.flows.src.runtime.a2a_messages import (
 )
 from apps.flows.src.runtime.a2a_messages import (
     build_user_message as new_user_message,
+)
+from apps.flows.src.runtime.agent_skill_runtime import (
+    AgentSkillRuntimeHost,
+    agent_skill_runtime_host_scope,
+    merge_tools_by_name,
 )
 from apps.flows.src.runtime.effective_llm_config import (
     EffectiveLLMConfig,
@@ -96,6 +102,7 @@ from core.context import get_context
 from core.errors import FlowExecutionError, ToolExecutionError
 from core.llm_context import (
     LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION,
+    LLMContextBlock,
     LLMContextProfile,
     LLMContextSourceRegistry,
 )
@@ -160,6 +167,55 @@ def _get_message_metadata(msg: Message | JsonObject) -> JsonObject:
     return require_json_object(raw_metadata, "message.metadata")
 
 
+def _message_plain_text(msg: Message) -> str:
+    parts: list[str] = []
+    for part in msg.parts:
+        root = part.root
+        if isinstance(root, TextPart):
+            parts.append(root.text)
+    return "".join(parts)
+
+
+def _user_message_already_in_task(
+    messages: Sequence[Message | JsonObject],
+    text: str,
+    task_id: str | None,
+) -> bool:
+    """Idempotent guard: тот же user text уже записан для этого A2A task_id."""
+    if task_id is None or task_id.strip() == "" or text == "":
+        return False
+    for raw in reversed(messages):
+        message = _runtime_message(raw)
+        if message.role != Role.user:
+            continue
+        if message.task_id != task_id:
+            continue
+        if _message_plain_text(message) == text:
+            return True
+    return False
+
+
+def _assistant_message_already_in_task(
+    messages: Sequence[Message | JsonObject],
+    text: str,
+    task_id: str | None,
+) -> bool:
+    """Idempotent guard: тот же agent text уже записан для этого A2A task_id."""
+    if task_id is None or task_id.strip() == "" or text == "":
+        return False
+    for raw in reversed(messages):
+        message = _runtime_message(raw)
+        if message.role != Role.agent:
+            continue
+        if message.task_id != task_id:
+            continue
+        if _message_plain_text(message) == text:
+            return True
+        # Смотрим только последнее agent-сообщение этого task.
+        return False
+    return False
+
+
 def _get_tool_calls_metadata(metadata: JsonObject, field_name: str) -> list[LLMToolCall] | None:
     raw_tool_calls = metadata.get("tool_calls")
     if raw_tool_calls is None:
@@ -196,6 +252,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
     MAX_ITERATIONS: ClassVar[int] = 10
     MAX_STREAM_IDLE_RETRIES: ClassVar[int] = 4  # При idle timeout 10с — макс 50с ожидания (5 попыток × 10с)
+    tools: list[BaseTool]
 
     def __init__(
         self,
@@ -208,6 +265,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         container: FlowRuntimeContainer,
         llm_context_policy: LLMContextProfile | None = None,
         llm_context_source_registry: LLMContextSourceRegistry | None = None,
+        agent_skill_host: AgentSkillRuntimeHost | None = None,
     ):
         super().__init__(
             node_config=node_config,
@@ -219,6 +277,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         self.container: FlowRuntimeContainer = container
         self.llm_context_policy: LLMContextProfile | None = llm_context_policy
         self.llm_context_source_registry: LLMContextSourceRegistry | None = llm_context_source_registry
+        self.agent_skill_host: AgentSkillRuntimeHost | None = agent_skill_host
+        if self.agent_skill_host is not None:
+            self.agent_skill_host.ensure_index_block()
         for tool in self.tools:
             tool.container = container
 
@@ -537,12 +598,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             else:
                 InterruptManager.clear_interrupt_path(state)
         elif user_content:
-            state.messages.append(
-                new_user_message(
-                    user_content, sid, context_id=context_id, task_id=task_id
+            if not _user_message_already_in_task(state.messages, user_content, task_id):
+                state.messages.append(
+                    new_user_message(
+                        user_content, sid, context_id=context_id, task_id=task_id
+                    )
                 )
-            )
-            await self._checkpoint_state(state)
+                await self._checkpoint_state(state)
 
         async for event in self._react_loop(
             state, llm_node_label, context_id, task_id, emitter
@@ -1206,11 +1268,18 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 logger.info(
                                     f"[llm_node:{llm_node_label}] Финальный ответ: {final_response[:100]}..."
                                 )
-                                state.messages.append(
-                                    new_assistant_message(
-                                        final_response, sid, None, context_id=context_id, task_id=task_id
+                                if not _assistant_message_already_in_task(
+                                    state.messages, final_response, task_id
+                                ):
+                                    state.messages.append(
+                                        new_assistant_message(
+                                            final_response,
+                                            sid,
+                                            None,
+                                            context_id=context_id,
+                                            task_id=task_id,
+                                        )
                                     )
-                                )
                                 InterruptManager.clear_interrupt_path(state)
                                 await self._checkpoint_state(state)
                                 break
@@ -1220,11 +1289,18 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     logger.info(
                                         f"[llm_node:{llm_node_label}] EXPLICIT non-strict: текст принят как ответ"
                                     )
-                                    state.messages.append(
-                                        new_assistant_message(
-                                            final_response, sid, None, context_id=context_id, task_id=task_id
+                                    if not _assistant_message_already_in_task(
+                                        state.messages, final_response, task_id
+                                    ):
+                                        state.messages.append(
+                                            new_assistant_message(
+                                                final_response,
+                                                sid,
+                                                None,
+                                                context_id=context_id,
+                                                task_id=task_id,
+                                            )
                                         )
-                                    )
                                     InterruptManager.clear_interrupt_path(state)
                                     await self._checkpoint_state(state)
                                     break
@@ -1348,6 +1424,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 context_id=context_id,
                 max_tokens=max_tok,
                 llm_context=self.llm_context_policy or self.node_config.llm_context or {},
+                llm_context_blocks=self._agent_skill_context_blocks(),
                 llm_context_source_registry=self.llm_context_source_registry,
                 stream_cancel_poll=_stream_cancel_poll,
             ):
@@ -1402,6 +1479,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     context_id=context_id,
                     max_tokens=max_tok,
                     llm_context=self.llm_context_policy or self.node_config.llm_context or {},
+                    llm_context_blocks=self._agent_skill_context_blocks(),
                     llm_context_source_registry=self.llm_context_source_registry,
                     stream_cancel_poll=_stream_cancel_poll,
                 ):
@@ -1447,6 +1525,24 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     attempt, e.idle_seconds, e.chunks_received,
                 )
                 raise
+
+    def _agent_skill_context_blocks(self) -> list[LLMContextBlock] | None:
+        if self.agent_skill_host is None:
+            return None
+        if not self.agent_skill_host.context_blocks:
+            return None
+        return list(self.agent_skill_host.context_blocks)
+
+    async def _flush_pending_agent_skill_tools(self) -> None:
+        host = self.agent_skill_host
+        if host is None or not host.pending_tool_refs:
+            return
+        pending = list(host.pending_tool_refs)
+        host.pending_tool_refs.clear()
+        new_tools = await self.container.tool_registry.create_tools(pending)
+        for tool in new_tools:
+            tool.container = self.container
+        self.tools = merge_tools_by_name(self.tools, new_tools)
 
     async def _execute_tools_parallel(
         self,
@@ -1716,7 +1812,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         state=state,
                         emitter=emitter,
                     ):
-                        result = await tool.run(tool_args, state)
+                        if self.agent_skill_host is not None:
+                            with agent_skill_runtime_host_scope(self.agent_skill_host):
+                                result = await tool.run(tool_args, state)
+                        else:
+                            result = await tool.run(tool_args, state)
+                    await self._flush_pending_agent_skill_tools()
                 self._record_reason_tool_call(
                     tool=tool,
                     tool_args=tool_args,

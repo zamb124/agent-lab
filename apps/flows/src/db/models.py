@@ -136,6 +136,33 @@ class Tools(Base):
         return f"<Tools(key='{self.key}', updated_at='{self.updated_at}')>"
 
 
+class AgentSkills(Base):
+    """
+    Catalog Agent Skills (progressive procedure packs for llm_node).
+
+    Keys: agent_skill:{agent_skill_id} (company-prefixed in repository).
+    """
+
+    __tablename__: str = "agent_skills"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    value: Mapped[JsonObject] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+    __table_args__: tuple[UniqueConstraint | Index, ...] = (
+        UniqueConstraint("key", name="uq_agent_skills_key"),
+        Index("ix_agent_skills_key_prefix", "key"),
+        Index("ix_agent_skills_updated_at", "updated_at"),
+        Index("ix_agent_skills_expired_at", "expired_at"),
+    )
+
+    @override
+    def __repr__(self) -> str:
+        return f"<AgentSkills(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
 class WorkflowInstances(Base):
     """Current durable workflow head/projection."""
 

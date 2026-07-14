@@ -49,4 +49,6 @@ def resolve_viewer_handler_id(
         return "media"
     if category == FileCategory.TEXT:
         return "text"
+    if category == FileCategory.VIZ:
+        return "viz"
     return "binary"

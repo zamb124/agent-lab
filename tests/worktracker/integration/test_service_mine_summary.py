@@ -53,6 +53,7 @@ async def test_mine_summary_assigned_and_queue_inbox(
     summary = await worktracker_service.mine_summary(company_id, user_id)
     assert summary.assigned_open_count >= 1
     assert summary.queue_inbox_count >= 1
+    assert queue.work_queue_id in summary.work_queue_ids
 
     total_assigned = await worktracker_service.count(
         company_id,

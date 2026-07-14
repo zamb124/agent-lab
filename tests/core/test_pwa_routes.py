@@ -29,7 +29,7 @@ def test_manifest_json(pwa_client: TestClient) -> None:
     assert "application/manifest" in response.headers["content-type"]
     body = response.json()
     assert body["name"]
-    assert body["short_name"] == "Humanitec"
+    assert body["short_name"] == "Linnex"
     assert body.get("start_url") == "/"
     assert body.get("scope") == "/"
     assert isinstance(body.get("icons"), list)

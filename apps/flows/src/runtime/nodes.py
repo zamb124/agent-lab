@@ -54,6 +54,7 @@ from apps.flows.src.models.enums import ChannelType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.models.hitl_schemas import HitlInterruptSnapshot, build_hitl_handoff_command
+from apps.flows.src.runtime.agent_skill_runtime import AgentSkillRuntimeHost
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
@@ -71,6 +72,7 @@ from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.registry import ToolMaterializeInput
 from apps.flows.src.variables import VariableResolver, VarResolver
+from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from core.ai.runtime import create_llm_client_from_call_config
 from core.clients.llm.mock_control import (
     MOCK_MISS,
@@ -261,6 +263,25 @@ def _config_tool_refs(config: JsonObject, field_name: str) -> list[str | ToolMat
             out.append(require_json_object(item, f"{field_name}[]"))
             continue
         raise ValueError(f"{field_name}: ожидается string или object")
+    return out
+
+
+def _config_string_list(config: JsonObject, field_name: str) -> list[str]:
+    if field_name not in config or config[field_name] is None:
+        return []
+    value = config[field_name]
+    if not isinstance(value, list):
+        raise ValueError(f"{field_name}: ожидается list[str]")
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"{field_name}: ожидаются непустые строки")
+        normalized = item.strip()
+        if normalized in seen:
+            raise ValueError(f"{field_name}: duplicate id {normalized}")
+        seen.add(normalized)
+        out.append(normalized)
     return out
 
 
@@ -906,6 +927,7 @@ class LlmNode(BaseNode):
 
         self.prompt_template: str = self.prompt or _config_string(cfg, "prompt", "")
         self.tool_refs: list[str | ToolMaterializeInput] = _config_tool_refs(cfg, "tools")
+        self.agent_skill_ids: list[str] = _config_string_list(cfg, "agent_skills")
         raw_llm = cfg.get("llm")
         if isinstance(raw_llm, dict):
             llm_config_dict: JsonObject = require_json_object(raw_llm, "llm")
@@ -916,8 +938,11 @@ class LlmNode(BaseNode):
         self._node_config: NodeConfig | None = node_config
         self._runner: LlmNodeRunner | None = None
         self._loaded_tools: list[BaseTool] | None = None
+        self._agent_skill_host: AgentSkillRuntimeHost | None = None
         if node_config is not None:
             self.messages_filter: Literal["all", "own"] | list[str] = node_config.messages_filter
+            if node_config.agent_skills:
+                self.agent_skill_ids = list(node_config.agent_skills)
 
     def _prepare_llm_runner_state(
         self, state: ExecutionState, inputs: NodeInputs
@@ -1033,6 +1058,7 @@ class LlmNode(BaseNode):
             llm_context_policy,
         )
         container = self.container
+        agent_skill_host = await self._ensure_agent_skill_host()
 
         self._runner = LlmNodeRunner(
             node_config=config,
@@ -1043,6 +1069,7 @@ class LlmNode(BaseNode):
             container=container,
             llm_context_policy=llm_context_policy,
             llm_context_source_registry=llm_context_source_registry,
+            agent_skill_host=agent_skill_host,
         )
 
         return self._runner
@@ -1052,14 +1079,39 @@ class LlmNode(BaseNode):
         if self._loaded_tools is not None:
             return self._loaded_tools
 
-        # Загружаем tools из tool_refs если они есть
+        tools: list[BaseTool]
         if self.tool_refs:
-            self._loaded_tools = await self._load_tools(state)
-            return self._loaded_tools
+            tools = await self._load_tools(state)
+        else:
+            tools = list(self.tools)
 
-        # Если нет tool_refs, возвращаем атрибут класса tools (для кастомных нод)
-        # Атрибут класса tools должен содержать уже готовые объекты, не конфиги
-        return self.tools
+        tools = await self._ensure_agent_skill_meta_tools(tools)
+        self._loaded_tools = tools
+        return tools
+
+    async def _ensure_agent_skill_host(self) -> AgentSkillRuntimeHost | None:
+        if not self.agent_skill_ids:
+            return None
+        if self._agent_skill_host is not None:
+            return self._agent_skill_host
+        index = await self.container.agent_skill_service.resolve_index(self.agent_skill_ids)
+        self._agent_skill_host = AgentSkillRuntimeHost(
+            attached_ids=frozenset(self.agent_skill_ids),
+            index_entries=tuple(index),
+        )
+        return self._agent_skill_host
+
+    async def _ensure_agent_skill_meta_tools(self, tools: list[BaseTool]) -> list[BaseTool]:
+        if not self.agent_skill_ids:
+            return tools
+        known = {tool.name for tool in tools}
+        merged = list(tools)
+        for meta_tool in (load_agent_skill, read_agent_skill_reference):
+            if meta_tool.name in known:
+                continue
+            known.add(meta_tool.name)
+            merged.append(meta_tool)
+        return merged
 
     async def set_tools(self, tools: list[BaseTool]) -> None:
         """Устанавливает tools."""
@@ -2455,6 +2507,8 @@ class HitlNode(BaseNode):
             state.hitl_handoff_correlation_id = None
             answer = str(state.content).strip()
             state.response = answer
+            # Closing reply уже в Redis (operator_reply); completed не должен дублировать текст в UI.
+            state.hitl_streamed_closing_text = answer
             _ = await container.workflow_runtime.record_lifecycle_event(
                 state.session_id,
                 event_type=WorkflowEventType.handoff_resumed,

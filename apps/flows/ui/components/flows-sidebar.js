@@ -15,6 +15,7 @@ import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/platform-deployment-version.js';
 import './flows-catalog-list.js';
 import { isPlainObject } from '../_helpers/flows-resolvers.js';
+import { AGENT_SKILL_ICON } from '../_helpers/agent-skill-map.js';
 
 export class FlowsSidebar extends PlatformElement {
     static properties = {
@@ -39,15 +40,29 @@ export class FlowsSidebar extends PlatformElement {
                 flex: 1;
                 min-height: 0;
             }
-            .home-nav {
+            .home-nav-row {
+                display: flex;
+                flex-direction: row;
+                align-items: stretch;
+                gap: var(--space-1);
                 width: calc(100% - var(--space-4));
                 margin: var(--space-2) var(--space-2) var(--space-3);
+                box-sizing: border-box;
             }
-            platform-service-sidebar[collapsed] .home-nav {
-                display: flex;
-                justify-content: center;
+            .home-nav {
+                flex: 1;
+                min-width: 0;
+                margin: 0;
+            }
+            platform-service-sidebar[collapsed] .home-nav-row {
+                flex-direction: column;
+                align-items: center;
                 width: auto;
                 margin-inline: auto;
+            }
+            platform-service-sidebar[collapsed] .home-nav {
+                flex: 0 0 auto;
+                width: auto;
             }
             platform-service-sidebar[collapsed] .home-nav-label {
                 display: none;
@@ -99,17 +114,30 @@ export class FlowsSidebar extends PlatformElement {
                 @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
                 @mobile-change=${(e) => { this.mobileOpen = e.detail.open; }}
             >
-                <platform-button
-                    class="home-nav"
-                    variant=${routeKey === 'list' ? 'secondary' : 'ghost'}
-                    density="compact"
-                    ?icon-only=${this.collapsed}
-                    aria-label=${this.t('flows_sidebar.home_title')}
-                    @click=${this._openHome}
-                >
-                    <platform-icon name="apps" size="18"></platform-icon>
-                    ${this.collapsed ? nothing : html`<span class="home-nav-label">${this.t('flows_sidebar.home')}</span>`}
-                </platform-button>
+                <div class="home-nav-row">
+                    <platform-button
+                        class="home-nav"
+                        variant=${routeKey === 'list' ? 'secondary' : 'ghost'}
+                        density="compact"
+                        ?icon-only=${this.collapsed}
+                        aria-label=${this.t('flows_sidebar.home_title')}
+                        @click=${this._openHome}
+                    >
+                        <platform-icon name="apps" size="18"></platform-icon>
+                        ${this.collapsed ? nothing : html`<span class="home-nav-label">${this.t('flows_sidebar.home')}</span>`}
+                    </platform-button>
+                    <platform-button
+                        class="home-nav"
+                        variant=${routeKey === 'agent_skills' ? 'secondary' : 'ghost'}
+                        density="compact"
+                        ?icon-only=${this.collapsed}
+                        aria-label=${this.t('flows_sidebar.skills_title')}
+                        @click=${() => { this.navigate('agent_skills'); this.closeMobile(); }}
+                    >
+                        <platform-icon name=${AGENT_SKILL_ICON} size="18"></platform-icon>
+                        ${this.collapsed ? nothing : html`<span class="home-nav-label">${this.t('flows_sidebar.skills')}</span>`}
+                    </platform-button>
+                </div>
                 <flows-catalog-list
                     mode="sidebar"
                     .collapsedSidebar=${this.collapsed}

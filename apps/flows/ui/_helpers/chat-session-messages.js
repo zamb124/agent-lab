@@ -145,9 +145,11 @@ export function a2aStateMessagesToChatMessages(rawMessages, defaultTaskId) {
             buf = null;
         } else {
             flushBuf();
+            const hitlRole = meta.hitl_role === 'operator' ? 'operator' : 'assistant';
+            const fileIds = _hitlFileIds(meta);
             out.push({
                 id: messageId,
-                role: 'assistant',
+                role: hitlRole,
                 content: text,
                 timestamp,
                 taskId,
@@ -156,6 +158,7 @@ export function a2aStateMessagesToChatMessages(rawMessages, defaultTaskId) {
                 activity: '',
                 toolCalls: [],
                 toolResults: [],
+                fileIds,
             });
         }
         idx += 1;
@@ -226,6 +229,24 @@ function _reasoningFromMeta(meta) {
         return meta.reasoning;
     }
     return '';
+}
+
+/**
+ * @param {object} meta
+ * @returns {string[]}
+ */
+function _hitlFileIds(meta) {
+    const raw = meta.hitl_file_ids;
+    if (!Array.isArray(raw)) {
+        return [];
+    }
+    const fileIds = [];
+    for (const entry of raw) {
+        if (typeof entry === 'string' && entry.trim().length > 0) {
+            fileIds.push(entry);
+        }
+    }
+    return fileIds;
 }
 
 /**

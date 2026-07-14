@@ -17,6 +17,10 @@ flows:
   - id: example_graph
     public: true
     description: "Graph: function nodes, branching, variables (scoped-by-var/expression/@var:), inline code"
+
+  - id: platform_assistant
+    public: true
+    description: "Платформенный ассистент: progressive Agent Skills (documents, viz, RAG, web, CRM, work)"
   
   # Внешние агенты
   - id: example_external

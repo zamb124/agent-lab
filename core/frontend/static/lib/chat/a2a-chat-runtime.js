@@ -710,6 +710,13 @@ function _statusUpdateToRuntimeEvents(out, result, contextId, taskId) {
         if (final || handoffContinue || oauthContinue) {
             _inputRequiredEvent(out.events, out.traceEntries, contextId, taskId, message, metadata);
         }
+        const interrupt = metadata && metadata.platform_interrupt;
+        const body = interrupt && typeof interrupt === 'object' ? interrupt.body : null;
+        // HITL: закрываем message/stream → ChatController.syncHitlLiveTail (tasks/resubscribe).
+        if (body && typeof body === 'object' && body.kind === 'operator_task') {
+            out.terminal = true;
+            return out;
+        }
         out.terminal = isA2aTerminalState(state, final);
         return out;
     }

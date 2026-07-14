@@ -47,7 +47,7 @@ export class PlatformCodeEditor extends PlatformElement {
                 height: 100%;
                 border-radius: 0;
                 border: 0;
-                background: transparent;
+                background: var(--bg-primary);
             }
             :host([fill-parent]) .editor-root {
                 flex: 1;
@@ -87,7 +87,8 @@ export class PlatformCodeEditor extends PlatformElement {
             .cm-editor {
                 height: 100%;
                 min-height: var(--code-editor-min-height, 220px);
-                background: transparent;
+                background: var(--bg-primary);
+                color: var(--text-primary);
                 font-size: var(--text-sm);
             }
             .cm-editor.cm-focused {
@@ -292,10 +293,13 @@ export class PlatformCodeEditor extends PlatformElement {
         const platformTheme = this._cm.EditorView.theme({
             '&': {
                 color: isLight ? '#1f2937' : 'var(--text-primary)',
-                backgroundColor: 'var(--bg-primary)',
+                backgroundColor: isLight ? '#f8fafc' : 'var(--bg-primary)',
             },
             '.cm-editor': {
-                backgroundColor: 'var(--bg-primary)',
+                backgroundColor: isLight ? '#f8fafc' : 'var(--bg-primary)',
+            },
+            '.cm-scroller': {
+                backgroundColor: isLight ? '#f8fafc' : 'var(--bg-primary)',
             },
             '.cm-content': {
                 color: isLight ? '#1f2937' : 'var(--text-primary)',
@@ -306,7 +310,9 @@ export class PlatformCodeEditor extends PlatformElement {
             },
             '.cm-gutters': {
                 color: 'var(--text-tertiary)',
-                backgroundColor: 'var(--glass-solid-medium)',
+                backgroundColor: isLight
+                    ? 'color-mix(in srgb, #e2e8f0 80%, #f8fafc)'
+                    : 'var(--glass-solid-medium)',
                 borderRight: '1px solid var(--glass-border-subtle)',
             },
             '.cm-activeLine': {

@@ -62,6 +62,7 @@ class ExecutionStateCreateKwargs(TypedDict, total=False):
     interrupt: InterruptData | None
     interrupt_path: list[InterruptPathItem]
     hitl_handoff_correlation_id: str | None
+    hitl_streamed_closing_text: str | None
     # Pydantic-схемы значений документированы в
     # `core/state/execution_state_records.py`:
     # node_history — NodeHistoryEntry, tool_results — ToolResult,
@@ -521,6 +522,13 @@ class ExecutionState(FlexibleBaseModel):
         description=(
             "При resume после operator handoff: correlation_id задачи до сброса interrupt, "
             "чтобы hitl_node один раз завершилась и граф пошёл дальше по рёбрам"
+        ),
+    )
+    hitl_streamed_closing_text: str | None = Field(
+        default=None,
+        description=(
+            "Текст closing operator reply, уже отправленный в Redis как operator_reply. "
+            "Если final_response совпадает — emit_complete не дублирует его в UI completed."
         ),
     )
 

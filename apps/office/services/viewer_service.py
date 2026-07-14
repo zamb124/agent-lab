@@ -17,6 +17,7 @@ from apps.office.services.viewer_handlers.image_handler import ImageViewerHandle
 from apps.office.services.viewer_handlers.media_handler import MediaViewerHandler
 from apps.office.services.viewer_handlers.onlyoffice_handler import OnlyOfficeViewerHandler
 from apps.office.services.viewer_handlers.text_handler import TextViewerHandler
+from apps.office.services.viewer_handlers.viz_handler import VizViewerHandler
 from core.documents.viewer.models import (
     DocumentOpenCapabilities,
     DocumentOpenConfigResponse,
@@ -35,6 +36,7 @@ _OfficeViewerHandler = (
     | MediaViewerHandler
     | TextViewerHandler
     | BinaryViewerHandler
+    | VizViewerHandler
 )
 
 
@@ -95,6 +97,7 @@ class DocumentViewerService:
             "media": MediaViewerHandler(),
             "text": TextViewerHandler(),
             "binary": BinaryViewerHandler(),
+            "viz": VizViewerHandler(),
         }
 
     def resolve_handler_id(
@@ -204,7 +207,10 @@ class DocumentViewerService:
             user_name=user_name,
             editor_lang=editor_lang,
         )
-        return await self._handler(handler_id).build_open_config(ctx)
+        try:
+            return await self._handler(handler_id).build_open_config(ctx)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     async def open_config_for_public_link(
         self,
@@ -246,7 +252,10 @@ class DocumentViewerService:
             link_permission=resolved_link_permission,
             public_link_token_hash=target.token_hash,
         )
-        return await self._handler(handler_id).build_open_config(ctx)
+        try:
+            return await self._handler(handler_id).build_open_config(ctx)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     async def open_config_for_file(
         self,
@@ -285,7 +294,10 @@ class DocumentViewerService:
             user_name=user_name,
             editor_lang=editor_lang,
         )
-        return await self._handler(handler_id).build_open_config(ctx)
+        try:
+            return await self._handler(handler_id).build_open_config(ctx)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     def capabilities_for_file(
         self,

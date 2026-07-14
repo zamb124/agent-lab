@@ -1002,6 +1002,9 @@ export class PlatformChat extends LitElement {
         this._operatorTransport = new OperatorConversationTransport({
             workItemId,
             conversation,
+            mode: typeof this.interactionPolicy.mode === 'string'
+                ? this.interactionPolicy.mode
+                : 'takeover',
             baseUrl: String(this.flowsBaseUrl || '').trim().replace(/\/$/, ''),
             credentials: this._requestCredentials(),
             getHeaders: () => this._outboundFlowsRequestHeaders(),
@@ -1018,13 +1021,19 @@ export class PlatformChat extends LitElement {
         });
     }
 
-    /** Виден ли композер отправки: для operator_handoff — только при can_send. */
+    /** Виден ли композер: takeover (can_send) или single_reply (can_complete → Send=complete). */
     _composerVisible() {
         if (!this._isOperatorProfile()) {
             return true;
         }
         const policy = this.interactionPolicy;
-        return Boolean(policy && typeof policy === 'object' && policy.can_send === true);
+        if (!policy || typeof policy !== 'object') {
+            return false;
+        }
+        if (policy.can_send === true) {
+            return true;
+        }
+        return policy.mode === 'single_reply' && policy.can_complete === true;
     }
 
     /**
@@ -2926,10 +2935,10 @@ export class PlatformChat extends LitElement {
             return;
         }
         if (this._isOperatorProfile()) {
-            // operator_handoff: ask через REST; live — tasks/resubscribe, без A2A message/stream.
+            // operator_handoff: ask/complete через transport; live — tasks/resubscribe.
             this._stickToBottom = true;
             try {
-                await this._controller.send({ message });
+                await this._controller.send({ message, files });
             } finally {
                 this.requestUpdate();
             }

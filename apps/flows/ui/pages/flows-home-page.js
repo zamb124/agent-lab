@@ -43,6 +43,13 @@ const QUICK_ACTIONS = Object.freeze([
 
 const CONNECT_ACTIONS = Object.freeze([
     Object.freeze({
+        id: 'skills',
+        icon: 'sparkles',
+        tone: 'accent',
+        titleKey: 'flows_home.connect_skills_title',
+        descKey: 'flows_home.connect_skills_desc',
+    }),
+    Object.freeze({
         id: 'mcp',
         icon: 'mcp',
         tone: 'info',
@@ -674,6 +681,7 @@ export class FlowsHomePage extends PlatformPage {
         this._sessions = this.useResource('flows/sessions');
         this._resources = this.useResource('flows/resources');
         this._mcpServers = this.useResource('flows/mcp_servers');
+        this._agentSkills = this.useResource('flows/agent_skills');
         this._variables = this.useResource('secrets/variables');
         this._tools = this.useOp('flows/tools_all');
         this._bundles = this.useOp('flows/flow_store_bundles');
@@ -707,6 +715,7 @@ export class FlowsHomePage extends PlatformPage {
         void this._sessions.load({ limit: 8, offset: 0 });
         void this._resources.load({ limit: 200, offset: 0 });
         void this._mcpServers.load();
+        void this._agentSkills.load({ limit: 200, offset: 0 });
         void this._variables.load({ limit: 200, offset: 0 });
         void this._tools.run({ limit: 2000, offset: 0 });
         void this._bundles.run({});
@@ -794,6 +803,10 @@ export class FlowsHomePage extends PlatformPage {
     }
 
     _openConnectAction(id) {
+        if (id === 'skills') {
+            this.navigate('agent_skills');
+            return;
+        }
         if (id === 'mcp') {
             this.openModal('flows.mcp_servers', {});
             return;
@@ -804,6 +817,9 @@ export class FlowsHomePage extends PlatformPage {
         }
         if (id === 'integrations') {
             this.openModal('flows.integrations', {});
+            return;
+        }
+        if (id === 'resources') {
             return;
         }
         throw new Error(`flows-home-page: unknown connect action "${id}"`);
@@ -1222,6 +1238,7 @@ export class FlowsHomePage extends PlatformPage {
         const variablesCount = asArray(this._variables.items).length;
         const integrationsCount = resultItems(this._integrations.lastResult).length;
         const values = {
+            skills: String(asArray(this._agentSkills.items).length),
             mcp: String(mcpCount),
             variables: String(variablesCount),
             integrations: String(integrationsCount),

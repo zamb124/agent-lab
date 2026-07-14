@@ -16,8 +16,8 @@ function isPlainObject(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-const OFFICE_EXT_RE = /\.(docx?|odt|rtf|txt|xlsx?|ods|csv|pptx?|odp)$/i;
-const OFFICE_MIME_RE = /(word|excel|spreadsheet|presentation|powerpoint|officedocument|opendocument|text\/csv|text\/plain)/i;
+const OFFICE_EXT_RE = /\.(docx?|odt|rtf|txt|xlsx?|ods|csv|pptx?|odp|viz)$/i;
+const OFFICE_MIME_RE = /(word|excel|spreadsheet|presentation|powerpoint|officedocument|opendocument|text\/csv|text\/plain|vnd\.platform\.viz\+json)/i;
 const EDITOR_VIEWPORT_MARGIN = 16;
 const EDITOR_MIN_WIDTH = 420;
 const EDITOR_MIN_HEIGHT = 320;

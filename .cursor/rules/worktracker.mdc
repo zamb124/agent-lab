@@ -94,8 +94,9 @@ AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API
 
 1. `hitl_node` / tool `hitl_operator_task` бросает `OperatorTaskInterrupt` (поле `work_item_id`; контракт в `core/state/interrupt.py`) и через `HitlWorkItemService` (flows) создаёт `WorkItem(kind=operator_handoff, blocking=true)` с хуком `completed`→`/flows/api/v1/internal/work-items/completed` + `flow_session` link. Диалог HITL пишется durable-append'ом в `ExecutionState.messages` (`HitlConversationService`), **не** в `WorkItemComment`.
 2. Оператор:
-   - **`single_reply`:** форма «Ответить и завершить» (`complete` + `resolution_text`); embedded chat read-only; closing reply durable-append + Emitter в `stream:{a2a_task_id}`.
-   - **`takeover`:** ask через embedded `<platform-chat profile="operator_handoff">` → REST `/flows/api/v1/hitl/{work_item_id}/conversation/messages` → durable append + Emitter; live — `tasks/resubscribe` (тот же stream, что у user chat). Close — complete (+ optional resolution).
+   - **Доступ:** claim/complete требуют членства в `WorkQueue` задачи. Демо-очередь `example_hitl` при `ensure_example_hitl_queue` получает owner/admin компании как members (иначе UI скрывает «Ответить и завершить», claim → «Нет доступа к очереди»).
+   - **`single_reply`:** ответ через embedded `<platform-chat profile="operator_handoff">` (полный composer, в т.ч. attach); Send = `complete` + closing reply durable-append + Emitter в `stream:{a2a_task_id}`.
+   - **`takeover`:** ask через тот же embedded chat → REST `/flows/api/v1/hitl/{work_item_id}/conversation/messages` (+ `file_ids`); live — `tasks/resubscribe`. Close — отдельная кнопка Complete.
    - Блок **«Активность»** (`WorkItemComment`) — только внутренние заметки команды; покупатель их не видит.
 3. На первом терминале ядро диспатчит `completed`-хук; flows-endpoint делает closing append при необходимости и возобновляет flow (`process_flow_task(is_resume=True)`, `content=resolution.text`). Маршрутизация по `state.current_nodes`/`interrupt_path`.
 
@@ -120,7 +121,7 @@ AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API
 | Модуль | Классы | Назначение |
 |---|---|---|
 | `worktracker-surfaces.styles.js` | `.wt-page`, `.wt-section`, `.wt-section-title`, `.wt-empty` | страницы, секции, empty states |
-| `worktracker-list.styles.js` | `.wt-list`, `.wt-list-row` | flat inbox/my/queue lists |
+| `worktracker-list.styles.js` | `.wt-list`, `.wt-list-row` | row-cards с gap (inbox/my/queue); kebab меню карточки — portal в `document.body` |
 | `worktracker-inspector.styles.js` | `.wt-inspector`, `.wt-inspector-row`, `.wt-inspector-meta` | compact properties sidebar |
 | `worktracker-detail.styles.js` | `.wt-detail-main`, `.wt-activity`, `.wt-composer` | task detail page/panel |
 | `worktracker-kanban.styles.js` | `.wt-kanban`, `.wt-kanban-column`, `.wt-board-toolbar` | board kanban |
@@ -134,6 +135,8 @@ Mobile properties на detail page — bottom sheet `worktracker.task_properties
 ## UI (Linear-grade SPA)
 
 Маршруты worktracker: `inbox` (default), `my`, `board`, `queues`, `queues/:workQueueId`, `tasks/:workItemId` (полная страница задачи). Canonical deep link: `/worktracker/tasks/{work_item_id}` (+ опционально `?from=inbox|my|board|queues` для back/breadcrumbs). Legacy `?work_item_id=` редиректится на canonical route.
+
+**Inbox очередей** фильтруется по membership: `mine/summary.work_queue_ids` → list с `work_queue_ids` + `queue_unclaimed_only`. Пустой membership — empty state + CTA на `queues`, без чужих unclaimed задач. **Участники очереди** в queue-detail — picker из `state.team.members` (`platform-user-chip`), не raw `user_id`.
 
 Desktop: клик по карточке → боковая панель quick view (`work-item-detail-panel`) с кнопкой «Открыть полностью». Mobile: клик → сразу страница `tasks/:workItemId`. Cross-service badge → всегда canonical page.
 

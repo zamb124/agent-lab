@@ -21,6 +21,7 @@ LLMContextBlockKind = Literal[
     "rag",
     "tool_summary",
     "system",
+    "skill",
     "custom",
 ]
 LLMContextBlockBudgetScope = Literal[
@@ -28,6 +29,7 @@ LLMContextBlockBudgetScope = Literal[
     "memory",
     "rag",
     "tool_result",
+    "skill",
     "custom",
 ]
 LLMContextMessageRole = Literal["system", "user", "assistant", "tool"]

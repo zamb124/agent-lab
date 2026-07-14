@@ -4,8 +4,8 @@
  * Оператор видит тот же разговор сессии, что и пользователь.
  * Источник истины — durable `ExecutionState.messages` (REST snapshot).
  * Live — A2A `tasks/resubscribe` на `a2a_task_id` (тот же Redis stream, что user chat).
- * Ask (takeover): POST `/hitl/{id}/conversation/messages`.
- * Close: WorkItem complete (не этот транспорт).
+ * Takeover ask: POST `/hitl/{id}/conversation/messages` (+ file_ids).
+ * Single_reply Send: POST worktracker complete (resolution_text + resolution_files).
  */
 
 import {
@@ -13,6 +13,7 @@ import {
     buildA2aResubscribeBody,
     consumeA2aStream,
 } from './a2a-stream.js';
+import { buildWorkItemFileCreateSpecJson } from '../../utils/file-create-spec.js';
 
 /** origin+префикс flows без завершающего слэша; пустая строка — same-origin `/flows`. */
 function _flowsRoot(baseUrl) {
@@ -20,18 +21,25 @@ function _flowsRoot(baseUrl) {
     return trimmed !== '' ? trimmed : '/flows';
 }
 
-/** ConversationTurn -> баббл chat-reducer. `agent` рисуется как `assistant`. */
+/**
+ * ConversationTurn -> баббл chat-reducer. `agent` рисуется как `assistant`.
+ * @param {object} turn
+ */
 export function turnToBubble(turn) {
     if (!turn || typeof turn !== 'object' || typeof turn.message_id !== 'string') {
         throw new Error('operator-transport: turn.message_id required');
     }
     const role = turn.role === 'agent' ? 'assistant' : String(turn.role || 'assistant');
+    const fileIds = Array.isArray(turn.file_ids)
+        ? turn.file_ids.filter((id) => typeof id === 'string' && id.length > 0)
+        : [];
     return {
         id: turn.message_id,
         role,
         content: typeof turn.text === 'string' ? turn.text : '',
         timestamp: new Date().toISOString(),
         files: [],
+        fileIds,
     };
 }
 
@@ -40,6 +48,30 @@ function _randomIdempotencyKey() {
         return globalThis.crypto.randomUUID();
     }
     return `op-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * @param {unknown} file
+ * @returns {boolean}
+ */
+function _isBrowserFile(file) {
+    return typeof File !== 'undefined' && file instanceof File;
+}
+
+/**
+ * @param {unknown} file
+ * @returns {file is { file_id: string, original_name: string, content_type: string, file_size: number }}
+ */
+function _isFileRefLike(file) {
+    return Boolean(
+        file
+        && typeof file === 'object'
+        && typeof /** @type {{ file_id?: unknown }} */ (file).file_id === 'string'
+        && /** @type {{ file_id: string }} */ (file).file_id.length > 0
+        && typeof /** @type {{ original_name?: unknown }} */ (file).original_name === 'string'
+        && typeof /** @type {{ content_type?: unknown }} */ (file).content_type === 'string'
+        && typeof /** @type {{ file_size?: unknown }} */ (file).file_size === 'number',
+    );
 }
 
 export class OperatorConversationTransport {
@@ -53,6 +85,7 @@ export class OperatorConversationTransport {
      *     branch_id?: string,
      *     a2a_task_id?: string|null,
      *   },
+     *   mode?: string,
      *   baseUrl?: string,
      *   credentials?: RequestCredentials,
      *   getHeaders?: () => Promise<Record<string, string>>,
@@ -83,8 +116,15 @@ export class OperatorConversationTransport {
         if (a2aTaskId === '') {
             throw new Error('OperatorConversationTransport: conversation.a2a_task_id required');
         }
+        const mode = typeof options.mode === 'string' && options.mode.length > 0
+            ? options.mode
+            : 'takeover';
+        if (mode !== 'takeover' && mode !== 'single_reply') {
+            throw new Error(`OperatorConversationTransport: unsupported mode ${JSON.stringify(mode)}`);
+        }
         this._workItemId = options.workItemId.trim();
         this._conversation = conv;
+        this._mode = mode;
         this._a2aTaskId = a2aTaskId;
         this._root = _flowsRoot(options.baseUrl);
         this._credentials = options.credentials || 'include';
@@ -234,18 +274,105 @@ export class OperatorConversationTransport {
         });
     }
 
+    /**
+     * @param {unknown[]} files
+     * @returns {Promise<Array<{
+     *   file_id: string,
+     *   original_name: string,
+     *   content_type: string,
+     *   file_size: number,
+     *   url?: string|null,
+     * }>>}
+     */
+    async _resolveFileRefs(files) {
+        const list = Array.isArray(files) ? files : [];
+        /** @type {Array<{ file_id: string, original_name: string, content_type: string, file_size: number, url?: string|null }>} */
+        const refs = [];
+        for (const file of list) {
+            if (_isFileRefLike(file)) {
+                refs.push({
+                    file_id: file.file_id,
+                    original_name: file.original_name,
+                    content_type: file.content_type,
+                    file_size: file.file_size,
+                    url: typeof file.url === 'string' ? file.url : null,
+                });
+                continue;
+            }
+            if (!_isBrowserFile(file)) {
+                throw new Error('operator-transport: files must be File or FileRef');
+            }
+            refs.push(await this._uploadBrowserFile(file));
+        }
+        return refs;
+    }
+
+    /**
+     * @param {File} file
+     */
+    async _uploadBrowserFile(file) {
+        const headers = await this._getHeaders();
+        const formData = new FormData();
+        formData.append('file', file, file.name);
+        formData.append('spec', buildWorkItemFileCreateSpecJson({ workItemId: this._workItemId }));
+        const response = await this._fetch('/frontend/api/v1/files/', {
+            method: 'POST',
+            headers: { ...headers },
+            credentials: this._credentials,
+            body: formData,
+        });
+        if (!response.ok) {
+            throw new Error(`operator-transport: file upload HTTP ${response.status}`);
+        }
+        const result = await response.json();
+        if (!result || typeof result !== 'object' || typeof result.file_id !== 'string') {
+            throw new Error('operator-transport: file upload result.file_id required');
+        }
+        return {
+            file_id: result.file_id,
+            original_name: typeof result.original_name === 'string' ? result.original_name : file.name,
+            content_type: typeof result.content_type === 'string' ? result.content_type : (file.type || 'application/octet-stream'),
+            file_size: typeof result.file_size === 'number' ? result.file_size : file.size,
+            url: typeof result.url === 'string' ? result.url : null,
+        };
+    }
+
+    /**
+     * @param {{ message?: string, files?: unknown[] }} input
+     */
     async send(input) {
         const message = input && typeof input.message === 'string' ? input.message.trim() : '';
-        if (message === '') {
+        const fileRefs = await this._resolveFileRefs(input && Array.isArray(input.files) ? input.files : []);
+        if (message === '' && fileRefs.length === 0) {
             return;
+        }
+        if (this._mode === 'single_reply') {
+            await this._completeWithReply(message, fileRefs);
+            return;
+        }
+        await this._sendAsk(message, fileRefs);
+    }
+
+    /**
+     * @param {string} text
+     * @param {Array<{ file_id: string, original_name: string, content_type: string, file_size: number, url?: string|null }>} fileRefs
+     */
+    async _sendAsk(text, fileRefs) {
+        if (text === '' && fileRefs.length === 0) {
+            throw new Error('operator-transport: ask requires text or files');
         }
         const headers = await this._getHeaders();
         const url = `${this._root}/api/v1/hitl/${encodeURIComponent(this._workItemId)}/conversation/messages`;
+        const body = {
+            text,
+            idempotency_key: _randomIdempotencyKey(),
+            file_ids: fileRefs.map((ref) => ref.file_id),
+        };
         const response = await this._fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers },
             credentials: this._credentials,
-            body: JSON.stringify({ text: message, idempotency_key: _randomIdempotencyKey() }),
+            body: JSON.stringify(body),
         });
         if (!response.ok) {
             throw new Error(`operator-transport: send HTTP ${response.status}`);
@@ -254,8 +381,33 @@ export class OperatorConversationTransport {
         this._ingestTurn(turn);
     }
 
+    /**
+     * @param {string} text
+     * @param {Array<{ file_id: string, original_name: string, content_type: string, file_size: number, url?: string|null }>} fileRefs
+     */
+    async _completeWithReply(text, fileRefs) {
+        if (text === '' && fileRefs.length === 0) {
+            throw new Error('operator-transport: single_reply complete requires text or files');
+        }
+        const headers = await this._getHeaders();
+        const url = `/worktracker/api/v1/work-items/${encodeURIComponent(this._workItemId)}/complete`;
+        const response = await this._fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers },
+            credentials: this._credentials,
+            body: JSON.stringify({
+                resolution_text: text,
+                resolution_files: fileRefs,
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`operator-transport: complete HTTP ${response.status}`);
+        }
+        // Пузырь придёт через live operator_reply / operator_files на stream:{a2a_task_id}.
+    }
+
     async cancel() {
-        /* HITL takeover: отмена live tail — no-op для send; dispose останавливает SSE. */
+        /* HITL: отмена live tail — no-op для send; dispose останавливает SSE. */
     }
 
     dispose() {

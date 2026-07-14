@@ -42,6 +42,7 @@ import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-switch.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { resolveResourceForPanel } from '../../_helpers/flows-branch-resource.js';
+import { AGENT_SKILL_ICON } from '../../_helpers/agent-skill-map.js';
 import { getNodeTypeMeta } from '../../constants/node-icons.js';
 import {
     getToolRefVisualMeta,
@@ -185,6 +186,8 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         previewExecutionState: { type: Object },
         dataflowNode: { type: Object },
         embedded: { type: Boolean, reflect: true },
+        focusMode: { type: Boolean, reflect: true },
+        focusSection: { type: String },
     };
 
     static styles = [
@@ -197,6 +200,23 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             .stack {
                 display: flex; flex-direction: column;
                 gap: var(--space-5);
+            }
+            :host([focusMode]) .stack.focus-prompt {
+                flex: 1;
+                min-height: 0;
+                height: 100%;
+            }
+            :host([focusMode]) .stack.focus-prompt prompt-editor {
+                flex: 1;
+                min-height: 0;
+                height: 100%;
+            }
+            .stack.focus-stage {
+                animation: agent-focus-fade 200ms ease-out;
+            }
+            @keyframes agent-focus-fade {
+                from { opacity: 0; transform: translateY(6px); }
+                to { opacity: 1; transform: translateY(0); }
             }
             .block { display: flex; flex-direction: column; gap: var(--space-2); }
             .block-title {
@@ -312,8 +332,11 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this.previewExecutionState = null;
         this.dataflowNode = null;
         this.embedded = false;
+        this.focusMode = false;
+        this.focusSection = 'prompt';
         this._editor = this.useOp('flows/editor');
         this._resources = this.useResource('flows/resources');
+        this._agentSkills = this.useResource('flows/agent_skills', { autoload: true });
         this._branchResourcesSlice = this.select((s) => {
             const bd = s.flowsEditor?.branchData;
             if (!bd || typeof bd.resources !== 'object') {
@@ -789,6 +812,100 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         });
     }
 
+    _agentSkillLabel(agentSkillId) {
+        const id = typeof agentSkillId === 'string' ? agentSkillId : '';
+        if (id.length === 0) {
+            return '';
+        }
+        const item = this._agentSkills.byId?.[id];
+        if (item && typeof item.name === 'string' && item.name.length > 0) {
+            return item.name;
+        }
+        const fromList = Array.isArray(this._agentSkills.items)
+            ? this._agentSkills.items.find((skill) => skill.agent_skill_id === id)
+            : null;
+        if (fromList && typeof fromList.name === 'string' && fromList.name.length > 0) {
+            return fromList.name;
+        }
+        return id;
+    }
+
+    _onPickAgentSkills() {
+        const attached = Array.isArray(this.nodeConfig?.agent_skills)
+            ? this.nodeConfig.agent_skills.filter((id) => typeof id === 'string' && id.length > 0)
+            : [];
+        this.openModal('flows.agent_skill_picker', {
+            excludeIds: attached,
+            onPickBatch: (items) => {
+                if (!Array.isArray(items)) {
+                    return;
+                }
+                const next = [...attached];
+                const seen = new Set(next);
+                for (const item of items) {
+                    const id = item && typeof item.agent_skill_id === 'string' ? item.agent_skill_id : '';
+                    if (id.length === 0 || seen.has(id)) {
+                        continue;
+                    }
+                    seen.add(id);
+                    next.push(id);
+                }
+                this._emitPatch({ agent_skills: next });
+            },
+        });
+    }
+
+    _onRemoveAgentSkill(agentSkillId) {
+        const attached = Array.isArray(this.nodeConfig?.agent_skills)
+            ? this.nodeConfig.agent_skills.filter((id) => typeof id === 'string' && id.length > 0)
+            : [];
+        this._emitPatch({
+            agent_skills: attached.filter((id) => id !== agentSkillId),
+        });
+    }
+
+    _renderAgentSkillsSection() {
+        const skills = Array.isArray(this.nodeConfig?.agent_skills)
+            ? this.nodeConfig.agent_skills.filter((id) => typeof id === 'string' && id.length > 0)
+            : [];
+        return html`
+            <section class="block">
+                ${this._sectionHeading(
+                    this.t('llm_node_editor.section_agent_skills'),
+                    'llm_node_editor.agent_skills_section_help',
+                )}
+                <div class="block-card content-panel">
+                    <div class="row">
+                        ${skills.map((skillId) => html`
+                            <span class="chip">
+                                <platform-icon name=${AGENT_SKILL_ICON} size="14"></platform-icon>
+                                <span class="chip-label">${this._agentSkillLabel(skillId)}</span>
+                                <platform-button
+                                    variant="ghost"
+                                    icon-only
+                                    density="compact"
+                                    aria-label=${this.t('llm_node_editor.agent_skills_remove')}
+                                    @click=${() => this._onRemoveAgentSkill(skillId)}
+                                >
+                                    <platform-icon name="x" size="12"></platform-icon>
+                                </platform-button>
+                            </span>
+                        `)}
+                    </div>
+                    <div class="add-tools">
+                        <platform-button variant="secondary" density="compact" @click=${this._onPickAgentSkills}>
+                            <platform-icon name="plus"></platform-icon>
+                            ${this.t('llm_node_editor.agent_skills_add')}
+                        </platform-button>
+                        <platform-button variant="ghost" density="compact" @click=${() => this.navigate('agent_skills')}>
+                            ${this.t('llm_node_editor.agent_skills_manage')}
+                        </platform-button>
+                    </div>
+                </div>
+            </section>
+        `;
+    }
+
     _sectionHeading(label, hintKey, docHref = '/documentation/scenarios/flows/edit-llm-flow/') {
         return html`
             <h4 class="block-title">
@@ -1233,6 +1350,47 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         `;
     }
 
+    _renderFocusSettings() {
+        const section = typeof this.focusSection === 'string' && this.focusSection.length > 0
+            ? this.focusSection
+            : 'prompt';
+        if (section === 'prompt') {
+            return html`
+                <div slot="settings" class="stack focus-stage focus-prompt">
+                    ${this._renderPromptSection()}
+                </div>
+            `;
+        }
+        if (section === 'model') {
+            return html`
+                <div slot="settings" class="stack focus-stage">
+                    ${this._renderLlmSection()}
+                    ${this._renderContextSection()}
+                </div>
+            `;
+        }
+        if (section === 'skills_tools') {
+            return html`
+                <div slot="settings" class="stack focus-stage">
+                    ${this._renderOutputModeSection()}
+                    ${this._renderReactSection()}
+                    ${this._renderCallTypeSection()}
+                    ${this._renderAgentSkillsSection()}
+                    ${this._renderToolsSection()}
+                    ${this._renderOutputSchemaSection()}
+                </div>
+            `;
+        }
+        if (section === 'advanced') {
+            return html`
+                <div slot="settings" class="stack focus-stage">
+                    ${this._renderMessagesFilterSection()}
+                </div>
+            `;
+        }
+        throw new Error(`flows-llm-node-editor: unknown focusSection "${section}"`);
+    }
+
     render() {
         return html`
             <flows-base-node-editor
@@ -1246,18 +1404,25 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 .previewExecutionState=${this.previewExecutionState}
                 .dataflowNode=${this.dataflowNode}
                 ?embedded=${this.embedded}
+                ?focusMode=${this.focusMode === true}
+                .focusSection=${typeof this.focusSection === 'string' ? this.focusSection : 'prompt'}
             >
-                <div slot="settings" class="stack">
-                    ${this._renderPromptSection()}
-                    ${this._renderLlmSection()}
-                    ${this._renderContextSection()}
-                    ${this._renderMessagesFilterSection()}
-                    ${this._renderOutputModeSection()}
-                    ${this._renderReactSection()}
-                    ${this._renderCallTypeSection()}
-                    ${this._renderToolsSection()}
-                    ${this._renderOutputSchemaSection()}
-                </div>
+                ${this.focusMode === true
+                    ? this._renderFocusSettings()
+                    : html`
+                        <div slot="settings" class="stack">
+                            ${this._renderPromptSection()}
+                            ${this._renderLlmSection()}
+                            ${this._renderContextSection()}
+                            ${this._renderMessagesFilterSection()}
+                            ${this._renderOutputModeSection()}
+                            ${this._renderReactSection()}
+                            ${this._renderCallTypeSection()}
+                            ${this._renderAgentSkillsSection()}
+                            ${this._renderToolsSection()}
+                            ${this._renderOutputSchemaSection()}
+                        </div>
+                    `}
             </flows-base-node-editor>
         `;
     }

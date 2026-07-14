@@ -361,11 +361,14 @@ export class ChatController {
                 context_id: streamState.contextId,
             });
             if (!terminal && typeof streamState.taskId === 'string' && streamState.taskId.length > 0) {
-                this.applyRuntimeVerb('failed', {
-                    task_id: streamState.taskId,
-                    context_id: streamState.contextId,
-                    error_i18n_key: STREAM_INCOMPLETE_I18N_KEY,
-                });
+                // Не затирать HITL pause stream_incomplete — нужен live tasks/resubscribe.
+                if (findActiveHitlPause(this._state) === null) {
+                    this.applyRuntimeVerb('failed', {
+                        task_id: streamState.taskId,
+                        context_id: streamState.contextId,
+                        error_i18n_key: STREAM_INCOMPLETE_I18N_KEY,
+                    });
+                }
             }
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') {
@@ -454,11 +457,13 @@ export class ChatController {
                 context_id: streamState.contextId,
             });
             if (!terminal && typeof streamState.taskId === 'string' && streamState.taskId.length > 0) {
-                this.applyRuntimeVerb('failed', {
-                    task_id: streamState.taskId,
-                    context_id: streamState.contextId,
-                    error_i18n_key: STREAM_INCOMPLETE_I18N_KEY,
-                });
+                if (findActiveHitlPause(this._state) === null) {
+                    this.applyRuntimeVerb('failed', {
+                        task_id: streamState.taskId,
+                        context_id: streamState.contextId,
+                        error_i18n_key: STREAM_INCOMPLETE_I18N_KEY,
+                    });
+                }
             }
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') {

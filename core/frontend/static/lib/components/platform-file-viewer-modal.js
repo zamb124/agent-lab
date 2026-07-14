@@ -197,9 +197,13 @@ export class PlatformFileViewerModal extends PlatformModal {
                 display: flex;
                 min-width: 0;
                 min-height: 0;
-                background: #e8eaed;
+                background: var(--bg-primary);
                 overflow: hidden;
                 z-index: 1;
+            }
+
+            :host-context([data-theme='light']) .viewer-shell {
+                background: #e8eaed;
             }
 
             platform-onlyoffice-host {

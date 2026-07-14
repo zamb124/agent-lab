@@ -481,6 +481,7 @@ class FlowsLoader:
                     "description": str(raw_node.get("description") or ""),
                     "prompt": raw_node.get("prompt", ""),
                     "tools": tools,
+                    "agent_skills": raw_node.get("agent_skills", []),
                     "llm": llm_config,
                     "llm_context": llm_context,
                     "llm_context_resource_key": raw_node.get("llm_context_resource_key"),

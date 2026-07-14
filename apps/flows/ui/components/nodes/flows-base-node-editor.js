@@ -55,6 +55,10 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         dataflowNode: { type: Object },
         /** Редактирование вложенного tool: без смены node id */
         embedded: { type: Boolean, reflect: true },
+        /** Agent Focus Studio: full-bleed секции без floating chrome */
+        focusMode: { type: Boolean, reflect: true },
+        /** Секция studio: prompt | model | skills_tools | advanced */
+        focusSection: { type: String },
         _stateDraft: { state: true },
         _mappingTab: { state: true },
         _mappingSyncNonce: { state: true },
@@ -80,6 +84,28 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 gap: 0;
                 height: 100%;
                 min-height: 0;
+            }
+            :host([focusMode]) .panel-layout.focus-single {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            :host([focusMode]) .panel-layout.focus-advanced {
+                grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+            }
+            :host([focusMode]) .panel-main.focus-main {
+                padding: 0;
+            }
+            :host([focusMode]) .panel-main.focus-main .section {
+                height: 100%;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+            }
+            :host([focusMode]) .panel-main.focus-main .section slot,
+            :host([focusMode]) .panel-main.focus-main ::slotted([slot='settings']) {
+                flex: 1;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
             }
             .panel-sidebar {
                 overflow: auto;
@@ -371,6 +397,8 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this.previewExecutionState = null;
         this.dataflowNode = null;
         this.embedded = false;
+        this.focusMode = false;
+        this.focusSection = 'prompt';
         this._mappingTab = 'input';
         this._mappingSyncNonce = 0;
         this._stateDraft = null;
@@ -527,6 +555,36 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         return root.querySelector('.embedded-tool-run-host');
     }
 
+    /**
+     * Agent Focus Studio: play в chrome studio, не в теле редактора.
+     */
+    _findAgentFocusStudio() {
+        let n = this;
+        for (let d = 0; d < 128; d += 1) {
+            if (!n) {
+                return null;
+            }
+            if (n.nodeName === 'FLOWS-AGENT-FOCUS-STUDIO') {
+                return n;
+            }
+            const p = n.parentNode;
+            if (p instanceof ShadowRoot) {
+                n = p.host;
+            } else {
+                n = p;
+            }
+        }
+        return null;
+    }
+
+    _agentFocusStudioRunHost(studio) {
+        const root = studio.shadowRoot;
+        if (!root) {
+            return null;
+        }
+        return root.querySelector('.studio-run-host');
+    }
+
     _placeNodeRunControl() {
         if (!this.nodeConfig) {
             return;
@@ -538,10 +596,14 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._syncNodeRunControlProps();
         const panel = this._findFlowsFloatingPanel();
         const embeddedModal = this._findEmbeddedToolConfigModal();
+        const studio = this._findAgentFocusStudio();
         const hostFromPanel = panel ? this._floatingPanelHeaderRunHost(panel) : null;
         const hostFromEmbedded = embeddedModal ? this._embeddedToolModalHeaderRunHost(embeddedModal) : null;
+        const hostFromStudio = studio ? this._agentFocusStudioRunHost(studio) : null;
         let target = null;
-        if (hostFromPanel) {
+        if (hostFromStudio) {
+            target = hostFromStudio;
+        } else if (hostFromPanel) {
             target = hostFromPanel;
         } else if (hostFromEmbedded) {
             target = hostFromEmbedded;
@@ -1757,6 +1819,35 @@ export class FlowsBaseNodeEditor extends PlatformElement {
 
     render() {
         if (!this.nodeConfig) return html`<div>${this.t('property_panel.select_node')}</div>`;
+        if (this.focusMode === true) {
+            const section = typeof this.focusSection === 'string' && this.focusSection.length > 0
+                ? this.focusSection
+                : 'prompt';
+            if (section === 'advanced') {
+                return html`
+                    <div class="panel-layout focus-advanced">
+                        <div class="panel-sidebar content-panel">
+                            ${this._renderBasic()}
+                            ${this._shouldShowPinnedResourcesSection() ? this._renderResources() : nothing}
+                            ${this._renderInputState()}
+                        </div>
+                        <div class="panel-main">
+                            <div class="panel-run-fallback" data-node-run-fallback="panel-main"></div>
+                            ${this._renderSettingsSlot()}
+                            ${this.nodeType === 'resource' ? nothing : this._renderDataflowMapping()}
+                        </div>
+                    </div>
+                `;
+            }
+            return html`
+                <div class="panel-layout focus-single">
+                    <div class="panel-main focus-main">
+                        <div class="panel-run-fallback" data-node-run-fallback="panel-main"></div>
+                        ${this._renderSettingsSlot()}
+                    </div>
+                </div>
+            `;
+        }
         return html`
             <div class="panel-layout">
                 <div class="panel-sidebar content-panel">

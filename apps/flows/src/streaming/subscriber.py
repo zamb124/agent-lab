@@ -34,6 +34,18 @@ def _is_agent_handoff_input_required(metadata: JsonObject) -> bool:
     return body.get("kind") == "handoff"
 
 
+def _is_operator_task_input_required(metadata: JsonObject) -> bool:
+    interrupt_value = metadata.get("platform_interrupt")
+    if interrupt_value is None:
+        return False
+    platform_interrupt = require_json_object(interrupt_value, "metadata.platform_interrupt")
+    body_value = platform_interrupt.get("body")
+    if body_value is None:
+        return False
+    body = require_json_object(body_value, "metadata.platform_interrupt.body")
+    return body.get("kind") == "operator_task"
+
+
 def parse_event(data: str) -> StreamEvent:
     """Парсит событие из JSON."""
     parsed = parse_json_object(data, "StreamEvent")
@@ -70,6 +82,9 @@ def is_final_event(event: StreamEvent) -> bool:
         )
         if state_str == "input-required":
             if _is_agent_handoff_input_required(metadata):
+                return True
+            # HITL: закрываем message/stream; user/operator идут на live tasks/resubscribe.
+            if _is_operator_task_input_required(metadata):
                 return True
             if metadata.get("platform_handoff_continue") is True:
                 return False

@@ -1,7 +1,7 @@
 /**
  * FlowEditorPage — визуальный редактор flow.
  *
- * Макет:
+ * Макет (canvas):
  *   <flows-editor-header />          — chrome: actions + branch tabs
  *   .editor-shell:
  *     <flows-node-types-sidebar />    — drag-source типов нод
@@ -12,9 +12,12 @@
  *       <flows-floating-panel /> — chrome property/resource panel (drag, resize, collapse)
  *     .editor-right-rail:
  *       <flows-flow-property-panel /> — лимиты и речь (по кнопке в сайдбаре)
+ *
+ * Макет (agent focus, ровно 1 llm_node):
+ *   header + <flows-agent-focus-studio /> вместо сайдбара/канвы
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
@@ -33,6 +36,7 @@ import '../modals/flows-incoming-policy-modal.js';
 import '../modals/flows-variable-mapping-modal.js';
 import '../modals/flows-library-picker-modal.js';
 import '../modals/flows-tool-create-modal.js';
+import '../modals/flows-agent-skill-picker-modal.js';
 import '../modals/flows-embedded-tool-config-modal.js';
 import '../modals/flows-code-node-drop-modal.js';
 import '../modals/flows-code-modal.js';
@@ -43,6 +47,14 @@ import '../modals/flows-raw-json-modal.js';
 import '../modals/flows-state-modal.js';
 import { getNodeTypeMeta, getCategoryToken } from '../constants/node-icons.js';
 import { asArray, asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
+import {
+    EDITOR_LAYOUT_AGENT,
+    isAgentFocusEligible,
+    writeEditorLayoutPreference,
+} from '../_helpers/flow-editor-layout.js';
+import '../components/editor/flows-agent-focus-studio.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-icon.js';
 
 function stableStringify(value) {
     if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -111,6 +123,26 @@ export class FlowEditorPage extends PlatformPage {
             }
             .editor-right-rail > * {
                 pointer-events: auto;
+            }
+            .layout-toggle-float {
+                position: absolute;
+                top: var(--space-3);
+                right: var(--space-3);
+                z-index: 8;
+                transition: transform 120ms ease;
+            }
+            .layout-toggle-float:active {
+                transform: scale(0.94);
+            }
+            .agent-studio-host {
+                flex: 1;
+                min-width: 0;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                position: relative;
+                isolation: isolate;
+                z-index: 0;
             }
             .flow-settings-dismiss-layer {
                 position: fixed;
@@ -363,21 +395,28 @@ export class FlowEditorPage extends PlatformPage {
                     @node-ai-helper-toggle=${this._onToggleNodeAiHelper}
                     @close=${() => this._onCloseFloatingPanel(nodeId)}
                 >
-                    ${isActive && nodeAiOpen
+                    ${isActive
                         ? html`
-                            <flows-node-ai-helper
-                                .flowId=${this.flowId}
-                                .branchId=${this.branchId}
-                                .nodeId=${nodeId}
-                            ></flows-node-ai-helper>
+                            <div slot="editor">
+                                <flows-property-panel
+                                    .flowId=${this.flowId}
+                                    .branchId=${this.branchId}
+                                    .nodeId=${nodeId}
+                                ></flows-property-panel>
+                            </div>
+                            ${nodeAiOpen
+                                ? html`
+                                    <div slot="assistant">
+                                        <flows-node-ai-helper
+                                            .flowId=${this.flowId}
+                                            .branchId=${this.branchId}
+                                            .nodeId=${nodeId}
+                                        ></flows-node-ai-helper>
+                                    </div>
+                                `
+                                : nothing}
                         `
-                        : isActive
-                            ? html`<flows-property-panel
-                                .flowId=${this.flowId}
-                                .branchId=${this.branchId}
-                                .nodeId=${nodeId}
-                            ></flows-property-panel>`
-                            : ''}
+                        : nothing}
                 </flows-floating-panel>
             `;
         });
@@ -436,9 +475,50 @@ export class FlowEditorPage extends PlatformPage {
         return '';
     }
 
+    _isAgentLayoutActive(state) {
+        const branchData = isPlainObject(state.branchData) ? state.branchData : null;
+        if (branchData === null || !isAgentFocusEligible(branchData)) {
+            return false;
+        }
+        return state.editorLayout === EDITOR_LAYOUT_AGENT;
+    }
+
+    _switchToAgentLayout() {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            throw new Error('FlowEditorPage: flowId is required to switch to agent layout');
+        }
+        writeEditorLayoutPreference(this.flowId, EDITOR_LAYOUT_AGENT);
+        this._editor.setEditorLayout({ layout: EDITOR_LAYOUT_AGENT });
+    }
+
+    _renderCanvasLayoutToggle(state) {
+        const branchData = isPlainObject(state.branchData) ? state.branchData : null;
+        if (branchData === null || !isAgentFocusEligible(branchData)) {
+            return '';
+        }
+        if (state.editorLayout === EDITOR_LAYOUT_AGENT) {
+            return '';
+        }
+        return html`
+            <platform-button
+                class="layout-toggle-float"
+                variant="secondary"
+                density="compact"
+                icon-only
+                title=${this.t('agent_focus.to_agent')}
+                aria-label=${this.t('agent_focus.to_agent_aria')}
+                @click=${() => this._switchToAgentLayout()}
+            >
+                <platform-icon name="llm_node" size="18"></platform-icon>
+            </platform-button>
+        `;
+    }
+
     render() {
         this._scheduleDataflowRefresh(asObject(this._editor.state));
         const dismissSafe = this._flowSettingsOpen ? 'flow-settings-dismiss-safe' : '';
+        const state = asObject(this._editor.state);
+        const agentLayout = this._isAgentLayoutActive(state);
         return html`
             ${this._flowSettingsOpen
                 ? html`<div class="flow-settings-dismiss-layer" @click=${() => this._onDismissFlowSettingsBackdrop()}></div>`
@@ -454,18 +534,36 @@ export class FlowEditorPage extends PlatformPage {
                 ></flows-editor-header>
             </div>
             <div class="editor-shell">
-                <flows-node-types-sidebar
-                    class=${dismissSafe}
-                    flow-id=${this.flowId}
-                    ?flow-settings-active=${this._flowSettingsOpen}
-                    @toggle-flow-settings=${() => this._onToggleFlowSettings()}
-                ></flows-node-types-sidebar>
-                <div class="canvas-host">
-                    <flows-flow-canvas .flowId=${this.flowId} .branchId=${this.branchId}></flows-flow-canvas>
-                    <flows-bottom-toolbar></flows-bottom-toolbar>
-                    <flows-execution-panel .flowId=${this.flowId} .branchId=${this.branchId}></flows-execution-panel>
-                    ${this._renderPropertyPanel()}
-                </div>
+                ${agentLayout
+                    ? ''
+                    : html`
+                        <flows-node-types-sidebar
+                            class=${dismissSafe}
+                            flow-id=${this.flowId}
+                            ?flow-settings-active=${this._flowSettingsOpen}
+                            @toggle-flow-settings=${() => this._onToggleFlowSettings()}
+                        ></flows-node-types-sidebar>
+                    `}
+                ${agentLayout
+                    ? html`
+                        <div class="agent-studio-host">
+                            <flows-agent-focus-studio
+                                .flowId=${this.flowId}
+                                .branchId=${this.branchId}
+                                @toggle-flow-settings=${() => this._onToggleFlowSettings()}
+                            ></flows-agent-focus-studio>
+                            <flows-execution-panel .flowId=${this.flowId} .branchId=${this.branchId}></flows-execution-panel>
+                        </div>
+                    `
+                    : html`
+                        <div class="canvas-host">
+                            <flows-flow-canvas .flowId=${this.flowId} .branchId=${this.branchId}></flows-flow-canvas>
+                            <flows-bottom-toolbar></flows-bottom-toolbar>
+                            <flows-execution-panel .flowId=${this.flowId} .branchId=${this.branchId}></flows-execution-panel>
+                            ${this._renderCanvasLayoutToggle(state)}
+                            ${this._renderPropertyPanel()}
+                        </div>
+                    `}
                 ${this._renderRightRail()}
             </div>
         `;

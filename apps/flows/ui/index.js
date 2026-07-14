@@ -27,6 +27,7 @@ import './pages/flows-home-page.js';
 import './pages/chat-page.js';
 import './pages/flow-editor-page.js';
 import './pages/flows-evaluation-page.js';
+import './pages/flows-agent-skills-page.js';
 
 // Shell components
 import './components/flows-sidebar.js';
@@ -45,6 +46,11 @@ import './modals/flows-variables-modal.js';
 import './modals/flows-trigger-editor-modal.js';
 import './modals/flows-triggers-modal.js';
 import './modals/flows-integrations-modal.js';
+import './modals/flows-agent-skill-create-modal.js';
+import './modals/flows-agent-skill-import-modal.js';
+import './modals/flows-agent-skill-picker-modal.js';
+import './modals/flows-embedded-tool-config-modal.js';
+import './modals/flows-library-picker-modal.js';
 
 // Observability modals (chat + editor header)
 import './modals/flows-tracing-modal.js';

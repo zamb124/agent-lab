@@ -41,13 +41,19 @@ from apps.flows.src.services.flows_loader import (  # noqa: E402
     load_flows_to_db,
     load_tools_to_db,
 )
-from apps.flows.src.services.hitl_demo_queue import ensure_example_hitl_queue  # noqa: E402
+from apps.flows.src.services.hitl_demo_queue import (  # noqa: E402
+    ensure_example_hitl_queue,
+    hitl_demo_operator_user_ids,
+)
 from apps.flows.src.services.landing_bundle_dev_sync import (  # noqa: E402
     sync_landing_public_demo_flows_from_bundles,
 )
 from apps.flows.src.services.mcp_sync import (  # noqa: E402
     ensure_default_mcp_servers_for_company,
     sync_auto_mcp_servers_for_company,
+)
+from apps.flows.src.services.platform_assistant_skills import (  # noqa: E402
+    seed_platform_assistant_skills,
 )
 from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
 from apps.flows.src.triggers.dev_polling import start_dev_polling, stop_dev_polling  # noqa: E402
@@ -201,7 +207,23 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
                 "system",
             )
             logger.info("Демо-переменные system: count=%s", seeded_variables)
-            await ensure_example_hitl_queue(container.work_item_service, "system")
+            seeded_skills = await seed_platform_assistant_skills(
+                container.agent_skill_service,
+                container.files_service,
+                "system",
+            )
+            logger.info("platform_assistant skills system: count=%s", seeded_skills)
+            stored_company = await container.company_repository.get("system")
+            member_user_ids = (
+                hitl_demo_operator_user_ids(stored_company)
+                if stored_company is not None
+                else []
+            )
+            await ensure_example_hitl_queue(
+                container.work_item_service,
+                "system",
+                member_user_ids=member_user_ids,
+            )
         except Exception as e:
             logger.error(f"Ошибка запуска миграции в system: {e}", exc_info=True)
         finally:

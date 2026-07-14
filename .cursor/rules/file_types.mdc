@@ -8,7 +8,7 @@ alwaysApply: false
 
 `core/files/types.py`:
 
-- `FileCategory` (StrEnum) — категории (`text`, `pdf`, `office_doc`, `spreadsheet`, `presentation`, `image`, `audio`, `video`, `archive`, `email`, `ebook`).
+- `FileCategory` (StrEnum) — категории (`text`, `pdf`, `office_doc`, `spreadsheet`, `presentation`, `image`, `audio`, `video`, `archive`, `email`, `ebook`, `viz`).
 - `FILE_TYPE_REGISTRY` — реестр `FileTypeEntry`: расширение, MIME, категория.
 - `ALL_CATEGORIES` — кортеж всех категорий.
 

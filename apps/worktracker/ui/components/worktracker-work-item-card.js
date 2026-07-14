@@ -1,8 +1,11 @@
 /**
  * WorktrackerWorkItemCard — единая карточка задачи в списках и на доске.
+ *
+ * Контекстное меню «Действия» порталится в document.body (position:fixed),
+ * чтобы не клиппилось overflow/contain у island и списков.
  */
 
-import { html, css } from 'lit';
+import { html, css, render } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { openWorkItemDetail, isMobileViewport } from '@platform/lib/utils/work-item-deeplink.js';
 import { worktrackerListStyles } from '../styles/worktracker-list.styles.js';
@@ -10,6 +13,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-work-item-badge.js';
 
 const TERMINAL_STATES = new Set(['done', 'cancelled', 'failed']);
+const MENU_ESTIMATE_PX = 220;
 
 function _assigneeIsQueue(item) {
     const assignment = item && item.assignment;
@@ -110,38 +114,6 @@ export class WorktrackerWorkItemCard extends PlatformElement {
                 background: var(--glass-solid-medium);
                 color: var(--text-primary);
             }
-            .menu {
-                position: absolute;
-                top: calc(100% + 4px);
-                right: 0;
-                z-index: var(--z-popover, 1100);
-                min-width: 11rem;
-                padding: var(--space-1);
-                background: var(--glass-solid-strong);
-                border: 1px solid var(--glass-border-medium);
-                border-radius: var(--radius-lg);
-                box-shadow: var(--glass-shadow-medium);
-            }
-            .menu-item {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                width: 100%;
-                padding: var(--space-2) var(--space-3);
-                border: none;
-                border-radius: var(--radius-md);
-                background: transparent;
-                color: var(--text-primary);
-                font-size: var(--text-sm);
-                text-align: left;
-                cursor: pointer;
-            }
-            .menu-item:hover {
-                background: var(--glass-solid-medium);
-            }
-            .menu-item.danger {
-                color: var(--danger);
-            }
         `,
     ];
 
@@ -152,11 +124,16 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         this.selected = false;
         this.showPreview = true;
         this._menuOpen = false;
+        /** @type {HTMLDivElement|null} */
+        this._menuPortal = null;
+        /** @type {HTMLDivElement|null} */
+        this._menuContent = null;
         this._claimOp = this.useOp('worktracker/work_item_claim');
         this._completeOp = this.useOp('worktracker/work_item_complete');
         this._cancelOp = this.useOp('worktracker/work_item_cancel');
         this._routeSel = this.select((state) => state.router.routeKey);
         this._onDocClick = this._onDocClick.bind(this);
+        this._onWindowReposition = this._onWindowReposition.bind(this);
     }
 
     connectedCallback() {
@@ -167,12 +144,20 @@ export class WorktrackerWorkItemCard extends PlatformElement {
     disconnectedCallback() {
         super.disconnectedCallback();
         document.removeEventListener('click', this._onDocClick, true);
+        this._closeMenuPortal();
     }
 
     updated(changed) {
         super.updated(changed);
         if (typeof this.variant !== 'string' || (this.variant !== 'row' && this.variant !== 'card')) {
             throw new Error(`WorktrackerWorkItemCard: invalid variant "${this.variant}"`);
+        }
+        if (changed.has('_menuOpen')) {
+            if (this._menuOpen) {
+                this._openMenuPortal();
+            } else {
+                this._closeMenuPortal();
+            }
         }
     }
 
@@ -184,7 +169,16 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         if (path.includes(this)) {
             return;
         }
+        if (this._menuPortal && path.includes(this._menuPortal)) {
+            return;
+        }
         this._menuOpen = false;
+    }
+
+    _onWindowReposition() {
+        if (this._menuOpen) {
+            this._syncMenuPortalPosition();
+        }
     }
 
     _workItemId() {
@@ -220,6 +214,103 @@ export class WorktrackerWorkItemCard extends PlatformElement {
     _toggleMenu(event) {
         event.stopPropagation();
         this._menuOpen = !this._menuOpen;
+    }
+
+    _ensureMenuPortal() {
+        if (this._menuPortal !== null) {
+            return;
+        }
+        const portal = document.createElement('div');
+        portal.setAttribute('data-wt-work-item-card-menu', '');
+        const style = document.createElement('style');
+        style.textContent = `
+            [data-wt-work-item-card-menu] .menu {
+                position: fixed;
+                z-index: var(--z-popover, 1100);
+                min-width: 11rem;
+                padding: var(--space-1);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-medium);
+                border-radius: var(--radius-lg);
+                box-shadow: var(--glass-shadow-medium);
+            }
+            [data-wt-work-item-card-menu] .menu-item {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                width: 100%;
+                padding: var(--space-2) var(--space-3);
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                text-align: left;
+                cursor: pointer;
+            }
+            [data-wt-work-item-card-menu] .menu-item:hover {
+                background: var(--glass-solid-medium);
+            }
+            [data-wt-work-item-card-menu] .menu-item.danger {
+                color: var(--danger);
+            }
+        `;
+        const content = document.createElement('div');
+        content.setAttribute('data-wt-menu-content', '');
+        portal.appendChild(style);
+        portal.appendChild(content);
+        document.body.appendChild(portal);
+        this._menuPortal = portal;
+        this._menuContent = content;
+        window.addEventListener('resize', this._onWindowReposition);
+        window.addEventListener('scroll', this._onWindowReposition, true);
+    }
+
+    _menuPositionStyle() {
+        const trigger = this.renderRoot.querySelector('.menu-trigger');
+        if (!(trigger instanceof HTMLElement)) {
+            return 'top: 0; right: 0;';
+        }
+        const rect = trigger.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const flipUp = spaceBelow < MENU_ESTIMATE_PX && rect.top > MENU_ESTIMATE_PX;
+        const right = Math.max(8, window.innerWidth - rect.right);
+        if (flipUp) {
+            const bottom = Math.max(8, window.innerHeight - rect.top + 4);
+            return `right: ${right}px; bottom: ${bottom}px; top: auto;`;
+        }
+        const top = Math.max(8, rect.bottom + 4);
+        return `right: ${right}px; top: ${top}px; bottom: auto;`;
+    }
+
+    _openMenuPortal() {
+        this._ensureMenuPortal();
+        this._syncMenuPortalPosition();
+    }
+
+    _syncMenuPortalPosition() {
+        if (this._menuContent === null || !this._menuOpen) {
+            return;
+        }
+        const pos = this._menuPositionStyle();
+        render(html`
+            <div class="menu" role="menu" style=${pos} @click=${(e) => e.stopPropagation()}>
+                ${this._renderMenuItems()}
+            </div>
+        `, this._menuContent);
+    }
+
+    _closeMenuPortal() {
+        window.removeEventListener('resize', this._onWindowReposition);
+        window.removeEventListener('scroll', this._onWindowReposition, true);
+        if (this._menuContent !== null) {
+            render(html``, this._menuContent);
+            this._menuContent = null;
+        }
+        if (this._menuPortal !== null) {
+            this._menuPortal.remove();
+            this._menuPortal = null;
+        }
     }
 
     async _runAction(action) {
@@ -306,11 +397,6 @@ export class WorktrackerWorkItemCard extends PlatformElement {
                     >
                         <platform-icon name="more-vert" size="16"></platform-icon>
                     </button>
-                    ${this._menuOpen ? html`
-                        <div class="menu" role="menu" @click=${(e) => e.stopPropagation()}>
-                            ${this._renderMenuItems()}
-                        </div>
-                    ` : null}
                 </div>
             </div>
         `;

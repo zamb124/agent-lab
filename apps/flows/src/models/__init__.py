@@ -1,3 +1,4 @@
+from .agent_skill import AgentSkill, AgentSkillActivation, AgentSkillIndexEntry
 from .branch_contracts import (
     BranchCreateRequest,
     BranchDetailResponse,
@@ -116,6 +117,9 @@ from .trigger_config import (
 LLMConfig = NodeLLMConfig
 
 __all__ = [
+    "AgentSkill",
+    "AgentSkillActivation",
+    "AgentSkillIndexEntry",
     "FlowType",
     "ChannelNodeConfig",
     "ChannelType",

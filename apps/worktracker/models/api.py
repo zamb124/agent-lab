@@ -113,3 +113,4 @@ class BoardUpdateRequest(StrictBaseModel):
 class WorkItemMineSummaryResponse(StrictBaseModel):
     assigned_open_count: int = Field(..., ge=0)
     queue_inbox_count: int = Field(..., ge=0)
+    work_queue_ids: list[str] = Field(default_factory=list)

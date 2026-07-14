@@ -1,5 +1,6 @@
 /**
  * Worktracker flat list rows — inbox, my tasks, queue detail.
+ * Строки — отдельные row-cards с gap (не «склеенный» divider-list).
  */
 import { css } from 'lit';
 
@@ -8,19 +9,18 @@ export const worktrackerListStyles = css`
         display: flex;
         flex-direction: column;
         min-width: 0;
-        gap: 0;
-        border: var(--worktracker-divider);
-        border-radius: var(--radius-lg);
-        overflow: hidden;
-        background: var(--bg-primary);
+        gap: var(--space-2);
+        overflow: visible;
+        background: transparent;
+        border: none;
     }
     .wt-list-row {
         display: block;
         min-width: 0;
-        border-bottom: var(--worktracker-divider);
-    }
-    .wt-list-row:last-child {
-        border-bottom: none;
+        border: var(--worktracker-divider);
+        border-radius: var(--radius-md);
+        background: var(--bg-primary);
+        overflow: visible;
     }
     .wt-list-row:hover {
         background: var(--glass-tint-subtle);

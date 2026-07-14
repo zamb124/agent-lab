@@ -4,8 +4,12 @@ globs:
   - "apps/office/**"
   - "migrations/office/**"
   - "core/documents/viewer/**"
+  - "core/viz/**"
   - "core/frontend/static/lib/components/platform-document-viewer-host.js"
   - "core/frontend/static/lib/components/platform-onlyoffice-host.js"
+  - "core/frontend/static/lib/components/platform-viz-host.js"
+  - "core/frontend/static/lib/components/platform-echarts-host.js"
+  - "core/frontend/static/lib/components/platform-mermaid-host.js"
   - "core/frontend/static/lib/components/platform-file-viewer-modal.js"
   - "core/frontend/static/assets/icons/files_icons/**"
 ---
@@ -53,7 +57,7 @@ globs:
 
 ## Что используем из DS / что не интегрировано
 
-**Используем:** viewer handler registry (`core/documents/viewer/` + `apps/office/services/viewer_handlers/` + `DocumentViewerService`); единый контракт `GET …/editor-config` → `DocumentOpenConfigResponse` (`handler` + `capabilities` + typed payload); UI shell `<platform-document-viewer-host>` (OnlyOffice → `platform-onlyoffice-host`, остальное → iframe bridge `/documents/api/v1/viewer-frame`); OnlyOffice для office_doc/spreadsheet/presentation/pdf (`OnlyOfficeViewerHandler`); image/media/text/binary handlers + anonymous `viewer-stream`/`viewer-save`; upload любого файла с `file_category` из `core.files.types`; `onlyoffice_document_type` (`word|cell|slide`) только для OnlyOffice JWT; JWT на конфиг OnlyOffice (с `document.permissions`); callback (статусы 2 и 6); `office-download`; mutations gated by `capabilities.server_mutations`; sync/preview через capabilities matrix.
+**Используем:** viewer handler registry (`core/documents/viewer/` + `apps/office/services/viewer_handlers/` + `DocumentViewerService`); единый контракт `GET …/editor-config` → `DocumentOpenConfigResponse` (`handler` + `capabilities` + typed payload); UI shell `<platform-document-viewer-host>` (OnlyOffice → `platform-onlyoffice-host`; image/media/text/binary/viz → native Lit hosts); OnlyOffice для office_doc/spreadsheet/presentation/pdf (`OnlyOfficeViewerHandler`); **viz** (`FileCategory.VIZ`, `.viz`, MIME `application/vnd.platform.viz+json`) → `VizViewerHandler` + `<platform-viz-host>` (ECharts/Mermaid); image/media/text/binary handlers + anonymous `viewer-stream`/`viewer-save`; upload любого файла с `file_category` из `core.files.types`; `onlyoffice_document_type` (`word|cell|slide`) только для OnlyOffice JWT; JWT на конфиг OnlyOffice (с `document.permissions`); callback (статусы 2 и 6); `office-download`; mutations gated by `capabilities.server_mutations`; sync/preview через capabilities matrix.
 
 **Намеренно вне BFF:** отдельный режим `mode: view` с разными `permissions` по ролям, plugins, forcesave как UX, Conversion API как сервис, embedded без нашего UI, мобильные SDK, co-editing вне выдачи нашего `editor-config` (co-edit идёт внутри DS при двух клиентах с одним `document.key`).
 

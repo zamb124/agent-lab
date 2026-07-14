@@ -1,0 +1,45 @@
+{
+  "flow_id": "platform_assistant",
+  "name": "Платформенный ассистент",
+  "description": "Универсальный ассистент с progressive Agent Skills: документы, диаграммы, RAG, web, CRM, задачи.",
+  "tags": [
+    "assistant",
+    "skills",
+    "store",
+    "demo"
+  ],
+  "permission": [
+    "admin",
+    "developers"
+  ],
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "node_id": "platform_assistant_main",
+      "agent_skills": [
+        "document-workspace",
+        "diagrams-viz",
+        "knowledge-rag",
+        "web-research",
+        "crm-notes",
+        "work-tracking"
+      ],
+      "llm": {
+        "provider": "humanitec_llm",
+        "model": "auto",
+        "temperature": 0.2
+      }
+    }
+  },
+  "edges": [
+    {
+      "from_node": "main",
+      "to_node": null
+    }
+  ],
+  "variables": {
+    "company_name": "@var:company_name"
+  },
+  "branches": {}
+}

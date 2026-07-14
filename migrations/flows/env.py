@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from apps.flows.src.db.models import (  # noqa: F401
     ActivityTasks,
+    AgentSkills,
     Base,
     EvaluationCaseRuns,
     EvaluationCases,
@@ -46,7 +47,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 MANAGED_TABLES = {
-    "flows", "flows_versions", "nodes", "tools",
+    "flows", "flows_versions", "nodes", "tools", "agent_skills",
     "workflow_instances", "execution_branches", "workflow_events",
     "workflow_snapshots", "activity_tasks",
     "evaluation_suites", "evaluation_cases",

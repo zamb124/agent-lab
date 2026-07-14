@@ -1,9 +1,12 @@
 /**
  * QueueDetailPage — inbox очереди и участники.
+ *
+ * Участники добавляются из `state.team.members` (поиск по имени/email), не по raw user_id.
  */
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { TEAM_EVENTS } from '@platform/lib/events/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
 import '@platform/lib/components/platform-user-chip.js';
@@ -17,7 +20,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
 
     static properties = {
         workQueueId: { type: String, attribute: 'work-queue-id' },
-        _memberUserId: { state: true },
+        _membersFilter: { state: true },
     };
 
     static styles = [
@@ -27,13 +30,6 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         css`
             :host { display: flex; flex-direction: column; min-height: 0; flex: 1; width: 100%; }
             .sections { display: flex; flex-direction: column; gap: var(--space-6); }
-            .section-title {
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-secondary);
-                margin-bottom: var(--space-2);
-            }
-            .rows { display: flex; flex-direction: column; gap: var(--space-2); }
             .members { display: flex; flex-direction: column; gap: var(--space-2); }
             .member-row {
                 display: flex;
@@ -44,24 +40,67 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
                 border-radius: var(--radius-md);
                 background: var(--glass-tint-subtle);
             }
-            .add-row { display: flex; gap: var(--space-2); align-items: flex-end; flex-wrap: wrap; margin-bottom: var(--space-3); }
+            .add-block {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                margin-bottom: var(--space-3);
+            }
+            .candidates {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                max-height: 16rem;
+                overflow-y: auto;
+            }
+            .candidate-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border: none;
+                border-radius: var(--radius-md);
+                background: var(--bg-primary);
+                cursor: pointer;
+                text-align: left;
+                width: 100%;
+                color: inherit;
+            }
+            .candidate-row:hover {
+                background: var(--glass-tint-subtle);
+            }
             .empty { padding: var(--space-4); color: var(--text-tertiary); text-align: center; }
+            .hint { font-size: var(--text-sm); color: var(--text-secondary); margin: 0; }
         `,
     ];
 
     constructor() {
         super();
         this.workQueueId = '';
-        this._memberUserId = '';
+        this._membersFilter = '';
         this._workItems = this.useResource('worktracker/work_items');
         this._queues = this.useResource('worktracker/work_queues');
         this._membersOp = this.useOp('worktracker/work_queue_members_list');
         this._addMemberOp = this.useOp('worktracker/work_queue_member_add');
         this._removeMemberOp = this.useOp('worktracker/work_queue_member_remove');
+        this._teamMembersSel = this.select((s) => s.team.members);
+        this._teamLoadingSel = this.select((s) => s.team.loading);
+        this.useEvent(this._addMemberOp.op.events.SUCCEEDED, () => {
+            if (this.workQueueId) {
+                this._membersOp.run({ work_queue_id: this.workQueueId });
+            }
+        });
+        this.useEvent(this._removeMemberOp.op.events.SUCCEEDED, () => {
+            if (this.workQueueId) {
+                this._membersOp.run({ work_queue_id: this.workQueueId });
+            }
+        });
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._ensureTeamMembers();
         this._reload();
     }
 
@@ -69,6 +108,14 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         super.updated(changed);
         if (changed.has('workQueueId')) {
             this._reload();
+        }
+    }
+
+    _ensureTeamMembers() {
+        const members = this._teamMembersSel.value;
+        const loading = this._teamLoadingSel.value;
+        if ((!Array.isArray(members) || members.length === 0) && !loading) {
+            this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
         }
     }
 
@@ -90,8 +137,41 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         return queues.find((row) => row && row.work_queue_id === this.workQueueId) || null;
     }
 
-    _addMember() {
-        const userId = this._memberUserId.trim();
+    _memberUserIds() {
+        const members = this._membersOp.state.items || [];
+        const ids = new Set();
+        if (!Array.isArray(members)) {
+            return ids;
+        }
+        for (const row of members) {
+            const member = row && row.member;
+            if (member && member.actor_kind === 'user' && typeof member.user_id === 'string' && member.user_id.length > 0) {
+                ids.add(member.user_id);
+            }
+        }
+        return ids;
+    }
+
+    _candidateMembers() {
+        const team = this._teamMembersSel.value;
+        if (!Array.isArray(team)) {
+            return [];
+        }
+        const already = this._memberUserIds();
+        const q = this._membersFilter.trim().toLowerCase();
+        return team
+            .filter((m) => m && typeof m.user_id === 'string' && m.user_id.length > 0 && !already.has(m.user_id))
+            .filter((m) => {
+                if (q.length === 0) {
+                    return true;
+                }
+                const name = typeof m.name === 'string' ? m.name.toLowerCase() : '';
+                const email = typeof m.email === 'string' ? m.email.toLowerCase() : '';
+                return name.includes(q) || email.includes(q) || m.user_id.toLowerCase().includes(q);
+            });
+    }
+
+    _addMember(userId) {
         if (!userId || !this.workQueueId) {
             return;
         }
@@ -100,8 +180,6 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
             member: { actor_kind: 'user', user_id: userId },
             role: 'member',
         });
-        this._memberUserId = '';
-        this._membersOp.run({ work_queue_id: this.workQueueId });
     }
 
     _removeMember(userId) {
@@ -112,7 +190,6 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
             work_queue_id: this.workQueueId,
             member: { actor_kind: 'user', user_id: userId },
         });
-        this._membersOp.run({ work_queue_id: this.workQueueId });
     }
 
     _renderMembers() {
@@ -139,6 +216,31 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
                         </div>
                     `;
                 })}
+            </div>
+        `;
+    }
+
+    _renderCandidates() {
+        const candidates = this._candidateMembers();
+        const teamLoading = this._teamLoadingSel.value;
+        if (teamLoading && candidates.length === 0) {
+            return html`<p class="hint">${this.t('queue_detail_page.members_loading')}</p>`;
+        }
+        if (candidates.length === 0) {
+            return html`<p class="hint">${this.t('queue_detail_page.no_candidates')}</p>`;
+        }
+        return html`
+            <div class="candidates">
+                ${candidates.map((m) => html`
+                    <button
+                        type="button"
+                        class="candidate-row"
+                        @click=${() => this._addMember(m.user_id)}
+                    >
+                        <platform-user-chip user-id=${m.user_id} size="sm" .interactive=${false}></platform-user-chip>
+                        <span>${this.t('queue_detail_page.add_member')}</span>
+                    </button>
+                `)}
             </div>
         `;
     }
@@ -170,19 +272,23 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
                 ` : html`<div class="empty">${this.t('queue_detail_page.empty_inbox')}</div>`}
                 <section class="wt-section">
                     <h2 class="wt-section-title">${this.t('queue_detail_page.members')}</h2>
-                    <div class="add-row">
+                    <p class="hint">${this.t('queue_detail_page.members_hint')}</p>
+                    <div class="add-block">
                         <platform-field
                             type="string"
                             mode="edit"
-                            .label=${this.t('queue_detail_page.label_member_user_id')}
-                            .value=${this._memberUserId}
+                            input-type="search"
+                            .label=${this.t('queue_detail_page.members_filter')}
+                            .placeholder=${this.t('queue_detail_page.members_filter_placeholder')}
+                            .value=${this._membersFilter}
                             @change=${(e) => {
-                                this._memberUserId = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+                                if (!e.detail || typeof e.detail.value !== 'string') {
+                                    throw new Error('queue-detail: members filter expects detail.value string');
+                                }
+                                this._membersFilter = e.detail.value;
                             }}
                         ></platform-field>
-                        <button class="btn btn-primary" @click=${() => this._addMember()}>
-                            ${this.t('queue_detail_page.add_member')}
-                        </button>
+                        ${this._renderCandidates()}
                     </div>
                     ${this._renderMembers()}
                 </section>

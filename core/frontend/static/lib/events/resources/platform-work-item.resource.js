@@ -29,6 +29,7 @@ export const platformWorkItemCountsOp = createAsyncOp({
         assigned_open_count: 0,
         queue_inbox_count: 0,
         total_open_count: 0,
+        work_queue_ids: [],
     },
     request: async () => {
         return await httpRequest({
@@ -46,11 +47,15 @@ export const platformWorkItemCountsOp = createAsyncOp({
         }
         const assignedOpenCount = typeof result.assigned_open_count === 'number' ? result.assigned_open_count : 0;
         const queueInboxCount = typeof result.queue_inbox_count === 'number' ? result.queue_inbox_count : 0;
+        const workQueueIds = Array.isArray(result.work_queue_ids)
+            ? result.work_queue_ids.filter((id) => typeof id === 'string' && id.length > 0)
+            : [];
         return {
             ...state,
             assigned_open_count: assignedOpenCount,
             queue_inbox_count: queueInboxCount,
             total_open_count: assignedOpenCount + queueInboxCount,
+            work_queue_ids: workQueueIds,
         };
     },
 });

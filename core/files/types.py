@@ -23,6 +23,7 @@ class FileCategory(StrEnum):
     ARCHIVE = "archive"
     EMAIL = "email"
     EBOOK = "ebook"
+    VIZ = "viz"
 
 
 @dataclass(frozen=True)
@@ -174,6 +175,12 @@ FILE_TYPE_REGISTRY: tuple[FileTypeEntry, ...] = (
     FileTypeEntry(".msg", ("application/vnd.ms-outlook",), FileCategory.EMAIL),
     # --- EBOOK ---
     FileTypeEntry(".epub", ("application/epub+zip",), FileCategory.EBOOK),
+    # --- VIZ (platform visualization document) ---
+    FileTypeEntry(
+        ".viz",
+        ("application/vnd.platform.viz+json",),
+        FileCategory.VIZ,
+    ),
 )
 
 

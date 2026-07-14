@@ -545,7 +545,7 @@ async def test_hitl_operator_chat_rejects_unauthorized_and_non_takeover_send(
     await container.work_item_service.claim(
         company_id="system", work_item_id=work_item_id, user_id=member
     )
-    # single_reply: отправка сообщения запрещена (композер только «Завершить»)
+    # single_reply: ask-append запрещён (ответ только через complete / closing reply)
     with pytest.raises(ValueError):
         await conv.append_operator_message(
             company_id="system",

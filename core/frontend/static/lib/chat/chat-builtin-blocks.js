@@ -4,6 +4,7 @@ import { FlowsChatUiTable } from './blocks/flows-chat-ui-table.js';
 import { FlowsChatUiActions } from './blocks/flows-chat-ui-actions.js';
 import { FlowsChatUiFileCard } from './blocks/flows-chat-ui-file-card.js';
 import { FlowsChatUiText } from './blocks/flows-chat-ui-text.js';
+import { FlowsChatUiViz } from './blocks/flows-chat-ui-viz.js';
 
 let registered = false;
 
@@ -17,4 +18,5 @@ export function registerBuiltinFlowChatBlocks() {
     registerFlowChatBlockType('actions', FlowsChatUiActions, null, 'flows-chat-ui-actions');
     registerFlowChatBlockType('file_card', FlowsChatUiFileCard, null, 'flows-chat-ui-file-card');
     registerFlowChatBlockType('text', FlowsChatUiText, null, 'flows-chat-ui-text');
+    registerFlowChatBlockType('viz', FlowsChatUiViz, null, 'flows-chat-ui-viz');
 }

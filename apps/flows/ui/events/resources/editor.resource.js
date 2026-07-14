@@ -9,7 +9,8 @@
  *     `erroredNodes`) — обновляется push-событиями `flows/run/*`;
  *   - breakpoints (`breakpointNodeIds`);
  *   - локальный canvas-state (`viewBox`, `panTool`, `multiSelection`,
- *     `smartGuides`, `contextMenu`, `stickyNotes`).
+ *     `smartGuides`, `contextMenu`, `stickyNotes`);
+ *   - `editorLayout` (`agent` | `canvas`) — Agent Focus Mode для single llm_node.
  *
  * `silent: true` — UI-only фабрика, .run() запрещён.
  */
@@ -17,6 +18,12 @@
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 import { applyAutoLayoutToBranchData, canvasNeedsAutoLayout } from '../../_helpers/flow-graph-auto-layout.js';
+import {
+    applyEditorLayoutToState,
+    EDITOR_LAYOUT_CANVAS,
+    isAgentFocusEligible,
+    resolveEditorLayout,
+} from '../../_helpers/flow-editor-layout.js';
 const HISTORY_LIMIT = 50;
 const DEFAULT_VIEWBOX = Object.freeze({ x: 0, y: 0, w: 1600, h: 1000 });
 
@@ -307,6 +314,7 @@ export const editorResource = createAsyncOp({
         dataflow: null,
         dataflowObservations: {},
         mode: 'edit',
+        editorLayout: EDITOR_LAYOUT_CANVAS,
         isDirty: false,
         isSaving: false,
         publishedAt: null,
@@ -351,6 +359,7 @@ export const editorResource = createAsyncOp({
         AGENT_EXECUTION_SET: 'agent_execution_set',
         ACTIVE_TOOL_SET: 'active_tool_set',
         MODE_SET: 'mode_set',
+        EDITOR_LAYOUT_SET: 'editor_layout_set',
         NAME_SET: 'name_set',
         FLOW_CONFIG_PATCHED: 'flow_config_patched',
         PUBLISHED_AT_SET: 'published_at_set',
@@ -392,6 +401,7 @@ export const editorResource = createAsyncOp({
         setAgentExecutionRunning: 'agent_execution_set',
         setActiveTool: 'active_tool_set',
         setMode: 'mode_set',
+        setEditorLayout: 'editor_layout_set',
         setName: 'name_set',
         patchFlowConfig: 'flow_config_patched',
         setPublishedAt: 'published_at_set',
@@ -441,9 +451,11 @@ export const editorResource = createAsyncOp({
                     loadLayoutDirty = true;
                 }
             }
-            return {
+            const nextFlowId = typeof flow.flow_id === 'string' ? flow.flow_id : state.flowId;
+            const resolvedLayout = resolveEditorLayout(nextBranchData, nextFlowId, null);
+            const loaded = {
                 ...state,
-                flowId: typeof flow.flow_id === 'string' ? flow.flow_id : state.flowId,
+                flowId: nextFlowId,
                 flowConfig: flow,
                 branchData: nextBranchData,
                 currentBranchId: requestedBranchId,
@@ -474,7 +486,9 @@ export const editorResource = createAsyncOp({
                 openNodePanelIds: [],
                 propertyPanelLayouts: {},
                 panelOpen: false,
+                editorLayout: EDITOR_LAYOUT_CANVAS,
             };
+            return applyEditorLayoutToState(loaded, resolvedLayout, nextBranchData);
         }
 
         if (t === 'flows/editor/branch_set') {
@@ -504,13 +518,31 @@ export const editorResource = createAsyncOp({
             const nextEntry = typeof data.entry === 'string' && data.entry.length > 0
                 ? data.entry
                 : null;
-            return {
+            const nextState = {
                 ...state,
                 branchData: data,
                 entryNodeId: nextEntry,
                 inheritedNodeIds,
                 inheritedEdgeKeys,
             };
+            if (!isAgentFocusEligible(data) && state.editorLayout !== EDITOR_LAYOUT_CANVAS) {
+                return { ...nextState, editorLayout: EDITOR_LAYOUT_CANVAS };
+            }
+            return nextState;
+        }
+
+        if (t === 'flows/editor/editor_layout_set') {
+            const layout = p.layout;
+            if (layout !== 'agent' && layout !== 'canvas') {
+                return state;
+            }
+            const branchData = state.branchData && typeof state.branchData === 'object'
+                ? state.branchData
+                : { nodes: {}, edges: [] };
+            if (layout === 'agent' && !isAgentFocusEligible(branchData)) {
+                return state;
+            }
+            return applyEditorLayoutToState(state, layout, branchData);
         }
 
         if (t === 'flows/editor/node_selected') {

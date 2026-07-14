@@ -34,6 +34,7 @@ STATE_DIFF_SKIP_KEYS: frozenset[str] = frozenset({
     "interrupt",
     "join_arrived_preds",
     "hitl_handoff_correlation_id",
+    "hitl_streamed_closing_text",
     "flow_deadline_monotonic",
     "flow_timeout_effective_seconds",
     "terminal_task_state",

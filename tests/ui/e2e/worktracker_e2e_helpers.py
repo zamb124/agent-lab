@@ -427,17 +427,8 @@ async def worktracker_hitl_chat_send(editor: Locator, text: str) -> None:
 
 
 async def worktracker_hitl_single_reply_complete(editor: Locator, text: str) -> None:
-    """single_reply: ответ через форму «Ответить и завершить» (не Activity, не chat composer)."""
-    reply = editor.locator(".wt-hitl-reply").first
-    await expect(reply).to_be_visible(timeout=30_000)
-    field = reply.locator("platform-field[data-canon='composer']").first
-    await expect(field).to_be_visible(timeout=15_000)
-    await _set_platform_field(field, text)
-    # После change Lit перерисовывает форму — кнопку берём заново.
-    btn = editor.locator(".wt-hitl-reply button.btn-primary").first
-    await expect(btn).to_be_enabled(timeout=10_000)
-    await btn.evaluate("(el) => el.click()")
-
+    """single_reply: Send в platform-chat = complete + closing reply."""
+    await worktracker_hitl_chat_send(editor, text)
 
 async def flows_user_chat_wait_text(page: Page, text_pattern: re.Pattern[str] | str) -> None:
     """Текст в чате покупателя (flows chat-page) — в т.ч. ответ оператора по Emitter."""

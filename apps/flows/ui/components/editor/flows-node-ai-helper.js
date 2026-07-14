@@ -25,13 +25,13 @@ export class FlowsNodeAiHelper extends PlatformElement {
                 flex-direction: column;
                 height: 100%;
                 min-height: 0;
-                background: var(--bg-primary);
+                background: color-mix(in oklab, var(--bg-secondary) 72%, transparent);
             }
 
             .chat-shell {
                 flex: 1;
                 min-height: 0;
-                padding: var(--space-3);
+                padding: var(--space-2);
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;

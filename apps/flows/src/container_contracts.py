@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from apps.flows.src.models.flow_config import Edge
     from apps.flows.src.models.registry_contracts import RegistryFlowSchema
     from apps.flows.src.runners.remote import RemoteCodeRunner
+    from apps.flows.src.services.agent_skill_service import AgentSkillService
     from apps.flows.src.services.flow_discovery import FlowDiscoveryService
     from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
     from apps.flows.src.services.hitl_conversation_service import HitlConversationService
@@ -297,6 +298,9 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def tool_repository(self) -> ToolRepository: ...
+
+    @property
+    def agent_skill_service(self) -> "AgentSkillService": ...
 
     @property
     def tool_registry(self) -> ToolRegistryProtocol: ...

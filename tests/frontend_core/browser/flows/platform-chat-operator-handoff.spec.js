@@ -148,9 +148,11 @@ describe('platform-chat operator_handoff', function () {
         expect(el.renderRoot.querySelectorAll('flows-chat-message').length).to.equal(3);
     });
 
-    it('single_reply: композер скрыт (read-only диалог)', async () => {
+    it('single_reply: композер виден при can_complete (Send = complete)', async () => {
         const el = await mount(singleReplyPolicy);
         await waitFor(() => el.renderRoot.querySelectorAll('flows-chat-message').length >= 2);
-        expect(el.renderRoot.querySelector('flows-chat-input')).to.equal(null);
+        const input = el.renderRoot.querySelector('flows-chat-input');
+        expect(input).to.not.equal(null);
+        expect(input.shadowRoot.querySelector('.attach-btn')).to.not.equal(null);
     });
 });

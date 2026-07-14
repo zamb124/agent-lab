@@ -85,6 +85,7 @@ class WorkItemCompletion:
 class WorkItemMineSummary(WorktrackerModel):
     assigned_open_count: int = Field(..., ge=0)
     queue_inbox_count: int = Field(..., ge=0)
+    work_queue_ids: list[str] = Field(default_factory=list)
 
 
 class WorkItemService:
@@ -181,11 +182,13 @@ class WorkItemService:
             queue_inbox_count = await self.count(
                 company_id,
                 exclude_terminal=True,
+                queue_unclaimed_only=True,
                 work_queue_ids=queue_ids,
             )
         return WorkItemMineSummary(
             assigned_open_count=assigned_open_count,
             queue_inbox_count=queue_inbox_count,
+            work_queue_ids=queue_ids,
         )
 
     async def map_work_item_ids_by_crm_entities(

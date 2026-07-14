@@ -52,13 +52,13 @@ const PROFILE_CAPABILITIES = Object.freeze({
         filesPanel: true,
         cancel: true,
     }),
-    // Поверхность оператора в карточке WorkItem(operator_handoff): чистый диалог
-    // без run-trace/preview/files-панели; отмена стрима неприменима (нет A2A-стрима).
+    // Поверхность оператора в карточке WorkItem(operator_handoff): полный composer
+    // (в т.ч. attach файлов); run-trace/preview/cancel неприменимы (нет A2A send-stream).
     operator_handoff: Object.freeze({
         runTrace: false,
         traceActions: false,
         browserPreviews: false,
-        filesPanel: false,
+        filesPanel: true,
         cancel: false,
     }),
 });
@@ -153,8 +153,7 @@ export function resolveChatViewConfig(profile, chatPolicy) {
     const caps = profile.capabilities;
 
     if (profile.kind === 'operator_handoff') {
-        // Минимальный диалоговый вид: политика композера (send/complete) приходит
-        // отдельно из interaction_policy задачи, не из FlowChatSettings.
+        // Диалог + composer (send/complete из interaction_policy); files panel включён.
         return Object.freeze({
             profileKind: profile.kind,
             showReasoning: false,
@@ -164,7 +163,7 @@ export function resolveChatViewConfig(profile, chatPolicy) {
             showRunTrace: false,
             showTraceActions: false,
             showBrowserPreviews: false,
-            showFilesPanel: false,
+            showFilesPanel: true,
             allowCancel: false,
             greetingMessage: null,
             suggestedPrompts: Object.freeze([]),

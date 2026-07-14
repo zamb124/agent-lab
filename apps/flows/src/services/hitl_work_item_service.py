@@ -209,7 +209,12 @@ class HitlWorkItemService:
 
         # Closing reply → durable messages + Redis stream до resume (live resubscribe).
         content = resolution.text
-        if content.strip():
+        resolution_file_ids: list[str] = []
+        for file_ref in resolution.files:
+            fid = file_ref.file_id
+            if fid is not None and fid.strip():
+                resolution_file_ids.append(fid.strip())
+        if content.strip() or resolution_file_ids:
             item = await self._work_items.get(company_id, work_item_id)
             operator_user_id = ""
             assignment = item.assignment
@@ -225,6 +230,7 @@ class HitlWorkItemService:
                 operator_user_id=operator_user_id,
                 text=content,
                 idempotency_key=f"complete:{work_item_id}",
+                file_ids=resolution_file_ids,
             )
 
         context_id = binding.get("context_id")

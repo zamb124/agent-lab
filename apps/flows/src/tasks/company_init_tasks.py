@@ -9,12 +9,16 @@ from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.services.agent_toolkit_service import bootstrap_agent_toolkits_from_registry
 from apps.flows.src.services.demo_company_variables import seed_demo_company_variables
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
-from apps.flows.src.services.hitl_demo_queue import ensure_example_hitl_queue
+from apps.flows.src.services.hitl_demo_queue import (
+    ensure_example_hitl_queue,
+    hitl_demo_operator_user_ids,
+)
 from apps.flows.src.services.mcp_catalog_provisioner import provision_mcp_catalog_for_company
 from apps.flows.src.services.mcp_sync import (
     ensure_default_mcp_servers_for_company,
     sync_auto_mcp_servers_for_company,
 )
+from apps.flows.src.services.platform_assistant_skills import seed_platform_assistant_skills
 from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
 from apps.flows_worker.broker_core import broker
 from core.context import Context, clear_context, set_context
@@ -143,7 +147,24 @@ async def init_company_resources(
         )
         stats["demo_variables"] = seeded_variables
 
-        await ensure_example_hitl_queue(container.work_item_service, company_id)
+        seeded_skills = await seed_platform_assistant_skills(
+            container.agent_skill_service,
+            container.files_service,
+            company_id,
+        )
+        stats["platform_assistant_skills"] = seeded_skills
+
+        stored_company = await container.company_repository.get(company_id)
+        member_user_ids = (
+            hitl_demo_operator_user_ids(stored_company)
+            if stored_company is not None
+            else []
+        )
+        await ensure_example_hitl_queue(
+            container.work_item_service,
+            company_id,
+            member_user_ids=member_user_ids,
+        )
 
         # Обновляем статистику tools
         stats["tools"] = len(loaded_tools)

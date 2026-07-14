@@ -1,11 +1,13 @@
 from core.db import BaseRepository, Storage
 
+from .agent_skill_repository import AgentSkillRepository
 from .agent_toolkit_repository import AgentToolkitRepository
 from .evaluation_lab_repository import EvaluationLabRepository
 from .flow_repository import FlowRepository
 from .mcp_repository import MCPServerRepository
 from .models import (  # noqa: F401
     ActivityTasks,
+    AgentSkills,
     EvaluationCaseRuns,
     EvaluationCases,
     EvaluationRunEvents,
@@ -28,6 +30,7 @@ from .tool_repository import ToolRepository
 __all__ = [
     "Storage",
     "BaseRepository",
+    "AgentSkillRepository",
     "AgentToolkitRepository",
     "NodeRepository",
     "EvaluationLabRepository",
@@ -35,6 +38,7 @@ __all__ = [
     "ToolRepository",
     "MCPServerRepository",
     "ResourceRepository",
+    "AgentSkills",
     "EvaluationSuites",
     "EvaluationCases",
     "EvaluationSuiteVersions",

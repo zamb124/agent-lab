@@ -276,6 +276,20 @@ Resolved LLM candidate может нести `context_length`; context layer и�
 
 Канон — `frontend.mdc` + `ui_factories.mdc` + `ui_components.mdc`. Сервис включён в `FACTORY_CANON_SERVICES`. Состояние домена — фабрики `apps/flows/ui/events/resources/*.resource.js`, регистрация в `apps/flows/ui/app/flows-app.js::static factories`. Доступ из компонентов — только helpers (`useResource('flows/<entity>')`, `useOp('flows/<entity>_<verb>')`). Запрещены: `services/`, `store/`, `*.service.js`, `BaseStore`, прямые `fetch`/`httpRequest`, прямой `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)`, хеш-роутинг (`#/...`), `CustomEvent('navigate')`. Навигация — `this.navigate(routeKey, params?)`.
 
+### Agent Focus Mode
+
+Когда в ветке ровно одна нода и `type === 'llm_node'`, редактор может открывать **Agent Focus Studio** вместо канвы.
+
+| Поле / файл | Роль |
+|---|---|
+| `editor.state.editorLayout` | `'agent'` \| `'canvas'` (ортогонально `mode` edit/run) |
+| `isAgentFocusEligible(branchData)` | `_helpers/flow-editor-layout.js` |
+| Preference | `platformStorageKey('flows', 'editor_layout.<flowId>')`, default `'agent'` |
+| Studio | `flows-agent-focus-studio.js` — chrome + sections + `flows-property-panel` с `focusMode` |
+| Toggle | studio → canvas; на канве (если eligible) — float pill → agent |
+
+При `branch_data_updated`, если граф больше не eligible — layout принудительно `'canvas'`. Секции studio: Prompt / Model / Skills & Tools / Advanced; `focusMode`/`focusSection` на `flows-llm-node-editor` + `flows-base-node-editor` без дубля логики секций.
+
 ### Design System (flows UI)
 
 - Визуальный канон — `tokens.css` + core UI Kit (`platform-button`, `platform-field`, `platform-segmented-control`, `glass-modal`, `page-header`, `platform-breadcrumbs`, `platform-picker-card`, `platform-json-editor`). Figma Networkle — только reference; hex/rgba в `apps/flows/ui/**` запрещены (исключение: SVG canvas в `flow-canvas/`). CI: `scripts/check_ui_canon.sh` #23 (hex/rgba), #24 (raw `<button`), #25 (legacy button CSS), #26 (`glass-button`), #27 (literal `--platform-button-icon-size`), #28 (inline glass triplet, max 4 файла), #30 (`color: white`), #31 (local `.form-field` CSS), #32 (raw checkbox/radio).

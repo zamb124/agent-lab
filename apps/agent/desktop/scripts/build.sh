@@ -267,6 +267,7 @@ HumanitecAgent placeholder for ${PLATFORM} (${VERSION_SHA})
 display_name=${display_name}
 bundle_name=${bundle_name}
 protocol_scheme=${protocol_scheme}
+${protocol_scheme}://
 platform=${PLATFORM}
 version_sha=${VERSION_SHA}
 EOF

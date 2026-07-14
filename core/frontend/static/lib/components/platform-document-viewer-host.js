@@ -1,5 +1,5 @@
 /**
- * DocumentViewerHost — единая surface для viewer handlers (OnlyOffice, image, media, text, binary).
+ * DocumentViewerHost — единая surface для viewer handlers (OnlyOffice, image, media, text, binary, viz).
  *
  * Принимает `openConfig` из `GET …/editor-config` (DocumentOpenConfigResponse):
  *   handler + typed payload + capabilities.
@@ -15,6 +15,7 @@ import './platform-document-text-viewer.js';
 import './platform-document-image-viewer.js';
 import './platform-document-media-viewer.js';
 import './platform-document-binary-viewer.js';
+import './platform-viz-host.js';
 
 function handlerPayload(openConfig) {
     if (!openConfig || typeof openConfig !== 'object') {
@@ -135,6 +136,17 @@ export class PlatformDocumentViewerHost extends PlatformElement {
                     content-type=${payload.content_type || openConfig.content_type || ''}
                     file-size=${payload.file_size || 0}
                 ></platform-document-binary-viewer>
+            `;
+        }
+        if (openConfig.handler === 'viz') {
+            return html`
+                <platform-viz-host
+                    .openConfig=${openConfig}
+                    .fileId=${openConfig.file_id || ''}
+                    ?suspended=${this.suspended}
+                    @editor-error=${this._onEditorError}
+                    @document-state=${this._onDocumentState}
+                ></platform-viz-host>
             `;
         }
         return nothing;

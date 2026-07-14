@@ -27,6 +27,7 @@ _BLOCK_OUTPUT_ORDER = {
     "profile": 10,
     "memory": 20,
     "rag": 30,
+    "skill": 35,
     "tool_summary": 40,
     "custom": 50,
 }

@@ -6,11 +6,11 @@ import {
 } from '../../../../core/frontend/static/lib/chat/runtime/chat-profile.js';
 
 describe('operator_handoff profile', () => {
-    it('входит в CHAT_PROFILE_KINDS и даёт минимальный диалоговый вид', () => {
+    it('входит в CHAT_PROFILE_KINDS и даёт полный composer без run-trace', () => {
         expect(CHAT_PROFILE_KINDS).toContain('operator_handoff');
         const profile = createChatProfile({ kind: 'operator_handoff' });
         expect(profile.capabilities.runTrace).toBe(false);
-        expect(profile.capabilities.filesPanel).toBe(false);
+        expect(profile.capabilities.filesPanel).toBe(true);
         expect(profile.capabilities.cancel).toBe(false);
     });
 
@@ -24,7 +24,7 @@ describe('operator_handoff profile', () => {
             const vc = resolveChatViewConfig(profile, policy);
             expect(vc.profileKind).toBe('operator_handoff');
             expect(vc.showRunTrace).toBe(false);
-            expect(vc.showFilesPanel).toBe(false);
+            expect(vc.showFilesPanel).toBe(true);
             expect(vc.allowCancel).toBe(false);
             expect(vc.toolCallsDisplay).toBe('hidden');
             expect(vc.suggestedPrompts).toEqual([]);

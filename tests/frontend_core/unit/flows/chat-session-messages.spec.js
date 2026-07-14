@@ -56,6 +56,28 @@ describe('a2aStateMessagesToChatMessages', () => {
         expect(asst.toolResults[0].result).toBe('{"temp":1}');
         expect(asst.content).toBe('Смотрю погоду…\n\nИтог: ясно.');
     });
+
+    it('HITL agent с hitl_role=operator и hitl_file_ids → operator bubble + fileIds', () => {
+        const raw = [
+            {
+                messageId: 'hitl-op-close:complete:wi1',
+                role: 'agent',
+                taskId: 't1',
+                metadata: {
+                    node_id: 'hitl_conversation',
+                    hitl_role: 'operator',
+                    hitl_file_ids: ['file_abc'],
+                    operator_user_id: 'user_1',
+                },
+                parts: [{ kind: 'text', text: 'вот держи' }],
+            },
+        ];
+        const out = a2aStateMessagesToChatMessages(raw, 't1');
+        expect(out).toHaveLength(1);
+        expect(out[0].role).toBe('operator');
+        expect(out[0].content).toBe('вот держи');
+        expect(out[0].fileIds).toEqual(['file_abc']);
+    });
 });
 
 describe('OpenAI-формат tool_calls в A2A', () => {

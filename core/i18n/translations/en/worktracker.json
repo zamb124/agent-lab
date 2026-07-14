@@ -31,7 +31,9 @@
     "claim": "Claim",
     "complete": "Complete",
     "empty_assigned": "No assigned tasks.",
-    "empty_queue": "No tasks in queue inbox."
+    "empty_queue": "No tasks in queue inbox.",
+    "empty_no_queue_membership": "You are not a member of any queue",
+    "go_to_queues": "Go to queues"
   },
   "my_page": {
     "title": "My tasks",
@@ -42,11 +44,15 @@
     "title": "Queue: {{name}}",
     "inbox": "Queue inbox",
     "members": "Members",
-    "label_member_user_id": "User ID",
-    "add_member": "Add member",
+    "members_hint": "Add members from the company team.",
+    "members_filter": "Search member",
+    "members_filter_placeholder": "Name or email",
+    "members_loading": "Loading team…",
+    "no_candidates": "No candidates to add.",
+    "add_member": "Add",
     "remove_member": "Remove",
     "empty_inbox": "No unclaimed tasks in this queue.",
-    "empty_members": "No members yet."
+    "empty_members": "No members yet — add people from the company team."
   },
   "work_item_card": {
     "actions": "Actions",
@@ -105,10 +111,10 @@
   },
   "hitl_chat": {
     "title": "Conversation with user",
-    "reply_placeholder": "Your reply to the user…",
-    "complete": "Reply and complete",
-    "hint_single_reply": "Reply to the user only via the field below and “Reply and complete”. Comments in Activity are not visible to the user.",
-    "hint_takeover": "Message the user in the conversation above. Activity comments are internal team notes only.",
+    "complete_takeover": "Complete task",
+    "hint_single_reply": "Reply to the user in the chat above (you can attach files) and press Send — the task will complete. Comments in Activity are not visible to the user.",
+    "hint_takeover": "Message the user in the conversation above (you can attach files). “Complete task” closes HITL. Activity comments are internal team notes only.",
+    "hint_need_queue_access": "You need queue access: add yourself to the queue (Queues → example_hitl), then Claim the task. After that the reply chat appears.",
     "activity_internal_hint": "Internal team notes — the user does not see them."
   },
   "board_page": {
@@ -195,7 +201,7 @@
     "work_item_updated": "Task updated",
     "work_item_update_failed": "Failed to update task",
     "work_item_claimed": "Task claimed",
-    "work_item_claim_failed": "Failed to claim task",
+    "work_item_claim_failed": "Failed to claim task. You must be a member of the task's queue",
     "work_item_completed": "Task completed",
     "work_item_complete_failed": "Failed to complete task",
     "work_item_cancelled": "Task cancelled",

@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from apps.flows.src.clients.mcp_client import MCPClient
     from apps.flows.src.models.mcp import MCPCallResult
     from apps.flows.src.runners.remote import RemoteCodeRunner
+    from apps.flows.src.services.agent_skill_service import AgentSkillService
     from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
     from apps.flows.src.services.lara_facade import LaraFacade
     from apps.flows.src.services.schedule_service import ScheduleService
@@ -44,6 +45,10 @@ if TYPE_CHECKING:
 
 def get_work_item_service() -> "WorkItemService":
     return require_current_container().work_item_service
+
+
+def get_agent_skill_service() -> "AgentSkillService":
+    return require_current_container().agent_skill_service
 
 
 def get_hitl_work_item_service() -> "HitlWorkItemService":

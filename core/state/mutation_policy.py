@@ -30,6 +30,7 @@ FROZEN_STATE_FIELDS: frozenset[str] = frozenset(
         "interrupt",
         "interrupt_path",
         "hitl_handoff_correlation_id",
+        "hitl_streamed_closing_text",
         "node_history",
         "execution_exceptions",
         "prompt_history",

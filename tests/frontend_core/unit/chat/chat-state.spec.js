@@ -240,6 +240,26 @@ describe('chat-state: streaming события', () => {
         expect(assistants[1].id).not.toBe(assistants[0].id);
     });
 
+    it('HITL live: content_chunk без task_started после input_required — новый bubble, без concat', () => {
+        const s = reduce(
+            ...base,
+            ['content_chunk', { task_id: 'tsk1', text: 'Mock LLM ответ' }],
+            ['input_required', {
+                task_id: 'tsk1',
+                context_id: 'ctx1',
+                result_metadata: { platform_interrupt: { question: 'operator?' } },
+            }],
+            ['content_chunk', { task_id: 'tsk1', text: 'Mock LLM ответ' }],
+        );
+        const assistants = s.messagesByContextId.ctx1.messages.filter(
+            (m) => m && m.role === 'assistant' && m.taskId === 'tsk1',
+        );
+        expect(assistants.length).toBe(2);
+        expect(assistants[0].content).toBe('Mock LLM ответ');
+        expect(assistants[1].content).toBe('Mock LLM ответ');
+        expect(assistants.every((m) => m.content !== 'Mock LLM ответMock LLM ответ')).toBe(true);
+    });
+
     it('operator_reply добавляет отдельное сообщение operator', () => {
         const s = reduce(...base, ['operator_reply', { task_id: 'tsk1', text: 'hi from op' }]);
         const op = s.messagesByContextId.ctx1.messages.find((m) => m.role === 'operator');
@@ -256,6 +276,80 @@ describe('chat-state: streaming события', () => {
         const op = s.messagesByContextId.ctx1.messages.filter((m) => m.role === 'operator');
         expect(op.length).toBe(1);
         expect(op[0].fileIds).toEqual(['f1', 'f2']);
+    });
+
+    it('operator_files затем operator_reply затем completed — один пузырь с файлами', () => {
+        const s = reduce(
+            ...base,
+            ['operator_files', { task_id: 'tsk1', file_ids: ['f1'] }],
+            ['operator_reply', { task_id: 'tsk1', text: 'вот держи' }],
+            ['completed', { task_id: 'tsk1', context_id: 'ctx1', content: 'вот держи' }],
+        );
+        const msgs = s.messagesByContextId.ctx1.messages.filter(
+            (m) => m.role === 'operator' || m.role === 'assistant',
+        );
+        expect(msgs.length).toBe(1);
+        expect(msgs[0].content).toBe('вот держи');
+        expect(msgs[0].fileIds).toEqual(['f1']);
+    });
+
+    it('completed затем operator_reply затем operator_files — один пузырь', () => {
+        const s = reduce(
+            ...base,
+            ['completed', { task_id: 'tsk1', context_id: 'ctx1', content: 'вот держи' }],
+            ['operator_reply', { task_id: 'tsk1', text: 'вот держи' }],
+            ['operator_files', { task_id: 'tsk1', file_ids: ['f1'] }],
+        );
+        const msgs = s.messagesByContextId.ctx1.messages.filter(
+            (m) => m.role === 'operator' || m.role === 'assistant',
+        );
+        expect(msgs.length).toBe(1);
+        expect(msgs[0].content).toBe('вот держи');
+        expect(msgs[0].fileIds).toEqual(['f1']);
+    });
+
+    it('operator_reply затем operator_files затем completed — один пузырь', () => {
+        const s = reduce(
+            ...base,
+            ['operator_reply', { task_id: 'tsk1', text: 'вот держи' }],
+            ['operator_files', { task_id: 'tsk1', file_ids: ['f1'] }],
+            ['completed', { task_id: 'tsk1', context_id: 'ctx1', content: 'вот держи' }],
+        );
+        const msgs = s.messagesByContextId.ctx1.messages.filter(
+            (m) => m.role === 'operator' || m.role === 'assistant',
+        );
+        expect(msgs.length).toBe(1);
+        expect(msgs[0].role).toBe('operator');
+        expect(msgs[0].content).toBe('вот держи');
+        expect(msgs[0].fileIds).toEqual(['f1']);
+    });
+
+    it('operator_reply затем completed с тем же текстом — один пузырь', () => {
+        const s = reduce(
+            ...base,
+            ['operator_reply', { task_id: 'tsk1', text: 'кака' }],
+            ['completed', { task_id: 'tsk1', context_id: 'ctx1', content: 'кака' }],
+        );
+        const msgs = s.messagesByContextId.ctx1.messages.filter(
+            (m) => m.role === 'operator' || m.role === 'assistant',
+        );
+        expect(msgs.length).toBe(1);
+        expect(msgs[0].role).toBe('operator');
+        expect(msgs[0].content).toBe('кака');
+        expect(s.streaming).toBe(false);
+    });
+
+    it('completed затем operator_reply с тем же текстом — один пузырь', () => {
+        const s = reduce(
+            ...base,
+            ['completed', { task_id: 'tsk1', context_id: 'ctx1', content: 'кака' }],
+            ['operator_reply', { task_id: 'tsk1', text: 'кака' }],
+        );
+        const msgs = s.messagesByContextId.ctx1.messages.filter(
+            (m) => m.role === 'operator' || m.role === 'assistant',
+        );
+        expect(msgs.length).toBe(1);
+        expect(msgs[0].content).toBe('кака');
     });
 });
 

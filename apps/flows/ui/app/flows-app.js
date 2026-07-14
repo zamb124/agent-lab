@@ -20,6 +20,12 @@ import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp
          branchRemoveOp, flowVoiceSessionQueryOp, flowPreviewShareOp } from '../events/resources/flows.resource.js';
 import { flowsVoiceCatalogLoadOp } from '../events/resources/voice-catalog.resource.js';
 import { toolsResource, toolsAllOp } from '../events/resources/tools.resource.js';
+import {
+    agentSkillsResource,
+    agentSkillUpdateOp,
+    agentSkillImportOp,
+    agentSkillsEnsureSeedOp,
+} from '../events/resources/agent-skills.resource.js';
 import { resourcesBundleResource, resourceUpdateOp } from '../events/resources/resources-bundle.resource.js';
 import { mcpServersResource, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp, mcpServerResetCatalogDefaultsOp, mcpBrandingLoadOp, mcpBrandingUpsertOp, mcpBrandingRemoveOp, mcpCatalogStoreLoadOp, mcpCatalogInstallOp, mcpCatalogUninstallOp } from '../events/resources/mcp.resource.js';
 import { triggersListOp, triggerGetOp, triggerCreateOp, triggerUpdateOp,
@@ -115,6 +121,7 @@ import '../components/flows-sidebar.js';
 const FLOWS_ROUTES = [
     { key: 'list',                 path: '',                              titleKey: 'routes.list' },
     { key: 'platform_services',    path: 'services', parent: 'list',      titleKey: 'routes.platform_services' },
+    { key: 'agent_skills',         path: 'skills', parent: 'list',        titleKey: 'routes.agent_skills' },
     { key: 'flow_chat',            path: ':flowId',                       parent: 'list', titleKey: 'routes.flow_chat' },
     { key: 'flow_chat_branch',     path: ':flowId/branch/:branchId',      parent: 'flow_chat', titleKey: 'routes.flow_chat_branch' },
     { key: 'flow_chat_session',    path: ':flowId/session/:sessionId',    parent: 'flow_chat', titleKey: 'routes.flow_chat_session' },
@@ -164,6 +171,10 @@ export class FlowsApp extends PlatformApp {
         flowPreviewShareOp,
         toolsResource,
         toolsAllOp,
+        agentSkillsResource,
+        agentSkillUpdateOp,
+        agentSkillImportOp,
+        agentSkillsEnsureSeedOp,
         resourcesBundleResource,
         resourceUpdateOp,
         mcpServersResource,
@@ -304,8 +315,14 @@ export class FlowsApp extends PlatformApp {
                 min-height: 0;
                 height: 100%;
             }
-            flows-home-page {
+            flows-home-page,
+            flows-agent-skills-page {
                 min-width: 0;
+            }
+            flows-agent-skills-page {
+                flex: 1;
+                min-height: 0;
+                height: 100%;
             }
             @media (max-width: 767px) {
                 .main {
@@ -477,6 +494,20 @@ export class FlowsApp extends PlatformApp {
                         .flowId=${params.flowId}
                         .branchId=${typeof params.branchId === 'string' && params.branchId.length > 0 ? params.branchId : 'default'}
                     ></flows-evaluation-page>
+                    ${this._renderLara()}
+                `;
+            case 'agent_skills':
+                return html`
+                    ${this._flowsDesktopSidebarColumn()}
+                    <div class="main">
+                        <platform-island
+                            padding=${this._flowsMobile ? 'none' : 'md'}
+                            ?safe-bottom=${this._flowsMobile}
+                            ?content-no-scroll=${true}
+                        >
+                            <flows-agent-skills-page></flows-agent-skills-page>
+                        </platform-island>
+                    </div>
                     ${this._renderLara()}
                 `;
             case 'list':

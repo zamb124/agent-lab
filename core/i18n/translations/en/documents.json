@@ -72,6 +72,7 @@
             "archive": "Archive",
             "email": "Email",
             "ebook": "E-book",
+            "viz": "Visualization",
             "unknown": "File"
         },
         "colActions": "Actions",

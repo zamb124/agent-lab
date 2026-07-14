@@ -135,6 +135,23 @@ def test_resolve_viewer_handler_binary_unknown() -> None:
     assert handler_id == "binary"
 
 
+def test_resolve_viewer_handler_viz() -> None:
+    handler_id = resolve_viewer_handler_id(
+        file_category=FileCategory.VIZ.value,
+        onlyoffice_eligible=False,
+        integration_configured=True,
+    )
+    assert handler_id == "viz"
+
+
+def test_resolve_file_category_viz() -> None:
+    category = resolve_file_category_for_upload(
+        "funnel.viz",
+        "application/vnd.platform.viz+json",
+    )
+    assert category == FileCategory.VIZ.value
+
+
 def test_image_handler_capabilities() -> None:
     file_record = FileRecord(
         file_id="f1",

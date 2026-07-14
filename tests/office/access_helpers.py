@@ -167,6 +167,16 @@ def parse_text_stream_url(open_body: dict[str, object]) -> str:
     return stream_url
 
 
+def parse_viz_stream_url(open_body: dict[str, object]) -> str:
+    assert open_body.get("handler") == "viz"
+    viz_payload = open_body.get("viz")
+    assert isinstance(viz_payload, dict)
+    stream_url = viz_payload.get("stream_url")
+    assert isinstance(stream_url, str)
+    assert stream_url != ""
+    return stream_url
+
+
 def parse_text_save_url(open_body: dict[str, object]) -> str:
     assert open_body.get("handler") == "text"
     text_payload = open_body.get("text")

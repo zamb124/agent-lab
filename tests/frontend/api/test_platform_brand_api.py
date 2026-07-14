@@ -44,8 +44,8 @@ async def test_platform_brand_lvh_me_dev_host(frontend_client) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["base_domain"] == "lvh.me"
-    assert payload["platform_name"] == "Humanitec"
-    assert payload["agent_product_name"] == "HumanitecAgent"
+    assert payload["platform_name"] == "Linnex"
+    assert payload["agent_product_name"] == "LinnexAgent"
     assert payload["apex_origin"] == "http://system.lvh.me:9004/"
 
 
@@ -58,7 +58,7 @@ async def test_platform_brand_localhost_dev_host(frontend_client) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["base_domain"] == "localhost"
-    assert payload["agent_product_name"] == "HumanitecAgent"
+    assert payload["agent_product_name"] == "LinnexAgent"
     assert payload["apex_origin"] == "http://localhost:9004/"
 
 
