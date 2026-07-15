@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "${ROOT_DIR}/../../.." && pwd)"
 VENDOR_DIR="${ROOT_DIR}/vendor/goose"
 PATCH_DIR="${ROOT_DIR}/patches"
 BASE_PATCH="${PATCH_DIR}/goose-vendor-base.patch"
@@ -51,14 +52,14 @@ reset_vendor_to_upstream() {
   fi
   vendor_git reset --hard "${UPSTREAM_SHA}"
   vendor_git clean -fd
-  # Windows-раннер: actions/checkout уже чекаутит submodule ровно на
-  # UPSTREAM_SHA системным git (core.autocrlf по умолчанию true) — файлы
-  # попадают на диск с CRLF. HEAD после этого уже равен UPSTREAM_SHA, так что
-  # reset --hard выше — no-op для содержимого файлов (git не видит разницы
-  # относительно индекса) и наш core.autocrlf=false/core.eol=lf никогда не
-  # применяется к байтам на диске. Принудительно перезаписываем working tree
-  # из индекса под этими настройками — иначе LF-based патчи не матчатся.
   vendor_git checkout-index --force --all
+  # checkout-index --force -c core.autocrlf=false/core.eol=lf на Windows-
+  # раннере GitHub Actions эмпирически не гарантирует LF на диске (checkout-
+  # machinery Git for Windows ведёт себя иначе, чем на macOS/Linux, где то же
+  # решение работает) — LF-based base-патч не матчился ни по одному файлу.
+  # Детерминированно нормализуем CRLF->LF по всем tracked-файлам напрямую,
+  # без зависимости от платформенного поведения checkout/reset.
+  (cd "${REPO_ROOT}" && vendor_git ls-files -z | uv run python "${ROOT_DIR}/scripts/normalize_vendor_line_endings.py" "${VENDOR_DIR}")
   restore_exact_blobs
 }
 
