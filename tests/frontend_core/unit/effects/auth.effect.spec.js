@@ -37,6 +37,36 @@ describe('authEffect: USER_LOAD_REQUESTED', () => {
     });
 });
 
+describe('authEffect: USER_SILENT_PROBE_REQUESTED', () => {
+    it('200 → AUTH_USER_LOADED (апгрейд до authenticated на публичной странице)', async () => {
+        fetchMock.respondJson('GET', '/svc/api/auth/me', { user_id: 'u1', name: 'Alice', company_id: 'c1', roles: ['owner'] });
+        const dispatched = [];
+        const effect = createAuthEffect({ baseUrl: '/svc' });
+        await effect(ev(CoreAuthEvents.USER_SILENT_PROBE_REQUESTED), buildCtx(() => ({}), dispatched));
+        const loaded = dispatched.find((d) => d.type === CoreEvents.AUTH_USER_LOADED);
+        expect(loaded).toBeTruthy();
+        expect(loaded.payload.user).toMatchObject({ id: 'u1', name: 'Alice', company_id: 'c1', roles: ['owner'] });
+    });
+
+    it('401 → AUTH_ASSUMED_ANONYMOUS (не AUTH_UNAUTHORIZED — аноним остаётся анонимом)', async () => {
+        fetchMock.respondStatus('GET', '/svc/api/auth/me', 401);
+        const dispatched = [];
+        await createAuthEffect({ baseUrl: '/svc' })(ev(CoreAuthEvents.USER_SILENT_PROBE_REQUESTED), buildCtx(() => ({}), dispatched));
+        const assumed = dispatched.find((d) => d.type === CoreEvents.AUTH_ASSUMED_ANONYMOUS);
+        const unauthorized = dispatched.find((d) => d.type === CoreEvents.AUTH_UNAUTHORIZED);
+        expect(assumed).toBeTruthy();
+        expect(unauthorized).toBeFalsy();
+    });
+
+    it('500 → AUTH_ASSUMED_ANONYMOUS (сбой не ломает публичную страницу)', async () => {
+        fetchMock.respondStatus('GET', '/svc/api/auth/me', 500);
+        const dispatched = [];
+        await createAuthEffect({ baseUrl: '/svc' })(ev(CoreAuthEvents.USER_SILENT_PROBE_REQUESTED), buildCtx(() => ({}), dispatched));
+        const assumed = dispatched.find((d) => d.type === CoreEvents.AUTH_ASSUMED_ANONYMOUS);
+        expect(assumed).toBeTruthy();
+    });
+});
+
 describe('authEffect: AUTH_LOGOUT_REQUESTED', () => {
     it('всегда диспатчит AUTH_LOGGED_OUT (даже если HTTP падает)', async () => {
         fetchMock.respondStatus('POST', '/svc/api/auth/logout', 500);

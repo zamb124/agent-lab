@@ -193,7 +193,11 @@ export class PlatformApp extends PlatformElement {
         if (this.shouldRequestUserLoadOnConnect()) {
             this.dispatch(CoreAuthEvents.USER_LOAD_REQUESTED, null);
         } else {
+            // Публичная страница: сразу считаем анонимом, чтобы рендер не ждал /me,
+            // но фоновой пробой проверяем активную сессию — залогиненный пользователь
+            // увидит «Dashboard» в шапке после ответа /api/auth/me.
             this.dispatch(CoreEvents.AUTH_ASSUMED_ANONYMOUS, null);
+            this.dispatch(CoreAuthEvents.USER_SILENT_PROBE_REQUESTED, null);
         }
         completeBootstrap();
     }

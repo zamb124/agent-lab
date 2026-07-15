@@ -3,6 +3,7 @@
  *
  * Слушает (полный набор):
  *   auth/user/load_requested              → GET  /api/auth/me                     → AUTH_USER_LOADED|_FAILED
+ *   auth/user/silent_probe_requested      → GET  /api/auth/me                     → AUTH_USER_LOADED (сессия валидна) | AUTH_ASSUMED_ANONYMOUS (401/сбой)
  *   auth/session/logout_requested         → POST /api/auth/logout                 → AUTH_LOGGED_OUT → редирект на корень платформы (apex)
  *   auth/company/switch_requested         → POST /api/auth/switch-company         → AUTH_COMPANY_SWITCHED
  *   auth/oauth/start_requested            → GET  /api/auth/login/<provider>       → AUTH_OAUTH_REDIRECTED
@@ -20,6 +21,7 @@ import { getPlatformApexOriginUrl } from '../../utils/company-url.js';
 
 export const CoreAuthEvents = Object.freeze({
     USER_LOAD_REQUESTED:           'auth/user/load_requested',
+    USER_SILENT_PROBE_REQUESTED:   'auth/user/silent_probe_requested',
     OAUTH_START_REQUESTED:         'auth/oauth/start_requested',
     OAUTH_REDIRECTED:              'auth/oauth/redirected',
     OAUTH_FAILED:                  'auth/oauth/failed',
@@ -44,21 +46,25 @@ export const CoreAuthEvents = Object.freeze({
 export function createAuthEffect({ baseUrl }) {
     const base = baseUrl || '';
 
+    async function fetchCurrentUser() {
+        const data = await httpRequest({ method: 'GET', url: `${base}/api/auth/me` });
+        return {
+            id: data.user_id,
+            user_id: data.user_id,
+            name: data.name,
+            email: data.email,
+            avatar_url: data.avatar_url,
+            company_id: data.company_id,
+            roles: data.roles || [],
+            raw: data,
+        };
+    }
+
     return async function authEffect(event, ctx) {
         switch (event.type) {
             case CoreAuthEvents.USER_LOAD_REQUESTED: {
                 try {
-                    const data = await httpRequest({ method: 'GET', url: `${base}/api/auth/me` });
-                    const user = {
-                        id: data.user_id,
-                        user_id: data.user_id,
-                        name: data.name,
-                        email: data.email,
-                        avatar_url: data.avatar_url,
-                        company_id: data.company_id,
-                        roles: data.roles || [],
-                        raw: data,
-                    };
+                    const user = await fetchCurrentUser();
                     ctx.dispatch(CoreEvents.AUTH_USER_LOADED, { user }, { causation_id: event.id, source: 'http' });
                 } catch (err) {
                     if (err instanceof HttpError && err.status === 401) {
@@ -66,6 +72,24 @@ export function createAuthEffect({ baseUrl }) {
                         return;
                     }
                     ctx.dispatch(CoreEvents.AUTH_USER_FAILED, { message: String(err.message || err) }, { causation_id: event.id, source: 'http' });
+                }
+                return;
+            }
+
+            case CoreAuthEvents.USER_SILENT_PROBE_REQUESTED: {
+                // Публичная страница уже рендерится анонимом (AUTH_ASSUMED_ANONYMOUS).
+                // Фоновая проба апгрейдит auth до authenticated, когда сессия валидна,
+                // чтобы залогиненный пользователь видел «Dashboard» в шапке лендинга.
+                try {
+                    const user = await fetchCurrentUser();
+                    ctx.dispatch(CoreEvents.AUTH_USER_LOADED, { user }, { causation_id: event.id, source: 'http' });
+                } catch (err) {
+                    if (err instanceof HttpError && err.status === 401) {
+                        ctx.dispatch(CoreEvents.AUTH_ASSUMED_ANONYMOUS, null, { causation_id: event.id, source: 'http' });
+                        return;
+                    }
+                    console.warn('[auth.effect] silent session probe failed', err);
+                    ctx.dispatch(CoreEvents.AUTH_ASSUMED_ANONYMOUS, null, { causation_id: event.id, source: 'http' });
                 }
                 return;
             }
