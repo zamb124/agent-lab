@@ -61,6 +61,13 @@ export function installChatProfileFetchStub(options = {}) {
     window.fetch = async (rawUrl, init = {}) => {
         const method = (init.method || 'GET').toUpperCase();
         const url = new URL(String(rawUrl), window.location.href);
+        if (method === 'GET' && url.pathname.endsWith('/integrations/credentials')) {
+            return new MockResponse({
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+                body: { items: [] },
+            });
+        }
         const isChatProfile = method === 'GET' && /\/chat-profile$/.test(url.pathname);
         if (!isChatProfile) {
             return prevFetch(rawUrl, init);

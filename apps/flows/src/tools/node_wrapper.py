@@ -24,7 +24,7 @@ from apps.flows.src.durable_execution import (
     build_state_delta,
 )
 from apps.flows.src.models import NodeConfig
-from apps.flows.src.models.enums import NodeType
+from apps.flows.src.models.enums import NodeToolCallType, NodeType
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.nodes import (
     ChannelNode,
@@ -104,7 +104,7 @@ class NodeAsToolWrapper(BaseTool):
         node_config: NodeConfig | JsonObject,
         *,
         container: FlowRuntimeContainer | None = None,
-        call_type: str = "call",
+        call_type: NodeToolCallType = NodeToolCallType.CALL,
     ):
         self.node_config: NodeConfig = (
             node_config
@@ -117,7 +117,7 @@ class NodeAsToolWrapper(BaseTool):
         )
         self.tags: list[str] = self.node_config.tags or [self.node_config.type.value]
         self.is_nested_flow_tool: bool = self.node_config.type == NodeType.FLOW
-        self.call_type: str = call_type
+        self.call_type: NodeToolCallType = NodeToolCallType(call_type)
         self._node: BaseNode | None = None
         self._bound_node: BaseNode | None = None
         self.container: ToolContainerRef | None = container
@@ -252,31 +252,34 @@ class NodeAsToolWrapper(BaseTool):
         node_id = self.node_config.node_id
         node_type = self.node_config.type
 
-        node = await self._get_node()
         logger.info(f"[wrapper:{node_id}] run with args: {list(args.keys())}")
+
+        # При call_type="handoff" бросаем HandoffInterrupt вместо ожидания result
+        if self.call_type == NodeToolCallType.HANDOFF:
+            if node_type != NodeType.FLOW:
+                raise ValueError(
+                    f"Node-as-tool '{node_id}' with call_type=handoff must have type=flow"
+                )
+            target_flow_id = self.node_config.flow_id
+            if target_flow_id is None:
+                raise ValueError(
+                    f"Node-as-tool '{node_id}' with call_type=handoff requires flow_id"
+                )
+            target_branch_id = self.node_config.branch_id
+            interrupt_body = HandoffInterrupt(
+                question=f"Передаю управление агенту «{self.node_config.name}»",
+                target_flow_id=target_flow_id,
+                target_branch_id=target_branch_id,
+                target_name=self.node_config.name,
+                variables=dict(args),
+            )
+            raise FlowInterrupt(body=interrupt_body)
+
+        node = await self._get_node()
 
         # Для llm_node создаем изолированный state
         if node_type == NodeType.LLM_NODE:
             return await self._run_llm_node(node, node_id, node_type, args, state)
-
-        # При call_type="handoff" бросаем HandoffInterrupt вместо ожидания result
-        if self.call_type == "handoff":
-            target_flow_id = self.node_config.flow_id
-            if target_flow_id is None:
-                if node_type == NodeType.FLOW:
-                    raise ValueError(
-                        f"Node-as-tool '{node_id}' with call_type=handoff requires flow_id"
-                    )
-                target_flow_id = node_id
-            target_branch_id = self.node_config.branch_id or "default"
-            interrupt_body = HandoffInterrupt(
-                question=f"Передаю управление агенту «{target_flow_id}»",
-                target_flow_id=target_flow_id,
-                target_branch_id=target_branch_id,
-                target_name=target_flow_id,
-                variables=dict(args),
-            )
-            raise FlowInterrupt(body=interrupt_body)
 
         # Для остальных нод - простой вызов
         for key, value in args.items():

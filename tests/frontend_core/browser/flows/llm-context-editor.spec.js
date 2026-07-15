@@ -4,13 +4,18 @@
 
 import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
+import { collectFactories } from '@platform/lib/events/factories/register.js';
+import { registerFactory } from '@platform/lib/events/factory-registry.js';
+import { llmContextResolveParentOp } from '../../../../apps/flows/ui/events/resources/llm-context.resource.js';
 import { renderResourceDefinitionEditor } from '../../../../apps/flows/ui/components/editor/flows-resource-definition-editor-surface.js';
 import '../../../../core/frontend/static/lib/components/llm/llm-context-editor.js';
 
 describe('platform-llm-context-editor', () => {
     beforeEach(() => {
         resetPlatformState();
-        bootstrapTestBus();
+        registerFactory(llmContextResolveParentOp);
+        const collected = collectFactories([llmContextResolveParentOp]);
+        bootstrapTestBus({ slices: collected.slices, effects: [] });
     });
 
     afterEach(() => fixtureCleanup());

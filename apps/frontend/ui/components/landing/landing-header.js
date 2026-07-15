@@ -48,8 +48,12 @@ export class LandingHeader extends PlatformElement {
                 width: 100%;
                 min-width: 0;
                 margin: 0 auto;
-                padding: max(20px, var(--platform-safe-top)) max(20px, var(--platform-safe-right))
-                    max(20px, var(--platform-safe-bottom)) max(20px, var(--platform-safe-left));
+                padding-block: max(20px, var(--platform-safe-top)) max(20px, var(--platform-safe-bottom));
+                padding-inline: max(
+                    20px,
+                    var(--platform-safe-left),
+                    var(--platform-safe-right)
+                );
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
@@ -102,7 +106,7 @@ export class LandingHeader extends PlatformElement {
             .nav {
                 display: none;
                 align-items: center;
-                gap: 24px;
+                gap: clamp(16px, 1.5vw, 24px);
                 flex: 0 1 auto;
                 margin: 0 auto;
             }
@@ -110,27 +114,31 @@ export class LandingHeader extends PlatformElement {
             .nav-link {
                 font-family: var(--font-sans);
                 font-size: 16px;
-                color: var(--landing-secondary, #E8E8E8);
                 text-decoration: none;
                 transition: color 0.3s;
                 white-space: nowrap;
             }
-            
-            .nav-link:hover {
+
+            /* PlatformElement has a more specific :any-link rule inside Shadow DOM. */
+            .nav a.nav-link:any-link,
+            button.nav-dropdown-trigger {
                 color: var(--accent);
             }
             
+            .nav a.nav-link:any-link:hover,
+            button.nav-dropdown-trigger:hover {
+                color: var(--accent-hover);
+            }
+
             .nav-dropdown {
                 position: relative;
             }
             
-            .nav-dropdown-trigger {
+            button.nav-dropdown-trigger {
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                font-family: var(--font-sans);
-                font-size: 16px;
-                color: var(--landing-secondary, #E8E8E8);
+                font: 400 16px/normal var(--font-sans);
                 text-decoration: none;
                 transition: color 0.3s;
                 white-space: nowrap;
@@ -138,10 +146,6 @@ export class LandingHeader extends PlatformElement {
                 background: none;
                 border: none;
                 padding: 0;
-            }
-            
-            .nav-dropdown-trigger:hover {
-                color: var(--accent);
             }
             
             .nav-dropdown-trigger svg {
@@ -412,8 +416,12 @@ export class LandingHeader extends PlatformElement {
             @media (max-width: 480px) {
                 .header-container {
                     gap: 8px;
-                    padding: max(16px, var(--platform-safe-top)) max(12px, var(--platform-safe-right))
-                        max(16px, var(--platform-safe-bottom)) max(12px, var(--platform-safe-left));
+                    padding-block: max(16px, var(--platform-safe-top)) max(16px, var(--platform-safe-bottom));
+                    padding-inline: max(
+                        12px,
+                        var(--platform-safe-left),
+                        var(--platform-safe-right)
+                    );
                 }
             
                 .header-actions {
@@ -445,7 +453,7 @@ export class LandingHeader extends PlatformElement {
                     font-size: 18px;
                 }
                 
-                .nav-dropdown-trigger {
+                button.nav-dropdown-trigger {
                     font-size: 18px;
                 }
                 
@@ -459,7 +467,7 @@ export class LandingHeader extends PlatformElement {
                 }
             }
             
-            @media (min-width: 1300px) {
+            @media (min-width: 1500px) {
                 .nav {
                     display: flex;
                 }
@@ -469,8 +477,13 @@ export class LandingHeader extends PlatformElement {
                 }
             }
             
-            @media (min-width: 1440px) {
+            /*
+             * The expanded navigation needs more than a 1440px viewport in RU.
+             * Enabling it earlier makes the non-wrapping links push actions off-screen.
+             */
+            @media (min-width: 1800px) {
                 .header-container {
+                    max-width: 1680px;
                     padding: 30px 80px;
                 }
                 
@@ -500,7 +513,7 @@ export class LandingHeader extends PlatformElement {
                     font-size: 20px;
                 }
                 
-                .nav-dropdown-trigger {
+                button.nav-dropdown-trigger {
                     font-size: 20px;
                 }
                 

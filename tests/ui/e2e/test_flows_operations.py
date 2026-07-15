@@ -425,10 +425,11 @@ async def test_flows_voice_and_limits(
 
     await flows_create_branch(page, branch_id, GREEN_GARDEN_BRANCH)
     await flows_select_branch_tab(page, re.escape(GREEN_GARDEN_BRANCH))
-    branch_tab = page.locator("flows-editor-page").get_by_text(
-        re.compile(GREEN_GARDEN_BRANCH, re.I)
+    branch_tab = page.get_by_role(
+        "button",
+        name=re.compile(rf"^{re.escape(GREEN_GARDEN_BRANCH)}$", re.I),
     ).first
-    await expect(branch_tab).to_be_visible(timeout=30_000)
+    await expect(branch_tab).to_be_visible(timeout=3_000)
     await scenario.step(
         "Создайте ветку для отдельных настроек",
         page,

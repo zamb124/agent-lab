@@ -100,36 +100,33 @@ async def test_flows_compose_orchestrator(
         ),
     )
 
-    try:
-        flow_node_id = await flows_drop_node(page, "flow", x=620, y=420)
-    except AssertionError:
-        flow_node_id = ""
-    if flow_node_id:
-        try:
-            _ = await flows_open_node_editor(page, flow_node_id)
-            await expect(page.locator("flows-flow-node-editor")).to_be_visible(timeout=30_000)
-        except AssertionError:
-            flow_node_id = ""
-    if flow_node_id:
-        await scenario.step(
-            "Добавьте ноду вложенного агента",
-            page,
-            screenshot_name="subflow-node-added",
-            label_en="Add a nested agent node",
-            details=(
-                "Перетащите ноду «Под-агент» (flow) на канву и откройте её настройки. "
-                "Здесь указывается, какой готовый агент будет выполнять часть работы."
-            ),
-            details_en=(
-                "Drag a Sub-agent (flow) node onto the canvas and open its settings. "
-                "Here you specify which existing agent runs part of the work."
-            ),
-        )
+    await flows_set_selected_llm_prompt(
+        page,
+        "Определи тему запроса. Вопросы о возврате передавай агенту возвратов.",
+    )
+    await scenario.step(
+        "Задайте правило делегирования",
+        page,
+        screenshot_name="orchestrator-routing-rule",
+        label_en="Set the delegation rule",
+        details=(
+            "В поле промпта укажите, какие обращения должен передавать оркестратор. "
+            "Явное правило про возвраты помогает ему выбирать специализированного "
+            "помощника по смыслу запроса, а не отвечать на все темы самостоятельно."
+        ),
+        details_en=(
+            "In the prompt field, state which requests the orchestrator should delegate. "
+            "An explicit returns rule helps it choose the specialized assistant from the "
+            "request meaning instead of answering every topic itself."
+        ),
+    )
 
     await flows_open_node_editor(page, "orchestrator")
-    await flows_llm_add_tool_from_library(page)
-    tool_chip = page.locator("flows-llm-node-editor .chip").first
-    await expect(tool_chip).to_be_visible(timeout=30_000)
+    await flows_llm_add_tool_from_library(page, returns_id)
+    tool_chip = page.locator("flows-llm-node-editor .chip").filter(
+        has_text=re.compile(re.escape(GREEN_GARDEN_RETURNS_AGENT), re.I)
+    ).first
+    await expect(tool_chip).to_be_visible(timeout=5_000)
     await scenario.step(
         "Подключите под-агента в списке tools",
         page,
@@ -364,9 +361,11 @@ async def test_flows_agent_handoff(
     await flows_open_editor(page, flows_ui, parent_id)
     await flows_open_node_editor(page, "agent")
     await flows_click_llm_output_mode(page, "tools")
-    await flows_llm_add_tool_from_library(page)
-    tool_chip = page.locator("flows-floating-panel flows-llm-node-editor .chip").first
-    await expect(tool_chip).to_be_visible(timeout=30_000)
+    await flows_llm_add_tool_from_library(page, child_id)
+    tool_chip = page.locator("flows-llm-node-editor .chip").filter(
+        has_text=re.compile(re.escape(GREEN_GARDEN_RETURNS_AGENT), re.I)
+    ).first
+    await expect(tool_chip).to_be_visible(timeout=5_000)
     await scenario.step(
         "Добавьте агента возвратов как инструмент",
         page,

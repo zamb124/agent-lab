@@ -63,6 +63,7 @@ from apps.flows.src.models.branch_contracts import (
 )
 from apps.flows.src.models.enums import ChannelType, NodeType
 from apps.flows.src.models.flow_config import FlowConfig
+from apps.flows.src.models.flow_tool_reference import FlowToolReference
 from apps.flows.src.observability.flow_timing import (
     maybe_record_flow_terminal,
     record_flow_task_enqueued,
@@ -1646,7 +1647,10 @@ class BaseChannel(ABC):
                     else:
                         tool_ref_obj = None
 
-                    if tool_ref_obj is not None and tool_ref_obj.get("code"):
+                    if tool_ref_obj is not None and (
+                        tool_ref_obj.get("code")
+                        or tool_ref_obj.get("type") == NodeType.FLOW.value
+                    ):
                         raw_tool_id = tool_ref_obj.get("tool_id")
                         tool_id = (
                             raw_tool_id
@@ -1671,7 +1675,9 @@ class BaseChannel(ABC):
                     node_db_config = await container.node_repository.get(node_db_id)
                     if node_db_config and node_db_config.tools:
                         for tool_ref in node_db_config.tools:
-                            if tool_ref.code:
+                            if isinstance(tool_ref, FlowToolReference) or (
+                                tool_ref.code
+                            ):
                                 inline_tools[tool_ref.tool_id] = require_json_object(
                                     tool_ref.model_dump(mode="json", exclude_none=True),
                                     "node.tools[]",

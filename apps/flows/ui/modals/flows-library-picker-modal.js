@@ -1550,20 +1550,23 @@ export class FlowsLibraryPickerModal extends PlatformModal {
 
     _pickToolLike(t) {
         const fn = this.onPick;
-        this.close();
         if (typeof fn !== 'function') {
+            this.close();
             return;
         }
         if (!isPlainObject(t) || typeof t.tool_id !== 'string' || t.tool_id.length === 0) {
+            this.close();
             return;
         }
         const kind = t.item_type === 'flow' ? 'flow' : 'tool';
-        queueMicrotask(() => {
-            fn({
-                kind,
-                tool_id: t.tool_id,
-                item: t,
-            });
+        // Dispatch close first, but apply in the same event turn while the
+        // opener is still connected. Deferring to a microtask lets the modal
+        // state re-render the editor surface and silently loses its `change`.
+        this.close();
+        fn({
+            kind,
+            tool_id: t.tool_id,
+            item: t,
         });
     }
 

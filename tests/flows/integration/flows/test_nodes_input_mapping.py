@@ -15,6 +15,7 @@ from apps.flows.src.runtime.nodes import (
 )
 from core.state import ExecutionState
 from core.types import JsonObject
+from core.variables import VariableResolver
 
 
 def _typed_config(node_type: NodeType, config: JsonObject) -> JsonObject:
@@ -109,6 +110,33 @@ class TestBaseNodeInputMapping:
         assert inputs["name"] == "Иван"
         assert "other_field" not in inputs
         assert "user_query" not in inputs
+
+    def test_llm_mapped_inputs_are_prompt_variables_with_explicit_precedence(
+        self, container: FlowRuntimeContainer
+    ):
+        node = llm_node(
+            container,
+            node_id="test_agent",
+            config={
+                "prompt": "Topic={topic}; company={company}",
+                "input_mapping": {"topic": "@state:upstream_topic"},
+            },
+        )
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            upstream_topic="mapped topic",
+            variables={"topic": "old topic", "company": "ACME"},
+        )
+
+        inputs = node._resolve_inputs(state)
+        prepared = node._prepare_llm_runner_state(state, inputs)
+        rendered = VariableResolver.render_template(node.prompt_template, prepared.variables)
+
+        assert prepared.variables == {"topic": "mapped topic", "company": "ACME"}
+        assert rendered == "Topic=mapped topic; company=ACME"
 
     def test_nested_state_mapping(self, container: FlowRuntimeContainer):
         """Маппинг с вложенными путями @state:user.profile.name"""

@@ -112,8 +112,12 @@ async def test_flows_manage_mcp_servers(
         unique_id,
     )
     await flows_click_platform_button(modal, "Install", "Установить")
-    await expect(modal.locator(".mcp-chip").filter(has_text=re.compile(r"Installed|Установлен"))).to_be_visible(
-        timeout=60_000,
+    await expect(
+        modal.locator(".mcp-chip").filter(
+            has_text=re.compile(r"Installed|Установлен")
+        ).first
+    ).to_be_visible(
+        timeout=5_000,
     )
     await flows_api_sync_mcp_server(flows_ui.origin, auth_token_system, server_id)
     await scenario.step(

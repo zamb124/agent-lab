@@ -7,6 +7,7 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { flowsChatMarkdownToHtml } from '../chat/markdown.js';
 import './platform-help-hint.js';
+import './platform-icon.js';
 
 export class PromptEditor extends PlatformElement {
     static i18nNamespace = 'platform';
@@ -428,12 +429,274 @@ export class PromptEditor extends PlatformElement {
                 height: 16px;
                 fill: currentColor;
             }
+
+            /* Prompt workspace */
+            .editor-wrapper {
+                border-radius: var(--radius-xl);
+                border-color: var(--border-subtle);
+                background: color-mix(in srgb, var(--glass-solid-subtle) 94%, transparent);
+                box-shadow: var(--glass-shadow-subtle);
+                transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
+            }
+
+            .editor-wrapper:focus-within {
+                border-color: color-mix(in srgb, var(--accent) 72%, transparent);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent), var(--glass-shadow-medium);
+            }
+
+            .editor-header {
+                min-height: 48px;
+                padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+                gap: var(--space-3);
+                background: color-mix(in srgb, var(--glass-tint-medium) 72%, transparent);
+            }
+
+            .editor-label-wrap {
+                gap: var(--space-2);
+            }
+
+            .editor-label {
+                font-weight: var(--font-semibold);
+                letter-spacing: -0.01em;
+            }
+
+            .document-meta {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                white-space: nowrap;
+            }
+
+            .document-meta::before {
+                content: '';
+                width: 4px;
+                height: 4px;
+                border-radius: 50%;
+                background: var(--border-strong);
+            }
+
+            .editor-actions {
+                align-items: center;
+                gap: var(--space-1);
+            }
+
+            .mode-switch {
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                padding: 3px;
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-tint-subtle);
+            }
+
+            .mode-tab {
+                min-height: 28px;
+                padding: 0 var(--space-2);
+                border: 0;
+                border-radius: calc(var(--radius-md) - 3px);
+                background: transparent;
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                cursor: pointer;
+                transition: var(--motion-transition-interactive);
+            }
+
+            .mode-tab:hover {
+                color: var(--text-primary);
+                background: var(--glass-tint-medium);
+            }
+
+            .mode-tab.active {
+                color: var(--text-primary);
+                background: var(--glass-solid-strong);
+                box-shadow: var(--glass-shadow-subtle);
+            }
+
+            .format-toolbar {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                min-height: 38px;
+                padding: var(--space-1) var(--space-3);
+                border-bottom: 1px solid var(--border-subtle);
+                background: color-mix(in srgb, var(--glass-tint-subtle) 68%, transparent);
+                overflow-x: auto;
+            }
+
+            .tool-group {
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                padding-right: var(--space-2);
+                margin-right: var(--space-1);
+                border-right: 1px solid var(--border-subtle);
+            }
+
+            .tool-group:last-child {
+                padding-right: 0;
+                margin-right: 0;
+                border-right: 0;
+            }
+
+            .tool-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 28px;
+                height: 28px;
+                padding: 0 var(--space-2);
+                border: 0;
+                border-radius: var(--radius-sm);
+                background: transparent;
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                cursor: pointer;
+                white-space: nowrap;
+            }
+
+            .tool-btn:hover {
+                color: var(--text-primary);
+                background: var(--accent-subtle);
+            }
+
+            .tool-btn:disabled {
+                opacity: 0.45;
+                cursor: default;
+            }
+
+            .tool-btn.mono {
+                font-family: var(--font-mono);
+                color: var(--accent);
+            }
+
+            #codemirror-container .cm-editor {
+                font-size: 14px;
+                line-height: 1.72;
+                background: transparent;
+            }
+
+            #codemirror-container .cm-content {
+                padding-block: var(--space-3);
+                font-family: var(--font-mono);
+                caret-color: var(--accent);
+            }
+
+            #codemirror-container .cm-scroller {
+                padding: 0;
+            }
+
+            #codemirror-container .cm-gutters {
+                min-width: 42px;
+                padding-top: var(--space-3);
+                border-right: 1px solid var(--border-subtle);
+                background: color-mix(in srgb, var(--glass-tint-subtle) 45%, transparent);
+                color: var(--text-disabled);
+            }
+
+            #codemirror-container .cm-lineNumbers .cm-gutterElement {
+                padding: 0 var(--space-3) 0 var(--space-2);
+                font-family: var(--font-mono);
+                font-size: var(--text-xs);
+            }
+
+            #codemirror-container .cm-activeLine,
+            #codemirror-container .cm-activeLineGutter {
+                background: color-mix(in srgb, var(--accent) 6%, transparent);
+            }
+
+            .syntax-footer {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                min-height: 38px;
+                padding: var(--space-1) var(--space-3);
+                border-top: 1px solid var(--border-subtle);
+                background: color-mix(in srgb, var(--glass-tint-subtle) 62%, transparent);
+            }
+
+            .syntax-list {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                min-width: 0;
+                overflow-x: auto;
+            }
+
+            .syntax-list-label {
+                flex: 0 0 auto;
+                margin-right: var(--space-1);
+                color: var(--text-tertiary);
+                font-size: 11px;
+                font-weight: var(--font-medium);
+            }
+
+            .syntax-chip {
+                padding: 3px 7px;
+                border: 1px solid transparent;
+                border-radius: var(--radius-full);
+                background: transparent;
+                color: var(--text-tertiary);
+                font-family: var(--font-mono);
+                font-size: 11px;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+
+            .syntax-chip[data-source="local"] { color: var(--accent); }
+            .syntax-chip[data-source="input"] { color: var(--success); }
+            .syntax-chip[data-source="upstream"],
+            .syntax-chip[data-source="preview"] { color: var(--info); }
+
+            .syntax-chip:hover {
+                color: var(--accent);
+                border-color: color-mix(in srgb, var(--accent) 24%, transparent);
+                background: var(--accent-subtle);
+            }
+
+            .syntax-chip:disabled {
+                cursor: default;
+            }
+
+            .editor-status {
+                flex: 0 0 auto;
+                color: var(--text-tertiary);
+                font-size: 11px;
+                white-space: nowrap;
+            }
+
+            .preview-container {
+                background: color-mix(in srgb, var(--glass-solid-subtle) 88%, transparent);
+            }
+
+            @media (max-width: 720px) {
+                .document-meta,
+                .mode-tab-label,
+                .syntax-list {
+                    display: none;
+                }
+
+                .editor-header {
+                    padding-inline: var(--space-3);
+                }
+
+                .mode-tab {
+                    min-width: 30px;
+                    padding-inline: var(--space-1);
+                }
+            }
         `
     ];
 
     static properties = {
         value: { type: String },
         variables: { type: Object },
+        variableCatalog: { type: Array },
         label: { type: String },
         hint: { type: String },
         placeholder: { type: String },
@@ -453,6 +716,7 @@ export class PromptEditor extends PlatformElement {
         super();
         this.value = '';
         this.variables = {};
+        this.variableCatalog = [];
         this.label = '';
         this.hint = '';
         this.placeholder = '';
@@ -545,10 +809,12 @@ export class PromptEditor extends PlatformElement {
             });
         }
         
-        if (changedProperties.has('variables') && this._editorView) {
+        if ((changedProperties.has('variables') || changedProperties.has('variableCatalog')) && this._editorView) {
             const nextFingerprint = this._variablesFingerprintValue(this.variables);
-            if (nextFingerprint !== this._variablesFingerprint) {
-                this._variablesFingerprint = nextFingerprint;
+            const nextCatalogFingerprint = JSON.stringify(this.variableCatalog || []);
+            const combinedFingerprint = `${nextFingerprint}|${nextCatalogFingerprint}`;
+            if (combinedFingerprint !== this._variablesFingerprint) {
+                this._variablesFingerprint = combinedFingerprint;
                 this._refreshVariableHighlighting();
             }
         }
@@ -592,6 +858,9 @@ export class PromptEditor extends PlatformElement {
             oneDark: cm.oneDark,
             syntaxHighlighting: cm.syntaxHighlighting,
             defaultHighlightStyle: cm.defaultHighlightStyle,
+            lineNumbers: cm.lineNumbers,
+            highlightActiveLine: cm.highlightActiveLine,
+            highlightActiveLineGutter: cm.highlightActiveLineGutter,
             Decoration: cm.Decoration,
             ViewPlugin: cm.ViewPlugin,
             hoverTooltip: cm.hoverTooltip,
@@ -626,6 +895,10 @@ export class PromptEditor extends PlatformElement {
 
         const extensions = [
             cm.history(),
+            cm.lineNumbers(),
+            cm.highlightActiveLine(),
+            cm.highlightActiveLineGutter(),
+            cm.EditorView.lineWrapping,
             this._readonlyCompartment.of(cm.EditorState.readOnly.of(this.readonly)),
             cm.autocompletion({ override: [completionSource] }),
             cm.keymap.of([
@@ -657,7 +930,7 @@ export class PromptEditor extends PlatformElement {
             }),
             parent: container
         });
-        this._variablesFingerprint = this._variablesFingerprintValue(this.variables);
+        this._variablesFingerprint = `${this._variablesFingerprintValue(this.variables)}|${JSON.stringify(this.variableCatalog || [])}`;
         this._syncFileDropListeners();
     }
 
@@ -817,6 +1090,10 @@ export class PromptEditor extends PlatformElement {
     }
     
     _variableExists(path) {
+        const root = path.split('.', 1)[0];
+        if (Array.isArray(this.variableCatalog) && this.variableCatalog.some((entry) => entry?.name === root)) {
+            return true;
+        }
         if (!this.variables) return false;
         
         const parts = path.split('.');
@@ -967,9 +1244,9 @@ export class PromptEditor extends PlatformElement {
     }
 
     _buildVariableCompletions(partial, prefix = '') {
-        if (!this.variables) return [];
-        
+        void prefix;
         const options = [];
+        const seen = new Set();
         const lowerPartial = partial.toLowerCase();
         
         const addVariable = (name, value, path = '') => {
@@ -993,6 +1270,7 @@ export class PromptEditor extends PlatformElement {
                     type: 'variable',
                     detail: detail,
                 });
+                seen.add(fullPath);
             }
             
             const actualValue = typeof value === 'object' && value !== null && 'value' in value ? value.value : value;
@@ -1003,8 +1281,18 @@ export class PromptEditor extends PlatformElement {
             }
         };
         
-        for (const [name, value] of Object.entries(this.variables)) {
+        for (const [name, value] of Object.entries(this.variables || {})) {
             addVariable(name, value);
+        }
+
+        for (const entry of Array.isArray(this.variableCatalog) ? this.variableCatalog : []) {
+            if (!entry || typeof entry.name !== 'string' || seen.has(entry.name)) continue;
+            if (!entry.name.toLowerCase().startsWith(lowerPartial)) continue;
+            options.push({
+                label: entry.name,
+                type: 'variable',
+                detail: `${entry.type || 'any'} · ${entry.source || 'runtime'}`,
+            });
         }
         
         return options;
@@ -1070,12 +1358,12 @@ export class PromptEditor extends PlatformElement {
             if (value !== undefined) {
                 return this._formatValue(value);
             }
-            return `⚠️${match}`;
+            return this._missingPreviewValue(match, varName);
         });
         
         result = result.replace(/@var:([\w.]+)/g, (match, varName) => {
             const value = this._getVariableValue(varName, 'variable');
-            return value !== undefined ? this._formatValue(value) : `⚠️${match}`;
+            return value !== undefined ? this._formatValue(value) : this._missingPreviewValue(match, varName);
         });
         
         result = result.replace(/@state:([\w.]+)/g, (match) => {
@@ -1083,6 +1371,14 @@ export class PromptEditor extends PlatformElement {
         });
         
         return result;
+    }
+
+    _missingPreviewValue(original, varName) {
+        const entry = Array.isArray(this.variableCatalog)
+            ? this.variableCatalog.find((item) => item?.name === varName.split('.')[0])
+            : null;
+        if (entry) return `‹${varName}: ${this.t('prompt_editor.runtime_value')}›`;
+        return `⚠️${original}`;
     }
     
     _resolveForLoops(template) {
@@ -1118,6 +1414,65 @@ export class PromptEditor extends PlatformElement {
         if (value === null || value === undefined) return '';
         if (typeof value === 'object') return JSON.stringify(value);
         return String(value);
+    }
+
+    _setMode(mode) {
+        if (mode !== 'edit' && mode !== 'preview' && mode !== 'split') {
+            throw new Error(`prompt-editor: unsupported mode "${mode}"`);
+        }
+        this.previewMode = mode === 'preview';
+        this.splitMode = mode === 'split';
+    }
+
+    _wrapSelection(prefix, suffix, placeholder) {
+        if (this.readonly || !this._editorView) return;
+        const { from, to } = this._editorView.state.selection.main;
+        const selected = this._editorView.state.sliceDoc(from, to);
+        const content = selected || placeholder;
+        const insert = `${prefix}${content}${suffix}`;
+        this._editorView.dispatch({
+            changes: { from, to, insert },
+            selection: {
+                anchor: from + prefix.length,
+                head: from + prefix.length + content.length,
+            },
+        });
+        this._editorView.focus();
+    }
+
+    _prefixSelectedLines(prefix) {
+        if (this.readonly || !this._editorView) return;
+        const { state } = this._editorView;
+        const { from, to } = state.selection.main;
+        const start = state.doc.lineAt(from).from;
+        const endLine = state.doc.lineAt(to);
+        const end = endLine.to;
+        const source = state.sliceDoc(start, end);
+        const insert = source.split('\n').map((line) => `${prefix}${line}`).join('\n');
+        this._editorView.dispatch({
+            changes: { from: start, to: end, insert },
+            selection: { anchor: start + prefix.length, head: start + insert.length },
+        });
+        this._editorView.focus();
+    }
+
+    _documentStats() {
+        const text = typeof this.value === 'string' ? this.value : '';
+        const words = text.trim() === '' ? 0 : text.trim().split(/\s+/u).length;
+        return { words, characters: text.length };
+    }
+
+    _availableVariableEntries() {
+        if (!Array.isArray(this.variableCatalog)) return [];
+        return this.variableCatalog.filter((entry) => entry && typeof entry.name === 'string' && entry.name.length > 0);
+    }
+
+    _variableChipTitle(entry) {
+        const source = this.t(`prompt_editor.source_${entry.source || 'system'}`);
+        const availability = entry.hasValue
+            ? this.t('prompt_editor.preview_value_available')
+            : this.t('prompt_editor.preview_value_runtime');
+        return `${entry.name} · ${entry.type || 'any'} · ${source} · ${availability}`;
     }
 
     getValue() {
@@ -1197,12 +1552,12 @@ export class PromptEditor extends PlatformElement {
         const splitMinHeight = Math.max(this.minHeight, 320);
         const hasLabelRow = this._hasLabelRow();
         const headerClass = hasLabelRow ? 'editor-header' : 'editor-header actions-only';
-        const previewToggleLabel = this.previewMode
-            ? this.t('prompt_editor.mode_edit')
-            : this.t('prompt_editor.mode_preview');
         const fullscreenTitle = this.fullscreenMode
             ? this.t('prompt_editor.fullscreen_exit')
             : this.t('prompt_editor.fullscreen_enter');
+        const mode = this.splitMode ? 'split' : (this.previewMode ? 'preview' : 'edit');
+        const stats = this._documentStats();
+        const availableVariables = this._availableVariableEntries();
 
         return html`
             <div class="editor-wrapper">
@@ -1214,26 +1569,33 @@ export class PromptEditor extends PlatformElement {
                                 ${typeof this.hint === 'string' && this.hint !== ''
                                     ? html`<platform-help-hint .text=${this.hint}></platform-help-hint>`
                                     : ''}
+                                <span class="document-meta">
+                                    ${this.t('prompt_editor.markdown_label')}
+                                </span>
                             </span>
                         ` : nothing}
                         <div class="editor-actions">
                             ${this.showPreview ? html`
-                                <button
-                                    type="button"
-                                    class="editor-btn ${this.previewMode && !this.splitMode ? 'active' : ''}"
-                                    @click=${this._togglePreview}
-                                    title=${this.t('prompt_editor.mode_preview')}
-                                >
-                                    ${previewToggleLabel}
-                                </button>
-                                <button
-                                    type="button"
-                                    class="icon-btn ${this.splitMode ? 'active' : ''}"
-                                    @click=${this._toggleSplit}
-                                    title=${this.t('prompt_editor.split')}
-                                >
-                                    ${this._icon('list') ? unsafeHTML(this._icon('list')) : '⊞'}
-                                </button>
+                                <div class="mode-switch" role="tablist" aria-label=${this.t('prompt_editor.view_modes')}>
+                                    <button type="button" class="mode-tab ${mode === 'edit' ? 'active' : ''}"
+                                        role="tab" aria-selected=${mode === 'edit'} @click=${() => this._setMode('edit')}
+                                        title=${this.t('prompt_editor.mode_edit')}>
+                                        <platform-icon name="edit" size="14"></platform-icon>
+                                        <span class="mode-tab-label">${this.t('prompt_editor.mode_edit')}</span>
+                                    </button>
+                                    <button type="button" class="mode-tab ${mode === 'preview' ? 'active' : ''}"
+                                        role="tab" aria-selected=${mode === 'preview'} @click=${() => this._setMode('preview')}
+                                        title=${this.t('prompt_editor.mode_preview')}>
+                                        <platform-icon name="eye" size="14"></platform-icon>
+                                        <span class="mode-tab-label">${this.t('prompt_editor.mode_preview')}</span>
+                                    </button>
+                                    <button type="button" class="mode-tab ${mode === 'split' ? 'active' : ''}"
+                                        role="tab" aria-selected=${mode === 'split'} @click=${() => this._setMode('split')}
+                                        title=${this.t('prompt_editor.split')}>
+                                        <platform-icon name="list" size="14"></platform-icon>
+                                        <span class="mode-tab-label">${this.t('prompt_editor.split_short')}</span>
+                                    </button>
+                                </div>
                             ` : ''}
                             <button
                                 type="button"
@@ -1246,6 +1608,30 @@ export class PromptEditor extends PlatformElement {
                                     : (this._icon('fullscreen') ? unsafeHTML(this._icon('fullscreen')) : '⊡')
                                 }
                             </button>
+                        </div>
+                    </div>
+                ` : nothing}
+
+                ${!this.previewMode ? html`
+                    <div class="format-toolbar" role="toolbar" aria-label=${this.t('prompt_editor.format_toolbar')}>
+                        <div class="tool-group">
+                            <button type="button" class="tool-btn" ?disabled=${this.readonly}
+                                @click=${() => this._prefixSelectedLines('## ')} title=${this.t('prompt_editor.format_heading')}>H2</button>
+                            <button type="button" class="tool-btn" ?disabled=${this.readonly}
+                                @click=${() => this._wrapSelection('**', '**', this.t('prompt_editor.placeholder_text'))}
+                                title=${this.t('prompt_editor.format_bold')}><strong>B</strong></button>
+                            <button type="button" class="tool-btn" ?disabled=${this.readonly}
+                                @click=${() => this._prefixSelectedLines('- ')} title=${this.t('prompt_editor.format_list')}>☷</button>
+                            <button type="button" class="tool-btn" ?disabled=${this.readonly}
+                                @click=${() => this._wrapSelection('`', '`', 'code')} title=${this.t('prompt_editor.format_code')}>&lt;/&gt;</button>
+                        </div>
+                        <div class="tool-group">
+                            <button type="button" class="tool-btn mono" ?disabled=${this.readonly}
+                                @click=${() => this.insertTextAtCursor('{variable}')}>${'{variable}'}</button>
+                            <button type="button" class="tool-btn mono" ?disabled=${this.readonly}
+                                @click=${() => this.insertTextAtCursor('{?optional}')}>${'{?optional}'}</button>
+                            <button type="button" class="tool-btn mono" ?disabled=${this.readonly}
+                                @click=${() => this.insertTextAtCursor('{for item in list}\n{item}\n{endfor}')}>${this.t('prompt_editor.insert_loop')}</button>
                         </div>
                     </div>
                 ` : nothing}
@@ -1267,7 +1653,26 @@ export class PromptEditor extends PlatformElement {
                 `}
 
                 ${this.showHint && !this.fullscreenMode ? html`
-                    <div class="hint">${this.t('prompt_editor.var_hint')}</div>
+                    <div class="syntax-footer">
+                        <div class="syntax-list" aria-label=${this.t('prompt_editor.syntax_help')}>
+                            <span class="syntax-list-label">${this.t('prompt_editor.available_variables')}</span>
+                            ${availableVariables.length > 0
+                                ? availableVariables.map((entry) => html`
+                                    <button
+                                        type="button"
+                                        class="syntax-chip"
+                                        data-source=${entry.source || 'system'}
+                                        title=${this._variableChipTitle(entry)}
+                                        ?disabled=${this.readonly}
+                                        @click=${() => this.insertTextAtCursor(`{${entry.name}}`)}
+                                    >{${entry.name}}</button>
+                                `)
+                                : html`<span class="editor-status">${this.t('prompt_editor.no_available_variables')}</span>`}
+                        </div>
+                        <span class="editor-status">
+                            ${this.t('prompt_editor.document_stats', { words: stats.words, characters: stats.characters })}
+                        </span>
+                    </div>
                 ` : ''}
             </div>
         `;

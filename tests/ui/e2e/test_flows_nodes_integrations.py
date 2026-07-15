@@ -242,7 +242,9 @@ async def test_flows_call_order_tracking_api(
     )
 
     await flows_open_node_editor(page, api_node_id)
-    await expect(page.locator("flows-external-api-editor")).to_contain_text("order_id", timeout=15_000)
+    await expect(page.locator("flows-external-api-editor platform-field[input-type='url']").get_by_role("textbox")).to_have_value(
+        re.compile(r"order_id"), timeout=5_000
+    )
     await scenario.step(
         "Проверьте URL с переменной заказа",
         page,
@@ -335,6 +337,8 @@ async def test_flows_connect_mcp_tool(
         unique_id,
     )
     await flows_click_platform_button(modal, "Установить", "Install")
+    await flows_click_platform_button(modal, "Подключённые", "Installed")
+    await expect(modal.get_by_text(server_id, exact=True)).to_be_visible(timeout=5_000)
     await scenario.step(
         "Установите MCP-сервер из каталога",
         page,
@@ -379,23 +383,23 @@ async def test_flows_connect_mcp_tool(
         ),
     )
 
-    mcp_node = page.locator("flows-flow-canvas g.node[data-node-type='mcp']").first
-    await mcp_node.click()
+    # The new picker selects the created node and opens its floating properties
+    # panel immediately; clicking through the backdrop only waits on interception.
     await expect(page.locator("flows-mcp-node-editor, flows-base-node-editor").first).to_be_visible(
-        timeout=30_000
+        timeout=5_000
     )
     await scenario.step(
-        "Откройте настройки MCP-ноды",
+        "Проверьте настройки MCP-ноды",
         page,
         screenshot_name="mcp-node-settings-open",
-        label_en="Open the MCP node settings",
+        label_en="Review the MCP node settings",
         details=(
-            "Кликните MCP-ноду на канве и проверьте панель свойств — там видно, какой "
-            "инструмент сервера подключён к графу."
+            "После выбора инструмента проверьте автоматически открытую панель свойств — "
+            "там видно, какой инструмент сервера подключён к графу."
         ),
         details_en=(
-            "Click the MCP node on the canvas and review the properties panel — it shows "
-            "which server tool is wired into the graph."
+            "After choosing the tool, review the properties panel that opens automatically. "
+            "It shows which server tool is wired into the graph."
         ),
     )
 
@@ -600,7 +604,9 @@ async def test_flows_call_remote_agent(
 
     editor = page.locator("flows-remote-flow-editor").first
     await flows_set_remote_flow_url(page, _REMOTE_AGENT_URL)
-    await expect(editor).to_contain_text("partner.example.com", timeout=15_000)
+    await expect(editor.locator(".remote-flow-endpoint-stack platform-field").first.get_by_role("textbox")).to_have_value(
+        _REMOTE_AGENT_URL, timeout=5_000
+    )
     await scenario.step(
         "Укажите адрес партнёрского агента",
         page,
@@ -617,9 +623,8 @@ async def test_flows_call_remote_agent(
     )
 
     await flows_open_node_editor(page, remote_node_id)
-    await expect(page.locator("flows-remote-flow-editor")).to_contain_text(
-        "partner.example.com",
-        timeout=15_000,
+    await expect(page.locator("flows-remote-flow-editor .remote-flow-endpoint-stack platform-field").first.get_by_role("textbox")).to_have_value(
+        _REMOTE_AGENT_URL, timeout=5_000
     )
     await scenario.step(
         "Проверьте адрес перед публикацией",

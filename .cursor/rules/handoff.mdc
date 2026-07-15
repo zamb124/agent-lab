@@ -15,6 +15,8 @@ alwaysApply: false
 ## Контракт
 
 - **`handoff_to_flow`** (`apps/flows/src/tools/handoff_tools.py`) → `FlowInterrupt(body=HandoffInterrupt)`. Parent **suspended** до handback.
+- **Flow как tool LLM-ноды** хранится строго как `FlowToolReference`: `type="flow"`, `flow_id`, `branch_id`, `call_type`, `parameters_schema`. Режим принадлежит конкретному элементу `llm_node.tools[i]`; root-поле `llm_node.call_type` запрещено.
+- **`NodeToolCallType`** — единственный enum agent-to-agent режима: `call` (обычный вложенный вызов) или `handoff` (передача управления). Значения не нормализуются и не угадываются.
 - **`handback_to_parent`** → `state.response`, `handback_return_variables`, `terminal_task_state="handback"`. Channel вызывает `HandoffOrchestratorService.complete_handback`.
 - **Variables — только явно** в args tools. Нет неявного merge parent↔child state.
 - **`handoff_max_depth`** (`apps/flows/config.py`) — лимит цепочки; проверка в `assert_handoff_depth_allowed`.
@@ -47,9 +49,11 @@ In-process `run_flow`: child `unique_id` = `child_context_id.removeprefix("conte
 
 | Механизм | Поведение |
 |---|---|
-| **FlowNode `handoff_mode: true`** | Durable child workflow; **тот же** child session id `:handoff:` что и tool-path; parent suspended; см. `FlowNode` в `nodes.py` |
-| **NodeAsToolWrapper `call_type: "handoff"`** | Tool-flow бросает `HandoffInterrupt` вместо inline run |
-| **FlowNode без handoff** | Обычный durable child link, без agent handoff interrupt |
+| **FlowNode `call_type: "handoff"`** | Durable child workflow с handoff-link; поле показывается рядом с `branch_id`; см. `FlowNode` в `nodes.py` |
+| **`llm_node.tools[i].call_type: "handoff"`** | `NodeAsToolWrapper` бросает `HandoffInterrupt` вместо inline run; в UI режим меняется на чипе именно этого flow-tool |
+| **FlowNode / flow-tool с `call_type: "call"`** | Обычный вложенный вызов без agent handoff interrupt |
+
+`handoff_mode` зарезервирован только для `hitl_node` (`single_reply`/`takeover`). Boolean `handoff_mode` для FlowNode запрещён моделью.
 
 ## State (`ExecutionState`)
 
@@ -91,10 +95,13 @@ In-process `run_flow`: child `unique_id` = `child_context_id.removeprefix("conte
 
 В одной parent-сессии допустимы **многократные** циклы handoff→handback к **тому же** child session id или к **разным** child flows. После handback `handoff_depth` parent уменьшается; новый handoff снова проходит depth check.
 
-## Тесты (без моков, только MockLLM)
+## Тесты
 
 | Файл | Покрытие |
 |---|---|
+| `tests/flows/integration/test_flow_tool_handoff_kernel.py` | Строгий production-kernel без test doubles: typed interrupt, target validation, child state isolation, routing, handback |
+| `tests/flows/api/test_flow_tool_call_type.py` | Реальный API/repository round-trip строгого `FlowToolReference`, ошибки flow/branch |
+| `tests/flows/unit/test_handoff_test_integrity.py` | AST-gate: запрещает mock/patch/monkeypatch hooks в строгих handoff suites |
 | `tests/flows/integration/test_handoff_e2e.py` | In-process A–I, multi-cycle L6 |
 | `tests/flows/api/test_handoff_a2a.py` | A2A K1–K9, demo bundles |
 | `tests/flows/api/test_handoff_a2a_multi.py` | Повторные циклы L1–L5 |
@@ -103,7 +110,7 @@ In-process `run_flow`: child `unique_id` = `child_context_id.removeprefix("conte
 
 **Store (Магазин):** `handoff_demo_parent` + `handoff_demo_child` в `registry.yaml` (`public: true`); child `hidden: true`; parent `depends_on_flow_ids` ставит оба flow при установке из UI и при company init.
 
-**MockLLM queue:** после `handback_to_parent` на child — текстовый buffer (`"child cycle N finished"`), иначе child съест parent mock `handoff_to_flow`.
+Полные LLM-driven E2E выше используют детерминированный MockLLM только на границе выбора tool-call. Строгий kernel/API слой отдельно обязан работать без test doubles; этот инвариант защищён AST-gate.
 
 **`sync_tools`:** `handoff_orchestrator_service` в patch list для `kiq_task_name_with_context` (`tests/conftest.py`).
 

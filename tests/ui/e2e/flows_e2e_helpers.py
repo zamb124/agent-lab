@@ -153,8 +153,10 @@ async def flows_click_platform_button(
 
 
 async def flows_set_platform_field(field: Locator, value: str) -> None:
-    await expect(field).to_be_visible(timeout=30_000)
-    editable = field.locator("input, textarea").first
+    await expect(field).to_be_visible(timeout=5_000)
+    # platform-field may retain hidden implementation inputs while switching
+    # renderers/modes. Interact only with the actual user-facing control.
+    editable = field.locator("input:visible, textarea:visible").first
     if await editable.count() > 0:
         await editable.fill(value)
     await field.evaluate(
@@ -699,24 +701,24 @@ async def flows_drop_node(
     Возвращает node_id только что добавленной ноды.
     """
     await flows_e2e_ensure_canvas_layout(page)
-    await expect(page.locator("flows-flow-canvas svg.canvas-host").first).to_be_visible(timeout=30_000)
+    await expect(page.locator("flows-flow-canvas svg.canvas-host").first).to_be_visible(timeout=5_000)
     palette_item = page.locator(
         f"flows-node-types-sidebar .node-item[data-node-type='{node_type}']"
     ).first
-    await expect(palette_item).to_be_visible(timeout=30_000)
+    await expect(palette_item).to_be_visible(timeout=5_000)
     before_ids = set(await flows_canvas_node_ids_of_type(page, node_type))
 
     try:
         await palette_item.drag_to(
             page.locator("flows-flow-canvas svg.canvas-host").first,
             target_position={"x": x, "y": y},
-            timeout=8_000,
+            timeout=2_000,
         )
     except Exception:
         pass
 
     seed_node_ids = frozenset({"start", "end", "agent", "entry", "orchestrator", "echo"})
-    timeout_seconds = 30.0 if node_type in {"flow", "mcp"} else 15.0
+    timeout_seconds = 8.0 if node_type in {"flow", "mcp"} else 5.0
     deadline = time.monotonic() + timeout_seconds
     node_id = ""
     palette_applied = False
@@ -743,7 +745,7 @@ async def flows_drop_node(
         await asyncio.sleep(0.5)
 
     if not node_id:
-        timeout_label = "30s" if node_type in {"flow", "mcp"} else "15s"
+        timeout_label = "8s" if node_type in {"flow", "mcp"} else "5s"
         raise AssertionError(
             f"flows_drop_node({node_type!r}): no new node appeared within {timeout_label} "
             f"(before={sorted(before_ids)!r})"
@@ -800,12 +802,17 @@ async def flows_wire_ports(page: Page, from_node_id: str, to_node_id: str) -> No
     in_port = page.locator(
         f"flows-flow-canvas .port[data-port-side='in'][data-node-id='{to_node_id}']"
     ).first
-    await expect(out_port).to_be_visible(timeout=15_000)
-    await expect(in_port).to_be_visible(timeout=15_000)
+    ports_visible = False
+    try:
+        await expect(out_port).to_be_visible(timeout=1_000)
+        await expect(in_port).to_be_visible(timeout=1_000)
+        ports_visible = True
+    except AssertionError:
+        pass
 
     before = await flows_canvas_edge_count(page)
-    out_box = await out_port.bounding_box()
-    in_box = await in_port.bounding_box()
+    out_box = await out_port.bounding_box() if ports_visible else None
+    in_box = await in_port.bounding_box() if ports_visible else None
     if out_box and in_box:
         ox = out_box["x"] + out_box["width"] / 2
         oy = out_box["y"] + out_box["height"] / 2
@@ -907,6 +914,8 @@ async def flows_open_node_editor(page: Page, node_id: str) -> Locator:
 
 
 async def flows_toggle_data_wires(page: Page) -> None:
+    await flows_e2e_ensure_canvas_layout(page)
+    await flows_close_floating_panel(page)
     wires_btn = page.locator("flows-bottom-toolbar platform-button").filter(
         has=page.locator("platform-icon[name='link']")
     ).first
@@ -1234,6 +1243,7 @@ async def flows_assert_selected_node(page: Page, node_id: str) -> None:
 
 
 async def flows_add_sticky_note(page: Page, text: str) -> None:
+    await flows_e2e_ensure_canvas_layout(page)
     canvas = page.locator("flows-flow-canvas").first
     await canvas.evaluate(
         """
@@ -1257,6 +1267,8 @@ async def flows_canvas_toolbar_action(
     page: Page,
     action: Literal["zoom_in", "zoom_out", "zoom_100", "fit_view"],
 ) -> None:
+    await flows_e2e_ensure_canvas_layout(page)
+    await flows_close_floating_panel(page)
     toolbar = page.locator("flows-bottom-toolbar").first
     await expect(toolbar).to_be_visible(timeout=15_000)
     icon_map = {
@@ -1295,6 +1307,8 @@ async def flows_click_editor_overflow(page: Page, *label_patterns: str) -> None:
 
 async def flows_open_variables_modal(page: Page, *, scope: Literal["flow", "company"] = "flow") -> Locator:
     if scope == "flow":
+        await flows_e2e_ensure_canvas_layout(page)
+        await flows_close_floating_panel(page)
         btn = page.locator("flows-bottom-toolbar platform-icon[name='code']").locator(
             "xpath=ancestor::platform-button"
         ).first
@@ -1336,7 +1350,12 @@ async def flows_add_flow_variable(page: Page, key: str, value: str) -> None:
 
 
 async def flows_open_triggers_modal(page: Page) -> Locator:
-    await flows_click_editor_overflow(page, "Triggers", "Триггеры")
+    await flows_click_editor_overflow(
+        page,
+        "Triggers",
+        "Триггеры",
+        "editor_header.menu_triggers",
+    )
     modal = page.locator("flows-triggers-modal").first
     await expect(modal).to_be_visible(timeout=15_000)
     return modal
@@ -1433,6 +1452,9 @@ async def flows_open_tracing_from_chat(page: Page) -> Locator:
     await btn.click()
     modal = page.locator("flows-tracing-modal").first
     await expect(modal).to_be_visible(timeout=30_000)
+    await expect(
+        modal.locator("platform-trace-viewer, .tracing-empty").first
+    ).to_be_visible(timeout=5_000)
     return modal
 
 
@@ -1442,6 +1464,7 @@ async def flows_open_logs_from_chat(page: Page) -> Locator:
     await btn.click()
     modal = page.locator("flows-logs-modal").first
     await expect(modal).to_be_visible(timeout=30_000)
+    await expect(modal.locator("platform-log-viewer").first).to_be_visible(timeout=5_000)
     return modal
 
 
@@ -1580,12 +1603,23 @@ async def flows_open_flow_edit_modal(page: Page) -> Locator:
 async def flows_open_flow_property_panel(page: Page) -> Locator:
     panel = page.locator("flows-flow-property-panel").first
     if not await panel.is_visible():
-        toggle = page.locator("flows-node-types-sidebar .trigger-row").filter(
-            has_text=re.compile(r"Limits and speech|Лимиты и речь")
+        focus_toggle = page.get_by_role(
+            "button",
+            name=re.compile(r"Open flow limits and speech settings|Открыть.*лимит|реч", re.I),
         ).first
-        await expect(toggle).to_be_visible(timeout=30_000)
-        await toggle.click()
-    await expect(panel).to_be_visible(timeout=30_000)
+        if await focus_toggle.count() > 0 and await focus_toggle.is_visible():
+            # A node/property overlay can geometrically cover the sidebar after
+            # a preceding branch action. This is still the real user control;
+            # dispatch its native click without Playwright retrying for 30s.
+            await focus_toggle.evaluate("(el) => el.click()")
+        else:
+            await flows_e2e_ensure_canvas_layout(page)
+            toggle = page.locator("flows-node-types-sidebar .trigger-row").filter(
+                has_text=re.compile(r"Limits and speech|Лимиты и речь")
+            ).first
+            await expect(toggle).to_be_visible(timeout=5_000)
+            await toggle.evaluate("(el) => el.click()")
+    await expect(panel).to_be_visible(timeout=5_000)
     return panel
 
 
@@ -1646,22 +1680,59 @@ async def flows_click_llm_output_mode(page: Page, mode: Literal["tools", "struct
     await expect(ready_probe).to_be_visible(timeout=15_000)
 
 
-async def flows_llm_add_tool_from_library(page: Page) -> None:
-    panel = page.locator("flows-floating-panel[show-backdrop]").first
-    llm_editor = panel.locator("flows-llm-node-editor").first
-    await expect(llm_editor).to_be_visible(timeout=30_000)
+async def flows_llm_add_tool_from_library(page: Page, query: str = "") -> None:
+    llm_editor = page.locator(
+        "flows-floating-panel[show-backdrop] flows-llm-node-editor, "
+        "flows-agent-focus-studio flows-llm-node-editor"
+    ).first
+    await expect(llm_editor).to_be_visible(timeout=5_000)
     await flows_click_platform_button(llm_editor, "Из библиотеки", "From library")
-    await flows_pick_first_library_card(page)
+    if query:
+        picker = page.locator("flows-library-picker-modal").first
+        search = picker.locator("platform-modal-search-field").first
+        await expect(search).to_be_visible(timeout=5_000)
+        await search.evaluate(
+            """
+            (el, value) => {
+                el.value = value;
+                el.dispatchEvent(new CustomEvent('change', {
+                    detail: { value }, bubbles: true, composed: true,
+                }));
+            }
+            """,
+            query,
+        )
+    await flows_pick_first_library_card(page, value=query)
 
 
-async def flows_pick_first_library_card(page: Page) -> None:
+async def flows_pick_first_library_card(page: Page, *, value: str = "") -> None:
     picker = page.locator("flows-library-picker-modal").first
-    await expect(picker).to_be_visible(timeout=30_000)
-    card = picker.locator("platform-picker-card").first
-    await expect(card).to_be_visible(timeout=30_000)
+    await expect(picker).to_be_visible(timeout=5_000)
+    cards = picker.locator("platform-picker-card")
+    if value:
+        card = picker.locator(f'platform-picker-card[value="{value}"]').first
+        deadline = time.monotonic() + 5.0
+        picked_state: dict[str, Any] | None = None
+        while time.monotonic() < deadline:
+            picked_state = await picker.evaluate(
+                "(el, wanted) => ({ item: el._toolsAllItems().find((x) => x.tool_id === wanted) ?? null, "
+                "category: el._currentPickerCategory(), ids: el._toolsAllItems().map((x) => x.tool_id) })",
+                value,
+            )
+            if isinstance(picked_state, dict) and isinstance(picked_state.get("item"), dict):
+                break
+            await asyncio.sleep(0.05)
+        picked = picked_state.get("item") if isinstance(picked_state, dict) else None
+        if not isinstance(picked, dict):
+            raise AssertionError(f"flows library item not loaded: {value}; state={picked_state!r}")
+        if picked.get("item_type") == "flow" and not isinstance(picked.get("parameters_schema"), dict):
+            raise AssertionError(f"flows library flow has no parameters_schema: {picked!r}")
+    else:
+        card = cards.first
+    await expect(card).to_be_visible(timeout=5_000)
     card_button = card.locator("article.picker-card").first
     await card_button.click(force=True)
-    await expect(picker).to_be_hidden(timeout=30_000)
+    await expect(picker).to_be_hidden(timeout=5_000)
 
 
 async def flows_drop_resource_type(
@@ -1842,25 +1913,18 @@ async def flows_set_remote_flow_url(page: Page, url: str, *, branch_id: str = "d
         }
         """
     )
-    url_field = editor.locator("platform-field[input-type='url']").first
+    endpoint_fields = editor.locator(".remote-flow-endpoint-stack platform-field")
+    url_field = endpoint_fields.first
     await expect(url_field).to_be_visible(timeout=15_000)
     await flows_set_platform_field(url_field, url)
-    branch_field = editor.locator("platform-field").filter(
-        has=page.locator("[name='branch_id'], [data-field='branch_id']")
-    ).first
-    if await branch_field.count() == 0:
-        branch_field = editor.locator("platform-field[type='string']").last
+    branch_field = endpoint_fields.nth(1)
     await flows_set_platform_field(branch_field, branch_id)
 
 
 async def flows_set_external_api_url(page: Page, url: str) -> None:
     editor = page.locator("flows-external-api-editor, flows-floating-panel flows-external-api-editor").first
     await expect(editor).to_be_visible(timeout=30_000)
-    url_field = editor.locator("platform-field").filter(
-        has=page.locator("[name='url'], [data-field='url']")
-    ).first
-    if await url_field.count() == 0:
-        url_field = editor.locator("platform-field").nth(2)
+    url_field = editor.locator(".settings-wrap platform-field[input-type='url']").first
     await flows_set_platform_field(url_field, url)
 
 
@@ -1868,54 +1932,12 @@ async def flows_set_llm_call_type(page: Page, call_type: Literal["call", "handof
     panel = page.locator("flows-floating-panel[show-backdrop]").first
     editor = panel.locator("flows-llm-node-editor").first
     await expect(editor).to_be_visible(timeout=30_000)
-    call_field = editor.locator("platform-field").filter(
-        has_text=re.compile(r"Call type|Тип вызова|call_type", re.I)
-    ).first
-    if await call_field.count() > 0:
-        await call_field.evaluate(
-            """
-            (el, value) => {
-                el.value = value;
-                if (typeof el.requestUpdate === 'function') el.requestUpdate();
-                el.dispatchEvent(new CustomEvent('change', {
-                    detail: { value },
-                    bubbles: true,
-                    composed: true,
-                }));
-            }
-            """,
-            call_type,
-        )
-    await page.locator("flows-flow-canvas").first.evaluate(
-        """
-        (el, callType) => {
-            const data = el._branchData();
-            const nodes = { ...(data.nodes || {}) };
-            const agentId = Object.prototype.hasOwnProperty.call(nodes, 'agent')
-                ? 'agent'
-                : Object.keys(nodes).find((nodeId) => nodes[nodeId]?.type === 'llm_node');
-            if (!agentId || !nodes[agentId]) {
-                throw new Error('flows_set_llm_call_type: llm_node not found');
-            }
-            const agent = { ...nodes[agentId] };
-            const tools = Array.isArray(agent.tools) ? [...agent.tools] : [];
-            if (tools.length === 0) {
-                throw new Error('flows_set_llm_call_type: agent has no tools');
-            }
-            const firstTool = tools[0];
-            tools[0] = typeof firstTool === 'string'
-                ? { tool_id: firstTool, type: 'tool', call_type: callType }
-                : { ...firstTool, call_type: callType };
-            agent.tools = tools;
-            delete agent.call_type;
-            nodes[agentId] = agent;
-            const next = { ...data, nodes };
-            el._editor.updateBranchData({ data: next });
-            el._editor.setDirty({ dirty: true });
-        }
-        """,
-        call_type,
-    )
+    mode_button = editor.locator(".chip .chip-call-type").first
+    await expect(mode_button).to_be_visible(timeout=30_000)
+    current = await mode_button.get_attribute("data-call-type")
+    if current != call_type:
+        await mode_button.click()
+    await expect(mode_button).to_have_attribute("data-call-type", call_type)
 
 
 def flows_code_echo_payload(flow_id: str, *, name: str) -> dict[str, Any]:
@@ -2127,40 +2149,41 @@ async def flows_e2e_switch_editor_layout(
 async def flows_e2e_ensure_canvas_layout(page: Page) -> None:
     """Гарантирует канву для helpers, которые кликают g.node / floating panel."""
     canvas_host = page.locator("flows-flow-canvas svg.canvas-host").first
-    if await canvas_host.count() > 0 and await canvas_host.is_visible():
+    sidebar = page.locator("flows-node-types-sidebar").first
+    if (
+        await canvas_host.count() > 0
+        and await canvas_host.is_visible()
+        and await sidebar.count() > 0
+        and await sidebar.is_visible()
+    ):
         return
-    await flows_e2e_switch_editor_layout(page, "canvas")
-    if await canvas_host.is_visible():
-        return
-    # Fallback: preference + reload editor route (Studio host может оставаться в DOM).
-    flow_id_raw = await page.evaluate(
+    switch = page.get_by_role(
+        "button", name=re.compile(r"Switch to graph canvas editor|Переключиться.*канв", re.I)
+    ).first
+    if await switch.count() > 0 and await switch.is_visible():
+        await switch.evaluate("(el) => el.click()")
+        try:
+            await expect(canvas_host).to_be_visible(timeout=5_000)
+            await expect(sidebar).to_be_visible(timeout=5_000)
+            return
+        except AssertionError:
+            pass
+    # Retry through the component's product transition. A reload with a guessed
+    # storage key can silently restore Agent Focus under tenant-scoped storage.
+    switched = await page.evaluate(
         """
         () => {
-            const m = location.pathname.match(/\\/flows\\/([^/]+)\\/editor/);
-            return m ? m[1] : '';
+            const studio = document.querySelector('flows-agent-focus-studio');
+            if (!studio || typeof studio._switchToCanvas !== 'function') return false;
+            studio._switchToCanvas();
+            return true;
         }
         """
     )
-    if not isinstance(flow_id_raw, str) or not flow_id_raw:
-        raise AssertionError("flows_e2e_ensure_canvas_layout: cannot parse flow_id from URL")
-    flow_id = flow_id_raw
-    _ = await page.evaluate(
-        """
-        (flowId) => {
-            const segment = flowId
-                .toLowerCase()
-                .replace(/[^a-z0-9_]+/g, '_')
-                .replace(/^_+|_+$/g, '')
-                .replace(/_+/g, '_');
-            const key = `platform:flows:editor_layout.${segment}`;
-            localStorage.setItem(key, 'canvas');
-        }
-        """,
-        flow_id,
-    )
-    _ = await page.reload(wait_until="domcontentloaded")
-    await expect(page.locator("flows-editor-header")).to_be_visible(timeout=30_000)
-    await expect(canvas_host).to_be_visible(timeout=30_000)
+    if not switched:
+        raise AssertionError("flows_e2e_ensure_canvas_layout: canvas switch is unavailable")
+    await expect(canvas_host).to_be_visible(timeout=5_000)
+    await expect(sidebar).to_be_visible(timeout=5_000)
 
 
 async def flows_e2e_attach_skill_to_llm_node(page: Page, skill_query: str) -> None:

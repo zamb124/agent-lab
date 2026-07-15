@@ -20,7 +20,6 @@ from typing import Any, List
 
 import pytest
 import pytest_asyncio
-from pytest import FixtureRequest
 from httpx import ASGITransport, AsyncClient
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
@@ -500,8 +499,28 @@ def platform_test_scope() -> Generator[str, None, None]:
 
 
 @pytest.fixture(autouse=True)
+def enforce_no_test_doubles(request: pytest.FixtureRequest) -> None:
+    """Fail closed when a no_test_doubles test requests a known double fixture."""
+    if request.node.get_closest_marker("no_test_doubles") is None:
+        return
+    forbidden = {
+        "monkeypatch",
+        "mock_context",
+        "mock_llm",
+        "mock_llm_capture",
+        "mock_llm_redis",
+        "mock_llm_with_queue",
+        "mocker",
+    }
+    requested = sorted(forbidden.intersection(request.fixturenames))
+    if requested:
+        pytest.fail(f"no_test_doubles test requested forbidden fixtures: {requested}")
+
+
+@pytest.fixture(autouse=True)
 def _inject_test_scope_header(
-    platform_test_scope: str, monkeypatch: pytest.MonkeyPatch
+    request: pytest.FixtureRequest,
+    platform_test_scope: str,
 ) -> None:
     """
     Все httpx-клиенты тестового процесса несут заголовок ``X-Test-Scope``.
@@ -510,9 +529,16 @@ def _inject_test_scope_header(
     реального HTTP транспорта. Сервисы читают заголовок в AccessLogMiddleware
     и прокидывают дальше (ServiceClient, A2A, TaskIQ labels).
     """
+    if request.node.get_closest_marker("no_test_doubles"):
+        return
+
     import httpx
 
     from core.test_scope import TEST_SCOPE_HEADER
+
+    monkeypatch = request.getfixturevalue("monkeypatch")
+    if not isinstance(monkeypatch, pytest.MonkeyPatch):
+        raise TypeError("monkeypatch fixture must be pytest.MonkeyPatch")
 
     original_async_build_request = httpx.AsyncClient.build_request
     original_sync_build_request = httpx.Client.build_request
@@ -699,19 +725,21 @@ def make_test_state():
 
 
 @pytest.fixture(autouse=True)
-def reset_mock_llm():
+def reset_mock_llm(request: pytest.FixtureRequest):
     """
     Автоматический сброс MockLLM перед каждым тестом.
     Обеспечивает изоляцию тестов.
     """
     yield
+    if request.node.get_closest_marker("no_test_doubles"):
+        return
     mock = get_global_mock_llm("mock-gpt-4")
     if mock:
         mock.reset()
 
 
 @pytest.fixture(autouse=True)
-def sync_tools(request, monkeypatch):
+def sync_tools(request: pytest.FixtureRequest):
     """
     Выполняет tools и agent tasks синхронно без TaskIQ worker.
 
@@ -729,9 +757,14 @@ def sync_tools(request, monkeypatch):
 
     Redis Pub/Sub не подменяется: стриминг идёт через реальный Redis из контейнера.
     """
-    if request.node.get_closest_marker("real_taskiq"):
+    if request.node.get_closest_marker("no_test_doubles") or request.node.get_closest_marker(
+        "real_taskiq"
+    ):
         yield
         return
+    monkeypatch = request.getfixturevalue("monkeypatch")
+    if not isinstance(monkeypatch, pytest.MonkeyPatch):
+        raise TypeError("monkeypatch fixture must be pytest.MonkeyPatch")
     import apps.crm.services.entity_service as crm_entity_service_module
     import apps.crm.services.task_service as crm_task_service_module
     import apps.crm_worker.tasks.analysis_tasks as crm_analysis_tasks

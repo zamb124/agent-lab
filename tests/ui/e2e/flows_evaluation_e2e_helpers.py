@@ -83,7 +83,18 @@ async def flows_eval_open_compare_panel(page: Page) -> Locator:
 
 async def flows_eval_compare_runs(page: Page) -> None:
     panel = await flows_eval_open_compare_panel(page)
-    await flows_click_platform_button(panel, "Compare", "Сравнить")
+    compare = panel.locator("platform-button").filter(
+        has_text=re.compile(r"^\s*(?:Compare|Сравнить)\s*$")
+    ).first
+    inner = compare.locator("button").first
+    chips = panel.locator(".run-chip")
+    await expect(chips).to_have_count(2, timeout=5_000)
+    for index in range(await chips.count()):
+        await chips.nth(index).click()
+        if await inner.is_enabled():
+            break
+    await expect(inner).to_be_enabled(timeout=3_000)
+    await compare.evaluate("(el) => el.click()")
 
 
 async def flows_eval_set_baseline(page: Page) -> None:

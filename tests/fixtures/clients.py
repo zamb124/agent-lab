@@ -38,14 +38,19 @@ _PLATFORM_ASGI_HOST_HEADERS = {"Host": "humanitec.ru"}
 @pytest.fixture(autouse=True)
 def patch_service_clients_asgi(
     request: pytest.FixtureRequest,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
     Универсальный патч для ServiceClient, направляющий запросы между сервисами
     через ASGITransport, если соответствующее приложение доступно.
     """
-    if request.node.get_closest_marker("no_service_client_patch"):
+    if request.node.get_closest_marker("no_test_doubles") or request.node.get_closest_marker(
+        "no_service_client_patch"
+    ):
         return
+
+    monkeypatch = request.getfixturevalue("monkeypatch")
+    if not isinstance(monkeypatch, pytest.MonkeyPatch):
+        raise TypeError("monkeypatch fixture must be pytest.MonkeyPatch")
 
     from httpx import ASGITransport, AsyncClient
 

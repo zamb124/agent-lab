@@ -18,7 +18,10 @@ export default {
     ],
     hostname: '127.0.0.1',
     concurrentBrowsers: 1,
-    concurrency: 1,
+    // Test files run in isolated pages. A single-page queue no longer fits the
+    // suite-wide timeout as the browser suite grows, while a small bounded
+    // parallelism keeps local/CI resource usage predictable.
+    concurrency: 4,
     browserStartTimeout: 120_000,
     testsStartTimeout: 60_000,
     middleware: [browserTestDevMiddleware],

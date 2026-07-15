@@ -12,6 +12,7 @@ import {
 } from '@platform/lib/events/resources/platform-work-item.resource.js';
 import '../../../../core/frontend/static/lib/chat/platform-chat.js';
 import { findActiveHitlPause } from '../../../../core/frontend/static/lib/chat/runtime/hitl-pause-listener.js';
+import { installChatProfileFetchStub } from '../helpers/chat-profile-stub.js';
 
 async function waitFor(predicate, { timeout = 2000 } = {}) {
     const start = Date.now();
@@ -25,8 +26,25 @@ async function waitFor(predicate, { timeout = 2000 } = {}) {
 }
 
 describe('platform-chat HITL live resubscribe (user surface)', () => {
+    let restoreChatFetch;
+    let restoreFlowFetch;
+
     beforeEach(() => {
         resetPlatformState();
+        restoreChatFetch = installChatProfileFetchStub({ flowId: 'flow1' });
+        const previousFetch = window.fetch;
+        restoreFlowFetch = () => { window.fetch = previousFetch; };
+        window.fetch = async (rawUrl, init = {}) => {
+            const method = (init.method || 'GET').toUpperCase();
+            const url = new URL(String(rawUrl), window.location.href);
+            if (method === 'POST' && url.pathname === '/flows/api/v1/flow1') {
+                return new Response('', {
+                    status: 200,
+                    headers: { 'content-type': 'text/event-stream' },
+                });
+            }
+            return previousFetch(rawUrl, init);
+        };
         for (const factory of platformWorkItemFactories) {
             registerFactory(factory);
         }
@@ -38,6 +56,8 @@ describe('platform-chat HITL live resubscribe (user surface)', () => {
     });
 
     afterEach(() => {
+        restoreFlowFetch();
+        restoreChatFetch();
         fixtureCleanup();
     });
 

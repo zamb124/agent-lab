@@ -84,6 +84,32 @@ async def test_picker_category_flow_is_not_truncated_by_many_mcp_tools(client, a
 
 
 @pytest.mark.asyncio
+async def test_picker_flow_item_contains_complete_flow_tool_schema(client, app, unique_id):
+    container = get_container()
+    flow_id = f"picker_contract_{unique_id}"
+    await container.flow_repository.set(_flow_config(flow_id))
+
+    response = await client.get(
+        "/flows/api/v1/tools/all?picker_category=flow&limit=2000&offset=0"
+    )
+
+    assert response.status_code == 200
+    item = next(entry for entry in response.json()["items"] if entry["tool_id"] == flow_id)
+    assert item["item_type"] == "flow"
+    assert item["parameters_schema"] == {
+        "type": "object",
+        "properties": {
+            "request": {
+                "type": "string",
+                "description": "Запрос, передаваемый дочернему flow",
+            }
+        },
+        "required": ["request"],
+        "additionalProperties": False,
+    }
+
+
+@pytest.mark.asyncio
 async def test_picker_category_filters_code_and_mcp(client, app, unique_id):
     """picker_category=code и picker_category=mcp возвращают непересекающиеся наборы."""
     container = get_container()

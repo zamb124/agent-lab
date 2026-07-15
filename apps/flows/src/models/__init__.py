@@ -35,6 +35,7 @@ from .enums import (
     ChannelType,
     CodeMode,
     MergeMode,
+    NodeToolCallType,
     ReactToolRole,
     SessionStatus,
     TriggerStatus,
@@ -74,6 +75,7 @@ from .flow_speech_settings import (
     FlowSpeechTtsBlock,
     FlowSpeechVadBlock,
 )
+from .flow_tool_reference import FlowToolReference, flow_tool_parameters_schema
 from .mcp import (
     MCPCallResult,
     MCPDiscoveredTool,
@@ -158,6 +160,7 @@ __all__ = [
     "NodeLLMConfig",
     "LLMConfig",
     "MergeMode",
+    "NodeToolCallType",
     "OutputAction",
     "Permission",
     "ReactConfig",
@@ -196,6 +199,8 @@ __all__ = [
     "TelegramTriggerConfig",
     "TelegramUpdate",
     "ToolReference",
+    "FlowToolReference",
+    "flow_tool_parameters_schema",
     "TriggerConfig",
     "TriggerStatus",
     "TriggerType",

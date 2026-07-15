@@ -130,7 +130,7 @@ class TestHandoffViaTool:
         assert result.interrupt.body.kind == InterruptKind.USER_MESSAGE
 
 
-# ── Block B: FlowNode handoff_mode=true ──────────────────────────────────────
+# ── Block B: FlowNode call_type=handoff ──────────────────────────────────────
 
 
 class TestFlowNodeHandoffMode:
@@ -147,7 +147,7 @@ class TestFlowNodeHandoffMode:
             "flow_id": parent_fid, "name": "Parent", "entry": "start",
             "nodes": {
                 "start": {"type": "llm_node", "node_id": "s", "prompt": "start", "llm": {"model": "mock-gpt-4"}, "tools": [{"tool_id": "ask_user", "description": "Ask"}]},
-                "call_child": {"type": "flow", "flow_id": child_fid, "handoff_mode": True},
+                "call_child": {"type": "flow", "flow_id": child_fid, "call_type": "handoff"},
             },
             "edges": [{"from_node": "start", "to_node": "call_child"}, {"from_node": "call_child", "to_node": None}],
         })
@@ -168,7 +168,7 @@ class TestFlowNodeHandoffMode:
         await _save_flow(container, {
             "flow_id": parent_fid, "name": "Parent", "entry": "call_child",
             "nodes": {
-                "call_child": {"type": "flow", "flow_id": child_fid, "handoff_mode": True, "input_mapping": {"order_id": "@state:order_id"}, "output_mapping": {"ticket_id": "created_ticket"}},
+                "call_child": {"type": "flow", "flow_id": child_fid, "call_type": "handoff", "input_mapping": {"order_id": "@state:order_id"}, "output_mapping": {"ticket_id": "created_ticket"}},
             },
             "edges": [{"from_node": "call_child", "to_node": None}],
         })
@@ -576,11 +576,11 @@ class TestHandoffChainWithAskUser:
 
 
 class TestFlowNodeHandoffDeep:
-    """Углублённые тесты FlowNode с handoff_mode: child interrupt, output_mapping, без handback."""
+    """Углублённые тесты FlowNode с call_type=handoff: child interrupt и output_mapping."""
 
     @pytest.mark.asyncio
     async def test_h1_flow_node_handoff_child_ask_user_handback(self, container, unique_id):
-        """FlowNode handoff_mode: child ask_user, resume, handback — parent переходит по графу."""
+        """FlowNode call_type=handoff: child ask_user, resume, handback — parent идёт дальше."""
         parent_fid = f"ht-h1-{unique_id}"
         child_fid = f"ht-h1c-{unique_id}"
 
@@ -594,7 +594,7 @@ class TestFlowNodeHandoffDeep:
             "flow_id": parent_fid, "name": "Parent", "entry": "start",
             "nodes": {
                 "start": {"type": "llm_node", "node_id": "s", "prompt": "s", "llm": {"model": "mock-gpt-4"}, "tools": [{"tool_id": "ask_user", "description": "Ask"}]},
-                "call_child": {"type": "flow", "flow_id": child_fid, "handoff_mode": True},
+                "call_child": {"type": "flow", "flow_id": child_fid, "call_type": "handoff"},
                 "after": {"type": "llm_node", "node_id": "after", "prompt": "after", "llm": {"model": "mock-gpt-4"}, "tools": [{"tool_id": "ask_user", "description": "Ask"}]},
             },
             "edges": [
@@ -611,7 +611,7 @@ class TestFlowNodeHandoffDeep:
 
     @pytest.mark.asyncio
     async def test_h2_flow_node_output_mapping_after_handback(self, container, unique_id):
-        """FlowNode handoff_mode: child handback с ticket_id мапится через output_mapping."""
+        """FlowNode call_type=handoff: child handback с ticket_id мапится через output_mapping."""
         parent_fid = f"ht-h2-{unique_id}"
         child_fid = f"ht-h2c-{unique_id}"
 
@@ -624,7 +624,7 @@ class TestFlowNodeHandoffDeep:
             "flow_id": parent_fid, "name": "Parent", "entry": "call_child",
             "nodes": {
                 "call_child": {
-                    "type": "flow", "flow_id": child_fid, "handoff_mode": True,
+                    "type": "flow", "flow_id": child_fid, "call_type": "handoff",
                     "input_mapping": {"order_id": "@state:order_id"},
                     "output_mapping": {"ticket_id": "created_ticket"},
                 },
@@ -637,7 +637,7 @@ class TestFlowNodeHandoffDeep:
 
     @pytest.mark.asyncio
     async def test_h3_child_without_handback_in_flow_node(self, container, unique_id):
-        """FlowNode handoff_mode: child завершается без handback, parent state сохраняется."""
+        """FlowNode call_type=handoff: child завершается без handback, parent state сохраняется."""
         parent_fid = f"ht-h3-{unique_id}"
         child_fid = f"ht-h3c-{unique_id}"
 
@@ -649,7 +649,7 @@ class TestFlowNodeHandoffDeep:
         await _save_flow(container, {
             "flow_id": parent_fid, "name": "Parent", "entry": "call_child",
             "nodes": {
-                "call_child": {"type": "flow", "flow_id": child_fid, "handoff_mode": True},
+                "call_child": {"type": "flow", "flow_id": child_fid, "call_type": "handoff"},
             },
             "edges": [{"from_node": "call_child", "to_node": None}],
         })
@@ -680,7 +680,7 @@ class TestWrapperAndBoundaryCases:
             "nodes": {"main": {"type": "llm_node", "node_id": "p", "prompt": "p", "llm": {"model": "mock-gpt-4"}, "tools": [
                 {
                     "tool_id": "child_handoff", "description": "Child handoff",
-                    "type": "flow", "flow_id": child_fid, "call_type": "handoff", "code": "",
+                    "type": "flow", "flow_id": child_fid, "call_type": "handoff",
                     "parameters_schema": {"type": "object", "properties": {}, "required": []},
                 },
             ]}},

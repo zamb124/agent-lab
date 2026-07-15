@@ -11,7 +11,6 @@ from playwright.async_api import Page, expect
 from tests.ui.e2e.flows_api_e2e_helpers import flows_seed_company_secret_var
 from tests.ui.e2e.flows_e2e_helpers import (
     GREEN_GARDEN_AGENT_NAME,
-    GREEN_GARDEN_CATALOG_FILE,
     GREEN_GARDEN_SUPPORT_EMAIL,
     flows_api_create_flow,
     flows_api_get_flow,
@@ -78,6 +77,7 @@ async def test_flows_reuse_with_resources(
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
+    await flows_e2e_ensure_canvas_layout(page)
     await flows_drop_resource_type(page, "files", x=640, y=400)
     resource_ids = await flows_canvas_node_ids_of_type(page, "resource")
     if not resource_ids:
@@ -114,21 +114,30 @@ async def test_flows_reuse_with_resources(
 
     resource_node_id = await _ensure_resource_node()
     await flows_open_node_editor(page, resource_node_id)
-    name_field = page.locator("flows-base-resource-editor platform-field").first
-    if await name_field.count() > 0:
-        await flows_set_platform_field(name_field, GREEN_GARDEN_CATALOG_FILE)
+    files_editor = page.locator("flows-files-resource-editor:visible").last
+    await expect(files_editor).to_be_visible()
+    storage_fields = files_editor.locator(".body platform-field:visible")
+    bucket_field = storage_fields.first
+    prefix_field = storage_fields.nth(1)
+    await flows_set_platform_field(bucket_field, "green-garden-catalogs")
+    await flows_set_platform_field(prefix_field, "spring-2026")
+    textboxes = files_editor.get_by_role("textbox")
+    await expect(textboxes.nth(0)).to_have_value("green-garden-catalogs")
+    await expect(textboxes.nth(1)).to_have_value("spring-2026")
     await scenario.step(
-        "Задайте имя ресурса каталога",
+        "Укажите хранилище каталога",
         page,
-        screenshot_name="resource-name-set",
-        label_en="Name the catalog resource",
+        screenshot_name="catalog-storage-configured",
+        label_en="Configure the catalog storage",
         details=(
-            f"Откройте свойства ресурса и задайте понятное имя — например "
-            f"«{GREEN_GARDEN_CATALOG_FILE}». Так в графе видно, какой файл подключён."
+            "Откройте свойства ресурса и укажите bucket «green-garden-catalogs» "
+            "и префикс «spring-2026». Эти поля направляют агент к нужной папке "
+            "объектного хранилища, где лежит актуальный каталог."
         ),
         details_en=(
-            f"Open the resource properties and set a clear name — for example "
-            f"«{GREEN_GARDEN_CATALOG_FILE}». The graph then shows which file is attached."
+            "Open the resource properties and set the bucket to “green-garden-catalogs” "
+            "and the prefix to “spring-2026”. These fields point the agent to the exact "
+            "object-storage folder containing the current catalog."
         ),
     )
 

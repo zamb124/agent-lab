@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models import NodeConfig, ToolReference
+from apps.flows.src.models import FlowToolReference, NodeConfig, ToolReference
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeLLMConfig
 from core.llm_context import LLMContextPatch
@@ -30,7 +30,7 @@ class NodeCreateRequest(BaseModel):
     name: str
     description: str | None = None
     prompt: str | None = None
-    tools: list[str | ToolReference] = Field(default_factory=list)
+    tools: list[str | FlowToolReference | ToolReference] = Field(default_factory=list)
     llm: NodeLLMConfig | None = None
     llm_context: LLMContextPatch | None = None
     llm_context_resource_key: str | None = None
@@ -55,8 +55,13 @@ class NodeResponse(BaseModel):
     source: str = "manual"
 
 
-def _tool_ref_to_response(tool_ref: ToolReference) -> str | JsonObject:
+def _tool_ref_to_response(tool_ref: FlowToolReference | ToolReference) -> str | JsonObject:
     """Конвертирует ToolReference в формат для ответа."""
+    if isinstance(tool_ref, FlowToolReference):
+        return parse_json_object(
+            tool_ref.model_dump_json(exclude_none=True),
+            f"node.tools.{tool_ref.tool_id}",
+        )
     if tool_ref.code:
         result: JsonObject = {
             "tool_id": tool_ref.tool_id,
@@ -112,9 +117,9 @@ async def list_nodes(
 @router.post("/", response_model=NodeResponse)
 async def create_node(request: NodeCreateRequest, container: ContainerDep) -> NodeResponse:
     """Создает новую ноду"""
-    tools: list[ToolReference] = []
+    tools: list[FlowToolReference | ToolReference] = []
     for tool_ref in request.tools:
-        if isinstance(tool_ref, ToolReference):
+        if isinstance(tool_ref, (FlowToolReference, ToolReference)):
             tools.append(tool_ref)
             continue
 
@@ -164,9 +169,9 @@ async def update_node(
     existing = await container.node_repository.get(node_id)
     source = existing.source if existing else "api"
 
-    tools: list[ToolReference] = []
+    tools: list[FlowToolReference | ToolReference] = []
     for tool_ref in request.tools:
-        if isinstance(tool_ref, ToolReference):
+        if isinstance(tool_ref, (FlowToolReference, ToolReference)):
             tools.append(tool_ref)
             continue
 

@@ -9,7 +9,7 @@ Zero-Guess Architecture:
 
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, cast
 
 from pydantic import AliasChoices, ConfigDict, Field, RootModel, field_validator, model_validator
 
@@ -25,9 +25,10 @@ from core.reflection import CriticPolicy
 from core.types import JsonObject, JsonValue
 from core.urn import extract_resource_id
 
-from .enums import ChannelType, NodeType
+from .enums import ChannelType, NodeToolCallType, NodeType
 from .exception_absorb_allow import ExceptionAbsorbAllowName
 from .external_api import HTTPMethod, ResponseSchema, ResponseType
+from .flow_tool_reference import FlowToolReference
 from .resource import ResourceReference
 from .tool_reference import ToolReference
 
@@ -206,14 +207,17 @@ class NodeConfig(StrictBaseModel):
         ),
     )
     tags: list[str] = Field(default_factory=list, description="Группы/категории")
-    call_type: str = Field(
-        default="call",
+    call_type: NodeToolCallType = Field(
+        default=NodeToolCallType.CALL,
         description="Режим node-as-tool: call (обычный вызов) или handoff (HandoffInterrupt)",
     )
 
     # Для llm_node
     prompt: str | None = Field(default=None, description="Системный промпт")
-    tools: list[ToolReference] = Field(default_factory=list, description="Список инструментов")
+    tools: list[FlowToolReference | ToolReference] = Field(
+        default_factory=list,
+        description="Список инструментов",
+    )
     agent_skills: list[str] = Field(
         default_factory=list,
         description="Attached Agent Skill ids from company catalog (progressive load)",
@@ -479,6 +483,8 @@ class NodeConfig(StrictBaseModel):
 
     @model_validator(mode="after")
     def validate_resource_node_excludes_agent_surface(self) -> "NodeConfig":
+        if self.call_type == NodeToolCallType.HANDOFF and self.type != NodeType.FLOW:
+            raise ValueError("call_type=handoff is only allowed for flow node-as-tool")
         if self.type == NodeType.REFLECTION:
             if self.critic_policy is None:
                 raise ValueError("reflection node: critic_policy is required")
@@ -543,7 +549,7 @@ class GraphNodeConfig(StrictBaseModel):
     pos_y: float | None = Field(default=None, description="Y-координата ноды на canvas редактора")
 
     prompt: str | None = Field(default=None, description="Системный промпт llm_node")
-    tools: list[ToolReference | JsonObject | str] = Field(
+    tools: list[FlowToolReference | ToolReference | JsonObject | str] = Field(
         default_factory=list, description="Tools llm_node"
     )
     agent_skills: list[str] = Field(
@@ -578,6 +584,7 @@ class GraphNodeConfig(StrictBaseModel):
 
     flow_id: str | None = Field(default=None)
     branch_id: str = Field(default="default")
+    call_type: NodeToolCallType | None = Field(default=None)
     config: JsonObject | None = Field(default=None)
 
     url: str | None = Field(default=None)
@@ -620,8 +627,34 @@ class GraphNodeConfig(StrictBaseModel):
 
     dataflow_nested: JsonObject | None = Field(default=None, alias="__dataflow_nested")
 
+    @field_validator("tools", mode="before")
+    @classmethod
+    def validate_flow_tool_references(cls, value: object) -> object:
+        if not isinstance(value, list):
+            return value
+        normalized: list[object] = []
+        for index, item in enumerate(cast(list[object], value)):
+            if isinstance(item, dict):
+                item_object = cast(JsonObject, item)
+                if item_object.get("type") == NodeType.FLOW.value:
+                    try:
+                        normalized.append(FlowToolReference.model_validate(item_object))
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"tools[{index}]: invalid flow tool reference"
+                        ) from exc
+                    continue
+                normalized.append(item_object)
+                continue
+            normalized.append(item)
+        return normalized
+
     @model_validator(mode="after")
     def validate_graph_node_type_constraints(self) -> "GraphNodeConfig":
+        if self.call_type is not None and self.type != NodeType.FLOW:
+            raise ValueError("call_type is only allowed on flow nodes")
+        if self.handoff_mode is not None and self.type != NodeType.HITL_NODE:
+            raise ValueError("handoff_mode is only allowed on hitl_node")
         if self.type == NodeType.REFLECTION:
             if self.critic_policy is None:
                 raise ValueError("reflection node: critic_policy is required")
