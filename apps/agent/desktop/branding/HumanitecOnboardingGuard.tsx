@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from './components/ui/button';
 import { defineMessages, useIntl } from './i18n';
 import { ensureHumanitecLlmConfigured } from './humanitecLlmSetup';
+import linnexMark from './images/linnex-mark.svg';
 
 const i18n = defineMessages({
   title: {
@@ -57,6 +58,7 @@ type HumanitecAgentApi = {
   openSettings: () => Promise<void>;
   distro: () => Promise<{ display_name: string; primary_color: string } | null>;
   resyncExtensions: () => Promise<void>;
+  fetchLlmModels: () => Promise<string[]>;
 };
 
 function resolveHumanitecAgentApi(): HumanitecAgentApi | null {
@@ -78,7 +80,6 @@ function HumanitecPairingStep({ onPaired }: HumanitecPairingStepProps) {
   const [pairingCode, setPairingCode] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPairing, setIsPairing] = useState(false);
-  const [settingsOpened, setSettingsOpened] = useState(false);
 
   const agentApi = resolveHumanitecAgentApi();
   if (agentApi === null) {
@@ -94,14 +95,6 @@ function HumanitecPairingStep({ onPaired }: HumanitecPairingStepProps) {
       setPrimaryColor(distro.primary_color);
     });
   }, [agentApi]);
-
-  useEffect(() => {
-    if (settingsOpened) {
-      return;
-    }
-    setSettingsOpened(true);
-    void agentApi.openSettings();
-  }, [agentApi, settingsOpened]);
 
   const handlePair = useCallback(async () => {
     const normalizedCode = pairingCode.trim();
@@ -125,10 +118,10 @@ function HumanitecPairingStep({ onPaired }: HumanitecPairingStepProps) {
     <div className="h-screen w-full bg-background-default flex flex-col items-center justify-center p-4">
       <div className="max-w-md w-full">
         <div
-          className="mb-6 inline-flex size-12 items-center justify-center rounded-xl text-lg font-semibold text-white"
+          className="mb-6 inline-flex size-16 items-center justify-center rounded-2xl p-3"
           style={{ backgroundColor: primaryColor }}
         >
-          H
+          <img src={linnexMark} alt={displayName} className="h-full w-full object-contain" />
         </div>
         <h1 className="text-2xl sm:text-3xl font-light mb-2">{displayName}</h1>
         <h2 className="text-lg font-light mb-3">{intl.formatMessage(i18n.title)}</h2>
@@ -190,16 +183,20 @@ export default function HumanitecOnboardingGuard({ children }: HumanitecOnboardi
     setPhase('llm_setup');
     setLlmSetupError(null);
     try {
+      const agentApi = resolveHumanitecAgentApi();
+      if (agentApi === null) {
+        throw new Error('humanitecAgent preload API missing');
+      }
+      // Модели только через main-process IPC: renderer fetch с file:// даёт CORS Origin: null.
+      const modelIds = await agentApi.fetchLlmModels();
       await ensureHumanitecLlmConfigured({
         apiBaseUrl: nextCredentials.llm_api_base_url,
         deviceToken: nextCredentials.token,
         providerId: nextCredentials.llm_provider_id,
         modelId: nextCredentials.llm_model_id,
+        modelIds,
       });
-      const agentApi = resolveHumanitecAgentApi();
-      if (agentApi !== null) {
-        await agentApi.resyncExtensions();
-      }
+      await agentApi.resyncExtensions();
       setPhase('ready');
     } catch (error) {
       setLlmSetupError(error instanceof Error ? error.message : String(error));
@@ -243,7 +240,9 @@ export default function HumanitecOnboardingGuard({ children }: HumanitecOnboardi
     if (llmSetupError !== null) {
       return (
         <div className="h-screen w-full bg-background-default flex flex-col items-center justify-center p-4">
-          <p className="text-red-500 mb-4">{intl.formatMessage(i18n.llmSetupFailed)}: {llmSetupError}</p>
+          <p data-humanitec-llm-setup-error className="text-red-500 mb-4">
+            {intl.formatMessage(i18n.llmSetupFailed)}: {llmSetupError}
+          </p>
           {credentials !== null ? (
             <Button
               onClick={() => {

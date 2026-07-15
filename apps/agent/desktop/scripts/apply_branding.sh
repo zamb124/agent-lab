@@ -119,6 +119,13 @@ for icon_name in required_icons:
     if source_icon.is_file():
         shutil.copyfile(source_icon, goose_images / icon_name)
 
+# Прозрачная vector-версия лого (frontend_logo.svg) — для in-app UI (onboarding, badges),
+# где нужен логотип без чёрного фона icon.png (тот предназначен для OS dock/taskbar).
+linnex_mark_source = icons_dir / "linnex-mark.svg"
+if not linnex_mark_source.is_file():
+    raise SystemExit(f"linnex-mark.svg missing: {linnex_mark_source}")
+shutil.copyfile(linnex_mark_source, goose_images / "linnex-mark.svg")
+
 defaults_payload = {
     "id": distro.id,
     "display_name": distro.display_name,
@@ -536,6 +543,7 @@ preload_patch = """contextBridge.exposeInMainWorld('humanitecAgent', {
   openSettings: () => ipcRenderer.invoke('humanitec-agent:open-settings'),
   distro: () => ipcRenderer.invoke('humanitec-agent:distro'),
   resyncExtensions: () => ipcRenderer.invoke('humanitec-agent:extensions-resync'),
+  fetchLlmModels: () => ipcRenderer.invoke('humanitec-agent:fetch-llm-models'),
   resolveEnvTemplates: (templates: string[]) =>
     ipcRenderer.invoke('humanitec-agent:resolve-env-templates', templates),
   onPlatformMcpEnvUpdated: (callback: (payload: { platform_mcp_url: string }) => void) => {
@@ -554,7 +562,12 @@ if "exposeInMainWorld('humanitecAgent'" not in preload_text:
         1,
     )
     preload_path.write_text(preload_text, encoding="utf-8")
-elif "resyncExtensions" not in preload_text or "openSettings" not in preload_text or "resolveEnvTemplates" not in preload_text:
+elif (
+    "resyncExtensions" not in preload_text
+    or "openSettings" not in preload_text
+    or "resolveEnvTemplates" not in preload_text
+    or "fetchLlmModels" not in preload_text
+):
     old_humanitec_block_start = preload_text.find("contextBridge.exposeInMainWorld('humanitecAgent', {")
     if old_humanitec_block_start == -1:
         raise SystemExit("preload.ts humanitecAgent block missing")
@@ -569,6 +582,48 @@ elif "resyncExtensions" not in preload_text or "openSettings" not in preload_tex
         + preload_text[old_humanitec_block_end:]
     )
     preload_path.write_text(preload_text, encoding="utf-8")
+
+goosed_ts_path = goose_desktop / "src" / "goosed.ts"
+goosed_ts_text = goosed_ts_path.read_text(encoding="utf-8")
+goosed_path_anchor = (
+    "  // Add binary directory to PATH for any dependencies\n"
+    "  const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';\n"
+    "  const currentPath = process.env[pathKey] || '';\n"
+    "  if (binaryPath) {\n"
+    "    env[pathKey] = `${path.dirname(binaryPath)}${path.delimiter}${currentPath}`;\n"
+    "  } else if (currentPath) {\n"
+    "    env[pathKey] = currentPath;\n"
+    "  }\n"
+)
+goosed_path_patch = (
+    "  // Add binary directory to PATH for any dependencies\n"
+    "  const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';\n"
+    "  const currentPath = process.env[pathKey] || '';\n"
+    "  // macOS GUI apps often start with a stripped PATH; developer shell expects\n"
+    "  // Homebrew tools (rg, python3). Prepend common user-tool prefixes.\n"
+    "  const macosToolPrefixes =\n"
+    "    process.platform === 'darwin'\n"
+    "      ? ['/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/bin', '/usr/local/sbin']\n"
+    "      : [];\n"
+    "  const pathParts = [\n"
+    "    ...(binaryPath ? [path.dirname(binaryPath)] : []),\n"
+    "    ...macosToolPrefixes,\n"
+    "    ...currentPath.split(path.delimiter).filter(Boolean),\n"
+    "  ];\n"
+    "  const uniquePathParts = pathParts.filter(\n"
+    "    (part, index) => pathParts.indexOf(part) === index\n"
+    "  );\n"
+    "  if (uniquePathParts.length > 0) {\n"
+    "    env[pathKey] = uniquePathParts.join(path.delimiter);\n"
+    "  }\n"
+)
+if "macosToolPrefixes" not in goosed_ts_text:
+    if goosed_path_anchor not in goosed_ts_text:
+        raise SystemExit("goosed.ts PATH block anchor missing")
+    goosed_ts_path.write_text(
+        goosed_ts_text.replace(goosed_path_anchor, goosed_path_patch, 1),
+        encoding="utf-8",
+    )
 
 main_path = goose_desktop / "src" / "main.ts"
 main_text = main_path.read_text(encoding="utf-8")
@@ -618,6 +673,11 @@ open_url_init_replacement = "    await initHumanitecAgentRuntime();"
 if open_url_init_anchor in main_text:
     main_text = main_text.replace(open_url_init_anchor, open_url_init_replacement)
 
+# В открытой ветке goose `open-url` handler (macOS: единственный путь для
+# реального OS deep link, second-instance используется только на win/linux)
+# не зовёт initHumanitecAgentRuntime() повторно — та уже вызвана при старте.
+# Без явного вызова handleHumanitecDeepLink здесь настоящий `linnex://pairing`,
+# открытый через `open` (Launch Services), никогда не долетает до пейринга.
 open_url_ready_anchor = (
     "    await app.whenReady();\n"
     "    await initHumanitecAgentRuntime();\n"
@@ -629,21 +689,36 @@ open_url_ready_anchor_no_blank = (
     "    await initHumanitecAgentRuntime();\n"
     "    const recentDirs = loadRecentDirs();"
 )
-for anchor in (open_url_ready_anchor, open_url_ready_anchor_no_blank):
-    if anchor in main_text and "await handleHumanitecDeepLink(url)" not in main_text:
-        main_text = main_text.replace(
-            anchor,
-            "    await app.whenReady();\n"
-            "    await initHumanitecAgentRuntime();\n"
-            "\n"
-            "    if (await handleHumanitecDeepLink(url)) {\n"
-            "      return;\n"
-            "    }\n"
-            "\n"
-            "    const recentDirs = loadRecentDirs();",
-            1,
-        )
-        break
+open_url_whenready_only_anchor = (
+    "    await app.whenReady();\n"
+    "\n"
+    "    const recentDirs = loadRecentDirs();"
+)
+open_url_patched_marker = (
+    "    if (await handleHumanitecDeepLink(url)) {\n"
+    "      return;\n"
+    "    }\n"
+    "\n"
+    "    const recentDirs = loadRecentDirs();"
+)
+if open_url_patched_marker not in main_text:
+    for anchor in (
+        open_url_ready_anchor,
+        open_url_ready_anchor_no_blank,
+        open_url_whenready_only_anchor,
+    ):
+        if anchor in main_text:
+            main_text = main_text.replace(
+                anchor,
+                anchor.replace(
+                    "    const recentDirs = loadRecentDirs();",
+                    open_url_patched_marker,
+                ),
+                1,
+            )
+            break
+    else:
+        raise SystemExit("main.ts open-url handleHumanitecDeepLink anchor missing")
 
 main_text = main_text.replace(
     "import { installHumanitecTestSelectors } from './humanitecTestSelectors';\n",
@@ -814,28 +889,29 @@ makers_plugins_anchor = "  ],\n  plugins:"
 if "@electron-forge/maker-wix" not in text:
     if makers_plugins_anchor not in text:
         raise SystemExit("forge.config.ts makers/plugins anchor missing")
-    extra_makers = """
-    {
+    wix_manufacturer = distro.maintainer.split("<", 1)[0].strip()
+    extra_makers = f"""
+    {{
       name: '@electron-forge/maker-wix',
       platforms: ['win32'],
-      config: {
+      config: {{
         language: 1033,
-        manufacturer: 'Humanitec',
+        manufacturer: '{wix_manufacturer}',
         icon: 'src/images/icon.ico',
-      },
-    },
-    {
+      }},
+    }},
+    {{
       name: '@reforged/maker-appimage',
       platforms: ['linux'],
-      config: {
-        options: {
-          name: 'humanitecagent',
-          bin: 'HumanitecAgent',
+      config: {{
+        options: {{
+          name: '{package_slug}',
+          bin: '{distro.bundle_name}',
           categories: ['Development'],
           icon: 'src/images/icon.png',
-        },
-      },
-    },
+        }},
+      }},
+    }},
   ],
   plugins:"""
     text = text.replace(makers_plugins_anchor, extra_makers, 1)

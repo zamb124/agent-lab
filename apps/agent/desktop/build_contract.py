@@ -57,12 +57,13 @@ def load_default_distro_config() -> HumanitecDistroConfig:
 def asset_name_pattern(platform: str, bundle_name: str) -> str:
     if platform not in VALID_PLATFORMS:
         raise ValueError(f"Unsupported platform: {platform!r}")
+    package_slug = bundle_name.lower()
     patterns: dict[str, str] = {
         "windows": f"{bundle_name}-Setup-",
         "macos-arm64": f"{bundle_name}-macos-arm64-",
         "macos-x64": f"{bundle_name}-macos-x64-",
-        "linux-deb": "humanitec-agent_",
-        "linux-rpm": "humanitec-agent-",
+        "linux-deb": f"{package_slug}_",
+        "linux-rpm": f"{package_slug}-",
         "linux-appimage": f"{bundle_name}-",
     }
     return patterns[platform]
@@ -91,14 +92,15 @@ def matches_release_asset_name(platform: str, asset_name: str, bundle_name: str)
 def artifact_filename(platform: str, version_sha: str, bundle_name: str) -> str:
     if platform not in VALID_PLATFORMS:
         raise ValueError(f"Unsupported platform: {platform!r}")
+    package_slug = bundle_name.lower()
     if platform == "windows":
         return f"{bundle_name}-Setup-{version_sha}.msi"
     if platform in {"macos-arm64", "macos-x64"}:
         return f"{bundle_name}-{platform}-{version_sha}.dmg"
     if platform == "linux-deb":
-        return f"humanitec-agent_{version_sha}_amd64.deb"
+        return f"{package_slug}_{version_sha}_amd64.deb"
     if platform == "linux-rpm":
-        return f"humanitec-agent-{version_sha}.x86_64.rpm"
+        return f"{package_slug}-{version_sha}.x86_64.rpm"
     if platform == "linux-appimage":
         return f"{bundle_name}-{version_sha}.AppImage"
     raise ValueError(f"Unsupported platform: {platform!r}")
