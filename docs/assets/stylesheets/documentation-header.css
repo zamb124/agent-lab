@@ -88,17 +88,19 @@ body[data-md-color-scheme="slate"] .md-header {
 }
 
 .docs-brand-logo {
-  width: 2.2rem;
-  height: 2.2rem;
-  margin-right: 0.25rem;
-  border-radius: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  height: 2.4rem;
+  margin-right: 0.35rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.6rem;
 }
 
-.docs-brand-logo img,
-.docs-brand-logo svg {
+.docs-brand-logo .logo-wordmark {
   display: block;
-  width: 1.55rem;
-  height: 1.75rem;
+  width: auto;
+  height: 1.85rem;
   object-fit: contain;
 }
 

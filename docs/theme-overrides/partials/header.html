@@ -18,7 +18,11 @@
 <header class="{{ class }}" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="{{ lang.t('header') }}">
     <a href="{{ docs_home | url }}" title="{{ config.site_name | e }}" class="md-header__button md-logo docs-brand-logo" aria-label="{{ config.site_name }}" data-md-component="logo">
-      {% include "partials/logo.html" %}
+      <img
+        class="logo-wordmark"
+        src="/static/core/assets/service_logos/linnex_test.png"
+        alt="{{ config.site_name }}"
+      >
     </a>
     <label class="md-header__button md-icon" for="__drawer" aria-label="{{ lang.t('nav') }}">
       {% set icon = config.theme.icon.menu or "material/menu" %}
