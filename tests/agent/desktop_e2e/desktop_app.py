@@ -7,6 +7,7 @@ import plistlib
 import shutil
 import subprocess
 import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +28,27 @@ from scripts.agent_build import detect_host_platform
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DESKTOP_ROOT = REPO_ROOT / "apps" / "agent" / "desktop"
 DIST_DIR = DESKTOP_ROOT / "dist"
+# macOS Launch Services помечает бандлы под $TMPDIR флагом `in-temp-dir` и
+# отказывается делать их authoritative claimant для custom URL scheme (`open
+# linnex://...` падает `kLSApplicationNotFoundErr` либо уходит в чужой stale
+# bundle). Устанавливаем desktop E2E copy вне temp — иначе реальный OS-level
+# deep link (в отличие от IPC test-only моста) недетерминированно не долетает.
+_MACOS_LS_INSTALL_ROOT = Path.home() / "Library" / "Caches" / "agent-lab-desktop-e2e" / "installs"
+_LSREGISTER_BIN = Path(
+    "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks"
+    "/LaunchServices.framework/Support/lsregister"
+)
+
+
+def _lsregister_unclaim(app_path: Path) -> None:
+    if platform.system() != "Darwin" or not _LSREGISTER_BIN.is_file():
+        return
+    subprocess.run(
+        [str(_LSREGISTER_BIN), "-u", str(app_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -35,9 +57,11 @@ class HumanitecDesktopInstall:
     executable: Path
     bundle_name: str
     install_root: Path
+    protocol_scheme: str
 
     def cleanup(self) -> None:
         if self.install_root.is_dir():
+            _lsregister_unclaim(self.install_root / f"{self.bundle_name}.app")
             shutil.rmtree(self.install_root, ignore_errors=True)
 
 
@@ -97,13 +121,19 @@ def ensure_humanitec_desktop_release_artifact() -> Path:
     return artifact
 
 
-def _install_macos_dmg(artifact_path: Path, distro_bundle_name: str) -> HumanitecDesktopInstall:
+def _install_macos_dmg(
+    artifact_path: Path,
+    distro_bundle_name: str,
+    protocol_scheme: str,
+) -> HumanitecDesktopInstall:
     if platform.system() != "Darwin":
         raise RuntimeError("macOS DMG install requires darwin host")
     if shutil.which("hdiutil") is None:
         raise FileNotFoundError("hdiutil is required to mount HumanitecAgent DMG")
 
-    install_root = Path(tempfile.mkdtemp(prefix="humanitec-agent-install-"))
+    _MACOS_LS_INSTALL_ROOT.mkdir(parents=True, exist_ok=True)
+    install_root = _MACOS_LS_INSTALL_ROOT / uuid.uuid4().hex
+    install_root.mkdir(parents=True)
     mount_dir = Path(tempfile.mkdtemp(prefix="humanitec-agent-mount-"))
     attach_result = subprocess.run(
         [
@@ -137,6 +167,19 @@ def _install_macos_dmg(artifact_path: Path, distro_bundle_name: str) -> Humanite
             )
         target_app = install_root / source_app.name
         shutil.copytree(source_app, target_app)
+        if _LSREGISTER_BIN.is_file():
+            register_result = subprocess.run(
+                [str(_LSREGISTER_BIN), "-f", str(target_app)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if register_result.returncode != 0:
+                raise RuntimeError(
+                    "lsregister -f failed for desktop E2E install: "
+                    + register_result.stderr
+                    + register_result.stdout
+                )
         executable = target_app / "Contents" / "MacOS" / distro_bundle_name
         if not executable.is_file():
             raise FileNotFoundError(f"HumanitecAgent executable missing: {executable}")
@@ -153,6 +196,7 @@ def _install_macos_dmg(artifact_path: Path, distro_bundle_name: str) -> Humanite
             executable=executable,
             bundle_name=distro_bundle_name,
             install_root=install_root,
+            protocol_scheme=protocol_scheme,
         )
     finally:
         detach_result = subprocess.run(
@@ -171,7 +215,11 @@ def _install_macos_dmg(artifact_path: Path, distro_bundle_name: str) -> Humanite
             mount_dir.rmdir()
 
 
-def _install_linux_artifact(artifact_path: Path, distro_bundle_name: str) -> HumanitecDesktopInstall:
+def _install_linux_artifact(
+    artifact_path: Path,
+    distro_bundle_name: str,
+    protocol_scheme: str,
+) -> HumanitecDesktopInstall:
     host_platform = detect_host_platform()
     install_root = Path(tempfile.mkdtemp(prefix="humanitec-agent-install-"))
     if host_platform == "linux-deb":
@@ -198,6 +246,7 @@ def _install_linux_artifact(artifact_path: Path, distro_bundle_name: str) -> Hum
             executable=executable,
             bundle_name=distro_bundle_name,
             install_root=install_root,
+            protocol_scheme=protocol_scheme,
         )
     if host_platform == "linux-appimage":
         target = install_root / artifact_path.name
@@ -208,6 +257,7 @@ def _install_linux_artifact(artifact_path: Path, distro_bundle_name: str) -> Hum
             executable=target,
             bundle_name=distro_bundle_name,
             install_root=install_root,
+            protocol_scheme=protocol_scheme,
         )
     raise RuntimeError(f"unsupported Linux desktop E2E platform: {host_platform}")
 
@@ -216,9 +266,17 @@ def install_humanitec_desktop_release(artifact_path: Path) -> HumanitecDesktopIn
     distro = load_default_distro_config()
     host_platform = detect_host_platform()
     if host_platform.startswith("macos"):
-        return _install_macos_dmg(artifact_path, distro.bundle_name)
+        return _install_macos_dmg(
+            artifact_path,
+            distro.bundle_name,
+            distro.protocol_scheme,
+        )
     if host_platform.startswith("linux"):
-        return _install_linux_artifact(artifact_path, distro.bundle_name)
+        return _install_linux_artifact(
+            artifact_path,
+            distro.bundle_name,
+            distro.protocol_scheme,
+        )
     if host_platform == "windows":
         raise RuntimeError("Windows HumanitecAgent desktop E2E install is not implemented yet")
     raise RuntimeError(f"unsupported host platform for desktop E2E: {platform.system()}")

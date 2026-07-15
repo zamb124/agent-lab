@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 from httpx import AsyncClient
@@ -127,7 +128,7 @@ async def goosed_call_tool(
     page: Page,
     session_id: str,
     tool_name: str,
-    arguments: dict[str, object],
+    arguments: Mapping[str, object],
 ) -> dict[str, object]:
     status, body = await goosed_request(
         page,
@@ -136,7 +137,7 @@ async def goosed_call_tool(
         {
             "session_id": session_id,
             "name": tool_name,
-            "arguments": arguments,
+            "arguments": dict(arguments),
         },
     )
     if status != 200:
@@ -151,7 +152,7 @@ async def wait_for_goosed_tools(
     session_id: str,
     *,
     name_suffix: str,
-    timeout_seconds: float = 120.0,
+    timeout_seconds: float = 10.0,
 ) -> dict[str, object]:
     deadline = asyncio.get_event_loop().time() + timeout_seconds
     last_tools: list[dict[str, object]] = []
@@ -159,7 +160,9 @@ async def wait_for_goosed_tools(
         last_tools = await goosed_tools_list(page, session_id)
         for tool in last_tools:
             tool_name = tool.get("name")
-            if isinstance(tool_name, str) and tool_name.endswith(name_suffix):
+            if not isinstance(tool_name, str):
+                continue
+            if tool_name == name_suffix or tool_name.endswith(f"__{name_suffix}"):
                 return tool
         await asyncio.sleep(1.0)
     names = [tool.get("name") for tool in last_tools]
@@ -169,10 +172,24 @@ async def wait_for_goosed_tools(
 
 
 def resolve_tool_name(tools: list[dict[str, object]], suffix: str) -> str:
+    """Resolve developer-style tool by exact name or extension prefix.
+
+    `endswith(suffix)` alone is wrong: `todo_write` matches suffix `write`.
+    """
+    exact: str | None = None
+    prefixed: str | None = None
     for tool in tools:
         tool_name = tool.get("name")
-        if isinstance(tool_name, str) and tool_name.endswith(suffix):
-            return tool_name
+        if not isinstance(tool_name, str):
+            continue
+        if tool_name == suffix:
+            exact = tool_name
+        elif tool_name.endswith(f"__{suffix}"):
+            prefixed = tool_name
+    if exact is not None:
+        return exact
+    if prefixed is not None:
+        return prefixed
     names = [tool.get("name") for tool in tools]
     raise ValueError(f"tool suffix {suffix!r} not in {names!r}")
 
@@ -218,6 +235,17 @@ def tool_response_contains(body: dict[str, object], needle: str) -> bool:
         if isinstance(stderr, str) and needle in stderr:
             return True
     return False
+
+
+def assert_tool_ok(body: dict[str, object], *, action: str) -> None:
+    is_error = body.get("isError")
+    if is_error is None:
+        is_error = body.get("is_error")
+    if is_error is True:
+        raise AssertionError(f"{action} failed: {body!r}")
+    content = body.get("content")
+    if not isinstance(content, list) or not content:
+        raise AssertionError(f"{action} returned empty content: {body!r}")
 
 
 async def assert_extension_tools_present(

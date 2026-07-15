@@ -8,6 +8,7 @@ p12cert.p12
 # Локальный runtime cache и desktop release artifacts
 /.cache/
 /apps/agent/desktop/dist/
+/.electron-packager-tmp/
 
 # Helm ConfigMap: собирается из корневого conf.json + deploy/helm/agent-lab/files/app-conf.k8s-overlay.json
 deploy/helm/agent-lab/files/app-conf.json

@@ -253,6 +253,7 @@ async def test_d15_device_mcp_offline(
 @pytest.mark.asyncio
 @pytest.mark.e2e
 @pytest.mark.real_taskiq
+@pytest.mark.timeout(45, func_only=True)
 async def test_d_gold_pairing_tunnel_mcp_audit(
     agent_frontend_http_client_system: AsyncClient,
     auth_token_system: str,

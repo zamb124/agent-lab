@@ -9,11 +9,13 @@ export function installHumanitecTestSelectors(): void {
     }
     const buttons = document.querySelectorAll("button");
     for (const button of buttons) {
-      const label = button.textContent;
-      if (label === null) {
-        continue;
-      }
-      if (label.includes("MCP") && !button.hasAttribute("data-humanitec-mcp-picker")) {
+      const label = button.textContent ?? "";
+      // Composer extension-picker кнопка (ExtensionMenu) — Puzzle-иконка + счётчик
+      // (только цифры). Sidebar nav-пункт "Extensions" тоже использует Puzzle,
+      // но его label — локализованное название, не число.
+      const hasPuzzleIcon = button.querySelector("svg.lucide-puzzle") !== null;
+      const isComposerExtensionPicker = hasPuzzleIcon && /^\d+$/.test(label.trim());
+      if (isComposerExtensionPicker && !button.hasAttribute("data-humanitec-mcp-picker")) {
         button.setAttribute("data-humanitec-mcp-picker", "1");
       }
       if (label.trim() === "Send" && !button.hasAttribute("data-humanitec-chat-send")) {

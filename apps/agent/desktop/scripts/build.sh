@@ -99,17 +99,34 @@ require_desktop_make_dir() {
   fi
 }
 
+# Spotlight (mds) индексирует каждый новый файл под node_modules/out/target
+# синхронно с его записью на диск. Пакетная распаковка Electron.app
+# (~600 файлов) и cargo/pnpm деревья порождают mdworker-шторм (десятки
+# короткоживущих mdworker, которые launchd тут же убивает SIGKILL), который
+# насыщает диск и CPU настолько, что electron-packager/pnpm либо зависает,
+# либо получает битые/недописанные файлы. Маркер .metadata_never_index
+# исключает директорию из индекса без sudo и без перезапуска mds.
+exclude_from_spotlight() {
+  local target_dir="$1"
+  mkdir -p "${target_dir}"
+  touch "${target_dir}/.metadata_never_index"
+}
+
 install_desktop_node_modules() {
   if [[ ! -f "${GOOSE_UI_DIR}/pnpm-lock.yaml" ]]; then
     echo "Goose UI lockfile missing: ${GOOSE_UI_DIR}/pnpm-lock.yaml" >&2
     exit 1
   fi
+  exclude_from_spotlight "${GOOSE_UI_DIR}/node_modules"
+  exclude_from_spotlight "${DESKTOP_DIR}/node_modules"
   # Единый install для всех платформ из корня Goose UI monorepo: только так
   # отрабатывает postinstall electron (onlyBuiltDependencies в ui/package.json)
   # и в node_modules/electron/dist оказывается реальный бинарь, а не только locales.
   pushd "${GOOSE_UI_DIR}" >/dev/null
   pnpm install --frozen-lockfile
   popd >/dev/null
+  exclude_from_spotlight "${GOOSE_UI_DIR}/node_modules"
+  exclude_from_spotlight "${DESKTOP_DIR}/node_modules"
   require_electron_dist
   case "${PLATFORM}" in
     windows|linux-deb|linux-rpm|linux-appimage)
@@ -282,6 +299,7 @@ build_goosed_binary() {
   if [[ "${PLATFORM}" == "macos-x64" ]]; then
     cargo_target="x86_64-apple-darwin"
   fi
+  exclude_from_spotlight "${VENDOR_DIR}/target"
   pushd "${VENDOR_DIR}" >/dev/null
   if [[ -n "${cargo_target}" ]]; then
     rustup target add "${cargo_target}"
@@ -737,12 +755,50 @@ bundle_windows_runtime_dlls() {
     -GoosedExe "${goosed_exe}"
 }
 
+verify_node_engine() {
+  # Goose UI (yauzl/extract-zip внутри @electron/packager) ломается силентно
+  # (hang -> Node сам завершается с exit 0 без ошибки/exception) на Node
+  # старше диапазона из engines.node — electron-forge make зависает на первом
+  # сжатом файле Electron.zip без единой строки в логе. Явная проверка здесь
+  # превращает это в понятную ошибку сборки вместо часового silent hang.
+  if ! command -v node >/dev/null 2>&1; then
+    echo "node is required for Goose desktop build" >&2
+    exit 1
+  fi
+  local engine_range actual_version
+  engine_range="$(node -p "require('${DESKTOP_DIR}/package.json').engines.node" 2>/dev/null || true)"
+  if [[ -z "${engine_range}" ]]; then
+    echo "engines.node missing in ${DESKTOP_DIR}/package.json" >&2
+    exit 1
+  fi
+  actual_version="$(node -v)"
+  if ! node -e '
+    const range = process.argv[1];
+    const actual = process.argv[2].replace(/^v/, "");
+    const m = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
+    if (!m) { console.error("unsupported engines.node range format: " + range); process.exit(2); }
+    const [, reqMajorStr, reqMinorStr, reqPatchStr] = m;
+    const reqMajor = Number(reqMajorStr);
+    const reqMinor = Number(reqMinorStr);
+    const reqPatch = Number(reqPatchStr);
+    const [actMajor, actMinor, actPatch] = actual.split(".").map(Number);
+    const meetsFloor = actMajor === reqMajor && (actMinor > reqMinor || (actMinor === reqMinor && actPatch >= reqPatch));
+    process.exit(meetsFloor ? 0 : 1);
+  ' "${engine_range}" "${actual_version}"; then
+    echo "Node ${actual_version} does not satisfy Goose desktop engines.node ${engine_range}" >&2
+    echo "Install a matching Node major (e.g. 'brew install node@24 && brew link --overwrite --force node@24') before building" >&2
+    exit 1
+  fi
+  echo "node engine ok: ${actual_version} satisfies ${engine_range}"
+}
+
 build_release() {
   if [[ ! -d "${VENDOR_DIR}" ]]; then
     echo "Goose vendor tree missing: ${VENDOR_DIR}" >&2
     echo "Run: git submodule update --init apps/agent/desktop/vendor/goose" >&2
     exit 1
   fi
+  verify_node_engine
 
   export GITHUB_OWNER="${GITHUB_OWNER:-zamb124}"
   export GITHUB_REPO="${GITHUB_REPO:-agent-lab}"
@@ -777,7 +833,8 @@ build_release() {
       # Staging electron-packager на том же томе, что out/ (а не системный $TMPDIR
       # на отдельном маленьком томе раннера), вне каталога проекта.
       export ELECTRON_PACKAGER_TMPDIR="${REPO_ROOT}/.electron-packager-tmp"
-      mkdir -p "${ELECTRON_PACKAGER_TMPDIR}"
+      exclude_from_spotlight "${ELECTRON_PACKAGER_TMPDIR}"
+      exclude_from_spotlight "${DESKTOP_DIR}/out"
       local package_arch
       package_arch="$(macos_package_arch)"
       run_desktop_forge_macos_zip "${package_arch}"

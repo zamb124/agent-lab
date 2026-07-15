@@ -4,19 +4,16 @@ from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
-from playwright.async_api import async_playwright
 
 from tests.agent._helpers import (
     AGENT_API_PREFIX,
     assert_audit_event_in_redis,
     company_id_from_auth_token,
 )
+from tests.agent.desktop_e2e.conftest import PairedDesktopDeepLink, PairedDesktopUiSession
 from tests.agent.desktop_e2e.helpers import (
     assert_platform_mcp_first_in_chat_picker,
     assert_platform_mcp_first_in_settings,
-    connect_desktop_browser,
-    find_main_app_page,
-    pair_desktop_via_deep_link,
     send_chat_message,
     wait_for_device_offline,
 )
@@ -26,14 +23,13 @@ from tests.agent.fixtures.flow_archetypes import ensure_failed_flow, ensure_inte
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
 async def test_mcp_g_int_chat_interrupt_resume(
-    agent_frontend_http_client: AsyncClient,
+    paired_desktop_ui_session: PairedDesktopUiSession,
     auth_token: str,
     flows_client_http: AsyncClient,
     flows_service: None,
     flows_worker: None,
     unique_id: str,
     mock_llm_with_queue,
-    humanitec_desktop_process_factory,
 ) -> None:
     _ = flows_service, flows_worker
     flow_id = await ensure_interrupt_flow(
@@ -48,65 +44,53 @@ async def test_mcp_g_int_chat_interrupt_resume(
             {"type": "text", "content": "Done L4"},
         ]
     )
-    desktop = humanitec_desktop_process_factory()
-    try:
-        desktop.start()
-        _device_id, credentials = await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
+    credentials = paired_desktop_ui_session.credentials
+    async with AsyncClient(timeout=60.0) as mcp_client:
+        first = await mcp_client.post(
+            credentials["platform_mcp_url"],
+            headers={"Authorization": f"Bearer {credentials['token']}"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": f"flow_{flow_id}",
+                    "arguments": {"message": "start", "context_id": context_id},
+                },
+            },
         )
-        async with AsyncClient(timeout=60.0) as mcp_client:
-            first = await mcp_client.post(
-                credentials["platform_mcp_url"],
-                headers={"Authorization": f"Bearer {credentials['token']}"},
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": f"flow_{flow_id}",
-                        "arguments": {"message": "start", "context_id": context_id},
-                    },
+        assert first.status_code == 200
+        assert first.json()["result"]["task_state"] == "input-required"
+        second = await mcp_client.post(
+            credentials["platform_mcp_url"],
+            headers={"Authorization": f"Bearer {credentials['token']}"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": f"flow_{flow_id}",
+                    "arguments": {"message": "Ivan", "context_id": context_id},
                 },
-            )
-            assert first.status_code == 200
-            assert first.json()["result"]["task_state"] == "input-required"
-            second = await mcp_client.post(
-                credentials["platform_mcp_url"],
-                headers={"Authorization": f"Bearer {credentials['token']}"},
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": f"flow_{flow_id}",
-                        "arguments": {"message": "Ivan", "context_id": context_id},
-                    },
-                },
-            )
-        assert second.status_code == 200
-        assert second.json()["result"]["task_state"] == "completed"
-        async with async_playwright() as playwright:
-            browser = await connect_desktop_browser(playwright, desktop)
-            page = await find_main_app_page(browser)
-            await assert_platform_mcp_first_in_chat_picker(page)
-            await send_chat_message(page, f"resume flow {flow_id}")
-    finally:
-        desktop.stop()
+            },
+        )
+    assert second.status_code == 200
+    assert second.json()["result"]["task_state"] == "completed"
+    page = paired_desktop_ui_session.page
+    await assert_platform_mcp_first_in_chat_picker(page)
+    await send_chat_message(page, f"resume flow {flow_id}")
 
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
 async def test_mcp_g_04_two_flows_in_session(
-    agent_frontend_http_client: AsyncClient,
+    paired_desktop_deep_link: PairedDesktopDeepLink,
     auth_token: str,
     flows_client_http: AsyncClient,
     flows_service: None,
     flows_worker: None,
     unique_id: str,
     mock_llm_with_queue,
-    humanitec_desktop_process_factory,
 ) -> None:
     from tests.agent.fixtures.flow_archetypes import ensure_react_flow
 
@@ -127,59 +111,49 @@ async def test_mcp_g_04_two_flows_in_session(
             {"type": "text", "content": "Flow B"},
         ]
     )
-    desktop = humanitec_desktop_process_factory()
-    try:
-        desktop.start()
-        _device_id, credentials = await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
+    credentials = paired_desktop_deep_link.credentials
+    async with AsyncClient(timeout=60.0) as mcp_client:
+        first = await mcp_client.post(
+            credentials["platform_mcp_url"],
+            headers={"Authorization": f"Bearer {credentials['token']}"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": f"flow_{flow_a}",
+                    "arguments": {"message": "first"},
+                },
+            },
         )
-        async with AsyncClient(timeout=60.0) as mcp_client:
-            first = await mcp_client.post(
-                credentials["platform_mcp_url"],
-                headers={"Authorization": f"Bearer {credentials['token']}"},
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": f"flow_{flow_a}",
-                        "arguments": {"message": "first"},
-                    },
+        second = await mcp_client.post(
+            credentials["platform_mcp_url"],
+            headers={"Authorization": f"Bearer {credentials['token']}"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": f"flow_{flow_b}",
+                    "arguments": {"message": "second"},
                 },
-            )
-            second = await mcp_client.post(
-                credentials["platform_mcp_url"],
-                headers={"Authorization": f"Bearer {credentials['token']}"},
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": f"flow_{flow_b}",
-                        "arguments": {"message": "second"},
-                    },
-                },
-            )
-        assert first.status_code == 200
-        assert second.status_code == 200
-        assert first.json()["result"]["task_state"] == "completed"
-        assert second.json()["result"]["task_state"] == "completed"
-    finally:
-        desktop.stop()
+            },
+        )
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["result"]["task_state"] == "completed"
+    assert second.json()["result"]["task_state"] == "completed"
 
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
 async def test_mcp_g_05_failed_flow_in_chat(
-    agent_frontend_http_client: AsyncClient,
+    paired_desktop_ui_session: PairedDesktopUiSession,
     auth_token: str,
     flows_client_http: AsyncClient,
     flows_service: None,
     flows_worker: None,
     unique_id: str,
-    humanitec_desktop_process_factory,
 ) -> None:
     _ = flows_service, flows_worker
     flow_id = await ensure_failed_flow(
@@ -187,50 +161,37 @@ async def test_mcp_g_05_failed_flow_in_chat(
         {"Authorization": f"Bearer {auth_token}"},
         unique_id,
     )
-    desktop = humanitec_desktop_process_factory()
-    try:
-        desktop.start()
-        _device_id, credentials = await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
-        async with AsyncClient(timeout=60.0) as mcp_client:
-            response = await mcp_client.post(
-                credentials["platform_mcp_url"],
-                headers={"Authorization": f"Bearer {credentials['token']}"},
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": f"flow_{flow_id}",
-                        "arguments": {"message": "fail please"},
-                    },
+    credentials = paired_desktop_ui_session.credentials
+    async with AsyncClient(timeout=60.0) as mcp_client:
+        response = await mcp_client.post(
+            credentials["platform_mcp_url"],
+            headers={"Authorization": f"Bearer {credentials['token']}"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": f"flow_{flow_id}",
+                    "arguments": {"message": "fail please"},
                 },
-            )
-        assert response.status_code == 200
-        body = response.json()
-        assert "error" in body or body.get("result", {}).get("task_state") == "failed"
-        async with async_playwright() as playwright:
-            browser = await connect_desktop_browser(playwright, desktop)
-            page = await find_main_app_page(browser)
-            await send_chat_message(page, f"failed flow {flow_id}")
-    finally:
-        desktop.stop()
+            },
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert "error" in body or body.get("result", {}).get("task_state") == "failed"
+    await send_chat_message(paired_desktop_ui_session.page, f"failed flow {flow_id}")
 
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
 async def test_acc_02_settings_picker_interrupt_flow(
-    agent_frontend_http_client: AsyncClient,
+    paired_desktop_ui_session: PairedDesktopUiSession,
     auth_token: str,
     flows_client_http: AsyncClient,
     flows_service: None,
     flows_worker: None,
     unique_id: str,
     mock_llm_with_queue,
-    humanitec_desktop_process_factory,
 ) -> None:
     _ = flows_service, flows_worker
     flow_id = await ensure_interrupt_flow(
@@ -244,67 +205,28 @@ async def test_acc_02_settings_picker_interrupt_flow(
             {"type": "text", "content": "Thanks"},
         ]
     )
-    desktop = humanitec_desktop_process_factory()
-    try:
-        desktop.start()
-        await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
-        async with async_playwright() as playwright:
-            browser = await connect_desktop_browser(playwright, desktop)
-            page = await find_main_app_page(browser)
-            await assert_platform_mcp_first_in_chat_picker(page)
-            await send_chat_message(page, f"flow {flow_id} interrupt test")
-    finally:
-        desktop.stop()
+    page = paired_desktop_ui_session.page
+    await assert_platform_mcp_first_in_chat_picker(page)
+    await send_chat_message(page, f"flow {flow_id} interrupt test")
 
 
 @pytest.mark.asyncio
 async def test_acc_05_in_flight_revoke_tunnel_offline(
+    paired_desktop_deep_link: PairedDesktopDeepLink,
     agent_frontend_http_client: AsyncClient,
-    auth_token: str,
-    humanitec_desktop_process_factory,
 ) -> None:
-    desktop = humanitec_desktop_process_factory()
-    try:
-        desktop.start()
-        device_id, _credentials = await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
-        delete_response = await agent_frontend_http_client.delete(
-            f"{AGENT_API_PREFIX}/devices/{device_id}"
-        )
-        assert delete_response.status_code in {200, 204}
-        await wait_for_device_offline(agent_frontend_http_client, device_id)
-        desktop.wait_for_credentials_cleared()
-    finally:
-        desktop.stop()
+    device_id = paired_desktop_deep_link.device_id
+    delete_response = await agent_frontend_http_client.delete(f"{AGENT_API_PREFIX}/devices/{device_id}")
+    assert delete_response.status_code in {200, 204}
+    await wait_for_device_offline(agent_frontend_http_client, device_id)
+    paired_desktop_deep_link.desktop.wait_for_credentials_cleared()
 
 
 @pytest.mark.asyncio
 async def test_acc_01_settings_extensions_order_after_pair(
-    agent_frontend_http_client: AsyncClient,
-    auth_token: str,
-    humanitec_desktop_process_factory,
+    paired_desktop_ui_session: PairedDesktopUiSession,
 ) -> None:
-    desktop = humanitec_desktop_process_factory()
-    try:
-        desktop.start()
-        await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
-        async with async_playwright() as playwright:
-            browser = await connect_desktop_browser(playwright, desktop)
-            page = await find_main_app_page(browser)
-            await assert_platform_mcp_first_in_settings(page)
-    finally:
-        desktop.stop()
+    await assert_platform_mcp_first_in_settings(paired_desktop_ui_session.page)
 
 
 @pytest.mark.asyncio
@@ -339,7 +261,7 @@ async def test_acc_03_discover_download_matches_local_release(
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
 async def test_acc_04_audit_after_platform_mcp_call(
-    agent_frontend_http_client: AsyncClient,
+    paired_desktop_deep_link: PairedDesktopDeepLink,
     auth_token: str,
     flows_client_http: AsyncClient,
     flows_service: None,
@@ -347,7 +269,6 @@ async def test_acc_04_audit_after_platform_mcp_call(
     frontend_container,
     unique_id: str,
     mock_llm_with_queue,
-    humanitec_desktop_process_factory,
 ) -> None:
     from tests.agent.fixtures.flow_archetypes import ensure_react_flow
 
@@ -358,37 +279,28 @@ async def test_acc_04_audit_after_platform_mcp_call(
         unique_id,
     )
     await mock_llm_with_queue([{"type": "text", "content": "Audit ACC-04"}])
-    desktop = humanitec_desktop_process_factory()
-    try:
-        desktop.start()
-        _device_id, credentials = await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
-        async with AsyncClient(timeout=60.0) as mcp_client:
-            response = await mcp_client.post(
-                credentials["platform_mcp_url"],
-                headers={"Authorization": f"Bearer {credentials['token']}"},
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": f"flow_{flow_id}",
-                        "arguments": {"message": "audit acc04"},
-                    },
+    credentials = paired_desktop_deep_link.credentials
+    async with AsyncClient(timeout=60.0) as mcp_client:
+        response = await mcp_client.post(
+            credentials["platform_mcp_url"],
+            headers={"Authorization": f"Bearer {credentials['token']}"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": f"flow_{flow_id}",
+                    "arguments": {"message": "audit acc04"},
                 },
-            )
-        assert response.status_code == 200
-        company_id = company_id_from_auth_token(auth_token)
-        await assert_audit_event_in_redis(
-            frontend_container,
-            company_id=company_id,
-            event_type="agent.platform_mcp.tools_call",
+            },
         )
-    finally:
-        desktop.stop()
+    assert response.status_code == 200
+    company_id = company_id_from_auth_token(auth_token)
+    await assert_audit_event_in_redis(
+        frontend_container,
+        company_id=company_id,
+        event_type="agent.platform_mcp.tools_call",
+    )
 
 
 @pytest.mark.asyncio
@@ -396,10 +308,11 @@ async def test_acc_06_second_device_in_list(
     agent_frontend_http_client: AsyncClient,
     auth_token: str,
     unique_id: str,
-    humanitec_desktop_process_factory,
+    paired_desktop_deep_link: PairedDesktopDeepLink,
 ) -> None:
     from tests.agent._helpers import pair_and_register_device
 
+    _ = paired_desktop_deep_link
     first_device_id, _first_token = await pair_and_register_device(
         agent_frontend_http_client,
         auth_cookie=auth_token,
@@ -416,16 +329,6 @@ async def test_acc_06_second_device_in_list(
     device_ids = {item["device_id"] for item in items if isinstance(item, dict)}
     assert first_device_id in device_ids
     assert second_device_id in device_ids
-    desktop = humanitec_desktop_process_factory()
-    try:
-        desktop.start()
-        await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
-    finally:
-        desktop.stop()
 
 
 @pytest.mark.asyncio
@@ -461,14 +364,13 @@ async def test_acc_07_policy_toggle_via_api(
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
 async def test_acc_08_golden_pair_mcp_picker_interrupt(
-    agent_frontend_http_client: AsyncClient,
+    paired_desktop_ui_session: PairedDesktopUiSession,
     auth_token: str,
     flows_client_http: AsyncClient,
     flows_service: None,
     flows_worker: None,
     unique_id: str,
     mock_llm_with_queue,
-    humanitec_desktop_process_factory,
 ) -> None:
     _ = flows_service, flows_worker
     flow_id = await ensure_interrupt_flow(
@@ -482,60 +384,32 @@ async def test_acc_08_golden_pair_mcp_picker_interrupt(
             {"type": "text", "content": "Golden L4"},
         ]
     )
-    desktop = humanitec_desktop_process_factory()
-    try:
-        desktop.start()
-        _device_id, credentials = await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
-        async with AsyncClient(timeout=60.0) as mcp_client:
-            response = await mcp_client.post(
-                credentials["platform_mcp_url"],
-                headers={"Authorization": f"Bearer {credentials['token']}"},
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": f"flow_{flow_id}",
-                        "arguments": {"message": "golden"},
-                    },
+    credentials = paired_desktop_ui_session.credentials
+    async with AsyncClient(timeout=60.0) as mcp_client:
+        response = await mcp_client.post(
+            credentials["platform_mcp_url"],
+            headers={"Authorization": f"Bearer {credentials['token']}"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": f"flow_{flow_id}",
+                    "arguments": {"message": "golden"},
                 },
-            )
-        assert response.status_code == 200
-        async with async_playwright() as playwright:
-            browser = await connect_desktop_browser(playwright, desktop)
-            page = await find_main_app_page(browser)
-            await assert_platform_mcp_first_in_chat_picker(page)
-    finally:
-        desktop.stop()
+            },
+        )
+    assert response.status_code == 200
+    await assert_platform_mcp_first_in_chat_picker(paired_desktop_ui_session.page)
 
 
 @pytest.mark.asyncio
 async def test_acc_09_no_goose_provider_onboarding(
-    agent_frontend_http_client: AsyncClient,
-    auth_token: str,
-    humanitec_desktop_process_factory,
+    paired_desktop_ui_session: PairedDesktopUiSession,
 ) -> None:
-    from tests.agent.desktop_e2e.helpers import pair_desktop_via_deep_link
-
-    desktop = humanitec_desktop_process_factory()
-    try:
-        desktop.start()
-        await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
-        async with async_playwright() as playwright:
-            browser = await connect_desktop_browser(playwright, desktop)
-            page = await find_main_app_page(browser)
-            await page.wait_for_selector("[data-humanitec-chat-composer]", timeout=120_000)
-            pairing_inputs = await page.locator("[data-humanitec-pairing-code]").count()
-            assert pairing_inputs == 0
-            goose_onboarding = await page.get_by_text("Connect an AI model provider").count()
-            assert goose_onboarding == 0
-    finally:
-        desktop.stop()
+    page = paired_desktop_ui_session.page
+    await page.wait_for_selector("[data-humanitec-chat-composer]", timeout=10_000)
+    pairing_inputs = await page.locator("[data-humanitec-pairing-code]").count()
+    assert pairing_inputs == 0
+    goose_onboarding = await page.get_by_text("Connect an AI model provider").count()
+    assert goose_onboarding == 0

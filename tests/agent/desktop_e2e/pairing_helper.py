@@ -6,25 +6,29 @@ import re
 
 from playwright.async_api import Page, expect
 
+_DESKTOP_UI_WAIT_MS = 10_000
+
 
 async def fetch_pairing_code_from_settings(page: Page, settings_url: str) -> str:
     await page.goto(settings_url, wait_until="domcontentloaded")
-    await expect(page.locator("frontend-settings-page")).to_be_visible(timeout=30_000)
-    agent_tab = page.locator("frontend-settings-page .tab").filter(
-        has_text=re.compile(r"HumanitecAgent")
+    await expect(page.locator("frontend-settings-page")).to_be_visible(
+        timeout=_DESKTOP_UI_WAIT_MS
     )
-    await expect(agent_tab).to_be_visible(timeout=30_000)
+    agent_tab = page.locator("frontend-settings-page .tab").filter(
+        has_text=re.compile(r"LinnexAgent|HumanitecAgent")
+    )
+    await expect(agent_tab).to_be_visible(timeout=_DESKTOP_UI_WAIT_MS)
     await agent_tab.click()
     connect_button = page.get_by_role(
         "button",
         name=re.compile(r"Подключить компьютер|Connect computer"),
     )
-    await expect(connect_button).to_be_visible(timeout=30_000)
+    await expect(connect_button).to_be_visible(timeout=_DESKTOP_UI_WAIT_MS)
     await connect_button.click()
     pairing_locator = page.locator("frontend-settings-page .info-grid dd").filter(
         has_text=re.compile(r"\d{6}")
     )
-    await expect(pairing_locator).to_be_visible(timeout=30_000)
+    await expect(pairing_locator).to_be_visible(timeout=_DESKTOP_UI_WAIT_MS)
     pairing_text = await pairing_locator.inner_text()
     digits = re.sub(r"\D", "", pairing_text)
     if len(digits) != 6:

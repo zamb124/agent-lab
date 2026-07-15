@@ -40,15 +40,61 @@ type HumanitecToolkitCatalogItemPayload = {
   mcp_url: string;
 };
 
+type AgentOpenAIModelsResponse = {
+  data: Array<{ id: string }>;
+};
+
 const DEV_PROBE_ORIGINS = [
   'http://system.lvh.me:8002',
   'http://system.lvh.me:9004',
 ];
 
 let tunnelClient: HumanitecTunnelClient | null = null;
+let tunnelPingIntervalHandle: NodeJS.Timeout | null = null;
 let pairingWindow: BrowserWindow | null = null;
 let runtimeInitialized = false;
 let devProbeFrontendBaseUrl: string | null = null;
+
+const DEFAULT_TUNNEL_PING_INTERVAL_MS = 30_000;
+
+function isRevokedTunnelClose(code: number): boolean {
+  return code === 4401 || code === 4403;
+}
+
+function resolveTunnelPingIntervalMs(): number {
+  const raw = process.env.HUMANITEC_REVOCATION_POLL_INTERVAL_MS;
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return DEFAULT_TUNNEL_PING_INTERVAL_MS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`invalid HUMANITEC_REVOCATION_POLL_INTERVAL_MS: ${raw}`);
+  }
+  return parsed;
+}
+
+function stopTunnelPingInterval(): void {
+  if (tunnelPingIntervalHandle !== null) {
+    clearInterval(tunnelPingIntervalHandle);
+    tunnelPingIntervalHandle = null;
+  }
+}
+
+// Сервер переоценивает device.is_active/revocation только при получении
+// сообщения от клиента (apps/agent/tunnel.py). Без периодического ping
+// idle-туннель никогда не увидит revoke до следующего реального вызова.
+function startTunnelPingInterval(client: HumanitecTunnelClient): void {
+  stopTunnelPingInterval();
+  tunnelPingIntervalHandle = setInterval(() => {
+    try {
+      client.sendPing();
+    } catch (error) {
+      console.log(
+        `[HumanitecAgent] tunnel ping failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }, resolveTunnelPingIntervalMs());
+}
 
 function devProbeEnabled(): boolean {
   if (process.env.HUMANITEC_DEV_PROBE === '1') {
@@ -159,6 +205,42 @@ async function fetchHumanitecToolkitsCatalog(
   return body;
 }
 
+async function fetchHumanitecLlmModelIds(
+  credentials: HumanitecAgentCredentials,
+): Promise<string[]> {
+  const modelsUrl = `${credentials.llm_api_base_url.replace(/\/+$/, '')}/models`;
+  const response = await fetch(modelsUrl, {
+    headers: {
+      Authorization: `Bearer ${credentials.token}`,
+    },
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Humanitec models fetch failed: HTTP ${response.status} ${detail}`);
+  }
+  const body = (await response.json()) as AgentOpenAIModelsResponse;
+  if (!Array.isArray(body.data)) {
+    throw new Error('Humanitec models response missing data');
+  }
+  const modelIds: string[] = [];
+  const seenModelIds = new Set<string>();
+  for (const item of body.data) {
+    if (typeof item?.id !== 'string' || !item.id.trim()) {
+      continue;
+    }
+    const modelId = item.id.trim();
+    if (seenModelIds.has(modelId)) {
+      continue;
+    }
+    seenModelIds.add(modelId);
+    modelIds.push(modelId);
+  }
+  if (modelIds.length === 0) {
+    throw new Error('Humanitec models catalog is empty');
+  }
+  return modelIds;
+}
+
 function notifyExtensionsResync(): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send('humanitec-agent:extensions-resync');
@@ -251,6 +333,7 @@ export async function startHumanitecTunnel(
     throw new Error('HumanitecAgent credentials missing');
   }
   if (tunnelClient !== null) {
+    stopTunnelPingInterval();
     tunnelClient.disconnect();
     tunnelClient = null;
   }
@@ -266,7 +349,8 @@ export async function startHumanitecTunnel(
     },
     onDisconnected: (code, reason) => {
       console.log(`[HumanitecAgent] tunnel disconnected ${code} ${reason}`);
-      if (code === 4401) {
+      stopTunnelPingInterval();
+      if (isRevokedTunnelClose(code)) {
         stopHumanitecTunnel();
         clearHumanitecAgentCredentials(userDataPath);
         delete process.env.HUMANITEC_PLATFORM_MCP_URL;
@@ -275,9 +359,11 @@ export async function startHumanitecTunnel(
     },
   });
   tunnelClient.connect();
+  startTunnelPingInterval(tunnelClient);
 }
 
 export function stopHumanitecTunnel(): void {
+  stopTunnelPingInterval();
   if (tunnelClient !== null) {
     tunnelClient.disconnect();
     tunnelClient = null;
@@ -367,6 +453,16 @@ export async function initHumanitecAgentRuntime(): Promise<void> {
     return registerHumanitecDevice(pairingCode);
   });
 
+  ipcMain.handle('humanitec-agent:test-deep-link', async (_event, url: string) => {
+    if (process.env.HUMANITEC_ENABLE_TEST_DEEP_LINK !== '1') {
+      throw new Error('test deep-link dispatcher is disabled');
+    }
+    if (typeof url !== 'string' || !url) {
+      throw new Error('test deep-link URL is required');
+    }
+    return handleHumanitecDeepLink(url);
+  });
+
   ipcMain.handle('humanitec-agent:status', async () => {
     const credentials = loadHumanitecAgentCredentials(app.getPath('userData'));
     return {
@@ -392,6 +488,14 @@ export async function initHumanitecAgentRuntime(): Promise<void> {
       throw new Error('HumanitecAgent credentials missing');
     }
     return fetchHumanitecToolkitsCatalog(credentials);
+  });
+
+  ipcMain.handle('humanitec-agent:fetch-llm-models', async () => {
+    const credentials = loadHumanitecAgentCredentials(app.getPath('userData'));
+    if (credentials === null) {
+      throw new Error('HumanitecAgent credentials missing');
+    }
+    return fetchHumanitecLlmModelIds(credentials);
   });
 
   ipcMain.handle('humanitec-agent:extensions-resync', async () => {

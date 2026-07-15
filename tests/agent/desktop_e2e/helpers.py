@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 
 from httpx import AsyncClient
@@ -18,6 +19,19 @@ BUNDLED_EXTENSIONS_PATH = (
     / "apps/agent/desktop/vendor/goose/ui/desktop/src/components/settings/extensions/bundled-extensions.json"
 )
 HUMANITEC_PLATFORM_MCP_DISPLAY_NAME = "Humanitec"
+# `BottomMenuExtensionSelection` composer-toolbar кнопка не имеет текста (только
+# Puzzle-иконка + счётчик) — единственный надёжный accessible-признак это `title`.
+_MANAGE_EXTENSIONS_TITLE_RE = re.compile("manage extensions|управлять расширениями", re.IGNORECASE)
+_DESKTOP_WAIT_SECONDS = 10.0
+_DESKTOP_WAIT_MS = 10_000
+_PRODUCT_NAME_MARKERS = (
+    "LinnexAgent",
+    "HumanitecAgent",
+    "Linnex",
+    "Goose",
+    "Pair device",
+    "Pairing",
+)
 
 
 async def create_pairing_code(
@@ -37,7 +51,7 @@ async def create_pairing_code(
 async def wait_for_humanitec_agent_api(
     browser: Browser,
     *,
-    timeout_seconds: float = 120.0,
+    timeout_seconds: float = _DESKTOP_WAIT_SECONDS,
 ) -> Page:
     deadline = asyncio.get_event_loop().time() + timeout_seconds
     while asyncio.get_event_loop().time() < deadline:
@@ -54,7 +68,7 @@ async def pair_via_humanitec_agent_api(
     browser: Browser,
     pairing_code: str,
     *,
-    timeout_seconds: float = 120.0,
+    timeout_seconds: float = _DESKTOP_WAIT_SECONDS,
 ) -> Page:
     page = await wait_for_humanitec_agent_api(browser, timeout_seconds=timeout_seconds)
     await page.evaluate(
@@ -79,12 +93,20 @@ async def pair_desktop_via_deep_link(
 
     pairing_code = await create_pairing_code(agent_frontend_http_client, auth_token)
     if page is not None:
-        code_input = page.locator("[data-humanitec-pairing-code]")
-        if await code_input.count() == 0:
-            code_input = page.locator("#pairing-code")
-        if await code_input.count() == 0:
-            raise RuntimeError("HumanitecAgent pairing UI not found on provided page")
-        await submit_pairing_code_in_ui(page, pairing_code)
+        # Prod IPC path: register через main process, без кликов по pairing UI.
+        has_api = await page.evaluate("typeof window.humanitecAgent?.pair === 'function'")
+        if has_api:
+            await page.evaluate(
+                "(code) => window.humanitecAgent.pair(code)",
+                pairing_code,
+            )
+        else:
+            code_input = page.locator("[data-humanitec-pairing-code]")
+            if await code_input.count() == 0:
+                code_input = page.locator("#pairing-code")
+            if await code_input.count() == 0:
+                raise RuntimeError("HumanitecAgent pairing UI/API not found on provided page")
+            await submit_pairing_code_in_ui(page, pairing_code)
     else:
         desktop_process.open_pairing_ui_deep_link()
         from playwright.async_api import async_playwright
@@ -93,10 +115,19 @@ async def pair_desktop_via_deep_link(
         try:
             browser = await connect_desktop_browser(playwright, desktop_process)
             pairing_page = await find_pairing_page(browser)
-            await submit_pairing_code_in_ui(pairing_page, pairing_code)
+            has_api = await pairing_page.evaluate(
+                "typeof window.humanitecAgent?.pair === 'function'"
+            )
+            if has_api:
+                await pairing_page.evaluate(
+                    "(code) => window.humanitecAgent.pair(code)",
+                    pairing_code,
+                )
+            else:
+                await submit_pairing_code_in_ui(pairing_page, pairing_code)
         finally:
             await playwright.stop()
-    credentials = desktop_process.wait_for_credentials(timeout_seconds=120.0)
+    credentials = desktop_process.wait_for_credentials(timeout_seconds=_DESKTOP_WAIT_SECONDS)
     device_id = credentials["device_id"]
     if device_id == "pending":
         raise ValueError("device remained pending after pairing")
@@ -108,6 +139,28 @@ async def pair_desktop_via_deep_link(
     if not isinstance(policy, dict):
         raise ValueError("device policy missing after pairing")
     return device_id, credentials
+
+
+async def wait_for_chat_ready(page: Page, *, timeout_ms: int = _DESKTOP_WAIT_MS) -> None:
+    """Ждёт chat composer либо явный LLM setup error (не крутит Configuring вечно)."""
+    deadline = asyncio.get_event_loop().time() + (timeout_ms / 1000.0)
+    while asyncio.get_event_loop().time() < deadline:
+        composer = page.locator("[data-humanitec-chat-composer]")
+        if await composer.count() > 0 and await composer.first.is_visible():
+            return
+        error = page.locator("[data-humanitec-llm-setup-error]")
+        if await error.count() > 0:
+            message = (await error.first.inner_text()).strip()
+            raise RuntimeError(f"HumanitecAgent LLM setup failed: {message}")
+        body_text = await page.locator("body").inner_text()
+        if "Failed to configure platform LLM" in body_text:
+            raise RuntimeError(f"HumanitecAgent LLM setup failed: {body_text[:400]!r}")
+        await asyncio.sleep(0.25)
+    final_body_text = (await page.locator("body").inner_text())[:400]
+    raise TimeoutError(
+        "HumanitecAgent chat composer not ready after pairing "
+        f"(timeout={timeout_ms}ms); body={final_body_text!r}"
+    )
 
 
 async def ensure_humanitec_paired_and_llm_ready(
@@ -131,7 +184,10 @@ async def ensure_humanitec_paired_and_llm_ready(
         auth_token,
         page=page,
     )
-    await page.wait_for_selector("[data-humanitec-chat-composer]", timeout=120_000)
+    # pair() через IPC не зовёт onPaired у guard — перезагрузка, чтобы refreshStatus
+    # увидел credentials и прошёл LLM setup → chat.
+    await page.reload(wait_until="domcontentloaded")
+    await wait_for_chat_ready(page)
     credentials = desktop.read_credentials()
     llm_provider_id = credentials.get("llm_provider_id")
     if llm_provider_id != "humanitec":
@@ -147,7 +203,7 @@ async def submit_pairing_code_in_ui(
     code_input = page.locator("[data-humanitec-pairing-code]")
     if await code_input.count() == 0:
         code_input = page.locator("#pairing-code")
-    await expect(code_input).to_be_visible(timeout=30_000)
+    await expect(code_input).to_be_visible(timeout=_DESKTOP_WAIT_MS)
     await code_input.fill(pairing_code)
     submit_button = page.locator("[data-humanitec-pair-submit]")
     if await submit_button.count() == 0:
@@ -156,11 +212,13 @@ async def submit_pairing_code_in_ui(
 
 
 async def find_pairing_page(browser: Browser) -> Page:
-    deadline = asyncio.get_event_loop().time() + 60.0
+    deadline = asyncio.get_event_loop().time() + _DESKTOP_WAIT_SECONDS
     while asyncio.get_event_loop().time() < deadline:
         for context in browser.contexts:
             for page in context.pages:
                 if await page.locator("#pairing-code").count() > 0:
+                    return page
+                if await page.locator("[data-humanitec-pairing-code]").count() > 0:
                     return page
         await asyncio.sleep(0.5)
     raise TimeoutError("HumanitecAgent pairing UI page not found")
@@ -170,7 +228,7 @@ async def wait_for_device_offline(
     http_client: AsyncClient,
     device_id: str,
     *,
-    timeout_seconds: float = 30.0,
+    timeout_seconds: float = _DESKTOP_WAIT_SECONDS,
 ) -> None:
     deadline = asyncio.get_event_loop().time() + timeout_seconds
     while asyncio.get_event_loop().time() < deadline:
@@ -203,10 +261,14 @@ async def connect_desktop_browser(playwright, desktop: HumanitecDesktopProcess) 
 
 
 async def find_main_app_page(browser: Browser) -> Page:
-    deadline = asyncio.get_event_loop().time() + 120.0
+    deadline = asyncio.get_event_loop().time() + _DESKTOP_WAIT_SECONDS
+    last_snapshot: list[str] = []
     while asyncio.get_event_loop().time() < deadline:
+        last_snapshot = []
         for context in browser.contexts:
             for page in context.pages:
+                title = await page.title()
+                url = page.url
                 if await page.locator("#pairing-code").count() > 0:
                     return page
                 if await page.locator("[data-humanitec-pairing-code]").count() > 0:
@@ -214,18 +276,38 @@ async def find_main_app_page(browser: Browser) -> Page:
                 if await page.locator("[data-humanitec-chat-composer]").count() > 0:
                     return page
                 body_text = await page.locator("body").inner_text()
+                last_snapshot.append(f"title={title!r} url={url!r} body={body_text[:240]!r}")
                 if "Configuring Platform Brain" in body_text:
                     continue
                 if await page.locator("textarea").count() > 0:
                     return page
-                if "HumanitecAgent" in body_text or "Pair device" in body_text:
+                if any(marker in body_text for marker in _PRODUCT_NAME_MARKERS):
+                    return page
+                if await page.evaluate("typeof window.humanitecAgent !== 'undefined'"):
                     return page
         await asyncio.sleep(0.5)
-    raise TimeoutError("HumanitecAgent main window not found")
+    raise TimeoutError(
+        "HumanitecAgent/LinnexAgent main window not found within "
+        f"{_DESKTOP_WAIT_SECONDS}s; pages={last_snapshot!r}"
+    )
+
+
+async def open_ready_main_page(browser: Browser) -> Page:
+    """Находит главное окно и доводит его до chat-ready после IPC-pairing.
+
+    pair() через IPC не зовёт onPaired у guard — перезагрузка, чтобы refreshStatus
+    увидел credentials, прошёл LLM setup и синхронизировал расширения → chat.
+    """
+    page = await find_main_app_page(browser)
+    composer = page.locator("[data-humanitec-chat-composer]")
+    if not (await composer.count() > 0 and await composer.first.is_visible()):
+        await page.reload(wait_until="domcontentloaded")
+    await wait_for_chat_ready(page)
+    return page
 
 
 async def open_settings_extensions(page: Page) -> None:
-    await page.evaluate("window.location.hash = '/settings'")
+    await page.evaluate("window.location.hash = '/extensions'")
     await page.wait_for_timeout(2000)
 
 
@@ -248,27 +330,20 @@ async def assert_platform_mcp_first_in_settings(page: Page) -> None:
 async def open_chat_mcp_picker(page: Page) -> None:
     await page.evaluate("window.location.hash = '/'")
     await page.wait_for_timeout(2000)
+    # `BottomMenuExtensionSelection` toolbar button — иконка + счётчик, без текста;
+    # приоритет перед `[data-humanitec-mcp-picker]`, т.к. sidebar nav-пункт
+    # "Extensions" использует ту же Puzzle-иконку и может получить тот же атрибут.
+    manage_extensions_button = page.get_by_title(_MANAGE_EXTENSIONS_TITLE_RE)
+    if await manage_extensions_button.count() > 0:
+        await manage_extensions_button.first.click()
+        await page.wait_for_timeout(1000)
+        return
     mcp_button = page.locator("[data-humanitec-mcp-picker]")
     if await mcp_button.count() > 0:
         await mcp_button.first.click()
         await page.wait_for_timeout(1000)
         return
-    mcp_button = page.get_by_role("button", name="MCP")
-    if await mcp_button.count() > 0:
-        await mcp_button.first.click()
-        await page.wait_for_timeout(1000)
-        return
-    extensions_button = page.get_by_text("Extensions", exact=False)
-    if await extensions_button.count() > 0:
-        await extensions_button.first.click()
-        await page.wait_for_timeout(1000)
-        return
-    tools_button = page.get_by_text("Tools", exact=False)
-    if await tools_button.count() > 0:
-        await tools_button.first.click()
-        await page.wait_for_timeout(1000)
-        return
-    raise AssertionError("MCP/extensions/tools picker control not found in chat UI")
+    raise AssertionError("MCP/extensions picker control not found in chat UI")
 
 
 async def assert_platform_mcp_first_in_chat_picker(page: Page) -> None:
@@ -301,7 +376,7 @@ async def send_chat_message(page: Page, message: str) -> None:
     composer = page.locator("[data-humanitec-chat-composer]")
     if await composer.count() == 0:
         composer = page.locator("textarea").first
-    await expect(composer).to_be_visible(timeout=30_000)
+    await expect(composer).to_be_visible(timeout=_DESKTOP_WAIT_MS)
     await composer.fill(message)
     send_button = page.locator("[data-humanitec-chat-send]")
     if await send_button.count() == 0:

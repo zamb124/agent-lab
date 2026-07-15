@@ -303,7 +303,15 @@ def _is_notification_ws_e2e_test(nodeid: str) -> bool:
 
 
 def _is_files_retention_purge_test(nodeid: str) -> bool:
-    return nodeid.startswith("tests/files/test_files_retention_purge.py")
+    if nodeid.startswith("tests/files/test_files_retention_purge.py"):
+        return True
+    # Тот же purge_expired_batch через idle_worker tick: под -n10 >5s.
+    if (
+        nodeid.startswith("tests/idle_worker/test_idle_worker_tasks.py")
+        and "file_retention_purge" in nodeid
+    ):
+        return True
+    return False
 
 
 def _is_flows_session_search_test(nodeid: str) -> bool:

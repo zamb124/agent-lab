@@ -8,6 +8,7 @@ from playwright.async_api import async_playwright
 
 from apps.agent.service import TOKEN_DENY_PREFIX
 from tests.agent._helpers import AGENT_API_PREFIX
+from tests.agent.desktop_e2e.conftest import PairedDesktopDeepLink
 from tests.agent.desktop_e2e.helpers import (
     create_pairing_code,
     find_pairing_page,
@@ -27,7 +28,7 @@ async def test_d5_auth_device_token_deep_link(
     desktop = humanitec_desktop_process_factory()
     try:
         desktop.start()
-        desktop.auth_via_deep_link(auth_token)
+        await desktop.auth_via_test_deep_link(auth_token)
         credentials = desktop.wait_for_credentials()
         assert credentials["device_id"] != "pending"
         assert credentials["llm_api_base_url"]
@@ -57,7 +58,7 @@ async def test_d6_pairing_deep_link_playwright(
     desktop = humanitec_desktop_system_process_factory()
     try:
         desktop.start()
-        desktop.pair_via_deep_link(pairing_code)
+        await desktop.pair_via_test_deep_link(pairing_code)
         credentials = desktop.wait_for_credentials()
         assert credentials["device_id"] != "pending"
         device_id = credentials["device_id"]
@@ -176,31 +177,19 @@ async def test_d12_device_mcp_tools_call_unavailable(
 
 @pytest.mark.asyncio
 async def test_d13_revoke_mid_session_tunnel_closed(
+    paired_desktop_deep_link: PairedDesktopDeepLink,
     agent_frontend_http_client: AsyncClient,
-    auth_token: str,
     unique_id: str,
     frontend_container,
-    humanitec_desktop_process_factory,
 ) -> None:
     _ = unique_id
-    desktop = humanitec_desktop_process_factory()
-    try:
-        desktop.start()
-        device_id, _credentials = await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
-        delete_response = await agent_frontend_http_client.delete(
-            f"{AGENT_API_PREFIX}/devices/{device_id}"
-        )
-        assert delete_response.status_code in {200, 204}
-        desktop.wait_for_credentials_cleared()
-        await wait_for_device_offline(agent_frontend_http_client, device_id)
-        deny_raw = await frontend_container.shared_storage.get(
-            f"{TOKEN_DENY_PREFIX}{device_id}",
-            force_global=True,
-        )
-        assert deny_raw is not None
-    finally:
-        desktop.stop()
+    device_id = paired_desktop_deep_link.device_id
+    delete_response = await agent_frontend_http_client.delete(f"{AGENT_API_PREFIX}/devices/{device_id}")
+    assert delete_response.status_code in {200, 204}
+    paired_desktop_deep_link.desktop.wait_for_credentials_cleared()
+    await wait_for_device_offline(agent_frontend_http_client, device_id)
+    deny_raw = await frontend_container.shared_storage.get(
+        f"{TOKEN_DENY_PREFIX}{device_id}",
+        force_global=True,
+    )
+    assert deny_raw is not None

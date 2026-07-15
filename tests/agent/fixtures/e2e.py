@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest_asyncio
-from httpx import AsyncClient
+from httpx import AsyncClient, Timeout
 
 from tests.agent._helpers import (
     AGENT_TEST_PUBLIC_ORIGIN,
@@ -20,6 +20,9 @@ from tests.agent._helpers import (
     pair_and_register_device,
 )
 from tests.agent._realtime_helpers import connect_agent_tunnel_ws
+
+# Pairing/register к company Host под нагрузкой Electron; default httpx 5s → ConnectTimeout.
+_AGENT_HTTP_TIMEOUT = Timeout(30.0, connect=10.0)
 
 
 @pytest_asyncio.fixture
@@ -51,6 +54,7 @@ async def agent_frontend_http_client(
         base_url=agent_base_url,
         follow_redirects=False,
         cookies={"auth_token": auth_token},
+        timeout=_AGENT_HTTP_TIMEOUT,
     ) as client:
         yield client
 
@@ -67,6 +71,7 @@ async def agent_frontend_http_client_system(
         base_url=base_url,
         follow_redirects=False,
         cookies={"auth_token": auth_token_system},
+        timeout=_AGENT_HTTP_TIMEOUT,
     ) as client:
         yield client
 
@@ -76,6 +81,7 @@ async def agent_frontend_http_anon() -> AsyncIterator[AsyncClient]:
     async with AsyncClient(
         base_url=AGENT_TEST_PUBLIC_ORIGIN,
         follow_redirects=False,
+        timeout=_AGENT_HTTP_TIMEOUT,
     ) as client:
         yield client
 

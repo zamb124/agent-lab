@@ -12,56 +12,22 @@ export type HumanitecLlmSetupParams = {
   deviceToken: string;
   providerId: string;
   modelId: string;
+  /** Каталог моделей уже загружен в main process (без CORS с file://). */
+  modelIds: string[];
 };
-
-type AgentOpenAIModelsResponse = {
-  data: Array<{ id: string }>;
-};
-
-async function fetchHumanitecLlmModelIds(params: HumanitecLlmSetupParams): Promise<string[]> {
-  const modelsUrl = `${params.apiBaseUrl.replace(/\/+$/, '')}/models`;
-  const response = await fetch(modelsUrl, {
-    headers: {
-      Authorization: `Bearer ${params.deviceToken}`,
-    },
-  });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Humanitec models fetch failed: HTTP ${response.status} ${detail}`);
-  }
-  const body = (await response.json()) as AgentOpenAIModelsResponse;
-  if (!Array.isArray(body.data)) {
-    throw new Error('Humanitec models response missing data');
-  }
-  const modelIds: string[] = [];
-  const seenModelIds = new Set<string>();
-  for (const item of body.data) {
-    if (typeof item.id !== 'string' || !item.id.trim()) {
-      continue;
-    }
-    const normalizedModelId = item.id.trim();
-    if (seenModelIds.has(normalizedModelId)) {
-      continue;
-    }
-    seenModelIds.add(normalizedModelId);
-    modelIds.push(normalizedModelId);
-  }
-  if (modelIds.length === 0) {
-    throw new Error('Humanitec models catalog is empty');
-  }
-  return modelIds;
-}
 
 async function buildHumanitecProviderRequest(
   params: HumanitecLlmSetupParams,
 ): Promise<UpdateCustomProviderRequest> {
-  const modelIds = await fetchHumanitecLlmModelIds(params);
+  if (params.modelIds.length === 0) {
+    throw new Error('Humanitec models catalog is empty');
+  }
   return {
     engine: 'openai_compatible',
     display_name: 'Humanitec',
     api_url: params.apiBaseUrl,
     api_key: params.deviceToken,
-    models: modelIds,
+    models: params.modelIds,
     supports_streaming: true,
     requires_auth: true,
     headers: {

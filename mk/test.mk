@@ -24,8 +24,10 @@ _PYTEST_XDIST := -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART)
 # Coverage (default-on): TEST_COVERAGE=0 make test
 COV_RUN_ID := $(if $(filter 1,$(TEST_COVERAGE)),$(shell date +%Y%m%dT%H%M%S),)
 ifeq ($(TEST_COVERAGE),1)
-_COV_ARGS := --cov=apps --cov=core
-_COV_ARGS_APPEND := --cov=apps --cov=core --cov-append
+# --cov-report= глушит дефолтный term-dump pytest-cov (все файлы).
+# Итоговый terminal report (только ≤90%) печатает scripts/test_coverage_report.py.
+_COV_ARGS := --cov=apps --cov=core --cov-report=
+_COV_ARGS_APPEND := --cov=apps --cov=core --cov-append --cov-report=
 else
 _COV_ARGS :=
 _COV_ARGS_APPEND :=
@@ -264,7 +266,7 @@ test:
 	uv run pytest tests/agent/e2e tests/flows/api/test_agent_platform_mcp.py tests/frontend/api/test_humanitec_agent_api.py -n0 --timeout=180 $(_COV_ARGS_APPEND); \
 	phase4a_rc=$$?; \
 	rm -f /tmp/platform_test_pytest_controller.pid; \
-	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=900 $(_COV_ARGS_APPEND); \
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=15 $(_COV_ARGS_APPEND); \
 	phase4c_rc=$$?; \
 	if [ "$(TEST_COVERAGE)" = "1" ]; then \
 		echo ""; \
@@ -333,19 +335,22 @@ test-cov: test-up
 	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration and not network" \
-		--cov=apps --cov=core --cov-report=term-missing --cov-report=html:htmlcov
+		--cov=apps --cov=core --cov-report= --cov-report=html:htmlcov
+	@uv run python -m scripts.test_coverage_report term
 
 test-cov-all: test-up
 	@echo "Запуск всех тестов с покрытием..."
 	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
-		--cov=apps --cov=core --cov-report=term-missing --cov-report=html:htmlcov
+		--cov=apps --cov=core --cov-report= --cov-report=html:htmlcov
 	uv run pytest tests/ui/e2e -v --timeout=180 \
-		--cov=apps --cov=core --cov-append --cov-report=term-missing --cov-report=html:htmlcov
+		--cov=apps --cov=core --cov-append --cov-report= --cov-report=html:htmlcov
+	@uv run python -m scripts.test_coverage_report term
 
 test-cov-report:
 	@echo "Генерация HTML отчета покрытия..."
 	uv run coverage html
+	@uv run python -m scripts.test_coverage_report term
 	@echo "Отчет сохранен в htmlcov/index.html"
 
 test-agent: test-up
@@ -353,7 +358,7 @@ test-agent: test-up
 	uv run python scripts/check_agent_goose_tool_contract.py
 	uv run python scripts/check_agent_test_no_monkeypatch.py
 	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"
-	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent tests/frontend/api/test_humanitec_agent_api.py tests/flows/api/test_agent_platform_mcp.py tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=900
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent tests/frontend/api/test_humanitec_agent_api.py tests/flows/api/test_agent_platform_mcp.py tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=15
 
 test-agent-e2e: test-up
 	uv run pytest tests/agent/e2e -v -n0 --timeout=180
@@ -362,7 +367,7 @@ test-agent-desktop-e2e: test-up
 	uv run python scripts/check_agent_e2e_coverage.py
 	uv run python scripts/check_agent_goose_tool_contract.py
 	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"
-	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=900
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=15
 
 test-agent-ui-e2e: test-up
 	UI_E2E_USE_LVH_ME=1 RUN_UI_IN_TEST=1 uv run pytest tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=300
