@@ -25,6 +25,7 @@
 | [platform-document-media-viewer](../platform-document-media-viewer/) | T0 | backlog |
 | [platform-document-text-viewer](../platform-document-text-viewer/) | T0 | backlog |
 | [platform-document-viewer-host](../platform-document-viewer-host/) | T0 | backlog |
+| [platform-echarts-host](../platform-echarts-host/) | T2 | backfill |
 | [platform-field](../platform-field/) | T1 | production |
 | [platform-field-array](../platform-field-array/) | T0 | backlog |
 | [platform-field-boolean](../platform-field-boolean/) | T0 | backlog |
@@ -48,6 +49,7 @@
 | [platform-llm-config-editor](../platform-llm-config-editor/) | T0 | backlog |
 | [platform-llm-context-editor](../platform-llm-context-editor/) | T0 | backlog |
 | [platform-log-viewer](../platform-log-viewer/) | T0 | backlog |
+| [platform-mermaid-host](../platform-mermaid-host/) | T2 | backfill |
 | [platform-metric-card](../platform-metric-card/) | T0 | backfill |
 | [platform-mini-bar-chart](../platform-mini-bar-chart/) | T0 | backlog |
 | [platform-modal-search-field](../platform-modal-search-field/) | T0 | backlog |
@@ -69,6 +71,7 @@
 | [platform-sidebar-nav-tree](../platform-sidebar-nav-tree/) | T0 | backlog |
 | [platform-span-attributes-viewer](../platform-span-attributes-viewer/) | T0 | backlog |
 | [platform-sparkline](../platform-sparkline/) | T0 | backlog |
+| [platform-spinner](../platform-spinner/) | T1 | backfill |
 | [platform-switch](../platform-switch/) | T0 | backfill |
 | [platform-timezone-picker](../platform-timezone-picker/) | T0 | backlog |
 | [platform-top-bar](../platform-top-bar/) | T0 | backlog |
@@ -82,6 +85,7 @@
 | [platform-variable-secret-policy](../platform-variable-secret-policy/) | T0 | backlog |
 | [platform-variable-value-editor](../platform-variable-value-editor/) | T0 | backlog |
 | [platform-variables-panel](../platform-variables-panel/) | T0 | backlog |
+| [platform-viz-host](../platform-viz-host/) | T2 | backfill |
 | [platform-work-item-badge](../platform-work-item-badge/) | T0 | backlog |
 | [platform-work-item-preview](../platform-work-item-preview/) | T0 | backlog |
 

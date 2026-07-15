@@ -12962,6 +12962,206 @@
         ],
         "title": "FlowStoreBundleResponse"
       },
+      "FlowToolReference": {
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Tool Id"
+          },
+          "type": {
+            "type": "string",
+            "const": "flow",
+            "title": "Type",
+            "default": "flow"
+          },
+          "flow_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Branch Id",
+            "default": "default"
+          },
+          "call_type": {
+            "$ref": "#/components/schemas/NodeToolCallType",
+            "default": "call"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "parameters_schema": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Parameters Schema"
+          },
+          "input_mapping": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Input Mapping"
+          },
+          "input_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Schema"
+          },
+          "output_mapping": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Mapping"
+          },
+          "output_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "resources": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ResourceReference"
+            },
+            "type": "object",
+            "title": "Resources"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRef"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "local_variables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Local Variables"
+          },
+          "store": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Store"
+          },
+          "incoming_policy": {
+            "type": "string",
+            "enum": [
+              "any",
+              "all"
+            ],
+            "title": "Incoming Policy",
+            "default": "any"
+          },
+          "save_to_messages": {
+            "type": "boolean",
+            "title": "Save To Messages",
+            "default": false
+          },
+          "message_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Field"
+          },
+          "exception_as_response": {
+            "type": "boolean",
+            "title": "Exception As Response",
+            "default": false
+          },
+          "exception_allow_types": {
+            "items": {
+              "$ref": "#/components/schemas/ExceptionAbsorbAllowName"
+            },
+            "type": "array",
+            "title": "Exception Allow Types"
+          },
+          "node_timeout_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Timeout Seconds"
+          },
+          "max_visits_per_run": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Visits Per Run"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tool_id",
+          "flow_id"
+        ],
+        "title": "FlowToolReference",
+        "description": "Настройка конкретного подключения внутреннего flow как LLM tool."
+      },
       "FlowType": {
         "type": "string",
         "enum": [
@@ -13291,6 +13491,9 @@
             "items": {
               "anyOf": [
                 {
+                  "$ref": "#/components/schemas/FlowToolReference"
+                },
+                {
                   "$ref": "#/components/schemas/ToolReference"
                 },
                 {
@@ -13550,6 +13753,16 @@
             "type": "string",
             "title": "Branch Id",
             "default": "default"
+          },
+          "call_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeToolCallType"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "config": {
             "anyOf": [
@@ -16777,6 +16990,9 @@
                   "type": "string"
                 },
                 {
+                  "$ref": "#/components/schemas/FlowToolReference"
+                },
+                {
                   "$ref": "#/components/schemas/ToolReference"
                 }
               ]
@@ -17314,6 +17530,15 @@
           "current_nodes"
         ],
         "title": "NodeScheduledPayload"
+      },
+      "NodeToolCallType": {
+        "type": "string",
+        "enum": [
+          "call",
+          "handoff"
+        ],
+        "title": "NodeToolCallType",
+        "description": "Режим вызова ноды, подключённой к LLM как tool."
       },
       "NodeType": {
         "type": "string",
