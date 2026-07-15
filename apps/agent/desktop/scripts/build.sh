@@ -765,10 +765,20 @@ verify_node_engine() {
     echo "node is required for Goose desktop build" >&2
     exit 1
   fi
-  local engine_range actual_version
-  engine_range="$(node -p "require('${DESKTOP_DIR}/package.json').engines.node" 2>/dev/null || true)"
+  local engine_range actual_version package_json_path
+  package_json_path="${DESKTOP_DIR}/package.json"
+  # Windows-раннер: node — нативный Windows-бинарь, а DESKTOP_DIR тут в
+  # git-bash/MSYS POSIX-форме (/d/a/...). MSYS авто-конвертирует path-like
+  # аргументы командной строки, но НЕ строки, вложенные внутрь другого
+  # аргумента (require('${package_json_path}') внутри -p) — require() молча
+  # не находит файл, engine_range остаётся пустым. cygpath -m даёт node
+  # путь, который он понимает нативно на всех платформах.
+  if command -v cygpath >/dev/null 2>&1; then
+    package_json_path="$(cygpath -m "${package_json_path}")"
+  fi
+  engine_range="$(node -p "require('${package_json_path}').engines.node" 2>/dev/null || true)"
   if [[ -z "${engine_range}" ]]; then
-    echo "engines.node missing in ${DESKTOP_DIR}/package.json" >&2
+    echo "engines.node missing in ${package_json_path}" >&2
     exit 1
   fi
   actual_version="$(node -v)"
