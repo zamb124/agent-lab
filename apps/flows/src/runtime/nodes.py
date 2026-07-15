@@ -50,7 +50,7 @@ from apps.flows.src.models import (
     ResourceReference,
     ResourceReferenceInput,
 )
-from apps.flows.src.models.enums import ChannelType, NodeType
+from apps.flows.src.models.enums import ChannelType, NodeToolCallType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.models.hitl_schemas import HitlInterruptSnapshot, build_hitl_handoff_command
@@ -1508,7 +1508,9 @@ class FlowNode(BaseNode):
             self.branch_id: str = r_s
         else:
             self.branch_id = "default"
-        self.handoff_mode: bool = bool(cfg.get("handoff_mode", False))
+        raw_call_type = cfg.get("call_type", NodeToolCallType.CALL.value)
+        self.call_type: NodeToolCallType = NodeToolCallType(raw_call_type)
+        self.is_handoff: bool = self.call_type == NodeToolCallType.HANDOFF
         self._nested_flow: RuntimeFlowProtocol | None = None
 
     @override
@@ -1520,7 +1522,7 @@ class FlowNode(BaseNode):
         session_id и собственную event history. State child не копируется в
         parent snapshots; parent хранит только typed link для resume.
 
-        При handoff_mode=True родитель suspended сразу после запуска child
+        При call_type=handoff родитель suspended сразу после запуска child
         и ждёт handback (а не обычного child completion).
         """
         if not self.flow_id:
@@ -1530,7 +1532,7 @@ class FlowNode(BaseNode):
         nested_flow = await self._load_nested_flow(container)
         existing_link = self._resume_link_from_parent_state(state)
 
-        if self.handoff_mode and existing_link is not None and existing_link.handoff:
+        if self.is_handoff and existing_link is not None and existing_link.handoff:
             if existing_link.status == "completed":
                 nested_state, link, _child_started = await self._load_child_workflow_state(
                     container,
@@ -1560,7 +1562,7 @@ class FlowNode(BaseNode):
                 existing_link,
             )
 
-        if self.handoff_mode:
+        if self.is_handoff:
             link = link.model_copy(update={"handoff": True})
             state.child_workflows[self.node_id] = link
 
@@ -1757,7 +1759,7 @@ class FlowNode(BaseNode):
         parent_execution_branch_id, parent_node_schedule_sequence = (
             self._require_parent_child_scope(parent_state)
         )
-        if self.handoff_mode:
+        if self.is_handoff:
             child_context_id, child_session_id = (
                 container.handoff_orchestrator_service.build_child_session_ids(
                     parent_state.context_id,
@@ -1791,7 +1793,7 @@ class FlowNode(BaseNode):
                     container,
                     existing_child,
                 ),
-                handoff=self.handoff_mode,
+                handoff=self.is_handoff,
             )
             return existing_child, link, False
 
@@ -1815,7 +1817,7 @@ class FlowNode(BaseNode):
         child_state.validation = None
         child_state.messages = self.get_filtered_messages(parent_state)
 
-        if self.handoff_mode:
+        if self.is_handoff:
             child_state.handoff_parent_session_id = parent_state.session_id
             child_state.handoff_depth = parent_state.handoff_depth + 1
             if parent_state.handoff_trace_id is not None:
@@ -1848,7 +1850,7 @@ class FlowNode(BaseNode):
             parent_execution_branch_id=parent_execution_branch_id,
             parent_node_schedule_sequence=parent_node_schedule_sequence,
             status="running",
-            handoff=self.handoff_mode,
+            handoff=self.is_handoff,
         )
         return child_state, link, True
 

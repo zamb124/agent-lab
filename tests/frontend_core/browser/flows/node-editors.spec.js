@@ -304,6 +304,93 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(last.patch.tools).to.deep.equal([{ tool_id: 'ts_tool', language: 'typescript' }]);
     });
 
+    it('flows-llm-node-editor — flow из picker сохраняется как полный typed reference', async () => {
+        const node = { node_id: 'a', type: 'llm_node', name: 'A', prompt: 'hi', tools: [] };
+        const el = await fixture(html`
+            <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+            </flows-llm-node-editor>
+        `);
+        await elementUpdated(el);
+        let last = null;
+        el.addEventListener('change', (e) => { last = e.detail; });
+        el.openModal = (kind, props) => {
+            expect(kind).to.equal('flows.tool_picker');
+            props.onPick({
+                kind: 'flow',
+                tool_id: 'fitness_coach',
+                item: {
+                    tool_id: 'fitness_coach',
+                    title: 'Фитнес-тренер',
+                    description: 'Строит план тренировок',
+                    parameters_schema: {
+                        type: 'object',
+                        properties: { request: { type: 'string' } },
+                        required: ['request'],
+                        additionalProperties: false,
+                    },
+                },
+            });
+        };
+
+        el._onPickTool();
+
+        expect(last.patch).to.not.have.property('call_type');
+        expect(last.patch.tools).to.deep.equal([{
+            tool_id: 'fitness_coach',
+            type: 'flow',
+            flow_id: 'fitness_coach',
+            branch_id: 'default',
+            call_type: 'call',
+            name: 'Фитнес-тренер',
+            description: 'Строит план тренировок',
+            parameters_schema: {
+                type: 'object',
+                properties: { request: { type: 'string' } },
+                required: ['request'],
+                additionalProperties: false,
+            },
+        }]);
+    });
+
+    it('flows-llm-node-editor — Call/Handoff меняется только на выбранном flow chip', async () => {
+        const flowTool = {
+            tool_id: 'fitness_coach',
+            type: 'flow',
+            flow_id: 'fitness_coach',
+            branch_id: 'default',
+            call_type: 'call',
+            name: 'Фитнес-тренер',
+            description: '',
+            parameters_schema: { type: 'object', properties: {}, required: [] },
+        };
+        const codeTool = { tool_id: 'calculator' };
+        const node = {
+            node_id: 'a',
+            type: 'llm_node',
+            name: 'A',
+            prompt: 'hi',
+            tools: [flowTool, codeTool],
+        };
+        const el = await fixture(html`
+            <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+            </flows-llm-node-editor>
+        `);
+        await elementUpdated(el);
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const modeButton = base.querySelector('.chip-call-type');
+        expect(modeButton).to.not.be.null;
+        expect(modeButton.dataset.callType).to.equal('call');
+
+        setTimeout(() => modeButton.click());
+        const changeEv = await oneEvent(el, 'change');
+
+        expect(changeEv.detail.patch).to.not.have.property('call_type');
+        expect(changeEv.detail.patch.tools[0]).to.deep.equal({ ...flowTool, call_type: 'handoff' });
+        expect(changeEv.detail.patch.tools[1]).to.equal(codeTool);
+    });
+
     it('flows-llm-node-editor — клик по skill chip открывает flows.agent_skill_edit', async () => {
         const node = {
             node_id: 'a',
@@ -556,6 +643,37 @@ describe('node editors — top-level NodeConfig contract', () => {
         const modeControl = settingsSegmentedControl(root, 'platform-segmented-control.source-mode');
         expect(modeControl).to.not.be.null;
         expect(segmentedSegments(modeControl).length).to.equal(2);
+    });
+
+    it('flows-flow-node-editor — режим Call/Handoff расположен рядом с веткой и эмитит enum', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'flow',
+            name: 'F',
+            flow_id: 'subflow_x',
+            branch_id: 'default',
+            call_type: 'call',
+        };
+        const el = await fixture(html`
+            <flows-flow-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'flow'}>
+            </flows-flow-node-editor>
+        `);
+        await elementUpdated(el);
+        const root = el.shadowRoot.querySelector('flows-base-node-editor');
+        const row = root.querySelector('.branch-mode-row');
+        const modeField = row.querySelector('.call-type-field platform-field');
+        expect(modeField).to.not.be.null;
+        expect(modeField.value).to.equal('call');
+        expect(modeField.config.values.map((item) => item.value)).to.deep.equal(['call', 'handoff']);
+
+        setTimeout(() => modeField.dispatchEvent(new CustomEvent('change', {
+            detail: { value: 'handoff' },
+            bubbles: true,
+            composed: true,
+        })));
+        const changeEv = await oneEvent(el, 'change');
+        expect(changeEv.detail.patch).to.deep.equal({ call_type: 'handoff' });
     });
 
     it('flows-remote-flow-editor — toggle url ↔ flow_id', async () => {

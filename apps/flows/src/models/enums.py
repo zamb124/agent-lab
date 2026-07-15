@@ -45,6 +45,13 @@ class NodeType(str, Enum):
     RESOURCE = "resource"           # Нода-ресурс на графе (привязка flow/skill resources; pass-through)
 
 
+class NodeToolCallType(str, Enum):
+    """Режим вызова ноды, подключённой к LLM как tool."""
+
+    CALL = "call"
+    HANDOFF = "handoff"
+
+
 class ReactToolRole(str, Enum):
     """
     Роль инструмента в ReAct-цикле llm_node.

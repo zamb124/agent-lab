@@ -53,4 +53,28 @@ describe('flows tool ref helpers', () => {
         expect(ref.server_id).toBeUndefined();
         expect(ref.tool_name).toBeUndefined();
     });
+
+    it('round-trips flow call_type without moving it to the parent LLM node', () => {
+        const raw = {
+            tool_id: 'coach',
+            type: 'flow',
+            flow_id: 'coach',
+            branch_id: 'vip',
+            call_type: 'handoff',
+            name: 'Coach',
+            description: 'Delegated specialist',
+            parameters_schema: {
+                type: 'object',
+                properties: { request: { type: 'string' } },
+                required: ['request'],
+                additionalProperties: false,
+            },
+        };
+
+        const node = toolRefToInitialNode(raw, 'coach');
+        const ref = nodeConfigToToolRef(node);
+
+        expect(node.call_type).toBe('handoff');
+        expect(ref).toEqual(raw);
+    });
 });

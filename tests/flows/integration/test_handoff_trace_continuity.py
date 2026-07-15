@@ -69,7 +69,7 @@ class TestHandoffTraceContinuity:
         await save_flow(container, {
             "flow_id": parent_fid, "name": "Parent", "entry": "call_child",
             "nodes": {
-                "call_child": {"type": "flow", "flow_id": child_fid, "handoff_mode": True},
+                "call_child": {"type": "flow", "flow_id": child_fid, "call_type": "handoff"},
             },
             "edges": [{"from_node": "call_child", "to_node": None}],
         })

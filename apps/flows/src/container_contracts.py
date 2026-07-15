@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from apps.flows.src.models import (
         BranchConfig,
         FlowConfig,
+        FlowToolReference,
         NodeConfig,
         ResourceMapInput,
         ToolReference,
@@ -125,16 +126,17 @@ class ToolRegistryProtocol(Protocol):
 
     async def materialize(
         self,
-        tool_ref: JsonObject | ToolReference | NodeConfig,
+        tool_ref: JsonObject | FlowToolReference | ToolReference | NodeConfig,
     ) -> BaseTool: ...
 
     async def create_tool(
         self,
-        tool_ref: str | JsonObject | ToolReference | NodeConfig,
+        tool_ref: str | JsonObject | FlowToolReference | ToolReference | NodeConfig,
     ) -> BaseTool: ...
 
     async def create_tools(
-        self, tool_refs: Sequence[str | JsonObject | ToolReference | NodeConfig],
+        self,
+        tool_refs: Sequence[str | JsonObject | FlowToolReference | ToolReference | NodeConfig],
     ) -> list[BaseTool]: ...
 
 

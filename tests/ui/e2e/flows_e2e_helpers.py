@@ -1868,54 +1868,12 @@ async def flows_set_llm_call_type(page: Page, call_type: Literal["call", "handof
     panel = page.locator("flows-floating-panel[show-backdrop]").first
     editor = panel.locator("flows-llm-node-editor").first
     await expect(editor).to_be_visible(timeout=30_000)
-    call_field = editor.locator("platform-field").filter(
-        has_text=re.compile(r"Call type|Тип вызова|call_type", re.I)
-    ).first
-    if await call_field.count() > 0:
-        await call_field.evaluate(
-            """
-            (el, value) => {
-                el.value = value;
-                if (typeof el.requestUpdate === 'function') el.requestUpdate();
-                el.dispatchEvent(new CustomEvent('change', {
-                    detail: { value },
-                    bubbles: true,
-                    composed: true,
-                }));
-            }
-            """,
-            call_type,
-        )
-    await page.locator("flows-flow-canvas").first.evaluate(
-        """
-        (el, callType) => {
-            const data = el._branchData();
-            const nodes = { ...(data.nodes || {}) };
-            const agentId = Object.prototype.hasOwnProperty.call(nodes, 'agent')
-                ? 'agent'
-                : Object.keys(nodes).find((nodeId) => nodes[nodeId]?.type === 'llm_node');
-            if (!agentId || !nodes[agentId]) {
-                throw new Error('flows_set_llm_call_type: llm_node not found');
-            }
-            const agent = { ...nodes[agentId] };
-            const tools = Array.isArray(agent.tools) ? [...agent.tools] : [];
-            if (tools.length === 0) {
-                throw new Error('flows_set_llm_call_type: agent has no tools');
-            }
-            const firstTool = tools[0];
-            tools[0] = typeof firstTool === 'string'
-                ? { tool_id: firstTool, type: 'tool', call_type: callType }
-                : { ...firstTool, call_type: callType };
-            agent.tools = tools;
-            delete agent.call_type;
-            nodes[agentId] = agent;
-            const next = { ...data, nodes };
-            el._editor.updateBranchData({ data: next });
-            el._editor.setDirty({ dirty: true });
-        }
-        """,
-        call_type,
-    )
+    mode_button = editor.locator(".chip .chip-call-type").first
+    await expect(mode_button).to_be_visible(timeout=30_000)
+    current = await mode_button.get_attribute("data-call-type")
+    if current != call_type:
+        await mode_button.click()
+    await expect(mode_button).to_have_attribute("data-call-type", call_type)
 
 
 def flows_code_echo_payload(flow_id: str, *, name: str) -> dict[str, Any]:

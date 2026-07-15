@@ -26,6 +26,7 @@ from apps.flows.src.models import (
     FlowChatSettings,
     FlowConfig,
     FlowEmployeeConfig,
+    FlowToolReference,
     FlowType,
     FlowVariableConfig,
     GraphNodeConfig,
@@ -403,6 +404,30 @@ async def _inline_single_tool(tool: JsonValue, container: FlowContainer) -> Json
         tool_obj = require_json_object(tool, "tool")
         tool_id = tool_obj.get("tool_id")
 
+        if tool_obj.get("type") == "flow":
+            try:
+                flow_ref = FlowToolReference.model_validate(tool_obj)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            flow_cfg = await container.flow_repository.get(flow_ref.flow_id)
+            if flow_cfg is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Flow tool target '{flow_ref.flow_id}' not found",
+                )
+            if flow_ref.branch_id != "default" and flow_ref.branch_id not in flow_cfg.branches:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Flow tool target '{flow_ref.flow_id}' has no branch "
+                        + repr(flow_ref.branch_id)
+                    ),
+                )
+            return parse_json_object(
+                flow_ref.model_dump_json(exclude_none=True),
+                f"flow_tool.{flow_ref.tool_id}",
+            )
+
         # Если это llm_node - рекурсивно инлайним его tools
         if tool_obj.get("type") == "llm_node" or tool_obj.get("prompt"):
             nested_tools = tool_obj.get("tools")
@@ -449,15 +474,16 @@ async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> Js
 
 def _flow_config_to_inline_tool(flow_cfg: FlowConfig) -> JsonObject:
     """Конвертирует FlowConfig в inline tool."""
-    return {
-        "tool_id": flow_cfg.flow_id,
-        "type": "flow",
-        "name": flow_cfg.name,
-        "description": flow_cfg.description,
-        "entry": flow_cfg.entry,
-        "nodes": flow_cfg.nodes or {},
-        "edges": [_edge_to_json(edge) for edge in flow_cfg.edges],
-    }
+    flow_ref = FlowToolReference(
+        tool_id=flow_cfg.flow_id,
+        flow_id=flow_cfg.flow_id,
+        name=flow_cfg.name,
+        description=flow_cfg.description,
+    )
+    return parse_json_object(
+        flow_ref.model_dump_json(exclude_none=True),
+        f"flow_tool.{flow_cfg.flow_id}",
+    )
 
 
 router = APIRouter(tags=["flows"])

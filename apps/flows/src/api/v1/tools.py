@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import Field
 
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models import FlowConfig, ToolReference
+from apps.flows.src.models import FlowConfig, ToolReference, flow_tool_parameters_schema
 from apps.flows.src.models.enums import CodeMode, ReactToolRole
 from apps.flows.src.services.agent_toolkit_service import (
     get_toolkit_ids_for_flow,
@@ -131,6 +131,7 @@ def _flow_response(flow_row: FlowConfig) -> ToolResponse:
         tool_id=flow_row.flow_id,
         title=flow_row.name,
         description=flow_row.description,
+        parameters_schema=flow_tool_parameters_schema(),
         tags=flow_row.tags or ["flow"],
         permission=None,
         item_type="flow",

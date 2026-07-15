@@ -500,9 +500,9 @@ Skills остаются в тегах `nodes` и `execution` (отдельный
 - Title: «Передаём диалог между агентами» / "Hand off the dialog between agents"
 - Для чего: передать покупателя профильному агенту (например, «Агенту возвратов»).
 - Результат: диалог передан второму агенту и при необходимости возвращается назад.
-- Шаги: 1) включить у ноды режим передачи; 2) указать целевого агента; 3) настроить возврат управления; 4) запустить диалог о возврате; 5) в истории увидеть цепочку передачи.
+- Шаги: 1) добавить целевой flow в «Инструменты» LLM-ноды; 2) на чипе этого flow переключить «Call» на «Handoff»; 3) при необходимости открыть flow-инструмент и выбрать ветку; 4) настроить возврат управления; 5) запустить диалог и увидеть цепочку передачи в истории.
 - Демонстрация: история выполнения с цепочкой handoff.
-- Фичи: llm_node call_type handoff, handback, durable history handoff.
+- Фичи: `llm_node.tools[i].call_type = handoff`, `FlowToolReference`, handback, durable history handoff.
 - Отличие от передачи оператору: handoff — между двумя агентами (машина→машина); HITL — агент→человек (раздел 4a).
 
 ---
@@ -818,4 +818,3 @@ E2E-тесты (все `[x]`):
 Документация: `make test-ui-doc` → `docs/scenarios/flows/**` и `docs/scenarios/worktracker/operators/**`.
 
 Developer learning path: `scenarios/flows/api/api-first-request/` (см. `docs/scenarios/taxonomy.yaml`).
-

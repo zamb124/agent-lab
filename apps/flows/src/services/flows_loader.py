@@ -22,7 +22,14 @@ from urllib.parse import urlparse
 import yaml
 
 from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
-from apps.flows.src.models import CodeMode, FlowConfig, NodeConfig, ToolReference, TriggerConfig
+from apps.flows.src.models import (
+    CodeMode,
+    FlowConfig,
+    FlowToolReference,
+    NodeConfig,
+    ToolReference,
+    TriggerConfig,
+)
 from apps.flows.src.models.bundle_registry import FlowBundleRegistry
 from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.tools.decorator import FunctionTool
@@ -612,14 +619,20 @@ class FlowsLoader:
         node["files"] = materialized
         return node
 
-    def _convert_tools(self, tools_list: JsonArray) -> list[ToolReference]:
+    def _convert_tools(
+        self,
+        tools_list: JsonArray,
+    ) -> list[FlowToolReference | ToolReference]:
         """Конвертирует список tools в List[ToolReference]."""
-        result: list[ToolReference] = []
+        result: list[FlowToolReference | ToolReference] = []
         for tool in tools_list:
             if isinstance(tool, str):
                 result.append(ToolReference(tool_id=tool))
             elif isinstance(tool, dict):
-                result.append(ToolReference.model_validate(tool))
+                if tool.get("type") == "flow":
+                    result.append(FlowToolReference.model_validate(tool))
+                else:
+                    result.append(ToolReference.model_validate(tool))
         return result
 
     async def _load_nodes_with_prompts(
@@ -954,6 +967,13 @@ class FlowsLoader:
 
             # Tool с tool_id без code — ищем в caches
             # Полностью определённые inline tools (не требуют поиска в кэшах)
+            if exec_kind == "flow":
+                flow_ref = FlowToolReference.model_validate(tool_payload)
+                logger.debug(f"{context}: inline flow tool '{flow_ref.tool_id}'")
+                return require_json_object(
+                    flow_ref.model_dump(mode="json", exclude_none=True),
+                    f"{context}.flow_tool",
+                )
             if exec_kind in _INLINE_SELF_CONTAINED_TOOL_TYPES:
                 logger.debug(f"{context}: inline tool '{tool_id}' с type='{exec_kind}'")
                 return tool_payload

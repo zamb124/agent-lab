@@ -122,7 +122,20 @@ function _appendPickerDetailToTools(detail, tools, existingKeys) {
     }
     existingKeys.add(newKey);
     if (kind === 'flow') {
-        tools.push({ type: 'flow', tool_id: toolId });
+        const item = isPlainObject(detail.item) ? detail.item : null;
+        if (item === null || !isPlainObject(item.parameters_schema)) {
+            throw new Error('flows-llm-node-editor: flow picker item requires parameters_schema');
+        }
+        tools.push({
+            tool_id: toolId,
+            type: 'flow',
+            flow_id: toolId,
+            branch_id: 'default',
+            call_type: 'call',
+            name: typeof item.title === 'string' && item.title.length > 0 ? item.title : toolId,
+            description: typeof item.description === 'string' ? item.description : '',
+            parameters_schema: structuredClone(item.parameters_schema),
+        });
         return;
     }
     const item = isPlainObject(detail.item) ? detail.item : null;
@@ -266,6 +279,19 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 background: none; border: none; padding: 0; margin: 0;
                 color: var(--accent); cursor: pointer;
                 font-size: var(--text-base); line-height: 1;
+            }
+            .chip .chip-call-type {
+                padding: 1px var(--space-2);
+                border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+                border-radius: var(--radius-full);
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                white-space: nowrap;
+            }
+            .chip .chip-call-type[data-call-type='handoff'] {
+                background: var(--accent);
+                color: var(--text-on-accent, white);
+                border-color: var(--accent);
             }
             .add-tools { display: flex; gap: var(--space-2); flex-wrap: wrap; }
             .filter-list {
@@ -1075,6 +1101,28 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this._emitPatch({ tools: next });
     }
 
+    _onToggleFlowToolCallType(toolId) {
+        if (typeof toolId !== 'string' || toolId.length === 0) {
+            throw new Error('flows-llm-node-editor: flow tool call type requires tool_id');
+        }
+        const tools = Array.isArray(this.nodeConfig?.tools) ? this.nodeConfig.tools : [];
+        let changed = false;
+        const next = tools.map((entry) => {
+            if (!isPlainObject(entry) || entry.tool_id !== toolId || entry.type !== 'flow') {
+                return entry;
+            }
+            changed = true;
+            return {
+                ...entry,
+                call_type: entry.call_type === 'handoff' ? 'call' : 'handoff',
+            };
+        });
+        if (!changed) {
+            throw new Error(`flows-llm-node-editor: flow tool '${toolId}' not found`);
+        }
+        this._emitPatch({ tools: next });
+    }
+
     _renderPromptSection() {
         const prompt = typeof this.nodeConfig?.prompt === 'string' ? this.nodeConfig.prompt : '';
         const variables = this.flowVariables && typeof this.flowVariables === 'object' ? this.flowVariables : {};
@@ -1368,35 +1416,6 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderCallTypeSection() {
-        const callType = this.nodeConfig?.call_type === 'handoff' ? 'handoff' : 'call';
-        return html`
-            <section class="block">
-                ${this._sectionHeading(
-                    this.t('llm_node_editor.section_call_type'),
-                    'llm_node_editor.call_type_help',
-                )}
-                <div class="block-card content-panel">
-                    <platform-field
-                        type="select"
-                        .label=${this.t('llm_node_editor.field_call_type')}
-                        .value=${callType}
-                        .options=${[
-                            { value: 'call', label: this.t('llm_node_editor.call_type_call') },
-                            { value: 'handoff', label: this.t('llm_node_editor.call_type_handoff') },
-                        ]}
-                        @change=${(e) => {
-                            const v = e.detail?.value;
-                            if (v === 'call' || v === 'handoff') {
-                                this._emitPatch({ call_type: v });
-                            }
-                        }}
-                    ></platform-field>
-                </div>
-            </section>
-        `;
-    }
-
     _renderToolsSection() {
         if (this.nodeConfig?.structured_output) return '';
         const tools = Array.isArray(this.nodeConfig?.tools) ? this.nodeConfig.tools : [];
@@ -1421,6 +1440,24 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                             <span class="chip" @click=${() => this._onEditTool(t)}>
                                 ${chipIcon}
                                 <span class="chip-label">${getToolLabel(t)}</span>
+                                ${isPlainObject(t) && t.type === 'flow' ? html`
+                                    <platform-button
+                                        variant="secondary"
+                                        density="compact"
+                                        class="chip-call-type"
+                                        data-call-type=${t.call_type === 'handoff' ? 'handoff' : 'call'}
+                                        aria-label=${this.t('llm_node_editor.flow_tool_call_type_aria', {
+                                            name: getToolLabel(t),
+                                        })}
+                                        title=${this.t('llm_node_editor.flow_tool_call_type_hint')}
+                                        @click=${(e) => {
+                                            e.stopPropagation();
+                                            this._onToggleFlowToolCallType(tid);
+                                        }}
+                                    >${t.call_type === 'handoff'
+                                        ? this.t('llm_node_editor.call_type_handoff_short')
+                                        : this.t('llm_node_editor.call_type_call_short')}</platform-button>
+                                ` : nothing}
                                 <platform-button
                                     variant="ghost"
                                     icon-only
@@ -1469,7 +1506,6 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 <div slot="settings" class="stack focus-stage">
                     ${this._renderOutputModeSection()}
                     ${this._renderReactSection()}
-                    ${this._renderCallTypeSection()}
                     ${this._renderAgentSkillsSection()}
                     ${this._renderToolsSection()}
                     ${this._renderOutputSchemaSection()}
@@ -1512,7 +1548,6 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                             ${this._renderMessagesFilterSection()}
                             ${this._renderOutputModeSection()}
                             ${this._renderReactSection()}
-                            ${this._renderCallTypeSection()}
                             ${this._renderAgentSkillsSection()}
                             ${this._renderToolsSection()}
                             ${this._renderOutputSchemaSection()}

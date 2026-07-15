@@ -4,6 +4,7 @@
  * Поля точно по `FlowNode` (apps/flows/src/runtime/nodes.py):
  *   - flow_id (combobox: список доступных flows + ручной ввод)
  *   - branch_id (по умолчанию 'default')
+ *   - call_type ('call' | 'handoff')
  */
 
 import { html, css } from 'lit';
@@ -36,6 +37,16 @@ export class FlowsFlowNodeEditor extends PlatformElement {
             label { font-size: var(--text-sm); color: var(--text-secondary); }
             .source-mode {
                 margin-bottom: var(--space-2);
+            }
+            .branch-mode-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(150px, 0.55fr);
+                gap: var(--space-3);
+                align-items: end;
+            }
+            .branch-mode-row .field { margin-bottom: 0; }
+            @media (max-width: 680px) {
+                .branch-mode-row { grid-template-columns: 1fr; }
             }
         `,
     ];
@@ -156,10 +167,23 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         this._emitPatch({ branch_id: v });
     }
 
+    _onCallType(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object' || !('value' in d)) {
+            throw new Error('flows-flow-node-editor: call_type change detail.value');
+        }
+        const v = d.value;
+        if (v !== 'call' && v !== 'handoff') {
+            throw new Error('flows-flow-node-editor: call_type must be call or handoff');
+        }
+        this._emitPatch({ call_type: v });
+    }
+
     render() {
         const cfg = asObject(this.nodeConfig);
         const flowId = this._resolvedFlowId(cfg);
         const branchId = this._resolvedBranchId(cfg);
+        const callType = cfg?.call_type === 'handoff' ? 'handoff' : 'call';
         const branchOptions = this._branchIdOptions(flowId, branchId);
         const flows = Array.isArray(this._flows.items) ? this._flows.items.filter((f) => f && f.flow_id !== this.flowId) : [];
         const isInList = flows.some((f) => f.flow_id === flowId);
@@ -218,16 +242,33 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                             ></platform-field>
                         `}
                     </div>
-                    <div class="field">
-                        <label>${this.t('flow_node_editor.branch_id')}</label>
-                        <platform-field
-                            mode="edit"
-                            type="enum"
-                            .value=${branchId}
-                            .config=${{ values: branchEnumValues }}
-                            ?disabled=${flowId.length === 0}
-                            @change=${this._onBranchId}
-                        ></platform-field>
+                    <div class="branch-mode-row">
+                        <div class="field">
+                            <label>${this.t('flow_node_editor.branch_id')}</label>
+                            <platform-field
+                                mode="edit"
+                                type="enum"
+                                .value=${branchId}
+                                .config=${{ values: branchEnumValues }}
+                                ?disabled=${flowId.length === 0}
+                                @change=${this._onBranchId}
+                            ></platform-field>
+                        </div>
+                        <div class="field call-type-field">
+                            <label>${this.t('flow_node_editor.call_type')}</label>
+                            <platform-field
+                                mode="edit"
+                                type="enum"
+                                .value=${callType}
+                                .hint=${this.t('flow_node_editor.call_type_hint')}
+                                .config=${{ values: [
+                                    { value: 'call', label: this.t('flow_node_editor.call_type_call') },
+                                    { value: 'handoff', label: this.t('flow_node_editor.call_type_handoff') },
+                                ] }}
+                                ?disabled=${flowId.length === 0}
+                                @change=${this._onCallType}
+                            ></platform-field>
+                        </div>
                     </div>
                 </div>
             </flows-base-node-editor>

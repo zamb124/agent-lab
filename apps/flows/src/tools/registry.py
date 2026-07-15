@@ -14,8 +14,8 @@ from collections.abc import Sequence
 from typing import Protocol, TypeAlias, cast
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.models import NodeConfig, ToolReference
-from apps.flows.src.models.enums import CodeMode, NodeType
+from apps.flows.src.models import FlowToolReference, NodeConfig, ToolReference
+from apps.flows.src.models.enums import CodeMode, NodeToolCallType, NodeType
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.mcp_wrapper import MCPTool
@@ -27,7 +27,7 @@ from core.types import JsonObject
 logger = get_logger(__name__)
 
 
-ToolMaterializeInput: TypeAlias = ToolReference | NodeConfig | JsonObject
+ToolMaterializeInput: TypeAlias = FlowToolReference | ToolReference | NodeConfig | JsonObject
 
 
 class NodeToolWrapperFactory(Protocol):
@@ -36,7 +36,7 @@ class NodeToolWrapperFactory(Protocol):
         node_config: NodeConfig,
         *,
         container: FlowRuntimeContainer | None = None,
-        call_type: str = "call",
+        call_type: NodeToolCallType = NodeToolCallType.CALL,
     ) -> BaseTool: ...
 
 
@@ -166,11 +166,20 @@ class ToolRegistry:
         """
         if isinstance(tool_ref, NodeConfig):
             return self._create_node_as_tool(tool_ref)
+        if isinstance(tool_ref, FlowToolReference):
+            return self._create_node_as_tool(
+                NodeConfig.model_validate(tool_ref.model_dump(mode="python"))
+            )
 
         if isinstance(tool_ref, dict):
             raw_code_mode = tool_ref.get("code_mode")
             if raw_code_mode == CodeMode.MCP_TOOL.value:
                 return await self._create_mcp_tool(ToolReference.model_validate(tool_ref))
+            if tool_ref.get("type") == NodeType.FLOW.value:
+                flow_ref = FlowToolReference.model_validate(tool_ref)
+                return self._create_node_as_tool(
+                    NodeConfig.model_validate(flow_ref.model_dump(mode="python"))
+                )
             if self._is_node_as_tool_payload(tool_ref):
                 return self._create_node_as_tool(NodeConfig.model_validate(tool_ref))
 
