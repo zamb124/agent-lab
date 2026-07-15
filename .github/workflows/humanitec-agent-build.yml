@@ -228,6 +228,7 @@ jobs:
           name: forge-logs-${{ matrix.platform }}
           path: apps/agent/desktop/vendor/goose/ui/desktop/forge-*.log
           if-no-files-found: ignore
+          retention-days: 1
 
       - name: Verify artifact branding
         shell: bash
@@ -247,6 +248,7 @@ jobs:
         with:
           name: humanitec-agent-${{ matrix.platform }}
           path: apps/agent/desktop/dist/*
+          retention-days: 1
 
   publish-release:
     needs: [resolve-release, build-matrix]
