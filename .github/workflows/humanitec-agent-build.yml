@@ -133,12 +133,11 @@ jobs:
         run: chmod +x apps/agent/desktop/scripts/build.sh apps/agent/desktop/scripts/apply_branding.sh
 
       - name: Setup Node.js
-        # Node 24 ломает extract-zip: процесс выходит (exit 0) посреди распаковки
-        # zip — рвёт postinstall electron (dist остаётся с одними locales на
-        # Linux/Windows) и упаковку @electron/packager на macOS. Node 22 LTS — ок.
+        # engines.node в vendor/goose/ui/desktop/package.json — ^24.10.0
+        # (build.sh::verify_node_engine падает иначе с понятной ошибкой).
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

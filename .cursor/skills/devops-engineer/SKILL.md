@@ -211,7 +211,7 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 
 | Тема | Канон |
 |---|---|
-| Node | **22 LTS** — Node 24 рвёт `extract-zip` (postinstall electron, packager на macOS) |
+| Node | **24** (`engines.node: ^24.10.0` в `vendor/goose/ui/desktop/package.json`); `build.sh::verify_node_engine` падает с понятной ошибкой до старта electron-forge, если версия не совпадает |
 | pnpm | `pnpm install --frozen-lockfile` из **`vendor/goose/ui`** (monorepo root), не из `ui/desktop` |
 | macOS packager | `ELECTRON_PACKAGER_TMPDIR=$REPO_ROOT/.electron-packager-tmp` — staging на том же томе, что `out/` |
 | macos-x64 | раннер **`macos-14`** (не `macos-13`); кросс: `x86_64-apple-darwin` + forge `--arch x64`; notarize вне forge |
