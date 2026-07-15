@@ -1,0 +1,13 @@
+component: platform-viz-host
+doc_slug: platform-viz-host
+tier: T2
+title_ru: Viz Host
+title_en: Viz Host
+import: "@platform/lib/components/platform-viz-host.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

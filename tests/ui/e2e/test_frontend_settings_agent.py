@@ -52,7 +52,7 @@ async def _open_settings_agent_tab_raw(page: Page, *, origin: str) -> None:
 
 async def _click_settings_agent_tab(page: Page) -> None:
     agent_tab = page.locator("frontend-settings-page .tab").filter(
-        has_text=re.compile(r"HumanitecAgent")
+        has_text=re.compile(r"LinnexAgent")
     )
     await expect(agent_tab).to_be_visible(timeout=30_000)
     await agent_tab.click()
@@ -99,7 +99,7 @@ async def test_f1_settings_agent_tab_visible(
     )
     await expect(
         ui_page_system.locator("frontend-settings-page .tab").filter(
-            has_text=re.compile(r"HumanitecAgent")
+            has_text=re.compile(r"LinnexAgent")
         )
     ).to_be_visible(timeout=30_000)
     await scenario.step(
@@ -381,8 +381,8 @@ async def test_f8_settings_agent_help_text(
     await expect(
         ui_page_system.get_by_text(
             re.compile(
-                r"Сгенерируйте код и введите его в HumanitecAgent|"
-                r"Generate a pairing code and enter it in HumanitecAgent"
+                r"Сгенерируйте код и введите его в LinnexAgent|"
+                r"Generate a pairing code and enter it in LinnexAgent"
             )
         )
     ).to_be_visible(timeout=30_000)

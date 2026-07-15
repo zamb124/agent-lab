@@ -1,0 +1,13 @@
+component: platform-echarts-host
+doc_slug: platform-echarts-host
+tier: T2
+title_ru: ECharts Host
+title_en: ECharts Host
+import: "@platform/lib/components/platform-echarts-host.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

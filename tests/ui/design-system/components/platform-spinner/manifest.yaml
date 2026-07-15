@@ -1,0 +1,13 @@
+component: platform-spinner
+doc_slug: platform-spinner
+tier: T1
+title_ru: Spinner
+title_en: Spinner
+import: "@platform/lib/components/platform-spinner.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1
