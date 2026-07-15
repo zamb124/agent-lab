@@ -780,6 +780,52 @@ def replace_forge_branding_value(
     raise SystemExit(f"forge.config.ts branding anchor missing ({label}): {missing}")
 
 
+# Секция makers/plugins должна добавить maker-wix ДО generic-замен ниже: на
+# чистом vendor-дереве (после reset_vendor_to_upstream) forge.config.ts вообще
+# не содержит "manufacturer" — anchor для generic-замены появляется только тут.
+makers_plugins_anchor = "  ],\n  plugins:"
+if "@electron-forge/maker-wix" not in text:
+    if makers_plugins_anchor not in text:
+        raise SystemExit("forge.config.ts makers/plugins anchor missing")
+    wix_manufacturer = distro.maintainer.split("<", 1)[0].strip()
+    extra_makers = f"""
+    {{
+      name: '@electron-forge/maker-wix',
+      platforms: ['win32'],
+      config: {{
+        language: 1033,
+        manufacturer: '{wix_manufacturer}',
+        icon: 'src/images/icon.ico',
+      }},
+    }},
+    {{
+      name: '@reforged/maker-appimage',
+      platforms: ['linux'],
+      config: {{
+        options: {{
+          name: '{package_slug}',
+          bin: '{distro.bundle_name}',
+          categories: ['Development'],
+          icon: 'src/images/icon.png',
+        }},
+      }},
+    }},
+  ],
+  plugins:"""
+    text = text.replace(makers_plugins_anchor, extra_makers, 1)
+
+# Тем же причинам, что и maker-wix выше: anchor для generic-замены "macos usage
+# description" должен существовать до forge_replacements — добавляем его здесь.
+extend_info_anchor = "extendInfo: {"
+if extend_info_anchor in text and "NSHumanitecUsageDescription" not in text:
+    text = text.replace(
+        extend_info_anchor,
+        extend_info_anchor
+        + f"\n      NSHumanitecUsageDescription: '{distro.display_name} desktop agent',",
+        1,
+    )
+
+
 forge_replacements: list[tuple[str, str, tuple[str, ...]]] = [
     (
         "maker package name",
@@ -854,15 +900,6 @@ extra_resource_target = "extraResource: ['src/bin', 'src/images', 'humanitec.def
 if extra_resource_anchor in text:
     text = text.replace(extra_resource_anchor, extra_resource_target, 1)
 
-extend_info_anchor = "extendInfo: {"
-if extend_info_anchor in text and "NSHumanitecUsageDescription" not in text:
-    text = text.replace(
-        extend_info_anchor,
-        extend_info_anchor
-        + f"\n      NSHumanitecUsageDescription: '{distro.display_name} desktop agent',",
-        1,
-    )
-
 zip_platforms_old = "platforms: ['darwin', 'win32', 'linux'],"
 zip_platforms_new = "platforms: ['darwin'],"
 if zip_platforms_old in text:
@@ -884,37 +921,6 @@ flatpak_maker_anchor = "      name: '@electron-forge/maker-flatpak',\n      conf
 flatpak_maker_patch = "      name: '@electron-forge/maker-flatpak',\n      platforms: ['linux'],\n      config:"
 if flatpak_maker_anchor in text and "name: '@electron-forge/maker-flatpak',\n      platforms:" not in text:
     text = text.replace(flatpak_maker_anchor, flatpak_maker_patch, 1)
-
-makers_plugins_anchor = "  ],\n  plugins:"
-if "@electron-forge/maker-wix" not in text:
-    if makers_plugins_anchor not in text:
-        raise SystemExit("forge.config.ts makers/plugins anchor missing")
-    wix_manufacturer = distro.maintainer.split("<", 1)[0].strip()
-    extra_makers = f"""
-    {{
-      name: '@electron-forge/maker-wix',
-      platforms: ['win32'],
-      config: {{
-        language: 1033,
-        manufacturer: '{wix_manufacturer}',
-        icon: 'src/images/icon.ico',
-      }},
-    }},
-    {{
-      name: '@reforged/maker-appimage',
-      platforms: ['linux'],
-      config: {{
-        options: {{
-          name: '{package_slug}',
-          bin: '{distro.bundle_name}',
-          categories: ['Development'],
-          icon: 'src/images/icon.png',
-        }},
-      }},
-    }},
-  ],
-  plugins:"""
-    text = text.replace(makers_plugins_anchor, extra_makers, 1)
 
 # Notarization вынесена в build.sh (notarytool + stapler после forge).
 # goosed (~245MB extraResource) pre-sign до forge; osxSign пропускает его через optionsForFile.

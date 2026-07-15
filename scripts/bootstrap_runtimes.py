@@ -113,11 +113,15 @@ def _command_output(command: list[str], *, env: dict[str, str] | None = None) ->
 
 
 def _node_ready() -> bool:
+    # Точное совпадение мажора, не "минимум": vendor/goose/ui/desktop
+    # требует engines.node ^24.10.0 — Node 25/26/... этот диапазон не
+    # удовлетворяет, а ">=" здесь ранее самоподкреплял уже símlink-нутый
+    # в BIN_DIR (первый в PATH) неподходящий мажор при повторных запусках.
     output = _command_output(["node", "--version"])
     if output is None:
         return False
     match = re.fullmatch(r"v(\d+)\..+", output)
-    return bool(match and int(match.group(1)) >= NODE_MAJOR)
+    return bool(match and int(match.group(1)) == NODE_MAJOR)
 
 
 def _go_ready() -> bool:
