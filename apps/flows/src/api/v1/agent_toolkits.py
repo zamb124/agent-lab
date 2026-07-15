@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 
 from apps.agent.device_auth import reject_revoked_device_bearer_if_present
-from apps.agent.service import build_toolkit_mcp_url_for_frontend
+from apps.agent.service import build_toolkit_mcp_url_for_frontend, resolve_frontend_base_url
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.agent_toolkit import AgentToolkit
 from apps.flows.src.services.agent_toolkit_notify import notify_agent_toolkits_updated
@@ -17,7 +17,6 @@ from apps.flows.src.services.agent_toolkit_service import (
     list_agent_toolkits,
     save_agent_toolkit,
 )
-from apps.frontend.config import get_frontend_public_base_url
 from core.context import require_context
 from core.models import StrictBaseModel
 
@@ -100,7 +99,10 @@ async def list_agent_toolkits_catalog(
         container.agent_toolkit_repository,
         company_id=active_company.company_id,
     )
-    frontend_base = get_frontend_public_base_url(request.headers.get("host"))
+    frontend_base = resolve_frontend_base_url(
+        request_host=request.headers.get("host"),
+        url_scheme=request.url.scheme,
+    )
     items: list[AgentToolkitCatalogItem] = []
     for toolkit in await list_agent_toolkits(container.agent_toolkit_repository):
         items.append(

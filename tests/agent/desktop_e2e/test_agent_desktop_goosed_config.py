@@ -41,17 +41,11 @@ async def test_goose_cfg_01_config_extensions_platform_mcp_first(
                 auth_token,
             )
             extensions = await goosed_get_config_extensions(page)
-            names: list[str] = []
-            for entry in extensions:
-                config = entry.get("config")
-                if isinstance(config, dict):
-                    name = config.get("name")
-                    if isinstance(name, str):
-                        names.append(name)
-            if not names:
-                display_name = extensions[0].get("display_name") if extensions else None
-                if isinstance(display_name, str):
-                    names.append(display_name)
+            names = [
+                entry["name"]
+                for entry in extensions
+                if isinstance(entry.get("name"), str)
+            ]
             assert len(names) > 0
             platform_names = [name for name in names if name.startswith("platform_")]
             assert "platform_humanitec_core" in platform_names

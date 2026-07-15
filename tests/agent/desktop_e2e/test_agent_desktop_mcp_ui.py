@@ -62,22 +62,20 @@ async def test_mcp_bld_04_platform_humanitec_core_after_pairing(
     desktop = humanitec_desktop_process_factory()
     try:
         desktop.start()
+        await pair_desktop_via_deep_link(
+            desktop,
+            agent_frontend_http_client,
+            auth_token,
+        )
         async with async_playwright() as playwright:
             browser = await connect_desktop_browser(playwright, desktop)
             page = await find_main_app_page(browser)
-            await pair_desktop_via_deep_link(
-                desktop,
-                agent_frontend_http_client,
-                auth_token,
-            )
             extensions = await goosed_get_config_extensions(page)
-            names: list[str] = []
-            for entry in extensions:
-                config = entry.get("config")
-                if isinstance(config, dict):
-                    name = config.get("name")
-                    if isinstance(name, str):
-                        names.append(name)
+            names = [
+                entry["name"]
+                for entry in extensions
+                if isinstance(entry.get("name"), str)
+            ]
             assert "platform_humanitec_core" in names
     finally:
         desktop.stop()
