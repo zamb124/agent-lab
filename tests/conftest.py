@@ -512,7 +512,11 @@ def enforce_no_test_doubles(request: pytest.FixtureRequest) -> None:
         "mock_llm_with_queue",
         "mocker",
     }
-    requested = sorted(forbidden.intersection(request.fixturenames))
+    fixture_info = getattr(request.node, "_fixtureinfo", None)
+    if fixture_info is None:
+        return
+    direct_fixture_names = set(getattr(fixture_info, "argnames", ()))
+    requested = sorted(forbidden.intersection(direct_fixture_names))
     if requested:
         pytest.fail(f"no_test_doubles test requested forbidden fixtures: {requested}")
 

@@ -103,9 +103,9 @@ async def test_f1_settings_agent_tab_visible(
         )
     ).to_be_visible(timeout=30_000)
     await scenario.step(
-        "Вкладка HumanitecAgent видна на странице настроек",
+        "Вкладка LinnexAgent видна на странице настроек",
         ui_page_system,
-        label_en="HumanitecAgent tab is visible in settings",
+        label_en="LinnexAgent tab is visible in settings",
     )
 
 
@@ -132,9 +132,9 @@ async def test_f2_settings_agent_connect_section(
         frontend_ui=frontend_ui,
     )
     await scenario.step(
-        "Открыта вкладка HumanitecAgent",
+        "Открыта вкладка LinnexAgent",
         ui_page_system,
-        label_en="HumanitecAgent settings tab opened",
+        label_en="LinnexAgent settings tab opened",
     )
     await expect(
         ui_page_system.get_by_text(re.compile(r"Подключение компьютера|Connect your computer"))
@@ -143,9 +143,9 @@ async def test_f2_settings_agent_connect_section(
         ui_page_system.get_by_role("button", name=re.compile(r"Подключить компьютер|Connect computer"))
     ).to_be_visible(timeout=30_000)
     await scenario.step(
-        "Секция подключения HumanitecAgent отображается",
+        "Секция подключения LinnexAgent отображается",
         ui_page_system,
-        label_en="HumanitecAgent connect section is visible",
+        label_en="LinnexAgent connect section is visible",
     )
 
 
@@ -173,9 +173,9 @@ async def test_f3_settings_agent_devices_empty(
         frontend_ui=frontend_ui,
     )
     await scenario.step(
-        "Открыта вкладка HumanitecAgent",
+        "Открыта вкладка LinnexAgent",
         ui_page_system,
-        label_en="HumanitecAgent settings tab opened",
+        label_en="LinnexAgent settings tab opened",
     )
     await expect(
         ui_page_system.get_by_text(re.compile(r"Подключённые устройства|Connected devices"))
@@ -214,9 +214,9 @@ async def test_f4_settings_agent_audit_empty(
         frontend_ui=frontend_ui,
     )
     await scenario.step(
-        "Открыта вкладка HumanitecAgent",
+        "Открыта вкладка LinnexAgent",
         ui_page_system,
-        label_en="HumanitecAgent settings tab opened",
+        label_en="LinnexAgent settings tab opened",
     )
     await expect(
         ui_page_system.get_by_text(re.compile(r"Журнал аудита|Audit log"))
@@ -254,9 +254,9 @@ async def test_f5_settings_agent_pairing_code(
         frontend_ui=frontend_ui,
     )
     await scenario.step(
-        "Открыта вкладка HumanitecAgent",
+        "Открыта вкладка LinnexAgent",
         ui_page_system,
-        label_en="HumanitecAgent tab opened",
+        label_en="LinnexAgent tab opened",
     )
     connect_button = ui_page_system.get_by_role(
         "button",
@@ -332,9 +332,9 @@ async def test_f7_settings_agent_release_banner(
     )
     await _wait_agent_releases_status(ui_page_system)
     await scenario.step(
-        "Открыта вкладка HumanitecAgent",
+        "Открыта вкладка LinnexAgent",
         ui_page_system,
-        label_en="HumanitecAgent settings tab opened",
+        label_en="LinnexAgent settings tab opened",
     )
     await expect(
         ui_page_system.locator("frontend-settings-page .section-help").filter(
@@ -374,9 +374,9 @@ async def test_f8_settings_agent_help_text(
         frontend_ui=frontend_ui,
     )
     await scenario.step(
-        "Открыта вкладка HumanitecAgent",
+        "Открыта вкладка LinnexAgent",
         ui_page_system,
-        label_en="HumanitecAgent settings tab opened",
+        label_en="LinnexAgent settings tab opened",
     )
     await expect(
         ui_page_system.get_by_text(

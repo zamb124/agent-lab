@@ -29,6 +29,7 @@ _CATEGORY_TO_KIND: dict[FileCategory, FileReadKind] = {
     FileCategory.ARCHIVE: FileReadKind.UNKNOWN,
     FileCategory.EMAIL: FileReadKind.OFFICE,
     FileCategory.EBOOK: FileReadKind.OFFICE,
+    FileCategory.VIZ: FileReadKind.TEXT,
 }
 
 # HTML/HTM — категория TEXT в реестре, но reader читает как HTML

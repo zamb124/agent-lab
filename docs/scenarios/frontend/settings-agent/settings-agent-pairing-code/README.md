@@ -6,9 +6,9 @@
 
 ![Открыта страница настроек платформы](settings-agent-pairing-code--01-platform-settings-page-opened.png)
 
-## Шаг 2. Открыта вкладка HumanitecAgent
+## Шаг 2. Открыта вкладка LinnexAgent
 
-![Открыта вкладка HumanitecAgent](settings-agent-pairing-code--02-humanitecagent-tab-opened.png)
+![Открыта вкладка LinnexAgent](settings-agent-pairing-code--02-linnexagent-tab-opened.png)
 
 ## Шаг 3. Pairing code создан и отображается
 

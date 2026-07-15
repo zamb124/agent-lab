@@ -6,6 +6,6 @@ Settings page opens and the LinnexAgent tab is available.
 
 ![Platform settings page opened](settings-agent-tab--01-platform-settings-page-opened.png)
 
-## Step 2. HumanitecAgent tab is visible in settings
+## Step 2. LinnexAgent tab is visible in settings
 
-![HumanitecAgent tab is visible in settings](settings-agent-tab--02-humanitecagent-tab-is-visible-in-settings.png)
+![LinnexAgent tab is visible in settings](settings-agent-tab--02-linnexagent-tab-is-visible-in-settings.png)

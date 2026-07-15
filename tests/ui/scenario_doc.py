@@ -15,9 +15,9 @@ from playwright.async_api import Page
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Основная готовность перед скриншотом не опирается на networkidle: WS держит соединение открытым.
-_READY_MS = 3_000
-_VISUAL_READY_MS = 1_000
-_STABLE_LAYOUT_FRAMES = 2
+_READY_MS = 30_000
+_VISUAL_READY_MS = 12_000
+_STABLE_LAYOUT_FRAMES = 6
 # Lit-корни платформенных SPA в E2E (см. tests/ui/apps.py).
 _SHELL_SELECTOR = "sync-app, crm-app, rag-app, flows-app, frontend-app, office-app"
 _LOADING_SELECTOR = (

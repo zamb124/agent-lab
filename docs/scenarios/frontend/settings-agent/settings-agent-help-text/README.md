@@ -6,9 +6,9 @@
 
 ![Открыта страница настроек платформы](settings-agent-help-text--01-platform-settings-page-opened.png)
 
-## Шаг 2. Открыта вкладка HumanitecAgent
+## Шаг 2. Открыта вкладка LinnexAgent
 
-![Открыта вкладка HumanitecAgent](settings-agent-help-text--02-humanitecagent-settings-tab-opened.png)
+![Открыта вкладка LinnexAgent](settings-agent-help-text--02-linnexagent-settings-tab-opened.png)
 
 ## Шаг 3. Help-текст про pairing отображается
 

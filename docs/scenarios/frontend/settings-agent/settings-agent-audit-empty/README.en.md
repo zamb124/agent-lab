@@ -6,9 +6,9 @@ The LinnexAgent tab shows an empty audit log.
 
 ![Platform settings page opened](settings-agent-audit-empty--01-platform-settings-page-opened.png)
 
-## Step 2. HumanitecAgent settings tab opened
+## Step 2. LinnexAgent settings tab opened
 
-![HumanitecAgent settings tab opened](settings-agent-audit-empty--02-humanitecagent-settings-tab-opened.png)
+![LinnexAgent settings tab opened](settings-agent-audit-empty--02-linnexagent-settings-tab-opened.png)
 
 ## Step 3. Empty audit log is visible
 

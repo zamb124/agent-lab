@@ -6,6 +6,6 @@
 
 ![Открыта страница настроек платформы](settings-agent-tab--01-platform-settings-page-opened.png)
 
-## Шаг 2. Вкладка HumanitecAgent видна на странице настроек
+## Шаг 2. Вкладка LinnexAgent видна на странице настроек
 
-![Вкладка HumanitecAgent видна на странице настроек](settings-agent-tab--02-humanitecagent-tab-is-visible-in-settings.png)
+![Вкладка LinnexAgent видна на странице настроек](settings-agent-tab--02-linnexagent-tab-is-visible-in-settings.png)

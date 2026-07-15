@@ -20,7 +20,21 @@ _TEST_CRAWL_TAXONOMY = SearchIndexCrawlTaxonomy(
 
 
 @pytest.fixture(autouse=True)
-def crawl_taxonomy_for_search_tests(monkeypatch):
+def crawl_taxonomy_for_search_tests(request: pytest.FixtureRequest) -> None:
+    """Search taxonomy stub.
+
+    Подключается и как ``tests/search/conftest``, и через ``pytest_plugins``
+    из отдельных cross-service модулей. ``monkeypatch`` нельзя объявлять
+    параметром фикстуры: иначе он попадает в ``fixturenames`` всех тестов
+    worker'а и ломает ``no_test_doubles``.
+    """
+    if request.node.get_closest_marker("no_test_doubles") is not None:
+        return
+
+    monkeypatch = request.getfixturevalue("monkeypatch")
+    if not isinstance(monkeypatch, pytest.MonkeyPatch):
+        raise TypeError("monkeypatch fixture must be pytest.MonkeyPatch")
+
     def _resolve(search_index_id: str) -> SearchIndexCrawlTaxonomy:
         _ = search_index_id
         return _TEST_CRAWL_TAXONOMY

@@ -305,7 +305,7 @@ async def read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
     return await _read_stored_file_by_id(file_id)
 
 
-_TEXT_EXTENSIONS = extensions_for(FileCategory.TEXT)
+_TEXT_EXTENSIONS = extensions_for(FileCategory.TEXT, FileCategory.VIZ)
 _SPREADSHEET_EXTENSIONS = extensions_for(FileCategory.SPREADSHEET)
 _OFFICE_EXTENSIONS = extensions_for(
     FileCategory.OFFICE_DOC,
