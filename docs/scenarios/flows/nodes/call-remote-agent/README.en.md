@@ -18,10 +18,16 @@ In URL mode enter the partner agent address and branch if needed. Your agent the
 
 ![Set the partner agent address](call-remote-agent--02-remote-agent-url-set.png)
 
-## Step 3. Publish the remote agent call
+## Step 3. Review the address before publishing
+
+Reopen the node and confirm the partner URL is in the draft — the graph is ready to delegate requests to an external agent.
+
+![Review the address before publishing](call-remote-agent--03-remote-agent-url-reviewed.png)
+
+## Step 4. Publish the remote agent call
 
 **Result demonstration.** The remote agent node is saved with the URL — the graph is ready to delegate requests to a partner.
 
 **Summary.** You can add a remote_flow node and configure an external agent call over A2A.
 
-![Publish the remote agent call](call-remote-agent--03-remote-agent-published.png)
+![Publish the remote agent call](call-remote-agent--04-remote-agent-published.png)

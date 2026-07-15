@@ -23,3 +23,11 @@ Send a customer question and wait for the reply. Each answer can be inspected wi
 Under the agent reply, click the trace icon. A step tree opens showing which blocks ran and how long each step took.
 
 ![Open the last reply trace](inspect-traces-logs--03-tracing-modal-open.png)
+
+## Step 4. Open logs for the same reply
+
+**Result demonstration.** Click the logs icon next to the same reply — the system log for that run opens. Traces and logs together show what happened inside the agent.
+
+**Summary.** You can now analyze Green Garden replies using traces and logs after each dialog.
+
+![Open logs for the same reply](inspect-traces-logs--04-logs-modal-open.png)

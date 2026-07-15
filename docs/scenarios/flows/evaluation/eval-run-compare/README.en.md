@@ -23,3 +23,11 @@ Click Run. Evaluation Lab submits the check in the background and shows status i
 Run again with the same case. The matrix shows two runs — you can compare them and pick a baseline.
 
 ![Run a second evaluation for comparison](eval-run-compare--03-evaluation-second-run.png)
+
+## Step 4. Compare runs and set baseline
+
+**Result demonstration.** The Compare panel is open and a baseline is set — you can now track regressions between agent versions.
+
+**Summary.** You can run checks, compare two runs, and assign a baseline for the branch.
+
+![Compare runs and set baseline](eval-run-compare--04-evaluation-compare-baseline.png)

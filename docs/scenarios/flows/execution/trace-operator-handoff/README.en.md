@@ -20,8 +20,14 @@ In the event list, find HandoffRequested; that is when the agent handed the dial
 
 ## Step 3. Find the resume event after the reply
 
-**Result demonstration.** The HandoffResumed event shows the operator replied and the agent continued the dialog. Together with HandoffRequested it is the full picture of human handoff.
+Scroll the list to HandoffResumed — that is when the operator replied and control returned to the agent.
+
+![Find the resume event after the reply](trace-operator-handoff--03-handoff-resumed-event.png)
+
+## Step 4. Review the handoff and resume chain
+
+**Result demonstration.** HandoffRequested and HandoffResumed appear in one list — the full picture of human handoff and dialog resume.
 
 **Summary.** You can now read run history and find operator handoff and dialog resume events.
 
-![Find the resume event after the reply](trace-operator-handoff--03-handoff-resumed-event.png)
+![Review the handoff and resume chain](trace-operator-handoff--04-handoff-chain-visible.png)

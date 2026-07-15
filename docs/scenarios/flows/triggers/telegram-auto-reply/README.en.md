@@ -20,7 +20,7 @@ In the triggers list click + and choose Telegram. Set id and name — the store 
 
 ## Step 3. Set the bot token via a secret
 
-In the token field set @var:tg_bot_98fb413a — the value comes from protected company variables. Verify and re-register webhook buttons are nearby.
+In the token field set @var:tg_bot_4a2e49ed — the value comes from protected company variables. Verify and re-register webhook buttons are nearby.
 
 ![Set the bot token via a secret](telegram-auto-reply--03-telegram-token-var-set.png)
 
