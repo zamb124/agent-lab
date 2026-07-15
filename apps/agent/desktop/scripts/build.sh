@@ -750,9 +750,10 @@ build_release() {
   GOOSE_BUNDLE_NAME="$(read_distro_field bundle_name)"
 
   chmod +x "${ROOT_DIR}/scripts/apply_branding.sh" "${ROOT_DIR}/scripts/apply_vendor_patches.sh"
+  # Overlay строится поверх base; branding (иконки/имена) — после overlay, иначе binary hunks падают.
   "${ROOT_DIR}/scripts/apply_vendor_patches.sh" pre
-  "${ROOT_DIR}/scripts/apply_branding.sh"
   "${ROOT_DIR}/scripts/apply_vendor_patches.sh" post
+  "${ROOT_DIR}/scripts/apply_branding.sh"
 
   mkdir -p "${OUTPUT_DIR}"
   local filename

@@ -142,7 +142,9 @@ Parent repo фиксирует commit submodule; floating `HEAD` без pin за
 
 ## UI rebranding (Goose → Humanitec)
 
-[`scripts/apply_branding.sh`](scripts/apply_branding.sh) перед `electron-forge make` патчит vendor Goose:
+[`scripts/apply_branding.sh`](scripts/apply_branding.sh) перед `electron-forge make` патчит vendor Goose.
+Порядок в [`scripts/build.sh`](scripts/build.sh): `apply_vendor_patches pre` (base) → `post` (overlay) → `apply_branding.sh`.
+Overlay строится поверх base; branding (иконки/имена) идёт после overlay.
 
 | Меняется | Источник |
 |---|---|

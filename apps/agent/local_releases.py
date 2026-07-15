@@ -116,10 +116,11 @@ def build_local_release_unavailable_status(platform: str, detail: str) -> AgentR
         platform=platform,
         detail=detail,
     )
+    # detail остаётся в логе; в API не отдаём путь к файлу — UI показывает i18n release_not_ready
     return AgentReleaseStatusResponse(
         ready=False,
         latest_tag=None,
         github_owner=settings.releases.github_owner,
         github_repo=settings.releases.github_repo,
-        detail=detail,
+        detail=None,
     )

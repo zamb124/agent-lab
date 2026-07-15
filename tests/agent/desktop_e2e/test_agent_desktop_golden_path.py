@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 import pytest
 from httpx import AsyncClient
 
@@ -40,7 +42,7 @@ async def test_d5_register_url_bundle(
     assert response.status_code == 200
     body = response.json()
     assert body["frontend_base_url"] == agent_base_url
-    parsed = __import__("urllib.parse").urlparse(agent_base_url)
+    parsed = urlparse(agent_base_url)
     assert body["tunnel_ws_url"] == f"ws://{parsed.netloc}/frontend/api/agent/tunnel"
     assert body["company_id"] == company_id_from_auth_token(auth_token)
     assert body["platform_mcp_url"] == f"{agent_base_url}/flows/api/v1/agent/platform-mcp"

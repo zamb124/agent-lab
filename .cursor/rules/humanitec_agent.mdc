@@ -75,6 +75,7 @@ Auth: **session JWT** или **device JWT**.
 
 - Distro: `apps/agent/desktop/distro/humanitec.json` — `default_extensions`: `developer`, `computercontroller` (platform groups — runtime из catalog)
 - Branding: `humanitecToolkitsSync.ts`, `humanitecToolkitsCatalog.ts`, `humanitecAgentRuntime.ts`
+- Vendor patches (`scripts/apply_vendor_patches.sh`): каждый build — `reset --hard` upstream → **base** → **overlay** → `apply_branding.sh` (branding после overlay: binary icon hunks иначе не накладываются)
 - Releases: GitHub assets `HumanitecAgent-{platform}-{sha}.{ext}` (имя артефакта; на linnex.io UI — LinnexAgent)
 
 ## Prod-инварианты
