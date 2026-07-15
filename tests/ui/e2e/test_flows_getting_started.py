@@ -83,9 +83,8 @@ async def test_flows_home_tour(
             "начать работу."
         ),
         details_en=(
-            "Open the Flows service. In the center you see the welcome block and quick "
-            "actions, and on the left the catalog of your agents. This shows you where "
-            "to start right away."
+            "Open Flows. The welcome block and quick actions are in the center; your "
+            "agent catalog is on the left."
         ),
     )
 
@@ -97,23 +96,6 @@ async def test_flows_home_tour(
         has_text=re.compile(r"Оператор|Operator|HITL")
     ).first
     await expect(operator_button).to_be_visible(timeout=15_000)
-    await scenario.step(
-        "Посмотрите быстрые действия и ссылку на LinnexAgent",
-        page,
-        screenshot_name="hero-quick-actions",
-        label_en="Review quick actions and the LinnexAgent download link",
-        details=(
-            "В блоке быстрых действий есть кнопки «Сессии», «Оператор / HITL» и ссылка "
-            "«Скачать LinnexAgent» для desktop-клиента. Отсюда можно перейти к задачам "
-            "операторов или скачать приложение для pairing и Platform MCP."
-        ),
-        details_en=(
-            "The quick actions block includes Sessions, Operator / HITL, and a "
-            "Download LinnexAgent link for the desktop client. From here you can open "
-            "operator tasks or download the app for pairing and Platform MCP."
-        ),
-    )
-
     sessions_button = hero_actions.locator("platform-button").filter(
         has_text=re.compile(r"Сессии|Sessions")
     ).first
@@ -130,8 +112,8 @@ async def test_flows_home_tour(
             "продолжить разговор или посмотреть, какие агенты недавно запускались."
         ),
         details_en=(
-            "The Sessions button opens a list of recent agent conversations. Here you "
-            "can resume a dialog or see which agents ran recently."
+            "Sessions opens recent agent conversations. Use the list to resume a dialog "
+            "or see which agents ran recently."
         ),
     )
     await page.keyboard.press("Escape")
@@ -155,10 +137,8 @@ async def test_flows_home_tour(
             "помощник Lara открывается из чата или отдельной инструкции «Чат с Lara»."
         ),
         details_en=(
-            "Lower on the home page is a connections block; among the cards is Skills "
-            "(the procedure library for agents). From here you can open the Skills "
-            "catalog. The built-in Lara assistant opens from chat or the Chat with Lara "
-            "guide."
+            "In the connections block, Skills opens the agents' procedure library. "
+            "The built-in Lara assistant is available from chat."
         ),
     )
 
@@ -190,9 +170,8 @@ async def test_flows_home_tour(
             "Появится карточка «Помощника Зелёного сада»."
         ),
         details_en=(
-            "Type part of the name into the catalog search. The list narrows to matching "
-            "agents, which is handy when you have many. The Green Garden Assistant card "
-            "appears."
+            "Type part of the name into catalog search. The narrowed list shows the "
+            "Green Garden Assistant card."
         ),
     )
 
@@ -211,8 +190,7 @@ async def test_flows_home_tour(
             "«Чат» и «Редактор» — чат для проверки агента, редактор для настройки графа."
         ),
         details_en=(
-            "Hover over the Green Garden Assistant card. Chat and Editor buttons appear — "
-            "chat to try the agent, editor to configure the graph."
+            "Hover over the agent card. Chat tests the agent; Editor configures its graph."
         ),
     )
     await chat_button.click(force=True)
@@ -228,9 +206,7 @@ async def test_flows_home_tour(
             "агента в деле."
         ),
         details_en=(
-            "Click the chat icon on the agent card. A dialog opens where you can talk to "
-            "the assistant like a regular customer. This is the main way to try the agent "
-            "in action."
+            "Click Chat on the card. The dialog lets you test the assistant as a customer."
         ),
     )
 

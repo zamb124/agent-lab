@@ -140,7 +140,7 @@
     "preset_external_desc": "Внешний flow по A2A протоколу. Подключите готового агента из реестра.",
     "picked_preset": "Создание с нуля",
     "picked_bundle": "Шаблон из Store",
-    "action_change": "Изменить",
+    "action_return": "Вернуться",
     "action_back": "Назад"
   },
   "flow_edit_modal": {

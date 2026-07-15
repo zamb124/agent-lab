@@ -92,7 +92,13 @@ async def flows_open_api_console_modal(page: Page, flows_ui: AppUI, flow_id: str
     await page.set_viewport_size({"width": 1600, "height": 920})
     await page.goto(f"{flows_ui.origin}/flows/{flow_id}/editor", wait_until="domcontentloaded")
     await expect(page.locator("flow-editor-page")).to_be_visible(timeout=30_000)
-    await flows_click_editor_overflow(page, "API and A2A specification", "API и A2A", "API")
+    await flows_click_editor_overflow(
+        page,
+        "API and A2A specification",
+        "API и A2A",
+        "API",
+        "editor_header.menu_api",
+    )
     modal = page.locator("flows-api-console-modal[open], flows-api-console-modal").first
     await expect(modal).to_be_visible(timeout=30_000)
     return modal

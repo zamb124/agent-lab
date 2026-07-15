@@ -10,6 +10,7 @@ import { toolsAllOp } from '../../../../apps/flows/ui/events/resources/tools.res
 import { integrationsListOp } from '../../../../apps/flows/ui/events/resources/integrations.resource.js';
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
 import { platformWorkItemCountsOp } from '@platform/lib/events/resources/platform-work-item.resource.js';
+import { agentSkillsResource } from '../../../../apps/flows/ui/events/resources/agent-skills.resource.js';
 import '../../../../apps/flows/ui/pages/flows-home-page.js';
 
 const FACTORIES = [
@@ -22,6 +23,7 @@ const FACTORIES = [
     integrationsListOp,
     secretsVariablesResource,
     platformWorkItemCountsOp,
+    agentSkillsResource,
 ];
 
 function bootstrapHomeBus() {

@@ -140,7 +140,7 @@
     "preset_external_desc": "External flow via A2A protocol. Connect an existing agent from the registry.",
     "picked_preset": "Created from scratch",
     "picked_bundle": "Template from Store",
-    "action_change": "Change",
+    "action_return": "Back",
     "action_back": "Back"
   },
   "flow_edit_modal": {

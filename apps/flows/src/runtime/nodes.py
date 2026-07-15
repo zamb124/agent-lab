@@ -953,6 +953,13 @@ class LlmNode(BaseNode):
         new_state = state.runtime_copy()
         for key, value in inputs.items():
             new_state[key] = value
+        # input_mapping is the explicit contract for values consumed by this
+        # LLM node. Make mapped targets available to the prompt resolver as
+        # {target}; node_config.local_variables still wins later in the runner.
+        new_state.variables = {
+            **require_json_object(state.variables or {}, "state.variables"),
+            **dict(inputs),
+        }
         new_state.messages = state.messages
         new_state.current_nodes = list(state.current_nodes)
         return new_state

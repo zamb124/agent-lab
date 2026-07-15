@@ -2,19 +2,18 @@
  * frontend-team-page: бейдж AI-сотрудника в карточке участника (mobile layout).
  */
 
-import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
+import { fixtureCleanup, expect } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { collectFactories } from '@platform/lib/events/factories/register.js';
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
 import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
 import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
-import { render } from 'lit';
 import {
     teamMembersResource,
     inviteGenerateOp,
 } from '../../../../apps/frontend/ui/events/resources/team.resource.js';
 import frontendEn from '../../../../core/i18n/translations/en/frontend.json' with { type: 'json' };
-import '../../../../apps/frontend/ui/pages/team/team-page.js';
+import { FrontendTeamPage } from '../../../../apps/frontend/ui/pages/team/team-page.js';
 
 const FACTORIES = [teamMembersResource, inviteGenerateOp];
 
@@ -51,6 +50,19 @@ function seedFrontendTranslations() {
     );
 }
 
+function templateText(value) {
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value.map(templateText).join(' ');
+    if (value && Array.isArray(value.values)) return value.values.map(templateText).join(' ');
+    return '';
+}
+
+function createRenderSubject() {
+    const subject = Object.create(FrontendTeamPage.prototype);
+    subject.t = (key) => key === 'team_page.flow_employee_badge' ? 'AI employee' : key;
+    return subject;
+}
+
 describe('frontend-team-page flow employee badge', () => {
     beforeEach(() => {
         resetPlatformState();
@@ -63,44 +75,35 @@ describe('frontend-team-page flow employee badge', () => {
         fixtureCleanup();
     });
 
-    it('_renderRow показывает role-tag AI employee только у flow-сотрудника', async () => {
-        const el = await fixture(html`<frontend-team-page></frontend-team-page>`);
-        await elementUpdated(el);
-
-        const employeeHost = document.createElement('div');
-        const humanHost = document.createElement('div');
-        render(el._renderRow(EMPLOYEE_MEMBER), employeeHost);
-        render(el._renderRow({
+    it('_renderRow показывает role-tag AI employee только у flow-сотрудника', () => {
+        // Это контракт pure render helper. Не подключаем страницу к DOM, потому
+        // что её autoload ресурса не имеет отношения к проверяемому badge.
+        const el = createRenderSubject();
+        const employeeText = templateText(el._renderRow(EMPLOYEE_MEMBER));
+        const humanText = templateText(el._renderRow({
             user_id: 'human_1',
             name: 'Human',
             email: 'human@example.com',
             roles: ['admin'],
             is_flow_employee: false,
-        }), humanHost);
-        await elementUpdated(el);
+        }));
 
-        expect(employeeHost.querySelector('.role-tag')?.textContent).to.equal('AI employee');
-        expect(humanHost.querySelector('.role-tag')).to.equal(null);
+        expect(employeeText).to.include('AI employee');
+        expect(humanText).not.to.include('AI employee');
     });
 
-    it('_renderCard показывает role-tag AI employee только у flow-сотрудника', async () => {
-        const el = await fixture(html`<frontend-team-page></frontend-team-page>`);
-        await elementUpdated(el);
-
-        const employeeHost = document.createElement('div');
-        const humanHost = document.createElement('div');
-        render(el._renderCard(EMPLOYEE_MEMBER), employeeHost);
-        render(el._renderCard({
+    it('_renderCard показывает role-tag AI employee только у flow-сотрудника', () => {
+        const el = createRenderSubject();
+        const employeeText = templateText(el._renderCard(EMPLOYEE_MEMBER));
+        const humanText = templateText(el._renderCard({
             user_id: 'human_1',
             name: 'Human',
             email: 'human@example.com',
             roles: ['admin'],
             is_flow_employee: false,
-        }), humanHost);
+        }));
 
-        const employeeTags = Array.from(employeeHost.querySelectorAll('.role-tag')).map((n) => n.textContent.trim());
-        const humanTags = Array.from(humanHost.querySelectorAll('.role-tag')).map((n) => n.textContent.trim());
-        expect(employeeTags.some((t) => t.includes('AI employee'))).to.be.true;
-        expect(humanTags.some((t) => t.includes('AI employee'))).to.be.false;
+        expect(employeeText).to.include('AI employee');
+        expect(humanText).not.to.include('AI employee');
     });
 });

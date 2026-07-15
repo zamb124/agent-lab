@@ -11,14 +11,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from playwright.async_api import Page
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Основная готовность перед скриншотом не опирается на networkidle: WS держит соединение открытым.
-_READY_MS = 30_000
-_VISUAL_READY_MS = 12_000
-_STABLE_LAYOUT_FRAMES = 6
+_READY_MS = 3_000
+_VISUAL_READY_MS = 1_000
+_STABLE_LAYOUT_FRAMES = 2
 # Lit-корни платформенных SPA в E2E (см. tests/ui/apps.py).
 _SHELL_SELECTOR = "sync-app, crm-app, rag-app, flows-app, frontend-app, office-app"
 _LOADING_SELECTOR = (
@@ -107,6 +106,8 @@ async def _await_no_blocking_loaders(page: Page) -> None:
             const visible = (el) => {
                 const rect = el.getBoundingClientRect();
                 if (rect.width <= 0 || rect.height <= 0) return false;
+                if (rect.bottom < 0 || rect.right < 0) return false;
+                if (rect.top > window.innerHeight || rect.left > window.innerWidth) return false;
                 const style = window.getComputedStyle(el);
                 if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
                     return false;
@@ -189,10 +190,6 @@ async def _await_page_ready(page: Page) -> None:
 async def _await_screenshot_ready(page: Page) -> None:
     await _force_light_theme(page)
     await _await_page_ready(page)
-    try:
-        await page.wait_for_load_state("networkidle", timeout=1_500)
-    except PlaywrightTimeoutError:
-        pass
     await _force_light_theme(page)
     await _await_stable_layout(page)
 
@@ -464,7 +461,7 @@ class ScenarioRecorder:
         label: str,
         page: Page | None = None,
         *,
-        full_page: bool = True,
+        full_page: bool = False,
         label_en: str | None = None,
         screenshot_name: str | None = None,
         details: str | None = None,

@@ -205,16 +205,25 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
             .form {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-3);
+                gap: 0;
             }
             .form .picked {
                 display: flex; align-items: center; gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-lg);
+                margin-bottom: var(--space-4);
             }
             .form .picked-text { display: flex; flex-direction: column; }
             .form .picked-title { font-weight: var(--font-semibold); color: var(--text-primary); }
             .form .picked-sub { font-size: var(--text-xs); color: var(--text-tertiary); }
+            .identity-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr);
+                gap: 0 var(--space-3);
+            }
+            @media (min-width: 720px) {
+                .identity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            }
             .form .change-link {
                 margin-left: auto;
                 background: none; border: none;
@@ -397,50 +406,59 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                         <div class="picked-sub">${pickedSub}</div>
                     </div>
                     <platform-button variant="ghost" density="compact" @click=${this._backToStep1}>
-                        ${this.t('flow_create_modal.action_change')}
+                        <platform-icon name="arrow-left" size="16"></platform-icon>
+                        ${this.t('flow_create_modal.action_return')}
                     </platform-button>
                 </div>
-                <div class="form-group">
-                    <label>${this.t('flow_create_modal.field_flow_id')}</label>
-                    <platform-field
-                        type="string"
-                        mode="edit"
-                        .value=${this._flowId}
-                        placeholder="my_flow"
-                        @change=${(e) => {
-                            const v = e.detail.value;
-                            if (typeof v !== 'string') {
-                                throw new TypeError('flows-flow-create-modal: flow_id expects string detail.value');
-                            }
-                            this._flowId = v;
-                            this.isDirty = true;
-                        }}
-                    ></platform-field>
-                    ${this._flowId && !validId
-                        ? html`<div class="form-error">${this.t('flow_create_modal.err_flow_id_pattern')}</div>`
-                        : ''}
-                </div>
-                <div class="form-group">
-                    <label>${this.t('flow_create_modal.field_name')}</label>
-                    <platform-field
-                        type="string"
-                        mode="edit"
-                        .value=${this._name}
-                        @change=${(e) => {
-                            const v = e.detail.value;
-                            if (typeof v !== 'string') {
-                                throw new TypeError('flows-flow-create-modal: name expects string detail.value');
-                            }
-                            this._name = v;
-                            this.isDirty = true;
-                        }}
-                    ></platform-field>
+                <div class="identity-grid">
+                    <div class="form-group">
+                        <label>${this.t('flow_create_modal.field_flow_id')}</label>
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            pill-density="compact"
+                            pill-embed
+                            .value=${this._flowId}
+                            placeholder="my_flow"
+                            @change=${(e) => {
+                                const v = e.detail.value;
+                                if (typeof v !== 'string') {
+                                    throw new TypeError('flows-flow-create-modal: flow_id expects string detail.value');
+                                }
+                                this._flowId = v;
+                                this.isDirty = true;
+                            }}
+                        ></platform-field>
+                        ${this._flowId && !validId
+                            ? html`<div class="form-error">${this.t('flow_create_modal.err_flow_id_pattern')}</div>`
+                            : ''}
+                    </div>
+                    <div class="form-group">
+                        <label>${this.t('flow_create_modal.field_name')}</label>
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            pill-density="compact"
+                            pill-embed
+                            .value=${this._name}
+                            @change=${(e) => {
+                                const v = e.detail.value;
+                                if (typeof v !== 'string') {
+                                    throw new TypeError('flows-flow-create-modal: name expects string detail.value');
+                                }
+                                this._name = v;
+                                this.isDirty = true;
+                            }}
+                        ></platform-field>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>${this.t('flow_create_modal.field_description')}</label>
                     <platform-field
                         type="text"
                         mode="edit"
+                        pill-density="compact"
+                        pill-embed
                         .value=${this._description}
                         @change=${(e) => {
                             const v = e.detail.value;

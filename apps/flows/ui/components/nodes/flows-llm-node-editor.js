@@ -55,6 +55,7 @@ import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from '../../_helper
 import { sanitizeToolName } from '@platform/lib/utils/sanitize-tool-name.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
+import { buildPromptVariableContext } from '../../_helpers/prompt-variable-catalog.js';
 
 const REACT_LOOP_MODES = Object.freeze(['auto', 'explicit']);
 
@@ -469,6 +470,21 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
+    _commitModalPatch(patch) {
+        const state = this._editor.state;
+        const branchData = state?.branchData;
+        const nodes = isPlainObject(branchData?.nodes) ? { ...branchData.nodes } : null;
+        const node = nodes?.[this.nodeId];
+        if (!isPlainObject(branchData) || nodes === null || !isPlainObject(node)) {
+            throw new Error('flows-llm-node-editor: modal patch requires active editor node');
+        }
+        nodes[this.nodeId] = { ...node, ...patch };
+        const next = { ...branchData, nodes };
+        this._editor.updateBranchData({ data: next });
+        this._editor.setDirty({ dirty: true });
+        this._editor.pushHistory({ snapshot: next });
+    }
+
     _onPromptChange(e) {
         const value = typeof e.detail?.value === 'string' ? e.detail.value : '';
         this._emitPatch({ prompt: value });
@@ -864,7 +880,11 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 const tools = Array.isArray(this.nodeConfig?.tools) ? [...this.nodeConfig.tools] : [];
                 const existingKeys = new Set(tools.map((t) => _toolListEntryKey(t)));
                 _appendPickerDetailToTools(detail, tools, existingKeys);
-                this._emitPatch({ tools });
+                // Modal stack updates may recreate the editor surface before
+                // the picker callback runs. Commit through the shared editor
+                // resource so the selected tool cannot be lost with a detached
+                // custom element's bubbling `change` event.
+                this._commitModalPatch({ tools });
             },
             onPickBatch: (detail) => {
                 if (detail === null || typeof detail !== 'object' || !Array.isArray(detail.items)) {
@@ -886,7 +906,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                         existingKeys,
                     );
                 }
-                this._emitPatch({ tools });
+                this._commitModalPatch({ tools });
             },
         });
     }
@@ -1125,11 +1145,17 @@ export class FlowsLlmNodeEditor extends PlatformElement {
 
     _renderPromptSection() {
         const prompt = typeof this.nodeConfig?.prompt === 'string' ? this.nodeConfig.prompt : '';
-        const variables = this.flowVariables && typeof this.flowVariables === 'object' ? this.flowVariables : {};
+        const variableContext = buildPromptVariableContext({
+            flowVariables: this.flowVariables,
+            nodeLocalVariables: this.nodeConfig?.local_variables,
+            dataflowNode: this.dataflowNode,
+            previewExecutionState: this.previewExecutionState,
+        });
         return html`
             <prompt-editor
                 .value=${prompt}
-                .variables=${variables}
+                .variables=${variableContext.values}
+                .variableCatalog=${variableContext.catalog}
                 label=${this.t('llm_node_editor.section_prompt')}
                 .hint=${this.t('llm_node_editor.prompt_help')}
                 @change=${this._onPromptChange}

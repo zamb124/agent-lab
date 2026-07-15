@@ -16,8 +16,8 @@ import '@platform/lib/components/platform-trace-viewer.js';
 export class FlowsTracingModal extends PlatformModal {
     static modalKind = 'flows.tracing';
     static i18nNamespace = 'flows';
-    static pollIntervalMs = 3000;
-    static pollMaxAttempts = 20;
+    static pollIntervalMs = 500;
+    static pollMaxAttempts = 6;
 
     static properties = {
         ...PlatformModal.properties,

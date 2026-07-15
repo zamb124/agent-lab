@@ -35,6 +35,7 @@ from tests.ui.e2e.hitl_e2e_bridge import (
     HITL_REACT_NODE,
     hitl_open_react_branch_chat,
     hitl_operator_claim_and_complete,
+    hitl_return_to_chat_session,
     hitl_trigger_deterministic,
     hitl_wait_chat_resume,
 )
@@ -399,7 +400,15 @@ async def test_flows_customer_waits_for_operator(
         work_item_id,
         GREEN_GARDEN_OPERATOR_REPLY,
     )
-    await hitl_wait_chat_resume(page, expect_operator_text=GREEN_GARDEN_OPERATOR_REPLY)
+    await hitl_return_to_chat_session(
+        page,
+        origin=flows_ui.origin,
+        auth_token=auth_token_system,
+        work_item_id=work_item_id,
+        flows_ui=flows_ui,
+        flow_id=EXAMPLE_REACT_ID,
+        expect_operator_text=GREEN_GARDEN_OPERATOR_REPLY,
+    )
     await scenario.step(
         "Получите ответ оператора в чате",
         page,
@@ -625,7 +634,15 @@ async def test_flows_trace_operator_handoff(
         work_item_id,
         GREEN_GARDEN_OPERATOR_REPLY,
     )
-    await hitl_wait_chat_resume(page, expect_operator_text=GREEN_GARDEN_OPERATOR_REPLY)
+    await hitl_return_to_chat_session(
+        page,
+        origin=flows_ui.origin,
+        auth_token=auth_token_system,
+        work_item_id=work_item_id,
+        flows_ui=flows_ui,
+        flow_id=EXAMPLE_REACT_ID,
+        expect_operator_text=GREEN_GARDEN_OPERATOR_REPLY,
+    )
 
     modal = await flows_open_durable_history_modal(page)
     await scenario.step(

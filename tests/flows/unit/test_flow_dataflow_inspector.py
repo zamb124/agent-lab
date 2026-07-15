@@ -159,7 +159,7 @@ def test_inspector_flags_unknown_prompt_variable_as_required_input():
     )
 
 
-def test_inspector_prompt_variable_satisfied_by_upstream_producer():
+def test_inspector_prompt_variable_not_satisfied_by_unmapped_top_level_state():
     result = inspect_flow_dataflow(
         flow_id="flow_1",
         branch_id="default",
@@ -181,7 +181,35 @@ def test_inspector_prompt_variable_satisfied_by_upstream_producer():
 
     node = result.nodes["llm_1"]
     required_by_name = {req.name: req for req in node.required_inputs}
+    assert required_by_name["topic"].satisfied is False
+    assert any(issue.code == "unknown_prompt_variable" for issue in node.issues)
+
+
+def test_inspector_prompt_variable_satisfied_by_explicit_mapped_upstream_state():
+    result = inspect_flow_dataflow(
+        flow_id="flow_1",
+        branch_id="default",
+        entry="code_1",
+        variables={},
+        nodes=_nodes({
+            "code_1": {
+                "type": "code",
+                "language": "python",
+                "code": "async def run(args, state):\n    state.topic = 'ai'\n    return {}",
+            },
+            "llm_1": {
+                "type": "llm_node",
+                "prompt": "Summarize {topic}",
+                "input_mapping": {"topic": "@state:topic"},
+            },
+        }),
+        edges=_edges([{"from_node": "code_1", "to_node": "llm_1"}]),
+    )
+
+    node = result.nodes["llm_1"]
+    required_by_name = {req.name: req for req in node.required_inputs}
     assert required_by_name["topic"].satisfied is True
+    assert node.input_mapping[0].sample_value is None
     assert not any(issue.code == "unknown_prompt_variable" for issue in node.issues)
 
 

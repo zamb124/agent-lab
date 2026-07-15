@@ -5,6 +5,7 @@ import { registerFactory } from '@platform/lib/events/factory-registry.js';
 import { TTS_OUTPUT_STORAGE_KEY } from '@platform/lib/voice/tts-output-pref.js';
 import { editorResource } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
 import { executionUiSlice } from '../../../../apps/flows/ui/events/resources/execution-ui.resource.js';
+import { installChatProfileFetchStub } from '../helpers/chat-profile-stub.js';
 import '../../../../apps/flows/ui/components/editor/flows-execution-panel.js';
 
 const FACTORIES = [
@@ -23,12 +24,16 @@ function bootstrapExecutionPanelBus() {
 }
 
 describe('flows-execution-panel hosts unified platform-chat', () => {
+    let restoreChatFetch;
+
     beforeEach(() => {
         resetPlatformState();
+        restoreChatFetch = installChatProfileFetchStub({ flowId: 'flow-1' });
         window.localStorage.setItem(TTS_OUTPUT_STORAGE_KEY, '0');
     });
 
     afterEach(() => {
+        restoreChatFetch();
         fixtureCleanup();
         window.localStorage.removeItem(TTS_OUTPUT_STORAGE_KEY);
     });

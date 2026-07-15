@@ -379,8 +379,6 @@ async def test_flows_inspect_traces_logs(
 
     tracing_modal = await flows_open_tracing_from_chat(page)
     await expect(tracing_modal).to_be_visible(timeout=30_000)
-    await page.keyboard.press("Escape")
-    await expect(page.locator("flows-tracing-modal")).to_be_hidden(timeout=15_000)
     await scenario.step(
         "Откройте трейс последнего ответа",
         page,
@@ -396,6 +394,8 @@ async def test_flows_inspect_traces_logs(
             "which blocks ran and how long each step took."
         ),
     )
+    await page.keyboard.press("Escape")
+    await expect(page.locator("flows-tracing-modal")).to_be_hidden(timeout=5_000)
 
     logs_modal = await flows_open_logs_from_chat(page)
     await expect(logs_modal).to_be_visible(timeout=30_000)

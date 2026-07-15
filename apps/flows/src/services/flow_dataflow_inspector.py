@@ -546,6 +546,13 @@ def _input_satisfied_by_state(
     return name in incoming or f"variables.{name}" in incoming
 
 
+def _prompt_variable_available(
+    name: str, incoming: dict[str, DataflowStateDescriptor]
+) -> bool:
+    """Prompt placeholders read state.variables, not arbitrary top-level state."""
+    return f"variables.{name}" in incoming
+
+
 def _derive_required_inputs(
     node: JsonObject,
     incoming: dict[str, DataflowStateDescriptor],
@@ -637,7 +644,7 @@ def _derive_required_inputs(
             satisfied = (
                 root in local_keys
                 or root in mapped_targets
-                or _input_satisfied_by_state(root, incoming)
+                or _prompt_variable_available(root, incoming)
             )
             source = mapped_targets.get(root)
             required.append(

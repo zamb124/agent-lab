@@ -4,6 +4,7 @@ import { FILES_EVENTS } from '@platform/lib/events/index.js';
 import '../../../../core/frontend/static/lib/chat/chat-message.js';
 import '../../../../core/frontend/static/lib/chat/platform-chat.js';
 import '../../../../apps/flows/ui/modals/flows-browser-preview-modal.js';
+import { installChatProfileFetchStub } from '../helpers/chat-profile-stub.js';
 
 const LABELS = {
     role_user: 'You',
@@ -45,16 +46,19 @@ function installDocumentEditorConfigStub() {
 describe('flows-chat-message shared surface', () => {
     let bus;
     let restoreFetch;
+    let restoreChatFetch;
 
     beforeEach(() => {
         cleanupEditorPortals();
         resetPlatformState();
         bus = bootstrapTestBus();
+        restoreChatFetch = installChatProfileFetchStub({ flowId: 'lara' });
         restoreFetch = installDocumentEditorConfigStub();
     });
 
     afterEach(() => {
         restoreFetch();
+        restoreChatFetch();
         fixtureCleanup();
         cleanupEditorPortals();
     });

@@ -18,11 +18,25 @@ _AGENT_SETTINGS_MUTATING_TESTS = frozenset({
     "test_f12_settings_agent_audit_after_register",
 })
 _AGENT_SETTINGS_MODULE_SUFFIX = "test_frontend_settings_agent.py"
+_FLOWS_SCENARIO_TIMEOUT_SECONDS = 15
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Пустые сценарии f3/f4 до тестов, мутирующих devices/audit (f9–f12)."""
+    """Политика UI E2E: быстрый fail Flows docs и порядок frontend settings."""
     _ = config
+    for item in items:
+        scenario = item.get_closest_marker("scenario")
+        if scenario is None or scenario.kwargs.get("service") != "flows":
+            continue
+        # Старые сценарии несут локальные timeout 180–360 секунд. Для
+        # документационного маршрута это скрывает сломанный locator и делает
+        # полный аудит многочасовым. Маркер prepend переопределяет старый
+        # бюджет, не затрагивая обычные длительные integration E2E.
+        item.add_marker(
+            pytest.mark.timeout(_FLOWS_SCENARIO_TIMEOUT_SECONDS, func_only=True),
+            append=False,
+        )
+
     positions = [
         (index, item)
         for index, item in enumerate(items)
