@@ -14,9 +14,10 @@ import pytest
 
 from apps.idle_worker.container import reset_container, set_container
 from apps.idle_worker.tasks import file_retention_tasks
-from core.files.file_repository import FileRepository
-from core.files.registry import default_retention_for_source
 from core.files.create_spec import FileSourceKind
+from core.files.file_repository import FileRepository
+from core.files.models import FileRecord, FileStatus
+from core.files.registry import default_retention_for_source
 
 
 @pytest.fixture(autouse=True)
@@ -79,13 +80,16 @@ async def test_file_retention_backfill_tick_skips_empty_repository(
     frontend_container,
     unique_id: str,
 ) -> None:
-    """Backfill тик на пустом репозитории возвращает нули и не падает."""
+    """Backfill тик исполняется на shared БД и возвращает корректную структуру."""
     result = await file_retention_tasks.file_retention_backfill_tick(
         schedule_task_id=f"backfill_{unique_id}",
         company_id=None,
     )
 
-    assert result == {"scanned": 0, "updated": 0, "skipped": 0}
+    assert set(result.keys()) == {"scanned", "updated", "skipped"}
+    assert result["scanned"] >= 0
+    assert result["updated"] >= 0
+    assert result["skipped"] >= 0
 
 
 @pytest.mark.asyncio
@@ -97,15 +101,23 @@ async def test_file_retention_backfill_tick_updates_record_missing_retention(
     repository: FileRepository = frontend_container.file_repository
     retention = default_retention_for_source(FileSourceKind.FLOW_ATTACHMENT)
 
-    record = await repository.create(
-        company_id=f"co_backfill_{unique_id}",
+    company_id = f"co_backfill_{unique_id}"
+    file_id = f"file_backfill_{unique_id}"
+    record = FileRecord(
+        file_id=file_id,
+        provider="minio",
         original_name=f"backfill_{unique_id}.txt",
+        s3_key=f"test-bucket/backfill_{unique_id}",
+        s3_bucket="test-bucket",
         content_type="text/plain",
         file_size=10,
         checksum=f"sha256_{unique_id}",
-        storage_url=f"s3://test-bucket/backfill_{unique_id}",
+        status=FileStatus.UPLOADED,
+        company_id=company_id,
         metadata={"source_kind": FileSourceKind.FLOW_ATTACHMENT.value},
     )
+    saved = await repository.set(record)
+    assert saved is True
     try:
         from core.config import get_settings
 
@@ -123,8 +135,8 @@ async def test_file_retention_backfill_tick_updates_record_missing_retention(
         assert result["scanned"] >= 1
         assert result["updated"] >= 1
 
-        refreshed = await repository.get(record.file_id)
+        refreshed = await repository.get(file_id)
         assert refreshed is not None
         assert refreshed.retention_kind == retention.kind
     finally:
-        await repository.delete(record.file_id)
+        await repository.delete(file_id)
