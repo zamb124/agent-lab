@@ -6,6 +6,7 @@ import { crmA2aInterfaceLanguageVariables, embedChatLabelsForLang } from './chat
 import { readEmbedChatUrlParams, applyEmbedChatDrawerSizeVars } from './chat-url-params.js';
 import { resolveEmbedChatTheme } from './chat-theme.js';
 import { mergeBlocksFromToolResult } from './tool-result-blocks.js';
+import { normalizeChatAuthor } from './chat-author.js';
 import { normalizeFlowChatBlockForPlatformUrls, CANONICAL_FILES_DOWNLOAD_PREFIX } from './flows-url-rewrite.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import {
@@ -3278,6 +3279,21 @@ export class PlatformChat extends LitElement {
         return this._langForUiLabels();
     }
 
+    _messageAuthor(message) {
+        const role = typeof message?.role === 'string' ? message.role : 'assistant';
+        const author = normalizeChatAuthor(message?.author, role);
+        if (author.name.length > 0) {
+            return author;
+        }
+        if (author.kind === 'agent') {
+            return { ...author, name: this._headDisplayTitle() };
+        }
+        if (author.kind === 'subagent' && author.flowId.length > 0) {
+            return { ...author, name: author.flowId };
+        }
+        return author;
+    }
+
     _renderSurfaceMessage(m, surfaceContext) {
         const labels = this._mergedLabels();
         const flowsRoot = (this.flowsBaseUrl && String(this.flowsBaseUrl).trim()) || '';
@@ -3292,6 +3308,7 @@ export class PlatformChat extends LitElement {
                 variant="embed"
                 data-role=${m.role || 'assistant'}
                 .role=${m.role || 'assistant'}
+                .author=${this._messageAuthor(m)}
                 .content=${m.content || ''}
                 .timestamp=${m.timestamp || ''}
                 .locale=${this._messageLocale()}

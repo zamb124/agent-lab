@@ -13,6 +13,13 @@ describe('flows-chat A2A runtime', () => {
                 contextId: 'ctx1',
                 artifact: {
                     name: 'reasoning',
+                    metadata: {
+                        author: {
+                            kind: 'subagent',
+                            flow_id: 'returns_agent',
+                            node_id: 'answer',
+                        },
+                    },
                     parts: [{ kind: 'text', text: 'thinking' }],
                 },
                 final: false,
@@ -23,6 +30,12 @@ describe('flows-chat A2A runtime', () => {
         expect(first.taskPrimed).toBe(true);
         expect(first.nextTaskId).toBe('t1');
         expect(first.events.map((e) => e.type)).toEqual(['task_started', 'reasoning_chunk']);
+        expect(first.events[0].payload.author).toEqual({
+            kind: 'subagent',
+            flow_id: 'returns_agent',
+            node_id: 'answer',
+        });
+        expect(first.events[1].payload.author).toEqual(first.events[0].payload.author);
 
         const done = mapA2aResultToChatRuntimeEvents(
             {
@@ -32,6 +45,13 @@ describe('flows-chat A2A runtime', () => {
                 status: {
                     state: 'completed',
                     message: {
+                        metadata: {
+                            author: {
+                                kind: 'subagent',
+                                flow_id: 'returns_agent',
+                                node_id: 'answer',
+                            },
+                        },
                         parts: [{ kind: 'text', text: 'final answer' }],
                     },
                 },
@@ -44,7 +64,16 @@ describe('flows-chat A2A runtime', () => {
         expect(done.events).toEqual([
             {
                 type: 'completed',
-                payload: { task_id: 't1', context_id: 'ctx1', content: 'final answer' },
+                payload: {
+                    task_id: 't1',
+                    context_id: 'ctx1',
+                    content: 'final answer',
+                    author: {
+                        kind: 'subagent',
+                        flow_id: 'returns_agent',
+                        node_id: 'answer',
+                    },
+                },
             },
         ]);
     });
@@ -115,5 +144,39 @@ describe('flows-chat A2A runtime', () => {
             provider: 'google',
             service: 'drive',
         });
+    });
+
+    it('treats non-final handoff input-required as the terminal stream boundary', () => {
+        const mapped = mapA2aResultToChatRuntimeEvents(
+            {
+                kind: 'status-update',
+                taskId: 'task-handoff',
+                contextId: 'ctx-handoff',
+                status: {
+                    state: 'input-required',
+                    message: {
+                        metadata: {
+                            platform_handoff_continue: true,
+                            platform_interrupt: {
+                                body: {
+                                    kind: 'handoff',
+                                    target_flow_id: 'returns_agent',
+                                    target_name: 'Returns Agent',
+                                },
+                            },
+                        },
+                        parts: [{ kind: 'text', text: 'Передаю управление' }],
+                    },
+                },
+                final: false,
+            },
+            { contextId: 'ctx-handoff', currentTaskId: null, taskPrimed: false },
+        );
+
+        expect(mapped.terminal).toBe(true);
+        expect(mapped.events.map((event) => event.type)).toEqual([
+            'task_started',
+            'input_required',
+        ]);
     });
 });

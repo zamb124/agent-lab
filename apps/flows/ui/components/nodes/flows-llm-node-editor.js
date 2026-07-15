@@ -266,8 +266,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 color: var(--text-primary); font: inherit;
             }
             .chip {
-                display: inline-flex; align-items: center; gap: 4px;
-                padding: 2px var(--space-2);
+                display: inline-flex; align-items: center; gap: 5px;
+                min-height: 30px;
+                box-sizing: border-box;
+                padding: 3px 5px 3px var(--space-2);
                 font-size: var(--text-sm);
                 background: var(--accent-subtle); color: var(--accent);
                 border-radius: var(--radius-full);
@@ -276,23 +278,26 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             .chip .chip-label { min-width: 0; }
             .chip platform-icon,
             .chip flows-code-language-icon { flex-shrink: 0; }
-            .chip button {
-                background: none; border: none; padding: 0; margin: 0;
-                color: var(--accent); cursor: pointer;
-                font-size: var(--text-base); line-height: 1;
+            .chip platform-button {
+                flex: 0 0 auto;
+                --btn-radius: var(--radius-full);
             }
             .chip .chip-call-type {
-                padding: 1px var(--space-2);
-                border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
-                border-radius: var(--radius-full);
-                font-size: var(--text-xs);
-                font-weight: var(--font-medium);
-                white-space: nowrap;
+                --btn-padding: 2px 9px;
+                --btn-font-size: 11px;
+                --btn-line-height: 16px;
+                --btn-font-weight: var(--font-semibold, 600);
+                --platform-btn-secondary-text: var(--accent);
+                --platform-btn-secondary-bg: color-mix(in srgb, var(--accent) 10%, transparent);
+                --platform-btn-secondary-bg-hover: color-mix(in srgb, var(--accent) 16%, transparent);
             }
             .chip .chip-call-type[data-call-type='handoff'] {
-                background: var(--accent);
-                color: var(--text-on-accent, white);
-                border-color: var(--accent);
+                --platform-btn-secondary-text: var(--text-on-accent, white);
+                --platform-btn-secondary-bg: var(--accent);
+                --platform-btn-secondary-bg-hover: color-mix(in srgb, var(--accent) 88%, black);
+            }
+            .chip .chip-remove {
+                --platform-button-icon-size: var(--flows-card-action-size);
             }
             .add-tools { display: flex; gap: var(--space-2); flex-wrap: wrap; }
             .filter-list {
@@ -476,6 +481,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const nodes = isPlainObject(branchData?.nodes) ? { ...branchData.nodes } : null;
         const node = nodes?.[this.nodeId];
         if (!isPlainObject(branchData) || nodes === null || !isPlainObject(node)) {
+            if (this.isConnected) {
+                this._emitPatch(patch);
+                return;
+            }
             throw new Error('flows-llm-node-editor: modal patch requires active editor node');
         }
         nodes[this.nodeId] = { ...node, ...patch };
@@ -1469,7 +1478,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                                 ${isPlainObject(t) && t.type === 'flow' ? html`
                                     <platform-button
                                         variant="secondary"
-                                        density="compact"
+                                        density="dense"
                                         class="chip-call-type"
                                         data-call-type=${t.call_type === 'handoff' ? 'handoff' : 'call'}
                                         aria-label=${this.t('llm_node_editor.flow_tool_call_type_aria', {
@@ -1487,7 +1496,8 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                                 <platform-button
                                     variant="ghost"
                                     icon-only
-                                    density="compact"
+                                    density="dense"
+                                    class="chip-remove"
                                     aria-label=${this.t('llm_node_editor.tools_remove')}
                                     @click=${(e) => { e.stopPropagation(); this._onRemoveTool(tid); }}
                                 >

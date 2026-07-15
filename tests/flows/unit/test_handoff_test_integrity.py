@@ -12,6 +12,8 @@ _STRICT_HANDOFF_SUITES = (
     _ROOT / "tests/flows/integration/test_flow_tool_handoff_kernel.py",
     _ROOT / "tests/flows/api/test_flow_tool_call_type.py",
     _ROOT / "tests/flows/unit/test_flow_tool_reference.py",
+    _ROOT / "tests/flows/services/test_handoff_orchestrator_schema.py",
+    _ROOT / "tests/flows/unit/test_message_author.py",
 )
 _FORBIDDEN_IMPORT_PREFIXES = ("unittest.mock", "pytest_mock")
 _FORBIDDEN_SYMBOLS = {

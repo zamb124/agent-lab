@@ -16,6 +16,7 @@ from a2a.types import Message, Part, Role, TextPart
 from apps.flows.src.models import NodeConfig, ReactLoopMode
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.runtime.a2a_messages import build_user_message
+from apps.flows.src.runtime.message_author import build_flow_message_author
 from apps.flows.src.streaming.base import BaseEmitter, StreamEvent
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.tools.finish_tool import finish
@@ -168,7 +169,13 @@ class BaseLlmNodeRunner(ABC):
         """Добавляет сообщение LlmNode."""
         if not self.node_config:
             raise ValueError("add_llm_node_message: node_config required")
-        meta: JsonObject = {"node_id": self.node_config.node_id}
+        meta: JsonObject = {
+            "node_id": self.node_config.node_id,
+            "author": build_flow_message_author(
+                state,
+                node_id=self.node_config.node_id,
+            ),
+        }
         if tool_calls:
             meta["tool_calls"] = [
                 tool_call.model_dump(mode="json", exclude_none=True)
@@ -194,6 +201,10 @@ class BaseLlmNodeRunner(ABC):
             metadata={
                 "tool_call_id": tool_call_id,
                 "node_id": self.node_config.node_id,
+                "author": build_flow_message_author(
+                    state,
+                    node_id=self.node_config.node_id,
+                ),
             },
             task_id=state.task_id,
         )

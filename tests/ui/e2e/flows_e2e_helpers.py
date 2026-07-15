@@ -1092,7 +1092,8 @@ async def flows_switch_editor_mode(page: Page, mode: Literal["edit", "run"]) -> 
     else:
         btn = group.get_by_role("button", name=re.compile(r"Visual editor|Визуальный"))
     await expect(btn).to_be_visible(timeout=15_000)
-    await btn.click()
+    if await btn.get_attribute("aria-pressed") != "true":
+        await btn.click()
     if mode == "run":
         panel = page.locator("flows-execution-panel:not([data-panel-closed])").first
         await expect(panel).to_be_visible(timeout=15_000)
@@ -1929,8 +1930,11 @@ async def flows_set_external_api_url(page: Page, url: str) -> None:
 
 
 async def flows_set_llm_call_type(page: Page, call_type: Literal["call", "handoff"]) -> None:
-    panel = page.locator("flows-floating-panel[show-backdrop]").first
-    editor = panel.locator("flows-llm-node-editor").first
+    editor = page.locator(
+        "flows-floating-panel[show-backdrop] flows-llm-node-editor, "
+        "flows-agent-focus-studio flows-llm-node-editor, "
+        "flows-property-panel flows-llm-node-editor"
+    ).first
     await expect(editor).to_be_visible(timeout=30_000)
     mode_button = editor.locator(".chip .chip-call-type").first
     await expect(mode_button).to_be_visible(timeout=30_000)

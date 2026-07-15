@@ -382,6 +382,14 @@ describe('node editors — top-level NodeConfig contract', () => {
         const modeButton = base.querySelector('.chip-call-type');
         expect(modeButton).to.not.be.null;
         expect(modeButton.dataset.callType).to.equal('call');
+        await modeButton.updateComplete;
+        const chips = [...base.querySelectorAll('.chip')];
+        expect(chips.length).to.equal(2);
+        const flowChipHeight = chips[0].getBoundingClientRect().height;
+        const codeChipHeight = chips[1].getBoundingClientRect().height;
+        const innerModeButton = modeButton.shadowRoot.querySelector('button');
+        expect(Math.abs(flowChipHeight - codeChipHeight)).to.be.at.most(2);
+        expect(innerModeButton.getBoundingClientRect().height).to.be.at.most(22);
 
         setTimeout(() => modeButton.click());
         const changeEv = await oneEvent(el, 'change');
@@ -662,10 +670,11 @@ describe('node editors — top-level NodeConfig contract', () => {
         await elementUpdated(el);
         const root = el.shadowRoot.querySelector('flows-base-node-editor');
         const row = root.querySelector('.branch-mode-row');
-        const modeField = row.querySelector('.call-type-field platform-field');
+        const modeField = row.querySelector('.call-type-field platform-segmented-control');
         expect(modeField).to.not.be.null;
         expect(modeField.value).to.equal('call');
-        expect(modeField.config.values.map((item) => item.value)).to.deep.equal(['call', 'handoff']);
+        expect(modeField.items.map((item) => item.value)).to.deep.equal(['call', 'handoff']);
+        expect(segmentedSegments(modeField).length).to.equal(2);
 
         setTimeout(() => modeField.dispatchEvent(new CustomEvent('change', {
             detail: { value: 'handoff' },

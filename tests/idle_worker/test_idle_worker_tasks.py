@@ -71,8 +71,12 @@ async def test_file_retention_purge_tick_runs_batch_without_failures(
     assert isinstance(result, dict)
     assert "purged_count" in result
     assert "failed_count" in result
-    assert result["purged_count"] >= 0
-    assert result["failed_count"] >= 0
+    purged_count = result["purged_count"]
+    failed_count = result["failed_count"]
+    assert isinstance(purged_count, int)
+    assert isinstance(failed_count, int)
+    assert purged_count >= 0
+    assert failed_count >= 0
 
 
 @pytest.mark.asyncio
@@ -99,7 +103,7 @@ async def test_file_retention_backfill_tick_updates_record_missing_retention(
 ) -> None:
     """Backfill обновляет FileRecord без retention, заполняя его по source_kind."""
     repository: FileRepository = frontend_container.file_repository
-    retention = default_retention_for_source(FileSourceKind.FLOW_ATTACHMENT)
+    retention = default_retention_for_source(FileSourceKind.FLOW_SESSION)
 
     company_id = f"co_backfill_{unique_id}"
     file_id = f"file_backfill_{unique_id}"
@@ -114,7 +118,7 @@ async def test_file_retention_backfill_tick_updates_record_missing_retention(
         checksum=f"sha256_{unique_id}",
         status=FileStatus.UPLOADED,
         company_id=company_id,
-        metadata={"source_kind": FileSourceKind.FLOW_ATTACHMENT.value},
+        metadata={"source_kind": FileSourceKind.FLOW_SESSION.value},
     )
     saved = await repository.set(record)
     assert saved is True
@@ -140,3 +144,50 @@ async def test_file_retention_backfill_tick_updates_record_missing_retention(
         assert refreshed.retention_kind == retention.kind
     finally:
         await repository.delete(file_id)
+
+
+# --- platform_schedules_gc + redis_inventory (без container injection) -------
+
+
+@pytest.mark.asyncio
+async def test_platform_schedules_gc_tick_runs_against_real_redis(
+    unique_id: str,
+) -> None:
+    """GC orphan keys тик на реальном TaskIQ broker Redis возвращает структуру."""
+    from apps.idle_worker.tasks.platform_schedules_gc_tasks import (
+        platform_schedules_gc_tick,
+    )
+
+    result = await platform_schedules_gc_tick(
+        schedule_task_id=f"gc_{unique_id}",
+        company_id=None,
+    )
+
+    assert isinstance(result, dict)
+    assert "scanned_keys" in result
+    assert "deleted_orphans" in result
+    assert "orphan_samples" in result
+    assert isinstance(result["scanned_keys"], int)
+    assert isinstance(result["deleted_orphans"], int)
+    assert isinstance(result["orphan_samples"], list)
+
+
+@pytest.mark.asyncio
+async def test_redis_inventory_tick_reports_db_sizes(unique_id: str) -> None:
+    """Redis inventory тик возвращает dbsize/no_ttl метрики для domain и broker Redis."""
+    from apps.idle_worker.tasks.redis_inventory_tasks import redis_inventory_tick
+
+    result = await redis_inventory_tick(
+        schedule_task_id=f"inv_{unique_id}",
+        company_id=None,
+    )
+
+    assert isinstance(result, dict)
+    assert "domain_dbsize" in result
+    assert "broker_dbsize" in result
+    assert "domain_no_ttl_total" in result
+    assert "broker_no_ttl_total" in result
+    assert "duration_ms" in result
+    assert isinstance(result["domain_dbsize"], int)
+    assert isinstance(result["broker_dbsize"], int)
+    assert result["duration_ms"] >= 0

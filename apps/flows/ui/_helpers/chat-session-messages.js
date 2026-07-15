@@ -7,6 +7,7 @@
  */
 
 import { isPlainObject } from './flows-resolvers.js';
+import { normalizeChatAuthor } from '@platform/lib/chat/chat-author.js';
 
 /**
  * @param {unknown} rawMessages
@@ -22,7 +23,7 @@ export function a2aStateMessagesToChatMessages(rawMessages, defaultTaskId) {
             ? defaultTaskId
             : null;
     const out = [];
-    /** @type {null | { content: string, toolCalls: object[], toolResults: object[], taskId: string, timestamp: string, id: string, reasoning: string, activity: string, mergeOpen: boolean }} */
+    /** @type {null | { content: string, toolCalls: object[], toolResults: object[], taskId: string, timestamp: string, id: string, reasoning: string, activity: string, mergeOpen: boolean, author: object }} */
     let buf = null;
     let idx = 0;
 
@@ -54,6 +55,7 @@ export function a2aStateMessagesToChatMessages(rawMessages, defaultTaskId) {
             out.push({
                 id: messageId,
                 role: 'user',
+                author: normalizeChatAuthor(meta.author, 'user'),
                 content: text,
                 timestamp,
                 taskId,
@@ -69,6 +71,7 @@ export function a2aStateMessagesToChatMessages(rawMessages, defaultTaskId) {
             out.push({
                 id: messageId,
                 role: 'system',
+                author: normalizeChatAuthor(meta.author, 'system'),
                 content: text,
                 timestamp,
                 taskId,
@@ -83,6 +86,7 @@ export function a2aStateMessagesToChatMessages(rawMessages, defaultTaskId) {
             out.push({
                 id: messageId,
                 role: 'assistant',
+                author: normalizeChatAuthor(meta.author, 'assistant'),
                 content: text,
                 timestamp,
                 taskId,
@@ -106,6 +110,7 @@ export function a2aStateMessagesToChatMessages(rawMessages, defaultTaskId) {
                 reasoning,
                 activity: '',
                 mergeOpen: true,
+                author: normalizeChatAuthor(meta.author, 'assistant'),
             };
             idx += 1;
             continue;
@@ -132,6 +137,7 @@ export function a2aStateMessagesToChatMessages(rawMessages, defaultTaskId) {
                         reasoning: '',
                         activity: '',
                         mergeOpen: false,
+                        author: normalizeChatAuthor(meta.author, 'assistant'),
                     }),
                 );
             }
@@ -150,6 +156,7 @@ export function a2aStateMessagesToChatMessages(rawMessages, defaultTaskId) {
             out.push({
                 id: messageId,
                 role: hitlRole,
+                author: normalizeChatAuthor(meta.author, hitlRole),
                 content: text,
                 timestamp,
                 taskId,
@@ -175,6 +182,7 @@ function _assistantRow(buf) {
     return {
         id: buf.id,
         role: 'assistant',
+        author: normalizeChatAuthor(buf.author, 'assistant'),
         content: buf.content,
         timestamp: buf.timestamp,
         taskId: buf.taskId,

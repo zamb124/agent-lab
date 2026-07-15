@@ -147,6 +147,7 @@ Parent repo фиксирует commit submodule; floating `HEAD` без pin за
 | Меняется | Источник |
 |---|---|
 | Installer / bundle id / protocol / icons | `distro/humanitec.json` |
+| Vendor compatibility layer | [`patches/`](patches/) + [`scripts/apply_vendor_patches.sh`](scripts/apply_vendor_patches.sh) |
 | Watermark, статусы чата, меню, i18n | [`ui_branding.py`](ui_branding.py) |
 | goosed prompt templates (`system.md`, fallbacks) | [`goosed_branding.py`](goosed_branding.py) + `branding/prompts/*` |
 | Platform MCP, pairing, onboarding | `branding/*` + inline patches |

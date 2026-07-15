@@ -749,8 +749,10 @@ build_release() {
   export GOOSE_BUNDLE_NAME
   GOOSE_BUNDLE_NAME="$(read_distro_field bundle_name)"
 
-  chmod +x "${ROOT_DIR}/scripts/apply_branding.sh"
+  chmod +x "${ROOT_DIR}/scripts/apply_branding.sh" "${ROOT_DIR}/scripts/apply_vendor_patches.sh"
+  "${ROOT_DIR}/scripts/apply_vendor_patches.sh" pre
   "${ROOT_DIR}/scripts/apply_branding.sh"
+  "${ROOT_DIR}/scripts/apply_vendor_patches.sh" post
 
   mkdir -p "${OUTPUT_DIR}"
   local filename

@@ -455,6 +455,13 @@ class TestHandoffA2A:
         meta = input_required[-1]["result"]["status"]["message"]["metadata"]
         assert meta.get("platform_handoff_continue") is True
         assert input_required[-1]["result"].get("final") is False
+        ui_event_types = [
+            part.get("data", {}).get("type")
+            for event in events
+            for part in event.get("result", {}).get("artifact", {}).get("parts", [])
+            if isinstance(part, dict)
+        ]
+        assert "platform.handoff_initiated" in ui_event_types
 
     @pytest.mark.asyncio
     async def test_demo_bundles_handoff_roundtrip(

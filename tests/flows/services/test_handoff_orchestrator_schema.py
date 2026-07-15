@@ -6,6 +6,8 @@ import pytest
 
 from apps.flows.src.tools.json_schema_parameters import validate_tool_args_against_parameters_schema
 
+pytestmark = [pytest.mark.no_test_doubles]
+
 
 class TestStructuredHandbackSchema:
     def test_output_schema_validates_handback_variables(self) -> None:

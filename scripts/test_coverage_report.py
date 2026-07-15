@@ -23,6 +23,10 @@ from typing import TypedDict, cast
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _REPORTS_ROOT = _REPO_ROOT / "reports" / "coverage"
 
+# Порог отсечения: пакеты с покрытием выше этого значения не попадают в
+# итоговый terminal/html summary «слабых пакетов». Фокус — на реально слабых.
+_LOW_PACKAGES_PCT_THRESHOLD = 90.0
+
 _PYTHON_SCOPE_NOTE = (
     "Python: apps + core из pytest phase 1/2/4 (без integration/network маркеров)."
 )
@@ -254,6 +258,8 @@ def _parse_python_summary(summary_path: Path) -> tuple[CoverageTotals, list[Pack
         lines_pct = _pct(covered, total)
         if lines_pct is None:
             continue
+        if lines_pct > _LOW_PACKAGES_PCT_THRESHOLD:
+            continue
         rows.append(
             {
                 "package": package,
@@ -433,7 +439,7 @@ def _render_terminal(summary: CoverageSummary) -> str:
     low_packages = summary.get("python_packages_low")
     if isinstance(low_packages, list) and low_packages:
         lines.append("")
-        lines.append("Python lowest packages (lines %):")
+        lines.append(f"Python packages ≤{_LOW_PACKAGES_PCT_THRESHOLD:g}% (lines %):")
         for row in low_packages[:5]:
             if not isinstance(row, dict):
                 continue
@@ -503,7 +509,7 @@ def _render_html(summary: CoverageSummary, *, run_dir: Path) -> str:
 
     low_packages = summary.get("python_packages_low")
     if isinstance(low_packages, list) and low_packages:
-        sections.append("<h2>Python lowest packages</h2><table>")
+        sections.append(f"<h2>Python packages ≤{_LOW_PACKAGES_PCT_THRESHOLD:g}%</h2><table>")
         sections.append("<tr><th>Package</th><th>Lines %</th><th>Covered</th><th>Total</th></tr>")
         for row in low_packages:
             if not isinstance(row, dict):

@@ -21,6 +21,7 @@ from a2a.types import (
     TextPart,
 )
 
+from apps.flows.src.runtime.message_author import build_flow_message_author
 from core.state import ExecutionState
 from core.state.interrupt import InterruptKind
 from core.types import JsonObject, JsonValue, parse_json_object
@@ -68,11 +69,13 @@ class BaseEmitter(ABC):
         message_id: str | None = None,
     ) -> Message:
         """Создаёт A2A Message объект."""
+        message_metadata: JsonObject = dict(metadata or {})
+        message_metadata["author"] = build_flow_message_author(self.state)
         return Message(
             message_id=message_id or str(uuid.uuid4()),
             role=Role.agent,
             parts=[_text_part(text)],
-            metadata=metadata,
+            metadata=message_metadata,
         )
 
     async def emit_text(
@@ -88,6 +91,7 @@ class BaseEmitter(ABC):
             artifact_id=str(uuid.uuid4()),
             name=artifact_name,
             parts=[_text_part(text)],
+            metadata={"author": build_flow_message_author(self.state)},
         )
 
         event = TaskArtifactUpdateEvent(

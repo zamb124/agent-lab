@@ -19,6 +19,7 @@ _AGENT_SETTINGS_MUTATING_TESTS = frozenset({
 })
 _AGENT_SETTINGS_MODULE_SUFFIX = "test_frontend_settings_agent.py"
 _FLOWS_SCENARIO_TIMEOUT_SECONDS = 15
+_FLOWS_SCENARIO_MAX_TIMEOUT_SECONDS = 120
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -32,8 +33,19 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         # документационного маршрута это скрывает сломанный locator и делает
         # полный аудит многочасовым. Маркер prepend переопределяет старый
         # бюджет, не затрагивая обычные длительные integration E2E.
+        requested_timeout = scenario.kwargs.get(
+            "timeout_seconds",
+            _FLOWS_SCENARIO_TIMEOUT_SECONDS,
+        )
+        timeout_seconds = (
+            requested_timeout
+            if isinstance(requested_timeout, int)
+            and not isinstance(requested_timeout, bool)
+            and _FLOWS_SCENARIO_TIMEOUT_SECONDS <= requested_timeout <= _FLOWS_SCENARIO_MAX_TIMEOUT_SECONDS
+            else _FLOWS_SCENARIO_TIMEOUT_SECONDS
+        )
         item.add_marker(
-            pytest.mark.timeout(_FLOWS_SCENARIO_TIMEOUT_SECONDS, func_only=True),
+            pytest.mark.timeout(timeout_seconds, func_only=True),
             append=False,
         )
 

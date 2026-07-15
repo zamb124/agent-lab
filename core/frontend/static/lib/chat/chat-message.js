@@ -23,12 +23,15 @@ import {
 } from './flows-url-rewrite.js';
 import { registerBuiltinFlowChatBlocks } from './chat-builtin-blocks.js';
 import { stopStreamTtsPlayback } from '../voice/stream-tts-registry.js';
+import { normalizeChatAuthor } from './chat-author.js';
 import './chat-block-renderer.js';
 
 registerBuiltinFlowChatBlocks();
 
 const DEFAULT_LABELS = {
     role_user: 'You',
+    role_agent: 'Agent',
+    role_subagent: 'Sub-agent',
     role_assistant: 'Assistant',
     role_operator: 'Operator',
     role_system: 'System',
@@ -88,6 +91,7 @@ export class FlowsChatMessage extends PlatformElement {
     static properties = {
         variant: { type: String, reflect: true },
         role: { type: String },
+        author: { type: Object },
         content: { type: String },
         timestamp: { type: String },
         locale: { type: String },
@@ -274,6 +278,78 @@ export class FlowsChatMessage extends PlatformElement {
 
         .bubble-meta.user-meta {
             justify-content: flex-end;
+        }
+
+        .author-identity {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+            max-width: min(100%, 320px);
+        }
+
+        .author-mark {
+            width: 22px;
+            height: 22px;
+            flex: 0 0 22px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            color: var(--flows-chat-accent);
+            background: var(--flows-chat-accent-muted);
+            border: 1px solid color-mix(in srgb, var(--flows-chat-accent) 22%, transparent);
+        }
+
+        .author-identity[data-author-kind='subagent'] .author-mark {
+            color: var(--info, #3b82f6);
+            background: var(--info-bg, rgba(59, 130, 246, 0.12));
+            border-color: var(--info-border, rgba(59, 130, 246, 0.24));
+        }
+
+        .author-identity[data-author-kind='operator'] .author-mark {
+            color: var(--flows-chat-warning);
+            background: color-mix(in srgb, var(--flows-chat-warning) 12%, transparent);
+            border-color: color-mix(in srgb, var(--flows-chat-warning) 26%, transparent);
+        }
+
+        .author-identity[data-author-kind='user'] .author-mark {
+            color: var(--flows-chat-user-fg);
+            background: rgba(255, 255, 255, 0.16);
+            border-color: rgba(255, 255, 255, 0.28);
+        }
+
+        .author-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--flows-chat-secondary);
+            font-size: 12px;
+            line-height: 1.2;
+            font-weight: var(--font-semibold, 600);
+        }
+
+        .author-kind {
+            flex: 0 0 auto;
+            padding: 2px 6px;
+            border-radius: var(--radius-full, 999px);
+            color: var(--flows-chat-muted);
+            background: var(--flows-chat-surface-subtle);
+            border: 1px solid var(--flows-chat-border);
+            font-size: 10px;
+            line-height: 1.2;
+            font-weight: var(--font-medium, 500);
+        }
+
+        .message.user .author-name,
+        .message.user .author-kind {
+            color: var(--flows-chat-user-fg);
+        }
+
+        .message.user .author-kind {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.24);
         }
 
         .bubble-meta.assistant-meta {
@@ -892,6 +968,7 @@ export class FlowsChatMessage extends PlatformElement {
         super();
         this.variant = 'app';
         this.role = 'user';
+        this.author = null;
         this.content = '';
         this.timestamp = '';
         this.locale = 'en';
@@ -965,26 +1042,70 @@ export class FlowsChatMessage extends PlatformElement {
         }).format(new Date(ms));
     }
 
-    _roleName() {
-        switch (this.role) {
+    _resolvedAuthor() {
+        return normalizeChatAuthor(this.author, this.role);
+    }
+
+    _authorKindName() {
+        const author = this._resolvedAuthor();
+        switch (author.kind) {
             case 'user':
                 return this._label('role_user', 'You');
-            case 'assistant':
-                return this._label('role_assistant', 'Assistant');
+            case 'agent':
+                return this._label('role_agent', this._label('role_assistant', 'Agent'));
+            case 'subagent':
+                return this._label('role_subagent', 'Sub-agent');
             case 'operator':
                 return this._label('role_operator', 'Operator');
             case 'system':
                 return this._label('role_system', 'System');
-            case 'handoff':
-                return this._label('chat_handoff.handoff_active', 'Active');
-            case 'handback':
-                return this._label('chat_handoff.handoff_returned', 'Returned');
             default:
-                return this.role || '';
+                return '';
         }
     }
 
+    _authorDisplayName() {
+        const author = this._resolvedAuthor();
+        return author.name || this._authorKindName();
+    }
+
+    _authorIdentityIcon() {
+        switch (this._resolvedAuthor().kind) {
+            case 'user':
+                return 'user';
+            case 'agent':
+                return 'bot';
+            case 'subagent':
+                return 'workflow';
+            case 'operator':
+                return 'agent';
+            case 'system':
+                return 'info';
+            default:
+                return 'chat';
+        }
+    }
+
+    _renderAuthorIdentity() {
+        const author = this._resolvedAuthor();
+        const name = this._authorDisplayName();
+        const kindName = this._authorKindName();
+        const showKind = author.name.length > 0 && author.name !== kindName;
+        return html`
+            <span class="author-identity" data-author-kind=${author.kind} title=${kindName}>
+                <span class="author-mark" aria-hidden="true">
+                    <platform-icon name=${this._authorIdentityIcon()} size="13"></platform-icon>
+                </span>
+                <span class="author-name">${name}</span>
+                ${showKind ? html`<span class="author-kind">${kindName}</span>` : nothing}
+            </span>
+        `;
+    }
+
     _avatarIcon() {
+        if (this.role !== 'handoff' && this.role !== 'handback') {
+            return this._authorIdentityIcon();
+        }
         switch (this.role) {
             case 'user':
                 return 'user';
@@ -1727,22 +1848,18 @@ export class FlowsChatMessage extends PlatformElement {
         const timestamp = this._formatTimestamp(this.timestamp);
         if (this.headerCompact) {
             if (this.role === 'user') {
-                if (!timestamp && !this.showRunTraceControls) {
-                    return nothing;
-                }
                 return html`
                     <div class="bubble-meta user-meta">
-                        ${timestamp ? html`<span class="timestamp">${timestamp}</span>` : nothing}
                         ${this._renderUserRunTraceActions()}
+                        ${timestamp ? html`<span class="timestamp">${timestamp}</span>` : nothing}
+                        ${this._renderAuthorIdentity()}
                     </div>
                 `;
             }
             if (this.role === 'assistant' || this.role === 'operator') {
-                if (!timestamp && !this._assistantObservabilityVisible()) {
-                    return nothing;
-                }
                 return html`
                     <div class="bubble-meta assistant-meta">
+                        ${this._renderAuthorIdentity()}
                         ${timestamp ? html`<span class="timestamp">${timestamp}</span>` : nothing}
                         ${this._renderAssistantObservabilityActions()}
                     </div>
@@ -1761,7 +1878,7 @@ export class FlowsChatMessage extends PlatformElement {
         if (!hasTools) {
             return html`
                 <div class="header">
-                    <span class="role">${this._roleName()}</span>
+                    ${this._renderAuthorIdentity()}
                     ${timestamp ? html`<span class="timestamp">${timestamp}</span>` : nothing}
                 </div>
             `;
@@ -1769,7 +1886,7 @@ export class FlowsChatMessage extends PlatformElement {
         return html`
             <div class="header has-inline-tools">
                 <div class="user-header-meta">
-                    <span class="role">${this._roleName()}</span>
+                    ${this._renderAuthorIdentity()}
                     ${timestamp ? html`<span class="timestamp">${timestamp}</span>` : nothing}
                 </div>
                 ${this._renderUserRunTraceActions()}
@@ -1781,7 +1898,7 @@ export class FlowsChatMessage extends PlatformElement {
         const timestamp = this._formatTimestamp(this.timestamp);
         return html`
             <div class="header">
-                <span class="role">${this._roleName()}</span>
+                ${this._renderAuthorIdentity()}
                 ${timestamp ? html`<span class="timestamp">${timestamp}</span>` : nothing}
                 ${this._renderAssistantObservabilityActions()}
             </div>

@@ -40,11 +40,20 @@ export class FlowsFlowNodeEditor extends PlatformElement {
             }
             .branch-mode-row {
                 display: grid;
-                grid-template-columns: minmax(0, 1fr) minmax(150px, 0.55fr);
+                grid-template-columns: minmax(0, 1fr) minmax(210px, 0.62fr);
                 gap: var(--space-3);
                 align-items: end;
             }
             .branch-mode-row .field { margin-bottom: 0; }
+            .call-type-control {
+                width: 100%;
+            }
+            .call-type-hint {
+                min-height: 16px;
+                font-size: var(--text-xs);
+                line-height: 1.35;
+                color: var(--text-tertiary);
+            }
             @media (max-width: 680px) {
                 .branch-mode-row { grid-template-columns: 1fr; }
             }
@@ -256,18 +265,20 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                         </div>
                         <div class="field call-type-field">
                             <label>${this.t('flow_node_editor.call_type')}</label>
-                            <platform-field
-                                mode="edit"
-                                type="enum"
+                            <platform-segmented-control
+                                class="call-type-control"
+                                full-width
+                                density="compact"
                                 .value=${callType}
-                                .hint=${this.t('flow_node_editor.call_type_hint')}
-                                .config=${{ values: [
+                                .items=${[
                                     { value: 'call', label: this.t('flow_node_editor.call_type_call') },
                                     { value: 'handoff', label: this.t('flow_node_editor.call_type_handoff') },
-                                ] }}
+                                ]}
+                                aria-label=${this.t('flow_node_editor.call_type')}
                                 ?disabled=${flowId.length === 0}
                                 @change=${this._onCallType}
-                            ></platform-field>
+                            ></platform-segmented-control>
+                            <div class="call-type-hint">${this.t('flow_node_editor.call_type_hint')}</div>
                         </div>
                     </div>
                 </div>

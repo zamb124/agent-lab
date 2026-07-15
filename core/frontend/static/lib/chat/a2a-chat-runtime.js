@@ -154,6 +154,28 @@ function _metadataFrom(result, message) {
     return {};
 }
 
+function _authorFromMetadata(metadata) {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        return null;
+    }
+    const author = metadata.author;
+    return author && typeof author === 'object' && !Array.isArray(author) ? author : null;
+}
+
+function _authorFromResult(result) {
+    if (!result || typeof result !== 'object') return null;
+    if (result.kind === 'artifact-update') {
+        return _authorFromMetadata(result.artifact?.metadata);
+    }
+    if (result.kind === 'message') {
+        return _authorFromMetadata(result.metadata);
+    }
+    if (result.kind === 'status-update') {
+        return _authorFromMetadata(result.status?.message?.metadata);
+    }
+    return null;
+}
+
 function _messageMetadataEvents(events, taskId, message) {
     if (!taskId || !message || typeof message !== 'object') {
         return;
@@ -248,9 +270,15 @@ function _terminalEvent(events, traceEntries, contextId, taskId, state, message)
     }
     if (state === 'completed' || state === 'finished') {
         const text = message ? extractA2aTextFromParts(message.parts) : '';
+        const author = _authorFromMetadata(message?.metadata);
         events.push({
             type: 'completed',
-            payload: { task_id: taskId, context_id: contextId, content: text },
+            payload: {
+                task_id: taskId,
+                context_id: contextId,
+                content: text,
+                ...(author ? { author } : {}),
+            },
         });
         return;
     }
@@ -567,10 +595,15 @@ export function mapA2aResultToChatRuntimeEvents(result, options = {}) {
     if (taskId) {
         out.nextTaskId = taskId;
     }
+    const frameAuthor = _authorFromResult(result);
     if (!out.taskPrimed && taskId && frameContextId) {
         out.events.push({
             type: 'task_started',
-            payload: { task_id: taskId, context_id: frameContextId },
+            payload: {
+                task_id: taskId,
+                context_id: frameContextId,
+                ...(frameAuthor ? { author: frameAuthor } : {}),
+            },
         });
         out.taskPrimed = true;
     }
@@ -597,6 +630,7 @@ export function mapA2aResultToChatRuntimeEvents(result, options = {}) {
 
 function _artifactUpdateToRuntimeEvents(out, result, contextId, taskId) {
     const artifact = result.artifact;
+    const author = _authorFromMetadata(artifact?.metadata);
     const final = result.final === true;
     if (artifact) {
         _nodeRuntimeEventsFromArtifact(out, artifact, contextId, taskId);
@@ -606,7 +640,15 @@ function _artifactUpdateToRuntimeEvents(out, result, contextId, taskId) {
         const text = extractA2aTextFromParts(artifact.parts);
         if (text) {
             if (artifact.name === 'reasoning') {
-                out.events.push({ type: 'reasoning_chunk', payload: { task_id: taskId, text } });
+                out.events.push({
+                    type: 'reasoning_chunk',
+                    payload: {
+                        task_id: taskId,
+                        context_id: contextId,
+                        text,
+                        ...(author ? { author } : {}),
+                    },
+                });
                 out.traceEntries.push({
                     context_id: contextId,
                     task_id: taskId,
@@ -629,7 +671,15 @@ function _artifactUpdateToRuntimeEvents(out, result, contextId, taskId) {
                     },
                 });
             } else if (artifact.name !== 'operator_files') {
-                out.events.push({ type: 'content_chunk', payload: { task_id: taskId, text } });
+                out.events.push({
+                    type: 'content_chunk',
+                    payload: {
+                        task_id: taskId,
+                        context_id: contextId,
+                        text,
+                        ...(author ? { author } : {}),
+                    },
+                });
             }
         }
         if (artifact.name === 'operator_files') {
@@ -649,7 +699,17 @@ function _artifactUpdateToRuntimeEvents(out, result, contextId, taskId) {
         _messageMetadataEvents(out.events, taskId, message);
         const textFromMessage = extractA2aTextFromParts(message.parts);
         if (textFromMessage) {
-            out.events.push({ type: 'content_chunk', payload: { task_id: taskId, text: textFromMessage } });
+            out.events.push({
+                type: 'content_chunk',
+                payload: {
+                    task_id: taskId,
+                    context_id: contextId,
+                    text: textFromMessage,
+                    ...(_authorFromMetadata(message.metadata)
+                        ? { author: _authorFromMetadata(message.metadata) }
+                        : {}),
+                },
+            });
         }
     }
 
@@ -718,6 +778,13 @@ function _statusUpdateToRuntimeEvents(out, result, contextId, taskId) {
         }
         const interrupt = metadata && metadata.platform_interrupt;
         const body = interrupt && typeof interrupt === 'object' ? interrupt.body : null;
+        // Backend RedisSubscriber closes message/stream on an agent handoff even though
+        // the A2A status itself intentionally has final=false. Treat that protocol
+        // boundary as terminal so the chat does not replace it with stream_incomplete.
+        if (body && typeof body === 'object' && body.kind === 'handoff') {
+            out.terminal = true;
+            return out;
+        }
         // HITL: закрываем message/stream → ChatController.syncHitlLiveTail (tasks/resubscribe).
         if (body && typeof body === 'object' && body.kind === 'operator_task') {
             out.terminal = true;

@@ -7,6 +7,7 @@
  */
 
 import { inputRequiredFieldsFromA2a } from '../a2a-chat-runtime.js';
+import { mergeChatAuthor, normalizeChatAuthor } from '../chat-author.js';
 
 const EMPTY_LIST = Object.freeze([]);
 const EMPTY_OBJECT = Object.freeze({});
@@ -58,6 +59,7 @@ export function createInitialChatRuntimeState() {
         sessionId: null,
         lastStreamPingAt: null,
         streamPingByContextId: EMPTY_OBJECT,
+        activeAuthorByContextId: EMPTY_OBJECT,
     };
 }
 
@@ -83,6 +85,35 @@ function _filesByContextMap(value) {
     return EMPTY_OBJECT;
 }
 
+function _activeAuthorMap(value) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return value;
+    }
+    return EMPTY_OBJECT;
+}
+
+function _contextAuthor(state, contextId, incoming = null) {
+    const active = typeof contextId === 'string'
+        ? _activeAuthorMap(state.activeAuthorByContextId)[contextId]
+        : null;
+    return mergeChatAuthor(incoming, active, 'assistant');
+}
+
+function _hasExplicitAuthor(value) {
+    return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function _setContextAuthor(state, contextId, author) {
+    if (typeof contextId !== 'string' || contextId.length === 0) return state;
+    return {
+        ...state,
+        activeAuthorByContextId: {
+            ..._activeAuthorMap(state.activeAuthorByContextId),
+            [contextId]: normalizeChatAuthor(author, 'assistant'),
+        },
+    };
+}
+
 function _ensureContextBucket(state, contextId) {
     if (typeof contextId !== 'string' || contextId.length === 0) return state;
     if (state.messagesByContextId[contextId]) return state;
@@ -101,7 +132,7 @@ function _ensureContextBucket(state, contextId) {
  * пишутся в последний bubble этого task; повторный terminal frame для завершённого
  * хода не создаёт дубль.
  */
-function _findOrCreateAssistantMessage(messages, taskId) {
+function _findOrCreateAssistantMessage(messages, taskId, author = null) {
     if (!Array.isArray(messages)) return { messages: [], message: null };
     let idx = -1;
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -112,16 +143,25 @@ function _findOrCreateAssistantMessage(messages, taskId) {
         }
     }
     if (idx >= 0) {
+        if (author !== null) {
+            const patched = {
+                ...messages[idx],
+                author: mergeChatAuthor(author, messages[idx].author, 'assistant'),
+            };
+            const nextMessages = messages.map((message, index) => (index === idx ? patched : message));
+            return { messages: nextMessages, message: patched, idx };
+        }
         return { messages, message: messages[idx], idx };
     }
-    const message = _newAssistantMessage(taskId, `assistant_${taskId}`);
+    const message = _newAssistantMessage(taskId, `assistant_${taskId}`, author);
     return { messages: [...messages, message], message, idx: messages.length };
 }
 
-function _newAssistantMessage(taskId, id) {
+function _newAssistantMessage(taskId, id, author = null) {
     return {
         id,
         role: 'assistant',
+        author: normalizeChatAuthor(author, 'assistant'),
         content: '',
         reasoning: '',
         activity: '',
@@ -163,7 +203,7 @@ function _hasResumeBoundary(message) {
     return message.inputRequired != null || message.breakpoint != null;
 }
 
-function _ensurePlaceholderAssistant(messages, taskId) {
+function _ensurePlaceholderAssistant(messages, taskId, author = null) {
     if (!Array.isArray(messages) || typeof taskId !== 'string' || taskId.length === 0) {
         return messages;
     }
@@ -176,15 +216,20 @@ function _ensurePlaceholderAssistant(messages, taskId) {
         }
     }
     if (lastIdx < 0) {
-        const { messages: withAssistant } = _findOrCreateAssistantMessage(messages, taskId);
+        const { messages: withAssistant } = _findOrCreateAssistantMessage(messages, taskId, author);
         return withAssistant;
     }
     if (!_hasResumeBoundary(messages[lastIdx])) {
+        if (author !== null) {
+            return messages.map((message, index) => index === lastIdx
+                ? { ...message, author: mergeChatAuthor(author, message.author, 'assistant') }
+                : message);
+        }
         return messages;
     }
     return [
         ...messages,
-        _newAssistantMessage(taskId, _assistantMessageIdForAppend(messages, taskId)),
+        _newAssistantMessage(taskId, _assistantMessageIdForAppend(messages, taskId), author),
     ];
 }
 
@@ -291,10 +336,10 @@ function _sweepOrphanStreamingInContext(state, contextId) {
     };
 }
 
-function _appendChunk(field, text) {
+function _appendChunk(field, text, author = null) {
     return (messages, taskId) => {
         if (typeof text !== 'string' || text.length === 0) return messages;
-        const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
+        const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId, author);
         return _replaceMessage(nextMsgs, idx, (m) => ({
             ...m,
             [field]: (typeof m[field] === 'string' ? m[field] : '') + text,
@@ -457,6 +502,10 @@ function _sessionInit(state, p) {
             ..._filesByContextMap(next.filesByContextId),
             [contextId]: EMPTY_LIST,
         },
+        activeAuthorByContextId: {
+            ..._activeAuthorMap(next.activeAuthorByContextId),
+            [contextId]: normalizeChatAuthor({ kind: 'agent', flowId }, 'assistant'),
+        },
     };
 }
 
@@ -480,6 +529,10 @@ function _sessionReset(state) {
             ..._filesByContextMap(state.filesByContextId),
             [contextId]: EMPTY_LIST,
         },
+        activeAuthorByContextId: {
+            ..._activeAuthorMap(state.activeAuthorByContextId),
+            [contextId]: normalizeChatAuthor({ kind: 'agent', flowId: state.currentFlowId }, 'assistant'),
+        },
     };
 }
 
@@ -500,6 +553,7 @@ function _sessionLoaded(state, p) {
     } else {
         contextId = `${Date.now()}`;
     }
+    const lastAssistant = [...messages].reverse().find((message) => message?.role === 'assistant');
     return {
         ...state,
         messagesByContextId: {
@@ -518,6 +572,13 @@ function _sessionLoaded(state, p) {
         filesByContextId: {
             ..._filesByContextMap(state.filesByContextId),
             [contextId]: files,
+        },
+        activeAuthorByContextId: {
+            ..._activeAuthorMap(state.activeAuthorByContextId),
+            [contextId]: normalizeChatAuthor(
+                lastAssistant?.author || { kind: 'agent', flowId },
+                'assistant',
+            ),
         },
     };
 }
@@ -547,7 +608,10 @@ function _userMessageAdded(state, p) {
     if (!p || typeof p !== 'object') return state;
     const contextId = typeof p.contextId === 'string' ? p.contextId : state.currentContextId;
     if (!contextId) return state;
-    const message = p.message;
+    const rawMessage = p.message;
+    const message = rawMessage && typeof rawMessage === 'object'
+        ? { ...rawMessage, author: normalizeChatAuthor(rawMessage.author, 'user') }
+        : rawMessage;
     if (!message || typeof message !== 'object') return state;
     const ensured = _ensureContextBucket(state, contextId);
     const bucket = ensured.messagesByContextId && ensured.messagesByContextId[contextId];
@@ -655,6 +719,7 @@ function _taskStarted(state, p) {
         ? p.context_id
         : state.currentContextId;
     if (!taskId) return state;
+    const author = _contextAuthor(state, contextId, p.author);
     let next = state;
     if (contextId) {
         next = _ensureContextBucket(next, contextId);
@@ -679,9 +744,12 @@ function _taskStarted(state, p) {
         withTask = _applyToBucketMessages(
             withTask,
             taskId,
-            (messages) => _ensurePlaceholderAssistant(messages, taskId),
+            (messages) => _ensurePlaceholderAssistant(messages, taskId, author),
             contextId,
         );
+        if (_hasExplicitAuthor(p.author)) {
+            withTask = _setContextAuthor(withTask, contextId, author);
+        }
     }
     return withTask;
 }
@@ -736,11 +804,17 @@ function _chunk(state, p, field) {
     if (!p || typeof p !== 'object') return state;
     const taskId = typeof p.task_id === 'string' ? p.task_id : null;
     const text = typeof p.text === 'string' ? p.text : '';
+    const ctxHint = typeof p.context_id === 'string' ? p.context_id : null;
+    const author = _contextAuthor(state, ctxHint || state.currentContextId, p.author);
     if (!taskId) return state;
-    return _applyToBucketMessages(state, taskId, (messages) => {
-        const withPlaceholder = _ensurePlaceholderAssistant(messages, taskId);
-        return _appendChunk(field, text)(withPlaceholder, taskId);
-    });
+    const next = _applyToBucketMessages(state, taskId, (messages) => {
+        const withPlaceholder = _ensurePlaceholderAssistant(messages, taskId, author);
+        return _appendChunk(field, text, author)(withPlaceholder, taskId);
+    }, ctxHint);
+    const contextId = ctxHint || state.currentContextId;
+    return _hasExplicitAuthor(p.author)
+        ? _setContextAuthor(next, contextId, author)
+        : next;
 }
 
 function _replyContentMatches(message, text) {
@@ -802,6 +876,7 @@ function _operatorReply(state, p) {
         const operatorMsg = {
             id: `operator_${taskId}_${Date.now()}`,
             role: 'operator',
+            author: normalizeChatAuthor({ kind: 'operator' }, 'operator'),
             content: text,
             timestamp: new Date().toISOString(),
             fileIds: [],
@@ -843,6 +918,7 @@ function _operatorFiles(state, p) {
             {
                 id: `operator_${taskId}_${Date.now()}`,
                 role: 'operator',
+                author: normalizeChatAuthor({ kind: 'operator' }, 'operator'),
                 content: '',
                 timestamp: new Date().toISOString(),
                 fileIds,
@@ -1001,6 +1077,16 @@ function _inputRequired(state, p) {
         }),
         ctxHint,
     );
+    if (extracted.interruptKind === 'handoff' && extracted.targetFlowId.length > 0) {
+        return _handoffInitiated(next, {
+            task_id: taskId,
+            context_id: ctxHint || state.currentContextId,
+            target_flow_id: extracted.targetFlowId,
+            target_flow_name: extracted.targetFlowName,
+            handoff_reason: extracted.reason,
+            depth: extracted.depth,
+        });
+    }
     return { ...next, streaming: false };
 }
 
@@ -1009,6 +1095,7 @@ function _completed(state, p) {
     const taskId = typeof p.task_id === 'string' ? p.task_id : null;
     const content = typeof p.content === 'string' ? p.content : '';
     const ctxHint = typeof p.context_id === 'string' ? p.context_id : null;
+    const author = _contextAuthor(state, ctxHint || state.currentContextId, p.author);
     if (!taskId) return state;
     const next = _applyToBucketMessages(
         state,
@@ -1040,7 +1127,7 @@ function _completed(state, p) {
                     content,
                 }));
             }
-            const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
+            const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId, author);
             return _replaceMessage(nextMsgs, idx, (m) => {
                 const updated = _stampTerminalTimestamp(m, terminalPatch);
                 if (content && (!m.content || m.content.trim() === '')) {
@@ -1051,7 +1138,11 @@ function _completed(state, p) {
         },
         ctxHint,
     );
-    return { ...next, streaming: false, currentTaskId: taskId };
+    const terminal = { ...next, streaming: false, currentTaskId: taskId };
+    const contextId = ctxHint || state.currentContextId;
+    return _hasExplicitAuthor(p.author)
+        ? _setContextAuthor(terminal, contextId, author)
+        : terminal;
 }
 
 function _failed(state, p) {
@@ -1100,14 +1191,43 @@ function _handoffInitiated(state, p) {
         reason: typeof p.handoff_reason === 'string' ? p.handoff_reason : '',
         traceId: typeof p.trace_id === 'string' ? p.trace_id : '',
     };
-    return _pushMessage(
-        _applyToBucketMessages(state, taskId,
-            _setMessageFields(taskId, { handoff, streaming: false, activity: '' }),
-            ctxHint
-        ),
-        state.currentContextId,
-        { id: `handoff_${taskId}_${handoff.targetFlowId}`, role: 'handoff', ...handoff },
+    const contextId = ctxHint || state.currentContextId;
+    const withAssistant = _applyToBucketMessages(
+        state,
+        taskId,
+        _setMessageFields(taskId, {
+            handoff,
+            inputRequired: null,
+            streaming: false,
+            activity: '',
+        }),
+        ctxHint,
     );
+    const bucket = typeof contextId === 'string'
+        ? withAssistant.messagesByContextId[contextId]
+        : null;
+    const alreadyVisible = Array.isArray(bucket?.messages) && bucket.messages.some(
+        (message) => message?.role === 'handoff'
+            && message.taskId === taskId
+            && message.handoff?.targetFlowId === handoff.targetFlowId,
+    );
+    const withCard = alreadyVisible
+        ? withAssistant
+        : _pushMessage(
+            withAssistant,
+            contextId,
+            {
+                id: `handoff_${taskId}_${handoff.targetFlowId}`,
+                role: 'handoff',
+                taskId,
+                handoff,
+            },
+        );
+    return _setContextAuthor(withCard, contextId, {
+        kind: 'subagent',
+        name: handoff.targetFlowName,
+        flowId: handoff.targetFlowId,
+    });
 }
 
 function _handbackCompleted(state, p) {
@@ -1116,14 +1236,13 @@ function _handbackCompleted(state, p) {
     if (!taskId) return state;
     const ctxHint = typeof p.context_id === 'string' ? p.context_id : null;
     const handback = {
-        id: `handback_${taskId}`,
-        role: 'handback',
         childFlowName: typeof p.child_flow_name === 'string' ? p.child_flow_name : '',
         parentFlowName: typeof p.parent_flow_name === 'string' ? p.parent_flow_name : '',
         response: typeof p.response === 'string' ? p.response : '',
         depth: typeof p.handoff_depth === 'number' ? p.handoff_depth : 0,
         traceId: typeof p.trace_id === 'string' ? p.trace_id : '',
     };
+    const contextId = ctxHint || state.currentContextId;
     const next = _applyToBucketMessages(state, taskId, (messages) => {
         const updated = messages.map((message) => {
             if (message.role !== 'assistant' || !message.handoff) {
@@ -1134,9 +1253,21 @@ function _handbackCompleted(state, p) {
                 handoff: { ...message.handoff, status: 'returned' },
             };
         });
-        return [...updated, handback];
+        return [
+            ...updated,
+            {
+                id: `handback_${taskId}`,
+                role: 'handback',
+                taskId,
+                handback,
+            },
+        ];
     }, ctxHint);
-    return { ...next, streaming: false };
+    return _setContextAuthor(
+        { ...next, streaming: false },
+        contextId,
+        { kind: 'agent', name: handback.parentFlowName },
+    );
 }
 
 function _skillLoaded(state, p) {

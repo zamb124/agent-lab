@@ -412,7 +412,44 @@ describe('chat-state: handoff', () => {
         expect(assistant.handoff.status).toBe('active');
         const handoffMsg = msgs.find((m) => m.role === 'handoff');
         expect(handoffMsg).toBeTruthy();
-        expect(handoffMsg.targetFlowName).toBe('Child Agent');
+        expect(handoffMsg.handoff.targetFlowName).toBe('Child Agent');
+    });
+
+    it('input_required handoff сам показывает карточку без формы ответа и не дублируется ui_event', () => {
+        const s = reduce(
+            ['session_init', { flowId: 'parent', contextId: 'ctx1' }],
+            ['task_started', { task_id: 'tsk1', context_id: 'ctx1' }],
+            ['input_required', {
+                task_id: 'tsk1',
+                context_id: 'ctx1',
+                result_metadata: {
+                    platform_interrupt: {
+                        body: {
+                            kind: 'handoff',
+                            target_flow_id: 'child_flow',
+                            target_name: 'Child Agent',
+                            reason: 'need specialist',
+                            depth: 1,
+                        },
+                    },
+                },
+            }],
+            ['handoff_initiated', {
+                task_id: 'tsk1',
+                context_id: 'ctx1',
+                target_flow_id: 'child_flow',
+                target_flow_name: 'Child Agent',
+                handoff_reason: 'need specialist',
+                depth: 1,
+            }],
+        );
+        const messages = s.messagesByContextId.ctx1.messages;
+        const assistant = messages.find((message) => message.role === 'assistant');
+        const cards = messages.filter((message) => message.role === 'handoff');
+        expect(assistant.inputRequired).toBe(null);
+        expect(cards).toHaveLength(1);
+        expect(cards[0].handoff.targetFlowName).toBe('Child Agent');
+        expect(s.activeAuthorByContextId.ctx1.kind).toBe('subagent');
     });
 
     it('handback_completed помечает handoff returned и добавляет handback card', () => {
@@ -438,7 +475,72 @@ describe('chat-state: handoff', () => {
         expect(assistant.handoff.status).toBe('returned');
         const handbackMsg = msgs.find((m) => m.role === 'handback');
         expect(handbackMsg).toBeTruthy();
-        expect(handbackMsg.response).toBe('resolved by child');
+        expect(handbackMsg.handback.response).toBe('resolved by child');
+    });
+
+    it('после handoff новые ответы принадлежат субагенту, после handback — родителю', () => {
+        const s = reduce(
+            ...handoffBase,
+            ['handoff_initiated', {
+                task_id: 'tsk1',
+                context_id: 'ctx1',
+                target_flow_id: 'returns_agent',
+                target_flow_name: 'Агент возвратов',
+                depth: 1,
+            }],
+            ['task_started', { task_id: 'tsk2', context_id: 'ctx1' }],
+            ['content_chunk', { task_id: 'tsk2', context_id: 'ctx1', text: 'Оформляю возврат.' }],
+            ['completed', { task_id: 'tsk2', context_id: 'ctx1' }],
+            ['handback_completed', {
+                task_id: 'tsk2',
+                context_id: 'ctx1',
+                child_flow_name: 'Агент возвратов',
+                parent_flow_name: 'Основной агент',
+                response: 'Возврат оформлен',
+                handoff_depth: 0,
+            }],
+            ['task_started', { task_id: 'tsk3', context_id: 'ctx1' }],
+            ['content_chunk', { task_id: 'tsk3', context_id: 'ctx1', text: 'Чем ещё помочь?' }],
+        );
+
+        const messages = s.messagesByContextId.ctx1.messages;
+        const childReply = messages.find((m) => m.role === 'assistant' && m.taskId === 'tsk2');
+        const parentReply = messages.find((m) => m.role === 'assistant' && m.taskId === 'tsk3');
+        expect(childReply.author).toEqual({
+            kind: 'subagent',
+            name: 'Агент возвратов',
+            flowId: 'returns_agent',
+            nodeId: '',
+        });
+        expect(parentReply.author).toEqual({
+            kind: 'agent',
+            name: 'Основной агент',
+            flowId: '',
+            nodeId: '',
+        });
+    });
+
+    it('явный типизированный author из runtime имеет приоритет над активным агентом контекста', () => {
+        const s = reduce(
+            ['session_init', { flowId: 'parent', contextId: 'ctx1' }],
+            ['task_started', {
+                task_id: 'tsk1',
+                context_id: 'ctx1',
+                author: {
+                    kind: 'subagent',
+                    flow_id: 'billing_agent',
+                    node_id: 'reply',
+                },
+            }],
+            ['content_chunk', { task_id: 'tsk1', context_id: 'ctx1', text: 'Готово' }],
+        );
+        const assistant = s.messagesByContextId.ctx1.messages.find((m) => m.role === 'assistant');
+        expect(assistant.author).toEqual({
+            kind: 'subagent',
+            name: '',
+            flowId: 'billing_agent',
+            nodeId: 'reply',
+        });
     });
 
     it('skill_loaded добавляет chip на assistant bubble без дублей', () => {

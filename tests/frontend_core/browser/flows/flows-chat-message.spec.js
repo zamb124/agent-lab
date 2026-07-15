@@ -9,6 +9,9 @@ import { installChatProfileFetchStub } from '../helpers/chat-profile-stub.js';
 const LABELS = {
     role_user: 'You',
     role_assistant: 'Assistant',
+    role_agent: 'Agent',
+    role_subagent: 'Sub-agent',
+    role_operator: 'Operator',
     operator_files: 'Attached files',
     tool_default_name: 'tool',
     tool_stack_aria: 'Tool calls: {names}',
@@ -385,6 +388,158 @@ describe('flows-chat-message shared surface', () => {
         expect(tracingDetail).to.deep.equal({ taskId: 'task-42' });
         expect(logsDetail).to.deep.equal({ sessionId: 'flow-1:ctx-1', taskId: 'task-42' });
         expect(historyDetail).to.deep.equal({ sessionId: 'flow-1:ctx-1' });
+    });
+
+    it('compact bubbles visibly distinguish user, agent, sub-agent and operator', async () => {
+        const host = await fixture(html`
+            <div>
+                <flows-chat-message
+                    role="user"
+                    .showHeader=${true}
+                    .headerCompact=${true}
+                    .author=${{ kind: 'user' }}
+                    .content=${'Нужен возврат'}
+                    .labels=${LABELS}
+                ></flows-chat-message>
+                <flows-chat-message
+                    role="assistant"
+                    .showHeader=${true}
+                    .headerCompact=${true}
+                    .author=${{ kind: 'agent', name: 'Основной агент' }}
+                    .content=${'Передаю специалисту'}
+                    .labels=${LABELS}
+                ></flows-chat-message>
+                <flows-chat-message
+                    role="assistant"
+                    .showHeader=${true}
+                    .headerCompact=${true}
+                    .author=${{ kind: 'subagent', name: 'Агент возвратов' }}
+                    .content=${'Возврат оформлен'}
+                    .labels=${LABELS}
+                ></flows-chat-message>
+                <flows-chat-message
+                    role="operator"
+                    .showHeader=${true}
+                    .headerCompact=${true}
+                    .author=${{ kind: 'operator' }}
+                    .content=${'Подтверждаю вручную'}
+                    .labels=${LABELS}
+                ></flows-chat-message>
+            </div>
+        `);
+        const bubbles = [...host.querySelectorAll('flows-chat-message')];
+        await Promise.all(bubbles.map((bubble) => bubble.updateComplete));
+
+        const identities = bubbles.map((bubble) => bubble.shadowRoot.querySelector('.author-identity'));
+        expect(identities.map((identity) => identity.dataset.authorKind)).to.deep.equal([
+            'user',
+            'agent',
+            'subagent',
+            'operator',
+        ]);
+        expect(identities.map((identity) => identity.querySelector('.author-name').textContent.trim())).to.deep.equal([
+            'You',
+            'Основной агент',
+            'Агент возвратов',
+            'Operator',
+        ]);
+        expect(identities[1].querySelector('.author-kind').textContent.trim()).to.equal('Agent');
+        expect(identities[2].querySelector('.author-kind').textContent.trim()).to.equal('Sub-agent');
+        expect(identities.every((identity) => identity.querySelector('.author-mark platform-icon'))).to.equal(true);
+    });
+
+    it('platform-chat labels the first response after handoff with the active sub-agent', async () => {
+        const el = await fixture(html`
+            <platform-chat
+                flows-base-url="/flows"
+                flow-id="lara"
+                .labels=${{ ...LABELS, greeting: 'Привет', new_chat: 'Новый чат' }}
+            ></platform-chat>
+        `);
+        const contextId = el._controller.state.currentContextId;
+        el._controller.applyRuntimeVerb('task_started', {
+            task_id: 'task-parent',
+            context_id: contextId,
+        });
+        el._controller.applyRuntimeVerb('handoff_initiated', {
+            task_id: 'task-parent',
+            context_id: contextId,
+            target_flow_id: 'returns_agent',
+            target_flow_name: 'Агент возвратов',
+            depth: 1,
+        });
+        el._controller.applyRuntimeVerb('task_started', {
+            task_id: 'task-child',
+            context_id: contextId,
+        });
+        el._controller.applyRuntimeVerb('content_chunk', {
+            task_id: 'task-child',
+            context_id: contextId,
+            text: 'Возврат оформлен.',
+        });
+        await elementUpdated(el);
+
+        const childBubble = [...el.shadowRoot.querySelectorAll('flows-chat-message')]
+            .find((bubble) => bubble.taskId === 'task-child');
+        expect(childBubble).to.not.equal(undefined);
+        await childBubble.updateComplete;
+        expect(childBubble.author).to.deep.equal({
+            kind: 'subagent',
+            name: 'Агент возвратов',
+            flowId: 'returns_agent',
+            nodeId: '',
+        });
+        const identity = childBubble.shadowRoot.querySelector('.author-identity');
+        expect(identity.dataset.authorKind).to.equal('subagent');
+        expect(identity.textContent).to.include('Агент возвратов');
+        expect(identity.textContent).to.include('Sub-agent');
+    });
+
+    it('platform-chat renders handoff and handback runtime cards as visible feed items', async () => {
+        const el = await fixture(html`
+            <platform-chat
+                flows-base-url="/flows"
+                flow-id="lara"
+                .labels=${{ ...LABELS, greeting: 'Привет', new_chat: 'Новый чат' }}
+            ></platform-chat>
+        `);
+        const contextId = el._controller.state.currentContextId;
+        el._controller.applyRuntimeVerb('task_started', {
+            task_id: 'task-handoff-card',
+            context_id: contextId,
+        });
+        el._controller.applyRuntimeVerb('handoff_initiated', {
+            task_id: 'task-handoff-card',
+            context_id: contextId,
+            target_flow_id: 'returns_agent',
+            target_flow_name: 'Агент возвратов',
+            depth: 1,
+        });
+        await elementUpdated(el);
+
+        const handoffBubble = el.shadowRoot.querySelector('flows-chat-message[data-role="handoff"]');
+        expect(handoffBubble).to.not.equal(null);
+        await handoffBubble.updateComplete;
+        const handoffCard = handoffBubble.shadowRoot.querySelector('.handoff-card');
+        expect(handoffCard).to.not.equal(null);
+        expect(handoffCard.textContent).to.include('Агент возвратов');
+
+        el._controller.applyRuntimeVerb('handback_completed', {
+            task_id: 'task-handoff-card',
+            context_id: contextId,
+            child_flow_name: 'Агент возвратов',
+            parent_flow_name: 'Основной агент',
+            response: 'Возврат оформлен',
+            handoff_depth: 0,
+        });
+        await elementUpdated(el);
+
+        const handbackBubble = el.shadowRoot.querySelector('flows-chat-message[data-role="handback"]');
+        expect(handbackBubble).to.not.equal(null);
+        await handbackBubble.updateComplete;
+        const handbackCard = handbackBubble.shadowRoot.querySelector('.handback-card');
+        expect(handbackCard).to.not.equal(null);
+        expect(handbackCard.textContent).to.include('Возврат оформлен');
     });
 
     it('breakpoint card shows node_id and dispatches continue-breakpoint', async () => {

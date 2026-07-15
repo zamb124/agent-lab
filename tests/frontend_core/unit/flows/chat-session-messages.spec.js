@@ -20,6 +20,11 @@ describe('a2aStateMessagesToChatMessages', () => {
                 taskId: 't1',
                 metadata: {
                     node_id: 'n1',
+                    author: {
+                        kind: 'subagent',
+                        flow_id: 'weather_agent',
+                        node_id: 'n1',
+                    },
                     tool_calls: [
                         { id: 'c1', name: 'get_weather', arguments: { city: 'Moscow' } },
                     ],
@@ -55,6 +60,12 @@ describe('a2aStateMessagesToChatMessages', () => {
         expect(asst.toolResults[0].id).toBe('c1');
         expect(asst.toolResults[0].result).toBe('{"temp":1}');
         expect(asst.content).toBe('Смотрю погоду…\n\nИтог: ясно.');
+        expect(asst.author).toEqual({
+            kind: 'subagent',
+            name: '',
+            flowId: 'weather_agent',
+            nodeId: 'n1',
+        });
     });
 
     it('HITL agent с hitl_role=operator и hitl_file_ids → operator bubble + fileIds', () => {
@@ -75,6 +86,7 @@ describe('a2aStateMessagesToChatMessages', () => {
         const out = a2aStateMessagesToChatMessages(raw, 't1');
         expect(out).toHaveLength(1);
         expect(out[0].role).toBe('operator');
+        expect(out[0].author.kind).toBe('operator');
         expect(out[0].content).toBe('вот держи');
         expect(out[0].fileIds).toEqual(['file_abc']);
     });

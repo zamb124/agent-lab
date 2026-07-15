@@ -16,14 +16,17 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_click_llm_output_mode,
     flows_doc_flow_id,
     flows_drop_node,
+    flows_execution_send_message,
     flows_llm_add_tool_from_library,
     flows_llm_payload,
     flows_multi_orchestrator_payload,
     flows_open_editor,
     flows_open_node_editor,
     flows_publish_editor,
+    flows_seed_mock_llm,
     flows_set_llm_call_type,
     flows_set_selected_llm_prompt,
+    flows_switch_editor_mode,
     flows_wire_ports,
 )
 from tests.ui.harness import AppUI
@@ -306,21 +309,24 @@ async def test_flows_add_answer_review(
     service="flows",
     tag="nodes",
     doc_slug="agent-handoff",
+    timeout_seconds=60,
     title="Передаём диалог между агентами",
     description=(
-        "**Для чего:** эта инструкция передаст покупателя профильному агенту, "
-        "например «Агенту возвратов».\n\n"
+        "**Для чего:** эта инструкция покажет полный цикл взаимодействия агентов: "
+        "передачу покупателя профильному агенту и возврат управления назад.\n\n"
         "**Какие проблемы решает:** основной помощник не должен вести весь диалог "
-        "сам — сложные темы лучше передать специалисту.\n\n"
-        "**Результат:** у инструмента под-агента включён режим handoff."
+        "сам, а пользователь должен всегда видеть, кто именно ему отвечает.\n\n"
+        "**Результат:** в реальном чате видны передача, ответ «Агента возвратов», "
+        "возврат управления и следующий ответ главного агента."
     ),
     title_en="Hand off the dialog between agents",
     description_en=(
-        "**What for:** this guide hands the customer to a specialist agent, "
-        "for example the Returns Agent.\n\n"
-        "**Problems it solves:** the main assistant should not handle every topic — "
-        "complex cases go to a dedicated agent.\n\n"
-        "**Result:** the sub-agent tool uses handoff mode."
+        "**What for:** this guide demonstrates the complete agent collaboration cycle: "
+        "handoff to a specialist and control returned to the parent.\n\n"
+        "**Problems it solves:** the main assistant should not handle every topic, and "
+        "the user must always see who is replying.\n\n"
+        "**Result:** the real chat shows the transfer, a Returns Agent reply, handback, "
+        "and the next reply from the main agent."
     ),
 )
 @pytest.mark.asyncio
@@ -344,7 +350,11 @@ async def test_flows_agent_handoff(
         flows_llm_payload(
             child_id,
             name=GREEN_GARDEN_RETURNS_AGENT,
-            prompt="Ты ведёшь диалог о возвратах после передачи от главного агента.",
+            prompt=(
+                "Ты ведёшь диалог о возвратах после передачи от главного агента. "
+                "Когда вопрос решён, вызови handback_to_parent."
+            ),
+            tools=[{"tool_id": "handback_to_parent"}],
         ),
     )
     await flows_api_create_flow(
@@ -359,7 +369,17 @@ async def test_flows_agent_handoff(
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, parent_id)
-    await flows_open_node_editor(page, "agent")
+    studio = page.locator("flows-agent-focus-studio").first
+    await expect(studio).to_be_visible(timeout=30_000)
+    await flows_set_selected_llm_prompt(
+        page,
+        "Если покупатель спрашивает про возврат, передай диалог агенту возвратов через handoff.",
+    )
+    skills_tab = studio.locator("platform-segmented-control").get_by_role(
+        "button", name=re.compile(r"Skills|Tools|Инструмент", re.I)
+    ).first
+    await expect(skills_tab).to_be_visible(timeout=15_000)
+    await skills_tab.click()
     await flows_click_llm_output_mode(page, "tools")
     await flows_llm_add_tool_from_library(page, child_id)
     tool_chip = page.locator("flows-llm-node-editor .chip").filter(
@@ -373,19 +393,17 @@ async def test_flows_agent_handoff(
         label_en="Add the returns agent as a tool",
         details=(
             "Откройте главного агента и добавьте из библиотеки под-агента возвратов. "
-            "Так оркестратор сможет передать ему диалог целиком."
+            "На одном таком чипе режим **Call** вызывает под-агента один раз и возвращает "
+            "результат текущему агенту; активным остаётся главный агент."
         ),
         details_en=(
             "Open the main agent and add the returns sub-agent from the library. "
-            "The orchestrator can then hand off the full dialog to it."
+            "On this chip, **Call** invokes the sub-agent once and returns its result to "
+            "the current agent; the main agent remains active."
         ),
     )
 
     await flows_set_llm_call_type(page, "handoff")
-    await flows_set_selected_llm_prompt(
-        page,
-        "Если покупатель спрашивает про возврат, передай диалог агенту возвратов через handoff.",
-    )
     await expect(tool_chip).to_be_visible(timeout=15_000)
     await scenario.step(
         "Включите режим передачи управления",
@@ -393,31 +411,16 @@ async def test_flows_agent_handoff(
         screenshot_name="handoff-mode-enabled",
         label_en="Enable handoff mode",
         details=(
-            "В блоке типа вызова выберите Handoff (передача управления). В этом режиме "
-            "под-агент получает весь диалог, а не только один запрос."
+            "Нажмите **Call** на чипе — он переключится в **Handoff**. Затем в инструкции "
+            "опишите, когда передавать управление. После handoff следующие сообщения "
+            "пользователя направляются под-агенту. Текущий текст и явно заданные переменные "
+            "передаются автоматически; историю нужно подключать отдельно через срез сообщений."
         ),
         details_en=(
-            "In the call type block choose Handoff (ownership transfer). In this mode "
-            "the sub-agent receives the full dialog, not a single request."
-        ),
-    )
-
-    handoff_prompt = page.locator("flows-llm-node-editor").get_by_text(
-        re.compile(r"возврат|return|handoff", re.I)
-    ).first
-    await expect(handoff_prompt).to_be_visible(timeout=15_000)
-    await scenario.step(
-        "Добавьте правило передачи в инструкцию",
-        page,
-        screenshot_name="handoff-prompt-rule-set",
-        label_en="Add a handoff rule to the instruction",
-        details=(
-            "В инструкции агента опишите, когда передавать диалог агенту возвратов — "
-            "например, при любом вопросе о возврате товара."
-        ),
-        details_en=(
-            "In the agent instruction describe when to hand off to the returns agent — "
-            "for example on any product return question."
+            "Click **Call** on the chip to switch it to **Handoff**, then describe when to "
+            "transfer control. Following user turns are routed to the sub-agent. The current "
+            "text and explicit variables are passed automatically; message history must be "
+            "mapped separately when it is needed."
         ),
     )
 
@@ -429,21 +432,147 @@ async def test_flows_agent_handoff(
     first_tool = tools[0]
     assert isinstance(first_tool, dict)
     assert first_tool.get("call_type") == "handoff"
+    await flows_switch_editor_mode(page, "run")
+    run_chat = page.locator("flows-execution-panel platform-chat").first
+    await expect(run_chat).to_be_visible(timeout=15_000)
     await scenario.step(
-        "Опубликуйте настройку handoff",
+        "Опубликуйте и откройте режим запуска",
         page,
-        screenshot_name="handoff-published",
-        label_en="Publish the handoff setup",
+        screenshot_name="handoff-run-opened",
+        label_en="Publish and open Run mode",
         details=(
-            "**Демонстрация результата.** Инструмент под-агента сохранён с режимом handoff — "
-            "главный агент может передать покупателя «Агенту возвратов».\n\n"
-            "**Итог.** Теперь вы умеете настраивать передачу диалога между агентами "
-            "без подключения оператора."
+            "Опубликуйте граф и включите **Запуск**. Справа откроется тот же общий чат, "
+            "который используется на странице агента и во встраиваемом виджете."
         ),
         details_en=(
-            "**Result demonstration.** The sub-agent tool is saved with handoff mode — "
-            "the main agent can transfer the customer to the Returns Agent.\n\n"
-            "**Summary.** You can configure dialog handoff between agents without "
-            "involving a human operator."
+            "Publish the graph and switch to **Run**. The shared chat used on the agent "
+            "page and in the embedded widget opens on the right."
+        ),
+    )
+
+    await flows_seed_mock_llm(
+        [
+            {
+                "type": "tool_call",
+                "tool": child_id,
+                "args": {"request": "Оформить возврат заказа GG-1042"},
+            },
+            {
+                "type": "text",
+                "content": "Я Агент возвратов и готов принять детали возврата.",
+            },
+        ]
+    )
+    await flows_execution_send_message(page, "Хочу вернуть заказ GG-1042")
+    handoff_card = run_chat.locator("flows-chat-message[data-role='handoff'] .handoff-card").last
+    await expect(handoff_card).to_be_visible(timeout=120_000)
+    await expect(handoff_card).to_contain_text(GREEN_GARDEN_RETURNS_AGENT)
+    await scenario.step(
+        "Передайте диалог профильному агенту",
+        page,
+        screenshot_name="handoff-visible-in-chat",
+        label_en="Hand off the dialog to the specialist",
+        details=(
+            "Отправьте вопрос о возврате. В ленте появится отдельная карточка передачи "
+            f"управления агенту «{GREEN_GARDEN_RETURNS_AGENT}». Это не обычный ответ: "
+            "следующая реплика пользователя уже пойдёт дочернему агенту."
+        ),
+        details_en=(
+            "Send a return question. The feed shows a dedicated control-transfer card for "
+            f"{GREEN_GARDEN_RETURNS_AGENT}. This is not a normal reply: the next user turn "
+            "is routed to the child agent."
+        ),
+    )
+
+    child_reply_text = "Я Агент возвратов. Заказ GG-1042 найден, готовлю возврат."
+    await flows_seed_mock_llm([{"type": "text", "content": child_reply_text}])
+    await flows_execution_send_message(page, "Товар не использован, упаковка сохранена")
+    child_bubble = run_chat.locator("flows-chat-message[data-role='assistant']").filter(
+        has_text=re.compile(r"Заказ GG-1042 найден", re.I)
+    ).last
+    await expect(child_bubble).to_be_visible(timeout=120_000)
+    child_author = child_bubble.locator(
+        ".author-identity[data-author-kind='subagent']"
+    )
+    await expect(child_author).to_be_visible(timeout=15_000)
+    await expect(child_author).to_contain_text(GREEN_GARDEN_RETURNS_AGENT)
+    await scenario.step(
+        "Убедитесь, что отвечает субагент",
+        page,
+        screenshot_name="subagent-author-visible",
+        label_en="Verify that the sub-agent is replying",
+        details=(
+            "Ответ помечен синей иконкой, именем «Агент возвратов» и ролью «Субагент». "
+            "Так в длинном диалоге сразу видно, кто написал каждый bubble."
+        ),
+        details_en=(
+            "The reply is marked with a blue icon, the Returns Agent name, and the "
+            "Sub-agent role. Every bubble remains attributable in a long conversation."
+        ),
+    )
+
+    await flows_seed_mock_llm(
+        [
+            {
+                "type": "tool_call",
+                "tool": "handback_to_parent",
+                "args": {
+                    "response": "Возврат GG-1042 оформлен",
+                    "variables": {"return_id": "RET-1042"},
+                },
+            }
+        ]
+    )
+    await flows_execution_send_message(page, "Оформите возврат и верните меня помощнику")
+    handback_card = run_chat.locator(
+        "flows-chat-message[data-role='handback'] .handback-card"
+    ).last
+    await expect(handback_card).to_be_visible(timeout=120_000)
+    await expect(handback_card).to_contain_text("Возврат GG-1042 оформлен")
+    await scenario.step(
+        "Верните управление главному агенту",
+        page,
+        screenshot_name="handback-visible-in-chat",
+        label_en="Return control to the main agent",
+        details=(
+            "Когда задача решена, дочерний агент вызывает **handback_to_parent**. В чат "
+            "добавляется карточка возврата. Назад уходят только текст результата и явно "
+            "указанные переменные — здесь это return_id."
+        ),
+        details_en=(
+            "When the task is complete, the child calls **handback_to_parent**. A handback "
+            "card is added to the feed. Only the result text and explicitly selected "
+            "variables are returned — return_id in this example."
+        ),
+    )
+
+    parent_reply_text = "Главный агент снова на связи. Возврат RET-1042 подтверждён."
+    await flows_seed_mock_llm([{"type": "text", "content": parent_reply_text}])
+    await flows_execution_send_message(page, "Спасибо, что дальше?")
+    parent_bubble = run_chat.locator("flows-chat-message[data-role='assistant']").filter(
+        has_text=re.compile(r"Главный агент снова на связи", re.I)
+    ).last
+    await expect(parent_bubble).to_be_visible(timeout=120_000)
+    parent_author = parent_bubble.locator(".author-identity[data-author-kind='agent']")
+    await expect(parent_author).to_be_visible(timeout=15_000)
+    await expect(parent_author).to_contain_text(GREEN_GARDEN_AGENT_NAME)
+    await scenario.step(
+        "Проверьте возврат к главному агенту",
+        page,
+        screenshot_name="parent-author-restored",
+        label_en="Verify the return to the main agent",
+        details=(
+            "**Демонстрация результата.** Следующий ответ снова подписан именем главного "
+            "агента и ролью «Агент». В одной ленте виден весь цикл: пользователь → агент → "
+            "handoff → субагент → handback → агент.\n\n"
+            "**Итог.** Используйте Call для разового запроса с возвратом результата, Handoff "
+            "для передачи следующих реплик и handback_to_parent для явного возврата управления."
+        ),
+        details_en=(
+            "**Result demonstration.** The next reply is again labelled with the main agent "
+            "name and Agent role. One feed shows the complete cycle: user → agent → handoff → "
+            "sub-agent → handback → agent.\n\n"
+            "**Summary.** Use Call for a one-off invocation, Handoff to route following turns, "
+            "and handback_to_parent to explicitly return control."
         ),
     )

@@ -98,7 +98,6 @@ export class PlatformSegmentedControl extends PlatformElement {
                 display: inline-flex;
                 align-items: stretch;
                 border-radius: var(--radius-full);
-                overflow: hidden;
                 flex-shrink: 0;
                 max-width: 100%;
             }
@@ -113,6 +112,7 @@ export class PlatformSegmentedControl extends PlatformElement {
                 justify-content: center;
                 gap: var(--space-1);
                 border: none;
+                border-radius: inherit;
                 background: transparent;
                 color: var(--text-secondary);
                 cursor: pointer;
