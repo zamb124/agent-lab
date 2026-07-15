@@ -51,6 +51,14 @@ reset_vendor_to_upstream() {
   fi
   vendor_git reset --hard "${UPSTREAM_SHA}"
   vendor_git clean -fd
+  # Windows-раннер: actions/checkout уже чекаутит submodule ровно на
+  # UPSTREAM_SHA системным git (core.autocrlf по умолчанию true) — файлы
+  # попадают на диск с CRLF. HEAD после этого уже равен UPSTREAM_SHA, так что
+  # reset --hard выше — no-op для содержимого файлов (git не видит разницы
+  # относительно индекса) и наш core.autocrlf=false/core.eol=lf никогда не
+  # применяется к байтам на диске. Принудительно перезаписываем working tree
+  # из индекса под этими настройками — иначе LF-based патчи не матчатся.
+  vendor_git checkout-index --force --all
   restore_exact_blobs
 }
 
