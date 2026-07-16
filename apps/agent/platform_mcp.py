@@ -21,6 +21,7 @@ from apps.agent.device_auth import (
 )
 from apps.agent.service import (
     build_flow_mcp_tools,
+    device_tunnel_is_online,
     record_agent_audit_event_redis,
 )
 from apps.agent.tunnel_bus import send_mcp_request_to_device
@@ -201,6 +202,7 @@ async def _persist_sticky_context_id(
     flow_id: str,
     context_id: str,
 ) -> None:
+    """Persist sticky context. MCP session wins over device (no cross-dialog reuse)."""
     ttl_seconds = get_agent_settings().session_ttl_seconds
     if mcp_session_id is not None:
         _ = await container.redis_client.set(
@@ -208,6 +210,7 @@ async def _persist_sticky_context_id(
             context_id,
             ttl=ttl_seconds,
         )
+        return
     if device_id is not None:
         _ = await container.redis_client.set(
             _device_session_context_key(device_id, flow_id),
@@ -224,7 +227,11 @@ async def _resolve_flow_context_id(
     flow_id: str,
     explicit_context_id: str | None,
 ) -> str:
-    """Sticky A2A context_id: explicit → MCP session → device → new UUID."""
+    """Sticky A2A context_id: explicit → MCP session → device (only without MCP session) → new UUID.
+
+    New Mcp-Session-Id always gets a new context_id (new LinnexAgent dialog ≠ old Lara session).
+    Device fallback is only for callers that omit Mcp-Session-Id.
+    """
     if explicit_context_id is not None:
         await _persist_sticky_context_id(
             container,
@@ -242,11 +249,20 @@ async def _resolve_flow_context_id(
             await _persist_sticky_context_id(
                 container,
                 mcp_session_id=mcp_session_id,
-                device_id=device_id,
+                device_id=None,
                 flow_id=flow_id,
                 context_id=existing_session.strip(),
             )
             return existing_session.strip()
+        new_context_id = str(uuid.uuid4())
+        await _persist_sticky_context_id(
+            container,
+            mcp_session_id=mcp_session_id,
+            device_id=None,
+            flow_id=flow_id,
+            context_id=new_context_id,
+        )
+        return new_context_id
 
     if device_id is not None:
         device_key = _device_session_context_key(device_id, flow_id)
@@ -254,20 +270,18 @@ async def _resolve_flow_context_id(
         if isinstance(existing_device, str) and existing_device.strip():
             await _persist_sticky_context_id(
                 container,
-                mcp_session_id=mcp_session_id,
+                mcp_session_id=None,
                 device_id=device_id,
                 flow_id=flow_id,
                 context_id=existing_device.strip(),
             )
             return existing_device.strip()
 
-    if mcp_session_id is None and device_id is None:
-        logger.info("agent.platform_mcp.no_sticky_anchor", flow_id=flow_id)
-
+    logger.info("agent.platform_mcp.no_sticky_anchor", flow_id=flow_id)
     new_context_id = str(uuid.uuid4())
     await _persist_sticky_context_id(
         container,
-        mcp_session_id=mcp_session_id,
+        mcp_session_id=None,
         device_id=device_id,
         flow_id=flow_id,
         context_id=new_context_id,
@@ -699,6 +713,15 @@ async def _platform_mcp_message_handler(
             if mcp_params_raw is not None
             else {}
         )
+        if not await device_tunnel_is_online(container.shared_storage, device_id):
+            return {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "error": {
+                    "code": -32000,
+                    "message": f"Device tunnel offline: {device_id}",
+                },
+            }
         try:
             device_result = await send_mcp_request_to_device(
                 container.redis_client,

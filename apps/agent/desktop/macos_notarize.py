@@ -30,7 +30,7 @@ from apps.agent.desktop.build_contract import (
 )
 
 NOTARY_FOLLOWUP_MAX_AGE_SECONDS_DEFAULT = 172_800
-MANIFEST_ASSET_NAME_PREFIX = "humanitec-agent-macos-notarize-"
+MANIFEST_ASSET_NAME_PREFIX = "linnex-agent-macos-notarize-"
 MANIFEST_ASSET_NAME_SUFFIX = ".json"
 NOTARY_SUBMISSION_ID_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",

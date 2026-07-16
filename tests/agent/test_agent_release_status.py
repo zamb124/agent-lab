@@ -78,7 +78,7 @@ def test_release_status_ready_with_pending_macos_notarization_manifest() -> None
         "draft": False,
         "assets": [
             {"name": "HumanitecAgent-macos-arm64-deadbeef.dmg"},
-            {"name": "humanitec-agent-macos-notarize-deadbee.json"},
+            {"name": "linnex-agent-macos-notarize-deadbee.json"},
         ],
     }
     status = build_agent_release_status_from_github_payload(

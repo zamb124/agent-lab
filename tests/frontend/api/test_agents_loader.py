@@ -10,13 +10,27 @@ from pathlib import Path
 
 import pytest
 
+from apps.flows.src.services.mcp_catalog_provisioner import MCPCatalogProvisionStats
+
+pytestmark = [pytest.mark.timeout(120, func_only=True)]
+
 
 @pytest.fixture(autouse=True)
 def _init_company_skip_mcp_network_sync(monkeypatch):
-    """sync_auto_mcp_servers_for_company ходит в Browser MCP; в CI/хосте без сервиса — зависание TCP."""
+    """MCP provision/sync ходит во внешние серверы; в unit-тестах loader — noop."""
 
     async def _noop_sync(**_kwargs: object) -> dict[str, int]:
         return {"servers": 0, "tools": 0}
+
+    async def _noop_provision(**_kwargs: object) -> MCPCatalogProvisionStats:
+        return MCPCatalogProvisionStats(
+            added=0,
+            updated=0,
+            skipped_locked=0,
+            deprecated=0,
+            sync_ok=0,
+            sync_failed=0,
+        )
 
     async def _noop_seed_demo_variables(*_args: object, **_kwargs: object) -> int:
         return 0
@@ -24,6 +38,10 @@ def _init_company_skip_mcp_network_sync(monkeypatch):
     monkeypatch.setattr(
         "apps.flows.src.tasks.company_init_tasks.sync_auto_mcp_servers_for_company",
         _noop_sync,
+    )
+    monkeypatch.setattr(
+        "apps.flows.src.tasks.company_init_tasks.provision_mcp_catalog_for_company",
+        _noop_provision,
     )
     monkeypatch.setattr(
         "apps.flows.src.tasks.company_init_tasks.seed_demo_company_variables",

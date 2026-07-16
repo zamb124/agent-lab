@@ -139,9 +139,17 @@ async def test_catalog_device_jwt_forces_lara_default_enabled(
     unique_id: str,
 ) -> None:
     """LaraOnly: device catalog always enables lara even if company DB is stale."""
+    from apps.flows.src.services.agent_toolkit_service import ensure_agent_toolkits_bootstrapped
+    from core.context import get_context
     from tests.agent.test_platform_mcp_exposure import _repository_context_for_auth
 
     async with _repository_context_for_auth(auth_headers, frontend_container):
+        active_company = get_context().active_company
+        assert active_company is not None
+        _ = await ensure_agent_toolkits_bootstrapped(
+            container.agent_toolkit_repository,
+            company_id=active_company.company_id,
+        )
         existing_lara = await container.agent_toolkit_repository.get("lara")
         assert existing_lara is not None
         await container.agent_toolkit_repository.set(

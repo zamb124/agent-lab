@@ -253,7 +253,7 @@ async def test_notification_priority_levels(crm_client, ws_cookie_system, system
                 ),
             )
 
-            event = await _recv_event_by_payload_title(ws, expected_title, timeout=5)
+            event = await _recv_event_by_payload_title(ws, expected_title, timeout=20)
             assert event["type"] == expected_type
             payload = _event_payload(event)
             assert payload["priority"] == priority

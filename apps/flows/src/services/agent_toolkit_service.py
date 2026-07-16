@@ -199,6 +199,7 @@ async def bootstrap_agent_toolkits_from_registry(
     registry_path: Path,
     *,
     filter_public: bool,
+    only_missing: bool = False,
 ) -> int:
     if not registry_path.exists():
         logger.warning("agent_toolkits registry not found: %s", registry_path)
@@ -212,13 +213,20 @@ async def bootstrap_agent_toolkits_from_registry(
             continue
         registry_toolkit = _registry_entry_to_toolkit(entry)
         existing = await repository.get(registry_toolkit.toolkit_id)
-        merged = _merge_registry_toolkit(existing, registry_toolkit)
+        if only_missing and existing is not None:
+            continue
+        merged = (
+            registry_toolkit
+            if only_missing
+            else _merge_registry_toolkit(existing, registry_toolkit)
+        )
         _ = await repository.set(merged)
         loaded_count += 1
     logger.info(
-        "agent_toolkits bootstrap loaded=%s filter_public=%s",
+        "agent_toolkits bootstrap loaded=%s filter_public=%s only_missing=%s",
         loaded_count,
         filter_public,
+        only_missing,
     )
     return loaded_count
 
@@ -229,15 +237,14 @@ async def ensure_agent_toolkits_bootstrapped(
     company_id: str,
     registry_path: Path | None = None,
 ) -> bool:
-    existing = await list_agent_toolkits(repository)
-    if existing:
-        return False
+    """Гарантирует platform toolkits из registry; не затирает уже существующие записи."""
     resolved_registry_path = (
         registry_path if registry_path is not None else get_agent_toolkits_registry_path()
     )
-    _ = await bootstrap_agent_toolkits_from_registry(
+    inserted = await bootstrap_agent_toolkits_from_registry(
         repository,
         resolved_registry_path,
         filter_public=(company_id != "system"),
+        only_missing=True,
     )
-    return True
+    return inserted > 0

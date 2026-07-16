@@ -14,10 +14,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
-import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -168,7 +166,7 @@ class TestZedSearchHealthcheck:
     def test_healthcheck_runs(self) -> None:
         """Healthcheck-скрипт запускается и завершается с понятным кодом."""
         result = subprocess.run(
-            ["bash", "scripts/zed_search_healthcheck.sh"],
+            ["bash", "scripts/zed_search/healthcheck.sh"],
             capture_output=True, text=True, timeout=30,
         )
         # Healthcheck должен завершиться (exit 0 или exit 1)
@@ -182,7 +180,7 @@ class TestZedSearchHealthcheck:
     def test_healthcheck_passes_when_all_ok(self) -> None:
         """Healthcheck возвращает exit 0 когда все компоненты работают."""
         result = subprocess.run(
-            ["bash", "scripts/zed_search_healthcheck.sh"],
+            ["bash", "scripts/zed_search/healthcheck.sh"],
             capture_output=True, text=True, timeout=30,
         )
         assert result.returncode == 0, f"Healthcheck упал:\n{result.stdout}\n{result.stderr}"
@@ -191,11 +189,11 @@ class TestZedSearchHealthcheck:
     def test_healthcheck_reports_version(self) -> None:
         """Healthcheck показывает версию MCP-пакета (или её отсутствие)."""
         result = subprocess.run(
-            ["bash", "scripts/zed_search_healthcheck.sh"],
+            ["bash", "scripts/zed_search/healthcheck.sh"],
             capture_output=True, text=True, timeout=30,
         )
         # Должна быть строка с MCP-пакет и упоминание версии или 'нет'
-        mcp_line = [l for l in result.stdout.splitlines() if "MCP-пакет" in l]
+        mcp_line = [line for line in result.stdout.splitlines() if "MCP-пакет" in line]
         assert mcp_line, f"Нет строки MCP-пакет:\n{result.stdout}"
         assert any(kw in mcp_line[0] for kw in ["v", "актуальна", "устарела", "npx"]), (
             f"Нет информации о версии в строке: {mcp_line[0]}"

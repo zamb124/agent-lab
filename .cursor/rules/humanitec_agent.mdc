@@ -28,7 +28,7 @@ LinnexAgent — desktop-клиент (Goose fork). **Канон продукта
 | Desktop sync | Extension `platform_lara` всегда `enabled=true` после pairing/resync |
 | LLM provider UI | Display name **Linnex** (tech id `humanitec` допустим) |
 | MCP tool | `flow_lara` → A2A `metadata.branch = linnex_agent` |
-| Sticky session | Redis: `Mcp-Session-Id` **или** `device:{device_id}` → A2A `context_id`; result text содержит `context_id: …` |
+| Sticky session | Redis: `Mcp-Session-Id` → A2A `context_id` (новый MCP session = новый диалог Lara); `device:{device_id}` только если нет `Mcp-Session-Id`; result text содержит `context_id: …` |
 | Local PC | Builtin `device_tools_list` / `device_tools_call` на branch; `device_id` из variables (device JWT), не из LLM args |
 | Tunnel local MCP | Built-in desktop surface (`humanitecLocalDeviceMcp.ts`) под `DevicePolicy`; optional `HUMANITEC_LOCAL_MCP_URL` override |
 | Updates | Skills/tools/prompts Lara — DB/seed; desktop binary не пересобирать ради platform |
@@ -55,7 +55,8 @@ Database-first (`apps/flows/src/models/agent_toolkit.py`). Bootstrap: `registry.
 | `tools/call` `tool_*` | `tool_registry.materialize` |
 | `device/mcp` | proxy → tunnel → local MCP (timeout 120s) |
 
-Sticky keys: `agent_mcp_session:{mcp_session}:flow:{flow_id}` и `agent_mcp_session:device:{device_id}:flow:{flow_id}`.
+Sticky keys: `agent_mcp_session:{mcp_session}:flow:{flow_id}` (приоритет); `agent_mcp_session:device:{device_id}:flow:{flow_id}` — fallback без MCP session. Новый `Mcp-Session-Id` не переиспользует device context.
+Locale: desktop Platform MCP headers включают `Accept-Language: ru|en` из Goose UI locale (`GOOSE_LOCALE`).
 
 ## Tunnel WS
 
