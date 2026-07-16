@@ -2,7 +2,7 @@
 
 В проекте два независимых поиска. Не заменяй один другим — у них разные задачи.
 
-- **codebase-memory-mcp** — структурный граф знаний (tree-sitter AST + Hybrid LSP → SQLite). 158 языков: call graph, импорты, наследование, HTTP-маршруты, dead code, архитектура. Локальный, без Docker/API.
+- **codebase-memory-mcp** — структурный граф знаний (tree-sitter AST + Hybrid LSP → SQLite). 158 языков: call graph, импорты, наследование, HTTP-маршруты, dead code, архитектура.
 - **claude-context MCP** (`@zilliz/claude-context-mcp`, Ollama + Milvus) — семантический векторный поиск по смыслу текста. Проект большой (3000+ файлов) — семантика + ранжирование критичны для «по смыслу» запросов.
 
 ## Какой инструмент когда
@@ -20,62 +20,59 @@
 | точные имена/литералы/regex (знаешь, что искать) | `grep` |
 | файлы по glob | `find_path` |
 
-Для структурных вопросов **сначала граф** — не file-by-file `read`. Граф отвечает за один вызов и экономит ~99% токенов vs grep/read-циклов.
+Для структурных вопросов **сначала граф** — не file-by-file `read`.
 
-## Что и когда эффективно (шпаргалка для агента)
+## Шпаргалка
 
-Выбор инструмента = вопрос + что знаешь. Короткие правила:
+1. Имя/regex известны → `grep`.
+2. Структурный вопрос → граф (`trace_path`, `search_graph`, …).
+3. По смыслу → `claude_context_search_code`.
+4. Тело функции → `get_code_snippet` по qualified_name.
+5. Не читай файл-за-файлом, если граф/семантика отвечают за один вызов.
 
-1. **Знаешь имя/regex и где искать** → `grep`. Точнее и быстрее семантики, ноль ложных срабатываний.
-2. **Структурный вопрос** (кто вызывает, impact, dead code, архитектура, маршруты, импорты, наследование) → **граф** (`trace_path`, `search_graph`, `query_graph`, `get_architecture`, `get_code_snippet`). Один вызов вместо обхода файлов.
-3. **По смыслу, без точных имён** (где реализован X, как работает Y, всё про Z; поиск по докам/конфигам/комментариям) → `claude_context_search_code`. Если сломан — fallback на `grep`, но качество хуже.
-4. **Нужно прочитать тело функции** → `get_code_snippet` по qualified_name из графа, не `read_file` вслепую.
-5. **Файлы по имени/шаблону** → `find_path`.
-6. **Никогда не читай файл-за-файлом `read`, если граф или семантика отвечают за один вызов.** Это сжигает токены и время.
-
-Порядок: **граф → семантика → grep → read**. Спускайся вниз только когда верхний уровень не дал ответа.
-
-Если не уверен, какой инструмент — для структурного вопроса бери граф, для смыслового — семантику, для точной строки — grep.
+Порядок: **граф → семантика → grep → read**.
 
 ## Имя проекта в графе
 
-Тулы графа требуют `project`. Не хардкодь — узнавай через `list_projects` (разрешён, мгновенно). Для статуса/свежести индекса — `index_status`.
+`list_projects` / `index_status`. Не хардкодь `project`.
 
-## Health-check при старте
+## Runtime-канон: Docker Compose
 
-Перед первой задачей по коду запусти `make zed-search-check` (claude-context MCP):
+Весь стек — в `scripts/zed_search/docker/docker-compose.yml` (Ollama + Milvus/etcd/MinIO + CBM+mcp-proxy + claude-context+mcp-proxy).
 
-- **exit 0** — MCP работает. Используй `claude_context_search_code` для семантики.
-- **exit 1** — claude-context сломан. Сообщи пользователю первым сообщением:
-  > ⚠️ claude-context MCP не работает — семантический поиск недоступен.
-  > Запусти `make zed-search` для настройки (Ollama + Milvus + автоиндексация).
-  > Граф codebase-memory-mcp независим от Milvus — структурные запросы продолжат работать.
-  Для семантики временно через grep, но хуже по качеству.
-- **WARN (exit 0)** — обработай каждый WARN:
-  - **MCP-пакет устарел** — `make zed-search-update`, перезапусти Zed.
-  - **Индекс устарёл/отсутствует** — `make zed-search-reindex`.
-  - Другие WARN — сообщи кратко и продолжай.
+| Сервис | URL на хосте |
+|---|---|
+| CBM | `http://127.0.0.1:9751/mcp` + header `X-API-Key` |
+| claude-context | `http://127.0.0.1:9752/mcp` + header `X-API-Key` |
+| Ollama | `127.0.0.1:11434` |
+| Milvus | `127.0.0.1:19530` |
 
-codebase-memory-mcp health-check не нужен (локальный SQLite, без внешних зависимостей). Если `list_projects` пуст или проект отсутствует — переиндексируй командой ниже.
+- Клиенты Zed/Cursor: только `url` + `headers.X-API-Key` — **не** stdio `command` / `npx`.
+- CBM: `auto_index=true`, **`auto_watch=false`** (полный reindex — `make zed-search-reindex`).
+- Репозиторий монтируется по **тому же абсолютному пути**, что на хосте.
+- Ключ: `scripts/zed_search/docker/.env` (`MCP_API_KEY`, не коммитить).
+- **Named volumes** переживают `compose down`/`up` — полный reindex после рестарта не нужен:
+  `cbm_cache` (граф SQLite), `claude_context_data` (snapshot/merkle), `milvus_data`+`minio_data`+`etcd_data` (векторы), `ollama_data` (модели).
+- `REINDEX_INTERVAL_SEC=0` по умолчанию (cron idle). Не делай `docker compose down -v` — сотрёт кэш.
+
+**Запрещено:** `pkill` контейнерных MCP, `rm` docker volumes / `down -v` наугад, возвращать stdio spawn, параллельный `index_repository` мимо HTTP proxy.
+
+## Health-check
+
+`make zed-search-check` при старте.
+
+- exit 1 → скажи пользователю: запусти `make zed-search`.
+- WARN про legacy launchd / stray stdio → `make zed-search` (compose stop-legacy) + перезапуск IDE.
 
 ## Команды
 
-claude-context MCP:
-- `make zed-search-check` — health-check (exit 0/1 + WARN).
-- `make zed-search-update` — обновить MCP-пакет.
-- `make zed-search-reindex` — переиндексировать для семантики.
-- `make zed-search` — полная настройка (Ollama + Milvus + автоиндексация).
-
-codebase-memory-mcp:
-- `codebase-memory-mcp cli list_projects` — проиндексированные проекты.
-- `codebase-memory-mcp cli index_repository '{"repo_path":"<абсолютный_путь>"}'` — (пере)индексировать граф.
-- `codebase-memory-mcp cli <tool> '<json>'` — любой тул из CLI.
-- `codebase-memory-mcp config set auto_index true` — автоиндекс при старте сессии.
-- `codebase-memory-mcp update` — обновить бинарь.
+- `make zed-search` — Compose up --build + wire + primary index
+- `make zed-search-check` / `zed-search-update` / `zed-search-reindex`
+- `make zed-search-status` / `zed-search-logs` / `zed-search-down`
 
 ## Правило
 
-1. Структурные вопросы (кто кого вызывает, impact, архитектура, dead code, маршруты, импорты) — **сначала codebase-memory-mcp**.
-2. Семантические вопросы (по смыслу, без точных имён; по не-кодовому тексту/докам/конфигам) — **claude_context_search_code**.
-3. Точные литералы/regex — `grep`.
-4. Не обходи код file-by-file `read`, если граф или семантика могут ответить за один вызов.
+1. Структура → codebase-memory-mcp.
+2. Смысл → claude-context.
+3. Литералы → grep.
+4. Оба MCP — только через Compose HTTP URL.
