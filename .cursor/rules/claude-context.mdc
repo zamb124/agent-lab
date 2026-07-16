@@ -1,44 +1,70 @@
 ---
-description: "claude-context MCP — семантический поиск по коду: используй claude_context_search_code по умолчанию вместо grep; health-check при старте, обновление, переиндексация, fallback"
+description: "Два движка поиска по коду: codebase-memory-mcp (структурный граф, call graph/impact/архитектура) + claude-context MCP (семантика). Какой когда, health-check, команды, fallback"
 alwaysApply: true
 ---
-# claude-context MCP — семантический поиск
+# Поиск по коду — два движка
 
-Семантический поиск по коду через claude-context MCP (Ollama + Milvus, `@zilliz/claude-context-mcp`).
-Проект большой (3000+ файлов) — `grep` по regex даёт шум, семантика + ранжирование критичны.
+В проекте два независимых поиска. Не заменяй один другим — у них разные задачи.
 
-## Какой поиск когда
+- **codebase-memory-mcp** — структурный граф знаний (tree-sitter AST + Hybrid LSP → SQLite). 158 языков: call graph, импорты, наследование, HTTP-маршруты, dead code, архитектура. Локальный, без Docker/API.
+- **claude-context MCP** (`@zilliz/claude-context-mcp`, Ollama + Milvus) — семантический векторный поиск по смыслу текста. Проект большой (3000+ файлов) — семантика + ранжирование критичны для «по смыслу» запросов.
 
-- `claude_context_search_code` (MCP) — основной. «где реализован X», «как работает Y», «всё связанное с Z». Без знания точных имён.
-- `find_symbol` / `get_callees` / `get_callers` (LSP) — структура: определения, дерево вызовов.
-- `grep` — fallback: точные имена, литералы, regex, когда знаешь что искать.
-- `find_path` — файлы по glob.
+## Какой инструмент когда
+
+| Запрос | Инструмент |
+|---|---|
+| «кто вызывает X» / «что вызывает X», call chain | `mcp:codebase-memory-mcp:trace_path` |
+| impact / blast-radius изменений | `detect_changes` |
+| архитектура: языки, пакеты, маршруты, hotspots, слои, кластеры | `get_architecture` |
+| найти функции/классы по имени/regex, по файлу, по степени | `search_graph` |
+| Cypher по графу (dead code: `WHERE NOT EXISTS { (f)<-[:CALLS]-() }`) | `query_graph` |
+| исходник функции по qualified name | `get_code_snippet` |
+| схема графа (labels, edge types) — запусти первым для ориентировки | `get_graph_schema` |
+| «где реализован X», «как работает Y», «всё связанное с Z» — по смыслу, без точных имён | `mcp:claude-context:search_code` |
+| точные имена/литералы/regex (знаешь, что искать) | `grep` |
+| файлы по glob | `find_path` |
+
+Для структурных вопросов **сначала граф** — не file-by-file `read`. Граф отвечает за один вызов и экономит ~99% токенов vs grep/read-циклов.
+
+## Имя проекта в графе
+
+Тулы графа требуют `project`. Не хардкодь — узнавай через `list_projects` (разрешён, мгновенно). Для статуса/свежести индекса — `index_status`.
 
 ## Health-check при старте
 
-Перед первой задачей по коду запусти `make zed-search-check`:
+Перед первой задачей по коду запусти `make zed-search-check` (claude-context MCP):
 
-- **exit 0** — MCP работает. Используй `claude_context_search_code`.
-- **exit 1** — MCP сломан. Сообщи пользователю первым сообщением:
+- **exit 0** — MCP работает. Используй `claude_context_search_code` для семантики.
+- **exit 1** — claude-context сломан. Сообщи пользователю первым сообщением:
   > ⚠️ claude-context MCP не работает — семантический поиск недоступен.
   > Запусти `make zed-search` для настройки (Ollama + Milvus + автоиндексация).
-  > Пока MCP недоступен, я буду искать через `grep`, но это хуже по качеству.
-  Продолжай через `grep`/`find_path`, явно отметив меньшую точность.
-- **WARN (exit 0)** — MCP работает, но есть риски. Обработай каждый WARN:
-  - **MCP-пакет устарел** — версия пакета отстаёт от актуальной в npm. Сообщи:
-    > ℹ️ claude-context MCP устарел (vX.Y.Z, актуальна vA.B.C).
-    > Обнови: `make zed-search-update`, затем перезапусти Zed.
-    Продолжай — старая версия обычно работает, но без свежих фич/багфиксов.
-  - **Индекс устарёл/отсутствует** — переиндексируй: `make zed-search-reindex`. Сообщи, что поиск может вернуть неполные результаты.
+  > Граф codebase-memory-mcp независим от Milvus — структурные запросы продолжат работать.
+  Для семантики временно через grep, но хуже по качеству.
+- **WARN (exit 0)** — обработай каждый WARN:
+  - **MCP-пакет устарел** — `make zed-search-update`, перезапусти Zed.
+  - **Индекс устарёл/отсутствует** — `make zed-search-reindex`.
   - Другие WARN — сообщи кратко и продолжай.
+
+codebase-memory-mcp health-check не нужен (локальный SQLite, без внешних зависимостей). Если `list_projects` пуст или проект отсутствует — переиндексируй командой ниже.
 
 ## Команды
 
-- `make zed-search-check` — health-check MCP (exit 0/1 + WARN).
-- `make zed-search-update` — обновить MCP-пакет до актуальной версии.
-- `make zed-search-reindex` — переиндексировать кодовую базу.
+claude-context MCP:
+- `make zed-search-check` — health-check (exit 0/1 + WARN).
+- `make zed-search-update` — обновить MCP-пакет.
+- `make zed-search-reindex` — переиндексировать для семантики.
 - `make zed-search` — полная настройка (Ollama + Milvus + автоиндексация).
+
+codebase-memory-mcp:
+- `codebase-memory-mcp cli list_projects` — проиндексированные проекты.
+- `codebase-memory-mcp cli index_repository '{"repo_path":"<абсолютный_путь>"}'` — (пере)индексировать граф.
+- `codebase-memory-mcp cli <tool> '<json>'` — любой тул из CLI.
+- `codebase-memory-mcp config set auto_index true` — автоиндекс при старте сессии.
+- `codebase-memory-mcp update` — обновить бинарь.
 
 ## Правило
 
-Сначала `claude_context_search_code`. `grep` — только точечные литералы/regex или когда MCP недоступен.
+1. Структурные вопросы (кто кого вызывает, impact, архитектура, dead code, маршруты, импорты) — **сначала codebase-memory-mcp**.
+2. Семантические вопросы (по смыслу, без точных имён; по не-кодовому тексту/докам/конфигам) — **claude_context_search_code**.
+3. Точные литералы/regex — `grep`.
+4. Не обходи код file-by-file `read`, если граф или семантика могут ответить за один вызов.
