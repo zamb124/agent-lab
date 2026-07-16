@@ -22,11 +22,20 @@
 
 Для структурных вопросов **сначала граф** — не file-by-file `read`.
 
+## Продуктовый/доменный вопрос → сначала `.mdc`
+
+«Как работает X в сервисе», «что сломается если поменять Y», «откуда берутся данные Z» — **сначала читай `.cursor/rules/<svc>.mdc`** (напр. `crm.mdc`, `rag.mdc`, `flows.mdc`), потом код. Правило даёт модель (источник правды, инварианты, имена символов) за один `read` и превращает дальнейший поиск в точечный `grep`/`get_code_snippet` по уже известным именам. Эмпирика: `crm.mdc` отвечает на «notes ↔ RAG» до любого семантического запроса.
+
 ## Стратегия поиска (Cursor + наш стек)
 
 Из [Cursor search docs](https://cursor.com/docs/agent/tools/search): *start specific, then go broad*; exact → grep; concept → semantic then grep; complex → semantic entry points → grep refs → read. У Cursor **нет** рецепта строки `query` для эмбеддера — только выбор стратегии.
 
-У нас цепочка: **граф → семантика → grep → snippet/read**. Concrete symbols лучше vague labels. Explore before changing.
+У нас цепочка: **rule (`.mdc`) → граф → семантика → grep → snippet/read**. Concrete symbols лучше vague labels. Explore before changing.
+
+### Гочи граф-тулов (стоили вызовов на практике)
+
+- `search_graph.name_pattern` / `search_code.pattern` с `foo|bar` **требуют `regex=true`** — иначе `|` матчится литералом и выдача пустая. Для OR — либо `regex=true`, либо обычный `grep`.
+- `trace_path` / `get_code_snippet` по **голому имени** (`create_entity`) → `ambiguous` (несколько совпадений, вызов впустую). Сначала `search_graph`, возьми `qualified_name`, потом трасса/сниппет.
 
 ## Формулировка `claude_context_search_code.query`
 
@@ -43,16 +52,26 @@
 
 Полный разбор «почему слабая выдача» — `.cursor/rules/claude-context.mdc` § «Формулировка … query».
 
+## Проверенный fast-path (доменный «как работает X + что сломается при Y»)
+
+1. `read .cursor/rules/<svc>.mdc` — модель ответа + имена символов.
+2. `grep` по известному литералу из правила (напр. `upload_text`, `vector_documents`) в зоне (`apps/<svc>`).
+3. `get_code_snippet` по qualified_name на точке мутации (create/update) + на входе данных (напр. `resolve_note_text`).
+4. `read` фонового пути, который вопрос затрагивает (напр. `reembed_stale_documents`).
+
+Широкая семантика тут не нужна — правило + grep по литералу точнее и дешевле.
+
 ## Шпаргалка
 
-1. Имя/regex известны → `grep` (start specific).
-2. Структурный вопрос → граф (`trace_path`, `search_graph`, …).
-3. По смыслу → `claude_context_search_code` (короткие якоря, не multi-question prose) → затем grep/граф.
-4. Тело функции → `get_code_snippet` по qualified_name.
-5. Не читай файл-за-файлом, если граф/семантика отвечают за один вызов.
-6. Перед правкой — explore existing patterns.
+1. Доменный/продуктовый вопрос → сначала `.cursor/rules/<svc>.mdc`.
+2. Имя/regex известны → `grep` (start specific).
+3. Структурный вопрос → граф (`trace_path`, `search_graph`, …); `qualified_name` из `search_graph`, `|` только с `regex=true`.
+4. По смыслу → `claude_context_search_code` (короткие якоря, не multi-question prose) → затем grep/граф.
+5. Тело функции → `get_code_snippet` по qualified_name.
+6. Не читай файл-за-файлом, если rule/граф/семантика отвечают за один вызов.
+7. Перед правкой — explore existing patterns.
 
-Порядок: **граф → семантика → grep → read**.
+Порядок: **rule → граф → семантика → grep → read**.
 
 ## Имя проекта в графе
 

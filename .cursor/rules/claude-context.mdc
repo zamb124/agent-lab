@@ -26,6 +26,15 @@ alwaysApply: true
 
 Для структурных вопросов **сначала граф** — не file-by-file `read`. Граф отвечает за один вызов и экономит ~99% токенов vs grep/read-циклов.
 
+## Продуктовый/доменный вопрос → сначала `.mdc`
+
+«Как работает X в сервисе», «что сломается если поменять Y», «откуда берутся данные Z» — **сначала читай `.cursor/rules/<svc>.mdc`** (`crm.mdc`, `rag.mdc`, `flows.mdc`, …), потом код. Правило даёт модель (источник правды, инварианты, имена символов) за один `read` и делает дальнейший поиск точечным `grep`/`get_code_snippet` по известным именам. Эмпирика: `crm.mdc` отвечает на «notes ↔ RAG» ещё до семантики.
+
+## Гочи граф-тулов (стоят вызовов впустую)
+
+- `search_graph.name_pattern` / `search_code.pattern` с `foo|bar` **требуют `regex=true`** — иначе `|` матчится литералом, выдача пустая. Для OR — `regex=true` либо `grep`.
+- `trace_path` / `get_code_snippet` по **голому имени** → `ambiguous`. Сначала `search_graph` → `qualified_name` → трасса/сниппет.
+
 ## Стратегия поиска (канон Cursor + наш стек)
 
 Опора на [Cursor: Semantic & Agentic Search](https://cursor.com/docs/agent/tools/search) и [Learn: Understanding Your Codebase](https://cursor.com/learn/understanding-your-codebase). У Cursor **нет** agent-facing рецепта строки `query` для эмбеддера — только выбор стратегии. Ниже — их tips + наш слой (граф, формулировка `query`).
@@ -40,7 +49,9 @@ alwaysApply: true
 
 Цепочка (адаптация Cursor *semantic → grep → read* под наш стек):
 
-**граф (структура) → семантика (смысл) → grep (литералы) → snippet/read (тело).**
+**rule (`.mdc`) → граф (структура) → семантика (смысл) → grep (литералы) → snippet/read (тело).**
+
+Проверенный fast-path для доменного «как работает X + что сломается при Y»: `read .cursor/rules/<svc>.mdc` → `grep` по литералу из правила (`upload_text`, `vector_documents`) в `apps/<svc>` → `get_code_snippet` на точке мутации (create/update) + на входе данных (`resolve_note_text`) → `read` фонового пути (`reembed_stale_documents`). Широкая семантика тут лишняя.
 
 Дополнительно из Cursor tips:
 
