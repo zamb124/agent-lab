@@ -7,12 +7,13 @@ from pathlib import Path
 
 import pytest
 
+from apps.agent.desktop.artifact_verify import MIN_RELEASE_BYTES
 from apps.agent.desktop.build_contract import (
     VALID_PLATFORMS,
-    artifact_path as contract_artifact_path,
+    load_default_distro_config,
 )
 from apps.agent.desktop.build_contract import (
-    load_default_distro_config,
+    artifact_path as contract_artifact_path,
 )
 from scripts import agent_build as agent_build_module
 
@@ -25,6 +26,33 @@ def test_publish_release_missing_artifacts(tmp_path: Path, monkeypatch: pytest.M
             release_tag="humanitec-agent-v0.0.0-test",
             version_sha=version_sha,
         )
+
+
+def test_ensure_local_reuses_newest_release_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host_platform = agent_build_module.detect_host_platform()
+    distro = load_default_distro_config()
+    monkeypatch.setattr(agent_build_module, "DIST_DIR", tmp_path)
+    donor = contract_artifact_path(tmp_path, host_platform, "donor-sha-aaaaaaaa", distro)
+    donor.write_bytes(b"R" * MIN_RELEASE_BYTES)
+    target_sha = f"reuse-{uuid.uuid4().hex[:12]}"
+    expected = contract_artifact_path(tmp_path, host_platform, target_sha, distro)
+
+    build_calls: list[dict[str, str]] = []
+
+    def _fake_build_platform(**kwargs: str) -> Path:
+        build_calls.append(kwargs)
+        raise AssertionError("ensure_local must reuse donor without build_platform")
+
+    monkeypatch.setattr(agent_build_module, "build_platform", _fake_build_platform)
+
+    result = agent_build_module.ensure_local(artifact_mode="release", version_sha=target_sha)
+    assert result == expected
+    assert expected.is_file()
+    assert expected.stat().st_size == MIN_RELEASE_BYTES
+    assert build_calls == []
 
 
 def test_ensure_local_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

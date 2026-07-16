@@ -90,28 +90,38 @@ async def _recv_pong(ws, timeout: float = 5.0) -> None:
 
 
 @pytest.mark.asyncio
-async def test_single_websocket_notification(crm_client, ws_cookie_system, system_user_id, crm_service):
+async def test_single_websocket_notification(
+    crm_client,
+    ws_cookie_system,
+    system_user_id,
+    crm_service,
+    unique_id: str,
+) -> None:
     """Одно WebSocket подключение получает уведомление."""
 
     ws_url = "ws://localhost:9003/crm/api/ws/notifications"
     expected_type = _expected_event_type("test", NotificationType.SYSTEM)
+    # xdist: все тесты делят system_user_id — матчим по уникальному title, не по type.
+    expected_title = f"Тестовое уведомление {unique_id}"
 
     async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws:
+        await ws.send("ping")
+        await _recv_pong(ws, timeout=5)
         await notify_user(
             user_id=system_user_id,
             notification=Notification(
                 type=NotificationType.SYSTEM,
-                title="Тестовое уведомление",
+                title=expected_title,
                 message="Проверка работы WebSocket",
                 service="test",
                 priority="normal",
             ),
         )
 
-        event = await _recv_event_by_type(ws, expected_type, timeout=5)
+        event = await _recv_event_by_payload_title(ws, expected_title, timeout=15)
         assert event["type"] == expected_type
         payload = _event_payload(event)
-        assert payload["title"] == "Тестовое уведомление"
+        assert payload["title"] == expected_title
         assert payload["service"] == "test"
         assert payload["kind"] == NotificationType.SYSTEM.value
 
@@ -202,11 +212,18 @@ async def test_websocket_heartbeat(crm_client, ws_cookie_system, system_user_id,
 
 
 @pytest.mark.asyncio
-async def test_websocket_reconnection(crm_client, ws_cookie_system, system_user_id, crm_service):
+async def test_websocket_reconnection(
+    crm_client,
+    ws_cookie_system,
+    system_user_id,
+    crm_service,
+    unique_id: str,
+) -> None:
     """Проверка переподключения после разрыва."""
 
     ws_url = "ws://localhost:9003/crm/api/ws/notifications"
     expected_type = _expected_event_type("test", NotificationType.SYSTEM)
+    expected_title = f"После переподключения {unique_id}"
 
     async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws1:
         await ws1.send("ping")
@@ -220,14 +237,15 @@ async def test_websocket_reconnection(crm_client, ws_cookie_system, system_user_
             user_id=system_user_id,
             notification=Notification(
                 type=NotificationType.SYSTEM,
-                title="После переподключения",
+                title=expected_title,
                 message="Уведомление после разрыва",
                 service="test",
             ),
         )
 
-        event = await _recv_event_by_type(ws2, expected_type, timeout=5)
-        assert _event_payload(event)["title"] == "После переподключения"
+        event = await _recv_event_by_payload_title(ws2, expected_title, timeout=15)
+        assert event["type"] == expected_type
+        assert _event_payload(event)["title"] == expected_title
 
 
 @pytest.mark.asyncio

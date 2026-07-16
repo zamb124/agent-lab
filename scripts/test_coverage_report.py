@@ -738,7 +738,11 @@ def main(argv: list[str] | None = None) -> int:
 
     term_parser = subparsers.add_parser(
         "term",
-        help=f"Print per-file table for files ≤{_LOW_COVERAGE_PCT_THRESHOLD:g}% from .coverage",
+        # argparse help uses %-formatting — literal percent must be escaped as %%.
+        help=(
+            f"Print per-file table for files ≤{_LOW_COVERAGE_PCT_THRESHOLD:g}%% "
+            "from .coverage"
+        ),
     )
     _ = term_parser.add_argument(
         "--coverage-file",

@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,6 +35,7 @@ from apps.agent.desktop.artifact_verify import (  # noqa: E402, I001
 from apps.agent.desktop.build_contract import (  # noqa: E402, I001
     VALID_PLATFORMS,
     artifact_path as contract_artifact_path,
+    asset_file_suffix,
     asset_name_pattern,
     load_default_distro_config,
     macos_notarize_manifest_filename,
@@ -209,13 +212,68 @@ def verify_ci_local(*, artifact_mode: str, version_sha: str) -> list[Path]:
     return verified
 
 
+def _iter_reusable_release_artifacts(
+    dist_dir: Path,
+    *,
+    platform_name: str,
+    bundle_name: str,
+) -> list[Path]:
+    """Newest-first valid release binaries for platform (exact HEAD name may be missing)."""
+    if not dist_dir.is_dir():
+        return []
+    prefix = asset_name_pattern(platform_name, bundle_name)
+    suffix = asset_file_suffix(platform_name)
+    candidates: list[Path] = []
+    for path in dist_dir.iterdir():
+        if not path.is_file():
+            continue
+        if not path.name.startswith(prefix) or not path.name.endswith(suffix):
+            continue
+        if is_placeholder_artifact(path):
+            continue
+        if path.stat().st_size < MIN_RELEASE_BYTES:
+            continue
+        candidates.append(path)
+    candidates.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+    return candidates
+
+
+def _link_or_copy_artifact(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists() or destination.is_symlink():
+        destination.unlink()
+    try:
+        os.link(source, destination)
+    except OSError:
+        _ = shutil.copy2(source, destination)
+
+
 def ensure_local(*, artifact_mode: str, version_sha: str) -> Path | None:
     host_platform = detect_host_platform()
+    distro = load_default_distro_config()
+    expected = contract_artifact_path(DIST_DIR, host_platform, version_sha, distro)
     if artifact_ready(host_platform, version_sha, artifact_mode=artifact_mode):
-        distro = load_default_distro_config()
-        existing = contract_artifact_path(DIST_DIR, host_platform, version_sha, distro)
-        print(f"agent-build: artifact already present: {existing}", flush=True)
-        return existing
+        print(f"agent-build: artifact already present: {expected}", flush=True)
+        return expected
+    # Local/CI smoke: reuse newest valid release binary under the HEAD filename instead of
+    # rebuilding Electron on every commit (API discover/download + desktop e2e need the path).
+    if artifact_mode == "release":
+        for candidate in _iter_reusable_release_artifacts(
+            DIST_DIR,
+            platform_name=host_platform,
+            bundle_name=distro.bundle_name,
+        ):
+            if candidate.resolve() == expected.resolve():
+                continue
+            _link_or_copy_artifact(candidate, expected)
+            if artifact_ready(host_platform, version_sha, artifact_mode=artifact_mode):
+                print(
+                    f"agent-build: reused release artifact {candidate.name} -> {expected.name}",
+                    flush=True,
+                )
+                return expected
+            if expected.exists() or expected.is_symlink():
+                expected.unlink()
     return build_platform(
         platform_name=host_platform,
         artifact_mode=artifact_mode,
