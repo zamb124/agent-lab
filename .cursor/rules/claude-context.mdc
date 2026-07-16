@@ -63,33 +63,42 @@ alwaysApply: true
 
 Схема тула: `query` = *natural language query*. Это **не** разрешение копировать вопрос пользователя целиком.
 
-Эмбеддер ищет похожие **чанки кода/доков**, а не отвечает на вопрос. Длинный разговорный multi-question запрос даёт шум (README, agent prompts, нерелевантный код). Cursor user-prompt («How does our app handle failed payments?») — для **выбора** semantic-тула человеком; **строка `query` агента** должна быть коротким якорем под чанки.
+Эмбеддер ищет похожие **чанки кода/доков** по cosine — не отвечает на вопрос и не взвешивает важность файла. Копипаст вопроса → шум: README, agent `skills/`/`prompts/`, `*.styles.js`, пустые `__init__.py`. Cursor user-prompt («How does our app handle failed payments?») — для **выбора** semantic-тула человеком; **строка `query` агента** — короткий якорь под чанки реализации.
 
-### Почему длинный prose даёт слабую выдачу
+### Универсальный transform: вопрос → `query` (4 механических шага)
 
-Ранжирование — cosine чанка к `query`, **не** важность файла. Провалы: multi-question размывает вектор; продуктовый жаргон (`Networkle`, `collect`, `sync`) поднимает skills/prompts раньше ядра (`EntityRepository`, `upload_text`); тул отдаёт похожие фрагменты, а не call-chain. Признак: топ — `agent_skills/**` / prompts / README, нет mutating-кода в `apps/crm` / `core/rag`. Не повторяй тот же query.
+Применяй к любому вопросу, любому домену, до вызова тула:
+
+1. **Убери вопросную оболочку.** `how/what/why/where/when/if`, `does/do/is`, «как/что/почему/где/если/что произойдёт/расхождения». Остаётся суть.
+2. **Убери бренды и продукт-жаргон.** `Networkle`, `Lara`, `Humanitec`, `Linnex`, «сервис», «платформа», «collect», «sync», «обрабатывает» — эти слова живут в `prompts/`, `agent_skills/`, `docs/`, README, а НЕ в ядре (`EntityRepository`, `upload_text`). Оставишь — поднимешь мусор наверх.
+3. **Переведи в код-уровневые токены.** Слой/класс (`Repository`, `Service`, `provider`), операция **как она названа в коде** (`index`, `upload`, `embed`, `search` — не «collect»/«обрабатывает»), данные (`vector_documents`, `entity_id`). Не знаешь точных имён — возьми их из `.cursor/rules/<svc>.mdc` **перед** семантикой.
+4. **Один концепт = один вызов.** Составной вопрос → 2–3 отдельных `query`. Известна зона → `extensionFilter: [".py"]`/`[".js"]`; `path` = абсолютный корень репо.
+
+### Gate: нужна ли вообще семантика
+
+Перед вызовом: **можешь назвать символ** (из `.mdc` или прошлого поиска)? → да: `grep`/граф, семантику пропусти. Семантика — только когда имена ещё неизвестны. **Не запускай семантику с prose в одном батче с чтением правила**: сначала `.mdc` даёт имена, потом (если ещё нужно) код-якоря.
+
+### Признак провала и что делать
+
+Топ выдачи — `agent_skills/**` / `prompts/**` / README / `*.styles.js` / пустые `__init__.py`, нет mutating-кода из `apps/<svc>` / `core/**`. Не повторяй тот же длинный `query`: примени transform (убери бренды/вопросные слова), сузь `extensionFilter`, либо переключись на граф/`grep` по уже известным символам.
 
 | Делай | Не делай |
 |---|---|
-| Короткие смысловые якоря (1 мысль, 5–12 слов) | Целый вопрос пользователя / «How does X… What happens if Y…» |
-| Термины ближе к коду: `EntityRepository upload_text`, `note RAG index`, `vector_documents entity_id` | Абстрактный prose без доменных слов (`collect`, `sync`, `how does`) |
-| Один концепт = один вызов; составной вопрос → 2–3 вызова | Два+ независимых вопроса в одном `query` |
-| `extensionFilter: [".py"]` / `[".js"]` когда зона известна | Широкий поиск по всему репо без нужды |
-| `path` = абсолютный корень репо | Относительный path |
+| Короткие код-якоря (1 мысль, 5–12 слов) | Копипаст вопроса / «How does X… What happens if Y…» |
+| `EntityRepository upload_text`, `vector_documents entity_id` | Абстрактный prose с брендом (`Networkle collect sync notes`) |
+| Один концепт = один вызов; split multi-part | Два+ независимых вопроса в одном `query` |
+| `extensionFilter` когда зона известна; `path` = абсолютный корень | Широкий репо-поиск без нужды; относительный `path` |
 
-Примеры:
+Пример (реальный провал сессии «notes ↔ RAG»):
 
 ```text
-# плохо (копипаст multi-question → skills/prompts, не ядро)
-How does Networkle CRM collect note data and sync notes with RAG? What happens when note changes in RAG?
+# плохо → топ: networkle/crm-notes SKILL.md, AGENTS.md, note-page.styles.js, пустой crm/api/__init__.py
+How does Networkle CRM collect and index notes data into RAG vector documents?
 
-# хорошо (отдельные вызовы — якоря под чанки реализации)
+# transform: -«How does» -«Networkle» -«collect» → код-токены + split + extensionFilter=[".py"]
 CRM note text indexing RAG vector documents
 EntityRepository upload_text document_id entity_id
-note attachment index_file RAG
 ```
-
-Если семантика вернула мусор (README / skills / чужой домен) — не повторяй тот же длинный query: сузь якоря + `extensionFilter` (часто `.py`), либо переключись на граф/`grep` по уже известным символам (`upload_text`, `search_with_similarity`).
 
 ## Имя проекта в графе
 

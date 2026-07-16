@@ -39,18 +39,21 @@
 
 ## Формулировка `claude_context_search_code.query`
 
-*Natural language* в схеме тула ≠ копипаст вопроса. Cursor user-prompt («how do we handle X?») выбирает semantic; **агентский `query`** — короткий якорь под чанки кода.
+*Natural language* в схеме тула ≠ копипаст вопроса. Эмбеддер ранжирует cosine чанка, не важность файла; вопрос-prose → шум (skills/prompts/README/CSS/пустые `__init__`).
 
-Эмбеддер ранжирует похожесть чанка, не важность файла. Prose/жаргон (`Networkle`, `collect`, `sync`) поднимает skills/prompts раньше ядра (`EntityRepository`, `upload_text`). Признак провала: топ без mutating-кода из `apps/crm` / `core/rag`.
+**Transform вопрос → query (механически, любой домен):**
+1. Убери вопросную оболочку: `how/what/why/if`, «как/что/почему/если/что произойдёт».
+2. Убери бренды/жаргон: `Networkle`/`Lara`/`Humanitec`/`Linnex`/«сервис»/«collect»/«sync» — они в prompts/skills/docs, не в ядре.
+3. Переведи в код-токены: слой/класс (`Repository`/`Service`/`provider`), операция как в коде (`index`/`upload`/`embed`/`search`), данные (`vector_documents`/`entity_id`). Имён не знаешь → возьми из `.cursor/rules/<svc>.mdc`.
+4. Один концепт = один вызов; `extensionFilter` когда зона ясна.
 
-- Короткие якоря (1 мысль, 5–12 слов), термины ближе к коду.
-- Один концепт = один вызов; составной вопрос → несколько вызовов.
-- Сужай `extensionFilter` (`.py` / `.js`), когда зона известна.
-- Плохо: `How does Networkle … What happens if …`
+**Gate:** можешь назвать символ (из `.mdc`/прошлого поиска)? → `grep`/граф, семантику пропусти. Не запускай семантику с prose в одном батче с чтением правила.
+
+- Плохо: `How does Networkle CRM collect and index notes into RAG?`
 - Хорошо: `CRM note text indexing RAG vector documents` / `EntityRepository upload_text entity_id`
-- Мусор в выдаче → не повторяй длинный query; сузь якоря / фильтр или переключись на граф/`grep`.
+- Провал (топ = skills/prompts/README/CSS) → не повторяй query: transform + `extensionFilter`, или граф/`grep`.
 
-Полный разбор «почему слабая выдача» — `.cursor/rules/claude-context.mdc` § «Формулировка … query».
+Полный разбор — `.cursor/rules/claude-context.mdc` § «Формулировка … query».
 
 ## Проверенный fast-path (доменный «как работает X + что сломается при Y»)
 
