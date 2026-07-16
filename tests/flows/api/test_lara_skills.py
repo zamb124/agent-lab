@@ -31,23 +31,49 @@ def _tools_unlocked(payload: JsonObject) -> list[str]:
     return [str(item) for item in require_json_array(payload["tools_unlocked"], "tools_unlocked")]
 
 
+def _assert_tools_include(payload: JsonObject, expected_tool_ids: set[str]) -> None:
+    assert expected_tool_ids <= set(_tools_unlocked(payload))
+
+
 @pytest.mark.asyncio
 async def test_lara_flow_attaches_full_skill_roots(container, unique_id: str) -> None:
     _ = unique_id
     flow = await ensure_lara_flow(container)
     assert_lara_attach(flow)
     assert "reflection_node_helper" in (flow.branches or {})
+    main = flow.nodes["main"] if flow.nodes is not None else None
+    main_obj = require_json_object(main, "lara.main")
+    skills = require_json_array(main_obj.get("agent_skills", []), "lara.main.agent_skills")
+    assert [str(item) for item in skills] == list(LARA_PLATFORM_SKILL_ROOTS)
 
 
 @pytest.mark.asyncio
-async def test_lara_effective_branch_keeps_full_roots_and_ask_user_only(
+async def test_lara_every_effective_branch_keeps_full_roots_and_ask_user_only(
     container,
     unique_id: str,
 ) -> None:
     _ = unique_id
     flow = await ensure_lara_flow(container)
+    branches = flow.branches
+    assert branches is not None
+    assert {
+        "console",
+        "crm",
+        "flows",
+        "sync",
+        "rag",
+        "documents",
+        "worktracker",
+        "litserve",
+        "docs",
+        "node_helper",
+    } <= set(branches)
+    docs_branch = branches["docs"]
+    assert docs_branch.entry == "docs_lookup"
+    assert docs_branch.edges is not None
+    assert any(edge.from_node == "docs_lookup" and edge.to_node == "main" for edge in docs_branch.edges)
     factory = container.flow_factory
-    for branch_id in ("crm", "flows", "code_helper", "docs", "llm_node_helper"):
+    for branch_id in sorted(branches):
         effective = factory.apply_branch(flow, branch_id)
         main = effective["nodes"]["main"]
         main_obj = require_json_object(main, f"effective.{branch_id}.main")
@@ -88,9 +114,17 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 await load_agent_skill.run({"agent_skill_id": "crm-entities"}, state)
             )
             assert entities["depth"] == 1
-            entity_tools = _tools_unlocked(entities)
-            assert "crm_search_entities" in entity_tools
-            assert "crm_create_entity" in entity_tools
+            _assert_tools_include(
+                entities,
+                {
+                    "crm_search_entities",
+                    "crm_create_entity",
+                    "crm_get_entity",
+                    "crm_create_relationship",
+                    "crm_list_entity_types",
+                    "crm_daily_summary",
+                },
+            )
 
             flows_root = _load_payload(
                 await load_agent_skill.run({"agent_skill_id": "flows-platform"}, state)
@@ -100,9 +134,10 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 await load_agent_skill.run({"agent_skill_id": "flows-editor"}, state)
             )
             assert editor["depth"] == 1
-            editor_tools = _tools_unlocked(editor)
-            assert "flows_patch_node" in editor_tools
-            assert "flows_read_context" in editor_tools
+            _assert_tools_include(
+                editor,
+                {"flows_patch_node", "flows_patch_flow", "flows_read_context", "push_embed_blocks"},
+            )
 
             docs = _load_payload(
                 await load_agent_skill.run({"agent_skill_id": "docs-knowledge"}, state)
@@ -117,8 +152,102 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 )
             )
             assert workspace["depth"] == 0
+            assert set(workspace["depends_on"]) == {
+                "document-workspace",
+                "diagrams-viz",
+                "web-research",
+                "work-tracking",
+            }
             work = _load_payload(
                 await load_agent_skill.run({"agent_skill_id": "work-tracking"}, state)
             )
             assert work["depth"] == 1
-            assert "work_item_create" in _tools_unlocked(work)
+            _assert_tools_include(
+                work,
+                {
+                    "work_item_create",
+                    "work_item_list",
+                    "work_item_complete",
+                    "schedule_cron_task",
+                    "schedule_interval_task",
+                    "schedule_one_time_task",
+                    "list_scheduled_tasks",
+                    "cancel_scheduled_task",
+                },
+            )
+
+            sync = _load_payload(
+                await load_agent_skill.run({"agent_skill_id": "sync-platform"}, state)
+            )
+            assert sync["depth"] == 0
+            assert _tools_unlocked(sync) == [
+                "sync_list_messages",
+                "sync_send_message",
+            ]
+
+            rag = _load_payload(
+                await load_agent_skill.run({"agent_skill_id": "rag-platform"}, state)
+            )
+            assert rag["depth"] == 0
+            knowledge = _load_payload(
+                await load_agent_skill.run({"agent_skill_id": "knowledge-rag"}, state)
+            )
+            assert knowledge["depth"] == 1
+            assert "rag_search" in _tools_unlocked(knowledge)
+
+            documents = _load_payload(
+                await load_agent_skill.run(
+                    {"agent_skill_id": "documents-platform"},
+                    state,
+                )
+            )
+            assert documents["depth"] == 0
+            assert set(documents["depends_on"]) == {"document-workspace", "diagrams-viz"}
+            document_workspace = _load_payload(
+                await load_agent_skill.run(
+                    {"agent_skill_id": "document-workspace"},
+                    state,
+                )
+            )
+            _assert_tools_include(
+                document_workspace,
+                {
+                    "read_file",
+                    "create_file",
+                    "documents_open_file",
+                    "documents_replace_text",
+                    "documents_append_text",
+                    "documents_update_cells",
+                },
+            )
+            diagrams = _load_payload(
+                await load_agent_skill.run({"agent_skill_id": "diagrams-viz"}, state)
+            )
+            _assert_tools_include(diagrams, {"create_viz", "update_viz", "export_viz", "viz_open_file"})
+
+            worktracker = _load_payload(
+                await load_agent_skill.run(
+                    {"agent_skill_id": "worktracker-platform"},
+                    state,
+                )
+            )
+            assert worktracker["depth"] == 0
+            assert worktracker["depends_on"] == ["work-tracking"]
+
+            console = _load_payload(
+                await load_agent_skill.run(
+                    {"agent_skill_id": "console-platform"},
+                    state,
+                )
+            )
+            assert console["depth"] == 0
+            assert _tools_unlocked(console) == []
+
+            litserve = _load_payload(
+                await load_agent_skill.run(
+                    {"agent_skill_id": "litserve-platform"},
+                    state,
+                )
+            )
+            assert litserve["depth"] == 0
+            assert _tools_unlocked(litserve) == []

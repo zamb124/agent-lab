@@ -65,11 +65,17 @@ alwaysApply: false
 
 ## Lara (канон)
 
-- `flow_id: lara` — единый ассистент; `LARA_PLATFORM_SKILL_ROOTS` на base `main` (`networkle`, `flows-platform`, `flows-code`, `docs-knowledge`, `platform-workspace`).
-- Branch = thin entry focus (prompt + `ask_user`); **не** режет catalog; standing domain tools запрещены.
+- `flow_id: lara` — единый ассистент восьми SPA.
+- Service roots полного Tier-1 catalog: `console-platform`, `networkle`, `flows-platform`, `sync-platform`, `rag-platform`, `documents-platform`, `worktracker-platform`, `litserve-platform`.
+- Дополнительные roots: `flows-code` (node helper entry), `docs-knowledge` (docs portal), `platform-workspace` (shared capabilities).
+- Branches `console`, `crm`, `flows`, `sync`, `rag`, `documents`, `worktracker`, `litserve`, `docs` и node-helper branches отличаются только focus prompt. Каждый наследует один `LARA_PLATFORM_SKILL_ROOTS`; branch не режет catalog.
+- Standing tools на base и во всех branches: только `ask_user`. Domain/shared tools появляются только после `load_agent_skill`.
 - Methodology бывших Lara prompts — в skill bodies + `references/*-lara-methodology.md`.
 - Skill Library CTA → `flow_chat` / `lara`. `platform_assistant` — deprecated alias с теми же roots.
-- Seed: `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` / `ensure-seed`; capability packs под `platform-workspace` (`document-workspace` → `docx-templates`, viz, RAG, web, work).
+- Seed: `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` / `ensure-seed`.
+- Service skill может содержать только существующие operational `tool_refs`; если tool контракта нет, body ведёт по UI и запрещает заявлять об исполнении.
+- Shared tree под `platform-workspace`: `document-workspace` → `docx-templates`, `diagrams-viz`, `web-research`, `work-tracking`. `web-research` включает batch browser search + page snapshot; `work-tracking` включает one-time + cron + interval scheduler.
+- Service children переиспользуют shared leaves через `depends_on` либо направляют к отдельному Tier-1 root; копировать один tool pack между service skills запрещено.
 
 
 ## Запреты

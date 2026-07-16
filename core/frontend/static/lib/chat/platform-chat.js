@@ -36,6 +36,10 @@ import { getActivePlatformNamespaceName } from '../utils/platform-namespace.js';
 import { getPlatformBus, hasPlatformBus } from '../events/bus-singleton.js';
 import { bootstrapPlatformBus, completeBootstrap } from '../events/bootstrap.js';
 import { CoreEvents } from '../events/contract.js';
+import {
+    readLaraLauncherPosition,
+    writeLaraLauncherPosition,
+} from './launcher-position-preference.js';
 
 let mid = 0;
 
@@ -340,6 +344,7 @@ export class PlatformChat extends LitElement {
         getAuthToken: { type: Object },
         open: { type: Boolean, reflect: true },
         showLauncher: { type: Boolean, attribute: 'show-launcher' },
+        launcherStorageScope: { type: String, attribute: 'launcher-storage-scope' },
         initialOpen: { type: Boolean, attribute: 'initial-open' },
         toggleEventName: { type: String, attribute: 'toggle-event-name' },
         panelMaximized: { type: Boolean, state: true },
@@ -567,6 +572,7 @@ export class PlatformChat extends LitElement {
             color: var(--platform-chat-drawer-fab-fg);
             box-shadow: var(--platform-chat-drawer-fab-shadow);
             cursor: pointer;
+            touch-action: none;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -598,10 +604,12 @@ export class PlatformChat extends LitElement {
         .fab:hover {
             background: var(--platform-chat-drawer-fab-bg-hover);
         }
-        .fab svg {
-            width: 26px;
-            height: 26px;
+        .fab-logo {
+            width: 42px;
+            height: 42px;
             display: block;
+            object-fit: contain;
+            pointer-events: none;
         }
         @media (max-width: 767px) {
             .fab {
@@ -832,6 +840,7 @@ export class PlatformChat extends LitElement {
         this.actionHandlers = {};
         this.open = false;
         this.showLauncher = false;
+        this.launcherStorageScope = 'core';
         this.initialOpen = false;
         this.toggleEventName = 'humanitec-embed-chat-toggle';
         this.panelMaximized = false;
@@ -938,9 +947,15 @@ export class PlatformChat extends LitElement {
         this._panelDragActive = false;
         this._panelDragPosition = null;
         this._panelDragContext = null;
+        this._fabDragPosition = null;
+        this._fabDragContext = null;
+        this._fabDragActive = false;
+        this._suppressFabClick = false;
         this._initialOpenConsumed = false;
         this._onPanelDragPointerMove = this._onPanelDragPointerMove.bind(this);
         this._onPanelDragPointerUp = this._onPanelDragPointerUp.bind(this);
+        this._onFabDragPointerMove = this._onFabDragPointerMove.bind(this);
+        this._onFabDragPointerUp = this._onFabDragPointerUp.bind(this);
         this._onViewportResize = this._onViewportResize.bind(this);
     }
 
@@ -1333,6 +1348,7 @@ export class PlatformChat extends LitElement {
             });
         }
         this._stopPanelDrag();
+        this._stopFabDrag();
         if (this._onPopStateEmbedParams) {
             window.removeEventListener('popstate', this._onPopStateEmbedParams);
             this._onPopStateEmbedParams = null;
@@ -1361,6 +1377,7 @@ export class PlatformChat extends LitElement {
         this._startGreetingTypingIfNeeded();
         if (this.display === 'drawer') {
             this._bindToggleListener();
+            this._restoreFabDragPosition();
         }
     }
 
@@ -1512,6 +1529,191 @@ export class PlatformChat extends LitElement {
         this.open = next;
     }
 
+    _fabPreferenceBranchId() {
+        const branchId = String(this.branchId).trim();
+        if (/^[a-z][a-z0-9_]*$/.test(branchId)) {
+            return branchId;
+        }
+        const embedId = typeof this.embedId === 'string' ? this.embedId.trim() : '';
+        const flowId = typeof this.flowId === 'string' ? this.flowId.trim() : '';
+        const surfaceId = embedId !== '' ? embedId : flowId;
+        const normalized = surfaceId.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+        if (!/^[a-z][a-z0-9_]*$/.test(normalized)) {
+            throw new Error('PlatformChat launcher persistence requires branch-id, embed-id, or flow-id');
+        }
+        return normalized;
+    }
+
+    _restoreFabDragPosition() {
+        if (!this.showLauncher) {
+            return;
+        }
+        const position = readLaraLauncherPosition(
+            this.launcherStorageScope,
+            this._fabPreferenceBranchId(),
+        );
+        if (position === null) {
+            return;
+        }
+        this._fabDragPosition = position;
+        this.requestUpdate();
+        void this.updateComplete.then(() => this._syncFabToViewport());
+    }
+
+    _fabInlineStyle() {
+        let style = `z-index:${this._layerZIndex(3)}`;
+        if (this._fabDragPosition !== null) {
+            style += `;left:${this._fabDragPosition.left}px;top:${this._fabDragPosition.top}px;right:auto;bottom:auto`;
+        }
+        return style;
+    }
+
+    _bindFabDragListeners() {
+        window.addEventListener('pointermove', this._onFabDragPointerMove);
+        window.addEventListener('pointerup', this._onFabDragPointerUp);
+        window.addEventListener('pointercancel', this._onFabDragPointerUp);
+    }
+
+    _unbindFabDragListeners() {
+        window.removeEventListener('pointermove', this._onFabDragPointerMove);
+        window.removeEventListener('pointerup', this._onFabDragPointerUp);
+        window.removeEventListener('pointercancel', this._onFabDragPointerUp);
+    }
+
+    _stopFabDrag() {
+        this._fabDragContext = null;
+        this._fabDragActive = false;
+        this._unbindFabDragListeners();
+    }
+
+    _clampFabDragPosition(top, left, width, height) {
+        const margin = 8;
+        const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+        const maxTop = Math.max(margin, window.innerHeight - height - margin);
+        return {
+            left: Math.min(Math.max(left, margin), maxLeft),
+            top: Math.min(Math.max(top, margin), maxTop),
+        };
+    }
+
+    _applyFabDragPosition(fab) {
+        if (!(fab instanceof HTMLElement) || this._fabDragPosition === null) {
+            return;
+        }
+        fab.style.left = `${this._fabDragPosition.left}px`;
+        fab.style.top = `${this._fabDragPosition.top}px`;
+        fab.style.right = 'auto';
+        fab.style.bottom = 'auto';
+    }
+
+    _syncFabToViewport() {
+        if (this._fabDragPosition === null) {
+            return;
+        }
+        const fab = this.renderRoot?.querySelector('.fab');
+        if (!(fab instanceof HTMLElement)) {
+            return;
+        }
+        const rect = fab.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) {
+            return;
+        }
+        const clamped = this._clampFabDragPosition(
+            this._fabDragPosition.top,
+            this._fabDragPosition.left,
+            rect.width,
+            rect.height,
+        );
+        if (
+            clamped.left === this._fabDragPosition.left
+            && clamped.top === this._fabDragPosition.top
+        ) {
+            return;
+        }
+        this._fabDragPosition = clamped;
+        this._applyFabDragPosition(fab);
+        writeLaraLauncherPosition(
+            this.launcherStorageScope,
+            this._fabPreferenceBranchId(),
+            clamped,
+        );
+        this.requestUpdate();
+    }
+
+    _onFabPointerDown(event) {
+        if (event.button !== 0) {
+            return;
+        }
+        const fab = this.renderRoot?.querySelector('.fab');
+        if (!(fab instanceof HTMLElement)) {
+            return;
+        }
+        const rect = fab.getBoundingClientRect();
+        this._fabDragContext = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            offsetX: event.clientX - rect.left,
+            offsetY: event.clientY - rect.top,
+            width: rect.width,
+            height: rect.height,
+        };
+        this._fabDragActive = false;
+        this._bindFabDragListeners();
+    }
+
+    _onFabDragPointerMove(event) {
+        const context = this._fabDragContext;
+        if (context === null || event.pointerId !== context.pointerId) {
+            return;
+        }
+        if (!this._fabDragActive) {
+            const distance = Math.hypot(
+                event.clientX - context.startX,
+                event.clientY - context.startY,
+            );
+            if (distance < 6) {
+                return;
+            }
+            this._fabDragActive = true;
+        }
+        this._fabDragPosition = this._clampFabDragPosition(
+            event.clientY - context.offsetY,
+            event.clientX - context.offsetX,
+            context.width,
+            context.height,
+        );
+        this._applyFabDragPosition(this.renderRoot?.querySelector('.fab'));
+        event.preventDefault();
+    }
+
+    _onFabDragPointerUp(event) {
+        const context = this._fabDragContext;
+        if (context === null || event.pointerId !== context.pointerId) {
+            return;
+        }
+        if (this._fabDragActive && this._fabDragPosition !== null) {
+            writeLaraLauncherPosition(
+                this.launcherStorageScope,
+                this._fabPreferenceBranchId(),
+                this._fabDragPosition,
+            );
+            this._suppressFabClick = true;
+            this.requestUpdate();
+        }
+        this._stopFabDrag();
+    }
+
+    _onFabClick(event) {
+        if (this._suppressFabClick) {
+            this._suppressFabClick = false;
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
+        this._toggle();
+    }
+
     _isMobileViewportForNativeFullscreen() {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
             return false;
@@ -1628,6 +1830,7 @@ export class PlatformChat extends LitElement {
 
     _onViewportResize() {
         this._syncPanelToViewport();
+        this._syncFabToViewport();
     }
 
     _applyPanelDragPosition(panel) {
@@ -3583,46 +3786,20 @@ export class PlatformChat extends LitElement {
                       <button
                           type="button"
                           class="fab"
-                          style="z-index:${this._layerZIndex(3)}"
+                          style=${this._fabInlineStyle()}
                           aria-label=${fabAria}
-                          @click=${this._toggle}
+                          @pointerdown=${this._onFabPointerDown}
+                          @click=${this._onFabClick}
                       >
                           ${this.fabUnreadCount > 0
                               ? html`<span class="fab-badge" aria-hidden="true">${this._fabBadgeText()}</span>`
                               : nothing}
-                          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                              <defs>
-                                  <linearGradient id="pc-ai-g1" x1="0%" y1="0%" x2="100%" y2="100%">
-                                      <stop offset="0%" style="stop-color:#4285f4;stop-opacity:1" />
-                                      <stop offset="100%" style="stop-color:#9c27b0;stop-opacity:1" />
-                                  </linearGradient>
-                                  <linearGradient id="pc-ai-g2" x1="0%" y1="0%" x2="100%" y2="100%">
-                                      <stop offset="0%" style="stop-color:#34a853;stop-opacity:1" />
-                                      <stop offset="100%" style="stop-color:#4285f4;stop-opacity:1" />
-                                  </linearGradient>
-                                  <linearGradient id="pc-ai-g3" x1="0%" y1="0%" x2="100%" y2="100%">
-                                      <stop offset="0%" style="stop-color:#9c27b0;stop-opacity:1" />
-                                      <stop offset="100%" style="stop-color:#ea4335;stop-opacity:1" />
-                                  </linearGradient>
-                              </defs>
-                              <g transform="scale(0.24) translate(0, 0)">
-                                  <path
-                                      d="m90.64,59.09l-16.25-7.09c-3.93-1.71-7.06-4.85-8.77-8.77l-7.09-16.25c-.55-1.26-2.34-1.26-2.89,0l-7.09,16.25c-1.71,3.93-4.85,7.06-8.77,8.77l-16.27,7.1c-1.26.55-1.26,2.33,0,2.88l16.55,7.32c3.92,1.73,7.04,4.88,8.73,8.82l6.86,15.94c.54,1.27,2.34,1.27,2.89,0l7.08-16.22c1.71-3.93,4.85-7.06,8.77-8.77l16.25-7.09c1.26-.55,1.26-2.34,0-2.89Z"
-                                      fill="url(#pc-ai-g1)"
-                                      opacity="0.9"
-                                  />
-                                  <path
-                                      d="m25.28,48.51l3.32-7.61c.8-1.84,2.27-3.31,4.11-4.11l7.62-3.32c.59-.26.59-1.1,0-1.35l-7.62-3.32c-1.84-.8-3.31-2.27-4.11-4.11l-3.32-7.62c-.26-.59-1.1-.59-1.35,0l-3.32,7.62c-.8,1.84-2.27,3.31-4.11,4.11l-7.63,3.33c-.59.26-.59,1.09,0,1.35l7.76,3.43c1.84.81,3.3,2.29,4.09,4.13l3.22,7.47c.26.59,1.1.6,1.35,0Z"
-                                      fill="url(#pc-ai-g2)"
-                                      opacity="0.8"
-                                  />
-                                  <path
-                                      d="m39.89,13.95l4.12,1.82c.98.43,1.75,1.22,2.17,2.19l1.71,3.97c.14.32.58.32.72,0l1.76-4.04c.43-.98,1.21-1.76,2.18-2.18l4.04-1.76c.31-.14.31-.58,0-.72l-4.04-1.76c-.98-.43-1.76-1.21-2.18-2.18l-1.76-4.04c-.14-.31-.58-.31-.72,0l-1.76,4.04c-.43.98-1.21,1.76-2.18,2.18l-4.05,1.77c-.31.14-.31.58,0,.72Z"
-                                      fill="url(#pc-ai-g3)"
-                                      opacity="0.7"
-                                  />
-                              </g>
-                          </svg>
+                          <img
+                              class="fab-logo"
+                              src="/static/core/assets/service_logos/linnex_spinner_logo.png"
+                              alt=""
+                              aria-hidden="true"
+                          />
                       </button>
                   `
                 : ''}

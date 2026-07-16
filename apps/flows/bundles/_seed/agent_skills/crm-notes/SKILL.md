@@ -20,7 +20,7 @@ Find CRM entities and capture structured notes with optional AI analysis (Lara N
    - need `name`, `description`; optional `note_date` (YYYY-MM-DD);
    - after successful apply, briefly confirm creation;
    - then ask via chat whether to run AI analysis; do not analyze without confirmation.
-4. Analyze free text — `crm_analyze_note_text` needs `text` and `note_id` of an existing note.
+4. Analyze an existing note — `crm_analyze_note_text` needs its real `note_id`; the CRM service reads the note text and attachments. Optional filters are `extract_entity_types` and `mentioned_entity_ids`.
 5. Create + analyze in one step — `crm_create_note_and_analyze` only when the user explicitly asks to create and analyze immediately.
 
 ## Rules

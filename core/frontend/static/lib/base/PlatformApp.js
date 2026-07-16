@@ -28,9 +28,12 @@
  *   - static topBarHideOnRoutes = []  — список routeKeys, на которых top-bar скрыт.
  *   - static routeMotionEnabled = true — route changes используют View Transition API,
  *     если браузер поддерживает document.startViewTransition и не включён reduced motion.
+ *   - static platformAssistant = { serviceId, branchId, showLauncher } — глобальный
+ *     authenticated drawer Lara. Контекст точки входа возвращает
+ *     getPlatformAssistantContextVariables(routeKey, params).
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { bootstrapPlatformBus, completeBootstrap, getPlatformBus, hasPlatformBus } from '../events/index.js';
 import { CoreEvents } from '../events/contract.js';
@@ -47,6 +50,8 @@ import {
 } from '../events/resources/platform-work-item.resource.js';
 import { setDefaultI18nNamespace } from '../utils/i18n-namespace.js';
 import { prefersReducedMotion } from '../utils/motion.js';
+import { resolveVoiceHttpOrigin } from '../voice/voice-http-origin.js';
+import { PLATFORM_LARA_TOGGLE_EVENT } from '../chat/chat-window-toggle.js';
 
 import '../components/pwa-install-banner.js';
 import '../components/platform-spinner.js';
@@ -62,6 +67,7 @@ import '../components/platform-user-info-modal.js';
 import '../components/platform-services-modal.js';
 import '../components/platform-file-viewer-modal.js';
 import './platform-services-page.js';
+import '../chat/platform-chat.js';
 
 export function renderPlatformAppShell(app) {
     if (app._fatalShell === 'server-error') {
@@ -163,6 +169,7 @@ export class PlatformApp extends PlatformElement {
         this._authSelect = this.select((s) => ({
             status: s.auth.status,
             user: s.auth.user,
+            activeCompanyId: s.auth.activeCompanyId,
             sessionEndCause: s.auth.sessionEndCause,
         }));
         this._routerSelect = this.select((s) => ({
@@ -170,6 +177,28 @@ export class PlatformApp extends PlatformElement {
             params: s.router.params,
             notFound: s.router.notFound,
         }));
+        this._platformAssistantContextProvider = async () => {
+            const routeValue = this._routerSelect.value;
+            const routeKey = routeValue.routeKey;
+            if (typeof routeKey !== 'string' || routeKey.length === 0) {
+                throw new Error('PlatformApp Lara context requires routeKey');
+            }
+            const params = routeValue.params;
+            if (!params || typeof params !== 'object' || Array.isArray(params)) {
+                throw new Error('PlatformApp Lara context requires route params object');
+            }
+            const config = this._platformAssistantConfig();
+            const serviceContext = await this.getPlatformAssistantContextVariables(routeKey, params);
+            if (!serviceContext || typeof serviceContext !== 'object' || Array.isArray(serviceContext)) {
+                throw new Error('PlatformApp Lara context hook must return an object');
+            }
+            return {
+                service: config.serviceId,
+                route_key: routeKey,
+                screen: routeKey,
+                ...serviceContext,
+            };
+        };
     }
 
     getBaseUrl() { return ''; }
@@ -177,6 +206,8 @@ export class PlatformApp extends PlatformElement {
     getServiceSlices() { return {}; }
     getServiceEffects() { return []; }
     rendersUnauthenticated() { return false; }
+    shouldRenderPlatformAssistant() { return true; }
+    async getPlatformAssistantContextVariables() { return {}; }
 
     /** Подкласс: false — не дергать GET /api/auth/me при connect (публичные страницы). */
     shouldRequestUserLoadOnConnect() { return true; }
@@ -288,6 +319,58 @@ export class PlatformApp extends PlatformElement {
         }
     }
 
+    _platformAssistantConfig() {
+        const config = this.constructor.platformAssistant;
+        if (!config || typeof config !== 'object' || Array.isArray(config)) {
+            throw new Error('PlatformApp subclass must define static platformAssistant');
+        }
+        if (typeof config.serviceId !== 'string' || !/^[a-z][a-z0-9_]*$/.test(config.serviceId)) {
+            throw new Error('PlatformApp platformAssistant.serviceId must be lowercase snake_case');
+        }
+        if (typeof config.branchId !== 'string' || !/^[a-z][a-z0-9_]*$/.test(config.branchId)) {
+            throw new Error('PlatformApp platformAssistant.branchId must be lowercase snake_case');
+        }
+        if (typeof config.showLauncher !== 'boolean') {
+            throw new Error('PlatformApp platformAssistant.showLauncher must be boolean');
+        }
+        return config;
+    }
+
+    _renderPlatformAssistant(auth, routeKey, params) {
+        if (auth.status !== 'authenticated') {
+            return nothing;
+        }
+        if (!this.shouldRenderPlatformAssistant(routeKey, params)) {
+            return nothing;
+        }
+        const config = this._platformAssistantConfig();
+        const companyId = auth.activeCompanyId;
+        if (typeof companyId !== 'string' || companyId.trim() === '') {
+            throw new Error('PlatformApp Lara requires active company_id');
+        }
+        const voiceBaseUrl = resolveVoiceHttpOrigin();
+        const voiceEnabled = voiceBaseUrl !== '';
+        return html`
+            <platform-chat
+                display="drawer"
+                profile="spa"
+                toggle-event-name=${PLATFORM_LARA_TOGGLE_EVENT}
+                event-namespace="assistant"
+                flow-id="lara"
+                branch-id=${config.branchId}
+                launcher-storage-scope=${config.serviceId}
+                .flowsBaseUrl=${'/flows'}
+                ?use-credentials=${true}
+                .showLauncher=${config.showLauncher}
+                assistant-title="Lara"
+                ?voice-enabled=${voiceEnabled}
+                voice-base-url=${voiceBaseUrl}
+                company-id=${companyId.trim()}
+                .getExtraMetadataVariables=${this._platformAssistantContextProvider}
+            ></platform-chat>
+        `;
+    }
+
     render() {
         const shell = renderPlatformAppShell(this);
         if (shell !== null) return shell;
@@ -332,6 +415,7 @@ export class PlatformApp extends PlatformElement {
                 ? html`<platform-top-bar></platform-top-bar>`
                 : ''}
             ${this.renderRoute(routeKey, params)}
+            ${this._renderPlatformAssistant(auth, routeKey, params)}
             ${bottomNavItems.length > 0
                 ? html`
                     <platform-bottom-nav

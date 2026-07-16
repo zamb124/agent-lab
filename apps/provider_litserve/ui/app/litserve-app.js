@@ -14,6 +14,7 @@ import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 
 import { humanitecModelsResource, humanitecModelRetryOp } from '../events/resources/models.resource.js';
+import { buildLitserveAssistantContext } from '../_helpers/platform-assistant-context.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/litserve-sidebar.js';
@@ -34,6 +35,11 @@ export class HumanitecModelsApp extends PlatformApp {
     static defaultI18nNamespace = 'litserve';
     static bottomNavItems = HUMANITEC_MODELS_BOTTOM_NAV_ITEMS;
     static bottomNavHideOnRoutes = [];
+    static platformAssistant = {
+        branchId: 'litserve',
+        serviceId: 'litserve',
+        showLauncher: true,
+    };
 
     static factories = [
         humanitecModelsResource,
@@ -85,6 +91,14 @@ export class HumanitecModelsApp extends PlatformApp {
         return [
             createRouterEffect({ baseUrl: '/litserve', routes: HUMANITEC_MODELS_ROUTES }),
         ];
+    }
+
+    shouldRenderPlatformAssistant(_routeKey) {
+        return true;
+    }
+
+    getPlatformAssistantContextVariables(routeKey, _params) {
+        return buildLitserveAssistantContext(routeKey);
     }
 
     renderRoute(routeKey) {

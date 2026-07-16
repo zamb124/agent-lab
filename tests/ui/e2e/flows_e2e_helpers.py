@@ -2230,7 +2230,9 @@ async def flows_e2e_attach_skill_to_llm_node(page: Page, skill_query: str) -> No
 
 
 async def flows_e2e_expect_skill_load_chip(page: Page, skill_name: str) -> Locator:
-    chat = page.locator("chat-page platform-chat, platform-chat").first
+    chat = page.locator('platform-chat[flow-id="lara"]').first
+    if await chat.count() == 0:
+        chat = page.locator("chat-page platform-chat, platform-chat").first
     chip = chat.get_by_role(
         "group",
         name=re.compile(
@@ -2247,28 +2249,17 @@ async def flows_e2e_expect_skill_load_chip(page: Page, skill_name: str) -> Locat
 
 
 async def flows_e2e_open_lara_chat(page: Page, flows_ui: AppUI) -> None:
-    """Открывает drawer Lara из шапки чата (toggle flows-lara-open)."""
-    await page.goto(f"{flows_ui.origin}/flows/chat", wait_until="domcontentloaded")
-    await expect(page.locator("flows-app")).to_be_visible(timeout=30_000)
-    lara_btn = page.locator("chat-page platform-button, flows-app platform-button").filter(
-        has=page.locator('platform-icon[name="ai"]')
-    ).first
-    await expect(lara_btn).to_be_visible(timeout=30_000)
-    await lara_btn.locator("button").first.click()
+    """Открывает глобальный drawer Lara через FAB на главной Flows."""
+    await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
+    await expect(page.locator("flows-home-page")).to_be_visible(timeout=30_000)
     chat = page.locator('platform-chat[flow-id="lara"]').first
     await expect(chat).to_be_attached(timeout=30_000)
-    await chat.evaluate(
-        """
-        (el) => {
-            el.open = true;
-            el.setAttribute('open', '');
-            el.removeAttribute('hidden');
-            if (typeof el.requestUpdate === 'function') el.requestUpdate();
-        }
-        """
-    )
+    fab = chat.locator("button.fab").first
+    await expect(fab).to_be_visible(timeout=30_000)
+    await fab.click()
     await expect(chat).to_have_attribute("open", "", timeout=15_000)
-    await expect(chat.locator("flows-chat-input textarea")).to_be_visible(timeout=30_000)
+    composer = chat.locator("flows-chat-input textarea, textarea").first
+    await expect(composer).to_be_visible(timeout=30_000)
 
 
 async def flows_e2e_open_chat_settings(page: Page) -> Locator:

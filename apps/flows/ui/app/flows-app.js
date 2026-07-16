@@ -13,7 +13,6 @@
 import { html, css } from 'lit';
 import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
-import '@platform/lib/chat/platform-chat.js';
 
 import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp,
          flowStoreBundlesOp, flowValidateOp, branchCreateOp, branchUpdateOp,
@@ -27,7 +26,7 @@ import {
     agentSkillsEnsureSeedOp,
 } from '../events/resources/agent-skills.resource.js';
 import { resourcesBundleResource, resourceUpdateOp } from '../events/resources/resources-bundle.resource.js';
-import { mcpServersResource, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp, mcpServerResetCatalogDefaultsOp, mcpBrandingLoadOp, mcpBrandingUpsertOp, mcpBrandingRemoveOp, mcpCatalogStoreLoadOp, mcpCatalogInstallOp, mcpCatalogUninstallOp } from '../events/resources/mcp.resource.js';
+import { mcpServersResource, mcpServersListOp, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp, mcpServerResetCatalogDefaultsOp, mcpBrandingLoadOp, mcpBrandingSlugSuggestOp, mcpBrandingUpsertOp, mcpBrandingRemoveOp, mcpCatalogStoreLoadOp, mcpCatalogInstallOp, mcpCatalogUninstallOp } from '../events/resources/mcp.resource.js';
 import { triggersListOp, triggerGetOp, triggerCreateOp, triggerUpdateOp,
          triggerRemoveOp, triggerVerifyOp, triggerReregisterOp, triggerTestOp } from '../events/resources/triggers.resource.js';
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
@@ -112,7 +111,6 @@ import {
     buildLaraFlowsContext,
     flattenLaraFlowsContext,
 } from '../_helpers/lara-node-helper.js';
-import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import '@platform/lib/components/layout/platform-island.js';
@@ -156,6 +154,11 @@ export class FlowsApp extends PlatformApp {
     static defaultI18nNamespace = 'flows';
     static bottomNavItems = FLOWS_BOTTOM_NAV_ITEMS;
     static bottomNavHideOnRoutes = FLOWS_BOTTOM_NAV_HIDE_ON_ROUTES;
+    static platformAssistant = {
+        serviceId: 'flows',
+        branchId: LARA_FLOWS_BRANCH_ID,
+        showLauncher: true,
+    };
 
     static factories = [
         flowsResource,
@@ -179,11 +182,13 @@ export class FlowsApp extends PlatformApp {
         resourcesBundleResource,
         resourceUpdateOp,
         mcpServersResource,
+        mcpServersListOp,
         mcpServerUpdateOp,
         mcpServerSyncOp,
         mcpServerTestOp,
         mcpServerResetCatalogDefaultsOp,
         mcpBrandingLoadOp,
+        mcpBrandingSlugSuggestOp,
         mcpBrandingUpsertOp,
         mcpBrandingRemoveOp,
         mcpCatalogStoreLoadOp,
@@ -373,11 +378,6 @@ export class FlowsApp extends PlatformApp {
         });
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
-        this._laraActiveCompanySel = this.select((s) => s.auth.activeCompanyId);
-        this._laraVoiceBaseUrl =
-            typeof window !== 'undefined' && typeof window.location !== 'undefined'
-                ? resolveVoiceHttpOrigin()
-                : '';
         this._flowsMql = null;
         this._onFlowsMobileMql = null;
         this._flowsMobile =
@@ -458,7 +458,6 @@ export class FlowsApp extends PlatformApp {
                             <platform-services-page></platform-services-page>
                         </platform-island>
                     </div>
-                    ${this._renderLara()}
                 `;
             case 'flow_chat':
             case 'flow_chat_branch':
@@ -478,7 +477,6 @@ export class FlowsApp extends PlatformApp {
                             ></chat-page>
                         </platform-island>
                     </div>
-                    ${this._renderLara()}
                 `;
             case 'flow_editor':
             case 'flow_editor_branch':
@@ -487,7 +485,6 @@ export class FlowsApp extends PlatformApp {
                         .flowId=${params.flowId}
                         .branchId=${typeof params.branchId === 'string' && params.branchId.length > 0 ? params.branchId : 'base'}
                     ></flow-editor-page>
-                    ${this._renderLara()}
                 `;
             case 'flow_evaluation':
             case 'flow_evaluation_branch':
@@ -496,7 +493,6 @@ export class FlowsApp extends PlatformApp {
                         .flowId=${params.flowId}
                         .branchId=${typeof params.branchId === 'string' && params.branchId.length > 0 ? params.branchId : 'default'}
                     ></flows-evaluation-page>
-                    ${this._renderLara()}
                 `;
             case 'agent_skills':
                 return html`
@@ -510,7 +506,6 @@ export class FlowsApp extends PlatformApp {
                             <flows-agent-skills-page></flows-agent-skills-page>
                         </platform-island>
                     </div>
-                    ${this._renderLara()}
                 `;
             case 'list':
             default:
@@ -524,44 +519,16 @@ export class FlowsApp extends PlatformApp {
                             <flows-home-page></flows-home-page>
                         </platform-island>
                     </div>
-                    ${this._renderLara()}
                 `;
         }
     }
 
-    _renderLara() {
-        // FAB (`show-launcher`) не включаем: запуск только из шапки редактора/чата
-        // через `dispatchEmbedChatWindowToggle('flows-lara-open')`; без узла drawer слушатель не работает.
-        const companyRaw = this._laraActiveCompanySel.value;
-        const companyId = typeof companyRaw === 'string' && companyRaw.trim() !== '' ? companyRaw.trim() : '';
-        const voiceBase = typeof this._laraVoiceBaseUrl === 'string' ? this._laraVoiceBaseUrl.trim() : '';
-        const duplex = companyId !== '' && voiceBase !== '';
-        return html`
-            <platform-chat
-                display="drawer"
-                profile="spa"
-                toggle-event-name="flows-lara-open"
-                event-namespace="assistant"
-                flow-id="lara"
-                branch-id=${LARA_FLOWS_BRANCH_ID}
-                .flowsBaseUrl=${'/flows'}
-                ?use-credentials=${true}
-                assistant-title="Lara"
-                ?voice-enabled=${duplex}
-                voice-base-url=${voiceBase}
-                company-id=${companyId}
-                .getExtraMetadataVariables=${this._laraEmbedContextVariables}
-                .getContextVariables=${this._laraEmbedContextVariables}
-            ></platform-chat>
-        `;
-    }
-
-    _laraEmbedContextVariables = async () => {
+    async getPlatformAssistantContextVariables() {
         return flattenLaraFlowsContext(this._buildLaraFlowsContext({
             assistant_branch_id: LARA_FLOWS_BRANCH_ID,
             request_kind: 'chat',
         }));
-    };
+    }
 
     _buildLaraFlowsContext(options = {}) {
         const routerValue = this._routerSelect ? this._routerSelect.value : null;

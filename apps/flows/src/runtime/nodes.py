@@ -1020,9 +1020,6 @@ class LlmNode(BaseNode):
         # выглядеть как будто вернула structured output, даже если это не так.
         runner_state.clear_structured_output_result()
 
-        if self.tool_refs and self._loaded_tools is None:
-            self._loaded_tools = await self._load_tools(runner_state)
-
         logger.info(f"[node:{self.node_id}] Запуск LlmNode")
 
         content = runner_state.content or ""
@@ -1084,7 +1081,9 @@ class LlmNode(BaseNode):
     async def get_tools(self, state: ExecutionState | None = None) -> list[BaseTool]:
         """Возвращает список tools."""
         if self._loaded_tools is not None:
-            return self._loaded_tools
+            tools = await self._ensure_agent_skill_meta_tools(self._loaded_tools)
+            self._loaded_tools = tools
+            return tools
 
         tools: list[BaseTool]
         if self.tool_refs:

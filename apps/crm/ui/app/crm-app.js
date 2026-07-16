@@ -118,7 +118,6 @@ import { platformFileCreateOp } from '@platform/lib/events/factories/platform-fi
 
 import '../components/crm-sidebar.js';
 import '../components/sheets/crm-workspace-picker-sheet.js';
-import '@platform/lib/chat/platform-chat.js';
 import '../pages/settings-hub-page.js';
 import '../pages/daily-notes-page.js';
 import '../pages/entities-page.js';
@@ -151,11 +150,13 @@ import { graphViewSlice } from '../events/resources/graph-view.resource.js';
 import { dailyNotesUiSlice } from '../events/resources/daily-notes-ui.resource.js';
 import { createCrmPersistEffect } from '../events/crm-persist.effect.js';
 import { createCrmGraphLegacyRoutesEffect } from '../events/crm-graph-legacy-routes.effect.js';
-import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { getPlatformBus } from '@platform/lib/events/bus-singleton.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
-import { getPlatformNamespaceSidebarSelection } from '@platform/lib/utils/platform-namespace.js';
+import {
+    getActivePlatformNamespaceName,
+    getPlatformNamespaceSidebarSelection,
+} from '@platform/lib/utils/platform-namespace.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 import '@platform/lib/components/layout/platform-island.js';
@@ -195,16 +196,18 @@ export class CRMApp extends PlatformApp {
     static defaultI18nNamespace = 'crm';
     static bottomNavItems = CRM_BOTTOM_NAV_ITEMS;
     static bottomNavHideOnRoutes = [];
+    static platformAssistant = {
+        serviceId: 'crm',
+        branchId: 'crm',
+        showLauncher: true,
+    };
 
     constructor() {
         super();
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this._laraActiveCompanySel = this.select((s) => s.auth.activeCompanyId);
-        this._laraVoiceBaseUrl =
-            typeof window !== 'undefined' && typeof window.location !== 'undefined'
-                ? resolveVoiceHttpOrigin()
-                : '';
+        this._laraSummary = this.useOp('crm/lara_summary');
         this._crmMql = null;
         this._onCrmMobileMql = null;
         this._crmMobile =
@@ -416,6 +419,39 @@ export class CRMApp extends PlatformApp {
         );
     }
 
+    async getPlatformAssistantContextVariables(routeKey, params) {
+        const companyId = this._laraActiveCompanySel.value;
+        if (typeof companyId !== 'string' || companyId.trim() === '') {
+            throw new Error('CRM Lara context requires active company_id');
+        }
+        const namespace = getActivePlatformNamespaceName(companyId.trim());
+        const summary = await this._laraSummary.run({ namespace });
+        if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+            throw new Error('CRM Lara summary request failed');
+        }
+        const context = {
+            namespace,
+            crm_knowledge_imports_awaiting_review: summary.knowledge_imports_awaiting_review,
+            crm_knowledge_imports_in_progress: summary.knowledge_imports_in_progress,
+            crm_notes_analysis_draft_not_applied: summary.notes_with_analysis_draft_not_applied,
+            crm_lara_summary_json: JSON.stringify(summary),
+        };
+        if (routeKey === 'note' && typeof params.itemId === 'string' && params.itemId !== '') {
+            return { ...context, note_id: params.itemId };
+        }
+        if (routeKey === 'entity' && typeof params.itemId === 'string' && params.itemId !== '') {
+            return { ...context, entity_id: params.itemId };
+        }
+        if (
+            (routeKey === 'namespace' || routeKey === 'namespace_integrations')
+            && typeof params.itemId === 'string'
+            && params.itemId !== ''
+        ) {
+            return { ...context, namespace_id: params.itemId };
+        }
+        return context;
+    }
+
     renderRoute(routeKey, params) {
         let content;
         switch (routeKey) {
@@ -443,12 +479,6 @@ export class CRMApp extends PlatformApp {
         const graphIslandFullBleed = routeKey === 'graph';
         const islandPadding = mobileIslandFullBleed || graphIslandFullBleed ? 'none' : 'md';
         const islandContentNoScroll = graphIslandFullBleed || routeKey === 'entities' || routeKey === 'entity';
-        const companyRaw = this._laraActiveCompanySel.value;
-        const companyId = typeof companyRaw === 'string' && companyRaw.trim() !== '' ? companyRaw.trim() : '';
-        const voiceBase =
-            typeof this._laraVoiceBaseUrl === 'string' ? this._laraVoiceBaseUrl.trim() : '';
-        const laraDuplex = companyId !== '' && voiceBase !== '';
-        const laraShowLauncher = !this._crmMobile;
         return html`
             <div class="sidebar"><crm-sidebar></crm-sidebar></div>
             <div class="main">
@@ -458,21 +488,6 @@ export class CRMApp extends PlatformApp {
                     ?content-no-scroll=${islandContentNoScroll}
                 >${content}</platform-island>
             </div>
-            <platform-chat
-                display="drawer"
-                profile="spa"
-                toggle-event-name="crm-lara-open"
-                event-namespace="assistant"
-                flow-id="lara"
-                branch-id="crm"
-                .flowsBaseUrl=${'/flows'}
-                ?use-credentials=${true}
-                .showLauncher=${laraShowLauncher}
-                assistant-title="Lara"
-                ?voice-enabled=${laraDuplex}
-                voice-base-url=${voiceBase}
-                company-id=${companyId}
-            ></platform-chat>
         `;
     }
 }

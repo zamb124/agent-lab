@@ -140,6 +140,7 @@ import {
     publicBlogPostOp,
 } from '../events/resources/public-site.resource.js';
 import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
+import { buildFrontendAssistantContext } from '../_helpers/platform-assistant-context.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/frontend-sidebar.js';
@@ -270,6 +271,11 @@ export class FrontendApp extends PlatformApp {
     static defaultI18nNamespace = 'frontend';
     static bottomNavItems = FRONTEND_BOTTOM_NAV_ITEMS;
     static bottomNavHideOnRoutes = FRONTEND_BOTTOM_NAV_HIDE_ON_ROUTES;
+    static platformAssistant = {
+        branchId: 'console',
+        serviceId: 'frontend',
+        showLauncher: true,
+    };
 
     static factories = [
         apiKeysResource,
@@ -470,6 +476,14 @@ export class FrontendApp extends PlatformApp {
     }
 
     rendersUnauthenticated() { return true; }
+
+    shouldRenderPlatformAssistant(routeKey) {
+        return !PUBLIC_ROUTE_KEYS.has(routeKey);
+    }
+
+    getPlatformAssistantContextVariables(routeKey, _params) {
+        return buildFrontendAssistantContext(routeKey);
+    }
 
     shouldRequestUserLoadOnConnect() {
         if (typeof window === 'undefined') return true;

@@ -28,6 +28,11 @@ if rg -q 'extends LitElement' apps -g '*.js'; then
     fail "запрещено extends LitElement в apps/**/*.js"
     rg 'extends LitElement' apps -g '*.js' >&2 || true
 fi
+while IFS= read -r platform_app_file; do
+    if ! rg -q 'static platformAssistant\s*=' "$platform_app_file"; then
+        fail "$platform_app_file: каждый PlatformApp обязан задать static platformAssistant"
+    fi
+done < <(rg -l 'extends PlatformApp\b' apps -g '*-app.js')
 
 # 2. Импорты core lib только через @platform/lib/...
 if rg -q "from ['\"]/static/core/lib" apps -g '*.js'; then

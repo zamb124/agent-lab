@@ -2,6 +2,8 @@
  * Сигнал на window для platform-embed-chat-drawer (toggle-event-name).
  * CustomEvent создаётся здесь, в core, а не в apps (check_ui_canon).
  */
+export const PLATFORM_LARA_TOGGLE_EVENT = 'platform-lara-open';
+
 export function dispatchEmbedChatWindowToggle(eventName, detail) {
     if (typeof eventName !== 'string' || eventName.length === 0) {
         throw new Error('dispatchEmbedChatWindowToggle: eventName must be non-empty string');
@@ -11,4 +13,8 @@ export function dispatchEmbedChatWindowToggle(eventName, detail) {
     }
     const d = typeof detail === 'object' && detail !== null ? detail : {};
     window.dispatchEvent(new CustomEvent(eventName, { detail: d }));
+}
+
+export function openPlatformLaraAssistant() {
+    dispatchEmbedChatWindowToggle(PLATFORM_LARA_TOGGLE_EVENT, { open: true });
 }

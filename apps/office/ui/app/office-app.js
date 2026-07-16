@@ -73,6 +73,7 @@ import {
 import { documentEditorConfigOp } from '../events/resources/editor.resource.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
+import { buildOfficeAssistantContext } from '../_helpers/platform-assistant-context.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/office-sidebar.js';
@@ -121,11 +122,17 @@ export class OfficeApp extends PlatformApp {
     static defaultI18nNamespace = 'documents';
     static bottomNavItems = OFFICE_BOTTOM_NAV_ITEMS;
     static bottomNavHideOnRoutes = OFFICE_BOTTOM_NAV_HIDE_ON_ROUTES;
+    static platformAssistant = {
+        branchId: 'documents',
+        serviceId: 'office',
+        showLauncher: true,
+    };
 
     constructor() {
         super();
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
+        this._assistantDocumentsSel = this.select((s) => s.officeDocuments);
     }
 
     static factories = [
@@ -245,6 +252,14 @@ export class OfficeApp extends PlatformApp {
         }
         const path = window.location.pathname;
         return /^\/documents\/p\/[^/]+/.test(path);
+    }
+
+    shouldRenderPlatformAssistant(routeKey) {
+        return routeKey !== 'documents_public_preview';
+    }
+
+    getPlatformAssistantContextVariables(routeKey, params) {
+        return buildOfficeAssistantContext(routeKey, params, this._assistantDocumentsSel.value);
     }
 
     renderRoute(routeKey, params) {

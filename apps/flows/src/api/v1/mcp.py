@@ -2,7 +2,6 @@
 API endpoints для MCP серверов.
 """
 
-import asyncio
 from datetime import datetime
 from typing import Annotated
 
@@ -29,6 +28,7 @@ from apps.flows.src.services.mcp_catalog_store import (
     uninstall_catalog_entry_from_company,
 )
 from apps.flows.src.services.mcp_server_display_order import sort_mcp_servers_for_display
+from apps.flows.src.services.mcp_server_search import filter_mcp_servers_by_search
 from apps.flows.src.services.mcp_sync import resolve_mcp_client_variables, sync_mcp_server_tools
 from core.context import get_context
 from core.logging import get_logger
@@ -103,17 +103,16 @@ class MCPServerBrandingResponse(BaseModel):
     updated_by_user_id: str
 
 
-class MCPServerBrandingListResponse(BaseModel):
-    """Список branding и slug из catalog для UI."""
-
-    items: list[MCPServerBrandingResponse]
-    catalog_slugs: list[str]
-
-
 class MCPServerBrandingUpsertRequest(BaseModel):
     """Загрузка иконки для slug."""
 
     icon_file_id: str = Field(..., min_length=1, description="Публичный file_id иконки")
+
+
+class MCPServerBrandingSlugSuggestResponse(BaseModel):
+    """Подсказки slug для branding иконок MCP."""
+
+    slugs: list[str]
 
 
 class MCPToolResponse(BaseModel):
@@ -159,6 +158,7 @@ class MCPCatalogStoreItemResponse(BaseModel):
     verify_status: str
     tool_count_snapshot: int
     installed: bool
+    platform_curated: bool
     icon_url: str | None = None
 
 
@@ -215,14 +215,14 @@ async def _server_response(
 @router.get("/servers", response_model=OffsetPage[MCPServerResponse])
 async def list_servers(
     container: ContainerDep,
+    search: Annotated[str, Query()] = "",
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[MCPServerResponse]:
-    servers, total = await asyncio.gather(
-        container.mcp_server_repository.list(limit=5000, offset=0),
-        container.mcp_server_repository.count_all(),
-    )
-    ordered_servers = sort_mcp_servers_for_display(servers)
+    servers = await container.mcp_server_repository.list(limit=5000, offset=0)
+    filtered_servers = filter_mcp_servers_by_search(servers, search)
+    ordered_servers = sort_mcp_servers_for_display(filtered_servers)
+    total = len(ordered_servers)
     page_servers = ordered_servers[offset : offset + limit]
     icon_url_map = await container.mcp_branding_service.build_icon_url_map_for_server_ids(
         [server.server_id for server in page_servers]
@@ -250,7 +250,7 @@ async def list_mcp_catalog(
         offset=offset,
     )
     icon_url_map = await container.mcp_branding_service.build_icon_url_map_for_server_ids(
-        [server_id_from_catalog_id(entry.catalog_id) for entry, _installed in page_entries]
+        [server_id_from_catalog_id(entry.catalog_id) for entry, _installed, _platform_curated in page_entries]
     )
     items = [
         MCPCatalogStoreItemResponse(
@@ -264,9 +264,10 @@ async def list_mcp_catalog(
             verify_status=entry.verify_status.value,
             tool_count_snapshot=entry.tool_count_snapshot,
             installed=installed,
+            platform_curated=platform_curated,
             icon_url=icon_url_map.get(server_id_from_catalog_id(entry.catalog_id)),
         )
-        for entry, installed in page_entries
+        for entry, installed, platform_curated in page_entries
     ]
     return OffsetPage[MCPCatalogStoreItemResponse](
         items=items,
@@ -552,17 +553,35 @@ async def reset_catalog_defaults(
     return await _server_response(container, stored)
 
 
-@router.get("/branding", response_model=MCPServerBrandingListResponse)
-async def list_mcp_branding(container: ContainerDep) -> MCPServerBrandingListResponse:
-    """Глобальные иконки MCP по slug и slug из catalog."""
-    items, catalog_slugs = await asyncio.gather(
-        container.mcp_branding_service.list_branding(),
-        container.mcp_branding_service.list_catalog_slugs(),
+@router.get("/branding", response_model=OffsetPage[MCPServerBrandingResponse])
+async def list_mcp_branding(
+    container: ContainerDep,
+    search: Annotated[str, Query()] = "",
+    limit: Annotated[int, Query(ge=1, le=200)] = 40,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> OffsetPage[MCPServerBrandingResponse]:
+    """Глобальные иконки MCP по slug."""
+    items, total = await container.mcp_branding_service.list_branding(
+        search=search,
+        limit=limit,
+        offset=offset,
     )
-    return MCPServerBrandingListResponse(
+    return OffsetPage[MCPServerBrandingResponse](
         items=[_branding_resolved_to_response(item) for item in items],
-        catalog_slugs=catalog_slugs,
+        total=total,
+        limit=limit,
+        offset=offset,
     )
+
+
+@router.get("/branding/slug-suggest", response_model=MCPServerBrandingSlugSuggestResponse)
+async def suggest_mcp_branding_slugs(
+    container: ContainerDep,
+    search: Annotated[str, Query()] = "",
+    limit: Annotated[int, Query(ge=1, le=50)] = 15,
+) -> MCPServerBrandingSlugSuggestResponse:
+    slugs = await container.mcp_branding_service.suggest_branding_slugs(search=search, limit=limit)
+    return MCPServerBrandingSlugSuggestResponse(slugs=slugs)
 
 
 @router.put("/branding/{server_id}", response_model=MCPServerBrandingResponse)

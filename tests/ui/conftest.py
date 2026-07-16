@@ -180,6 +180,12 @@ async def worktracker_ui(worktracker_http_service, flows_service) -> AppUI:
 
 
 @pytest_asyncio.fixture
+async def litserve_ui(provider_litserve_service) -> AppUI:
+    _ = provider_litserve_service
+    return AppUI(SERVICE_UI_REGISTRY["litserve"])
+
+
+@pytest_asyncio.fixture
 async def hitl_demo_ready(
     flows_service,
     worktracker_http_service,

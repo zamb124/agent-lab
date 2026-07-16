@@ -30,7 +30,7 @@ import {
     buildFlowPublishBody,
     getBranchNodes,
 } from '../../_helpers/flows-resolvers.js';
-import { dispatchEmbedChatWindowToggle } from '@platform/lib/chat/chat-window-toggle.js';
+import { openPlatformLaraAssistant } from '@platform/lib/chat/chat-window-toggle.js';
 
 const MENU_PORTAL_STYLE_ID = 'flows-editor-header-menu-portal-styles-v1';
 const MENU_PORTAL_GAP_PX = 4;
@@ -755,7 +755,7 @@ export class FlowsEditorHeader extends PlatformElement {
 
     _openLara() {
         this._closeOverflow();
-        dispatchEmbedChatWindowToggle('flows-lara-open', { open: true });
+        openPlatformLaraAssistant();
     }
 
     _openTriggers() {

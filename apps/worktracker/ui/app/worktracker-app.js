@@ -33,6 +33,7 @@ import {
     readWorkItemIdFromPathname,
     hasLegacyWorkItemQuery,
 } from '@platform/lib/utils/work-item-deeplink.js';
+import { buildWorktrackerAssistantContext } from '../_helpers/platform-assistant-context.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/worktracker-sidebar.js';
@@ -66,6 +67,11 @@ const WORKTRACKER_BOTTOM_NAV_ITEMS = [
 export class WorktrackerApp extends PlatformApp {
     static defaultI18nNamespace = 'worktracker';
     static bottomNavHideOnRoutes = ['work_item_detail'];
+    static platformAssistant = {
+        branchId: 'worktracker',
+        serviceId: 'worktracker',
+        showLauncher: true,
+    };
 
     static factories = [
         workItemsResource,
@@ -229,6 +235,14 @@ export class WorktrackerApp extends PlatformApp {
         return [
             createRouterEffect({ baseUrl: '/worktracker', routes: WORKTRACKER_ROUTES }),
         ];
+    }
+
+    shouldRenderPlatformAssistant(_routeKey) {
+        return true;
+    }
+
+    getPlatformAssistantContextVariables(routeKey, params) {
+        return buildWorktrackerAssistantContext(routeKey, params, this._detailWorkItemId);
     }
 
     _renderPage(routeKey, params) {

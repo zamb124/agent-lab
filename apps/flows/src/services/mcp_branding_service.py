@@ -14,6 +14,7 @@ from apps.flows.src.services.mcp_branding_aliases import (
     BRANDING_SERVER_ID_ALIASES,
     resolve_branding_server_id,
 )
+from apps.flows.src.services.mcp_defaults import build_default_mcp_servers
 from core.context import get_context, require_context
 from core.files.service import FilesService
 
@@ -83,17 +84,33 @@ class MCPServerBrandingService:
             updated_by_user_id=branding.updated_by_user_id,
         )
 
-    async def list_branding(self) -> list[MCPServerBrandingResolved]:
+    async def list_branding(
+        self,
+        *,
+        search: str,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[MCPServerBrandingResolved], int]:
         entries = await self._branding_repository.list(limit=10_000)
+        query = search.strip().casefold()
+        if query:
+            entries = [entry for entry in entries if query in entry.server_id.casefold()]
+        entries.sort(key=lambda entry: entry.server_id.casefold())
+        total = len(entries)
+        page = entries[offset : offset + limit]
         items: list[MCPServerBrandingResolved] = []
-        for entry in entries:
+        for entry in page:
             items.append(await self._to_resolved(entry))
-        return items
+        return items, total
 
-    async def list_catalog_slugs(self) -> list[str]:
+    async def suggest_branding_slugs(self, *, search: str, limit: int) -> list[str]:
         entries = await self._catalog_repository.list(limit=10_000)
-        slugs = sorted({entry.catalog_id for entry in entries})
-        return slugs
+        default_server_ids = [server.server_id for server in build_default_mcp_servers()]
+        slugs = sorted({*default_server_ids, *(entry.catalog_id for entry in entries)}, key=str.casefold)
+        query = search.strip().casefold()
+        if query:
+            slugs = [slug for slug in slugs if query in slug.casefold()]
+        return slugs[:limit]
 
     async def build_icon_url_map(self) -> dict[str, str]:
         entries = await self._branding_repository.list(limit=10_000)

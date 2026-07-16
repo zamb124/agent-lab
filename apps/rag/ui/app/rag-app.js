@@ -30,6 +30,7 @@ import { documentStatusResource } from '../events/resources/document-status.reso
 import { searchOp } from '../events/resources/search.resource.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
+import { buildRagAssistantContext } from '../_helpers/platform-assistant-context.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/rag-sidebar.js';
@@ -61,6 +62,11 @@ export class RagApp extends PlatformApp {
     static defaultI18nNamespace = 'rag';
     static bottomNavItems = RAG_BOTTOM_NAV_ITEMS;
     static bottomNavHideOnRoutes = [];
+    static platformAssistant = {
+        branchId: 'rag',
+        serviceId: 'rag',
+        showLauncher: true,
+    };
 
     constructor() {
         super();
@@ -127,6 +133,14 @@ export class RagApp extends PlatformApp {
         return [
             createRouterEffect({ baseUrl: '/rag', routes: RAG_ROUTES }),
         ];
+    }
+
+    shouldRenderPlatformAssistant(_routeKey) {
+        return true;
+    }
+
+    getPlatformAssistantContextVariables(routeKey, params) {
+        return buildRagAssistantContext(routeKey, params);
     }
 
     updated(changed) {

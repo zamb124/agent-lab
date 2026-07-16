@@ -376,6 +376,7 @@ async def test_flows_create_first_agent(
     service="flows",
     tag="getting-started",
     doc_slug="chat-with-lara",
+    timeout_seconds=120,
     title="Чат с Lara — помощником платформы",
     description=(
         "**Для чего:** эта инструкция поможет спросить у Lara, как устроена платформа, "
@@ -453,7 +454,7 @@ async def test_flows_chat_with_lara(
                     "Lara: Skills — это библиотека процедур для агентов. "
                     "Откройте раздел Skills в Flows."
                 ),
-            }
+            },
         ]
     )
     await scenario.step(
@@ -462,12 +463,12 @@ async def test_flows_chat_with_lara(
         screenshot_name="lara-ready-to-ask",
         label_en="Prepare a platform question",
         details=(
-            "Сформулируйте простой вопрос, например про Skills. Если Lara подгрузит "
-            "процедуру, в чате могут появиться чипы активации — это нормально."
+            "Сформулируйте простой вопрос, например про Skills. Lara отвечает в drawer "
+            "помощника платформы."
         ),
         details_en=(
-            "Ask a simple question, for example about Skills. If Lara loads a procedure, "
-            "activation chips may appear — that is expected."
+            "Ask a simple question, for example about Skills. Lara replies in the "
+            "platform assistant drawer."
         ),
     )
 
@@ -477,20 +478,57 @@ async def test_flows_chat_with_lara(
         chat_selector='platform-chat[flow-id="lara"]',
     )
     reply = chat.get_by_text(re.compile(r"Skills|процедур", re.I), exact=False).first
-    await expect(reply).to_be_visible(timeout=120_000)
+    await expect(reply).to_be_visible(timeout=60_000)
     await scenario.step(
         "Прочитайте ответ Lara",
         page,
         screenshot_name="lara-answered",
         label_en="Read Lara's reply",
         details=(
-            "**Демонстрация результата.** В ленте виден ответ Lara про Skills — помощник "
-            "платформы работает в чате.\n\n"
+            "**Демонстрация результата.** В drawer виден ответ Lara про Skills — "
+            "помощник платформы работает.\n\n"
             "**Итог.** Вы умеете открывать Lara и задавать вопросы о платформе."
         ),
         details_en=(
-            "**Result demonstration.** The feed shows Lara's reply about Skills — the "
-            "platform assistant works in chat.\n\n"
+            "**Result demonstration.** The drawer shows Lara's reply about Skills — "
+            "the platform assistant works.\n\n"
             "**Summary.** You can open Lara and ask platform questions."
         ),
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(240)
+async def test_lara_is_attached_in_all_platform_spa_shells(
+    ui_page_system: Page,
+    frontend_ui: AppUI,
+    crm_ui: AppUI,
+    flows_ui: AppUI,
+    sync_ui: AppUI,
+    rag_ui: AppUI,
+    office_ui: AppUI,
+    worktracker_ui: AppUI,
+    litserve_ui: AppUI,
+) -> None:
+    page = ui_page_system
+    matrix = [
+        (frontend_ui, "frontend-app", "console", "/settings"),
+        (crm_ui, "crm-app", "crm", None),
+        (flows_ui, "flows-app", "flows", "/flows/"),
+        (sync_ui, "sync-app", "sync", None),
+        (rag_ui, "rag-app", "rag", None),
+        (office_ui, "office-app", "documents", None),
+        (worktracker_ui, "worktracker-app", "worktracker", None),
+        (litserve_ui, "litserve-app", "litserve", None),
+    ]
+    for app_ui, shell_selector, branch_id, path_override in matrix:
+        if path_override is None:
+            await app_ui.open(page)
+        else:
+            await page.goto(f"{app_ui.origin}{path_override}", wait_until="domcontentloaded")
+        await expect(page.locator(shell_selector)).to_be_visible(timeout=30_000)
+        chat = page.locator(
+            f'platform-chat[flow-id="lara"][branch-id="{branch_id}"]'
+        ).first
+        await expect(chat).to_be_attached(timeout=30_000)

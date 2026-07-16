@@ -19,6 +19,26 @@ export const mcpServersResource = createResourceCollection({
     },
 });
 
+export const mcpServersListOp = createAsyncOp({
+    name: 'flows/mcp_servers_list',
+    silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/mcp/servers' },
+    request: async ({ payload }) => {
+        const search = payload && typeof payload.search === 'string' ? payload.search : '';
+        const limit = payload && typeof payload.limit === 'number' ? payload.limit : 50;
+        const offset = payload && typeof payload.offset === 'number' ? payload.offset : 0;
+        const params = new URLSearchParams({
+            search,
+            limit: String(limit),
+            offset: String(offset),
+        });
+        return httpRequest({
+            method: 'GET',
+            url: `/flows/api/v1/mcp/servers?${params.toString()}`,
+        });
+    },
+});
+
 // Бэкенд требует PUT (а не PATCH).
 export const mcpServerUpdateOp = createAsyncOp({
     name: 'flows/mcp_server_update',
@@ -95,10 +115,38 @@ export const mcpBrandingLoadOp = createAsyncOp({
     name: 'flows/mcp_branding_load',
     silent: true,
     restMirror: { method: 'GET', path: '/flows/api/v1/mcp/branding' },
-    request: async () => httpRequest({
-        method: 'GET',
-        url: '/flows/api/v1/mcp/branding',
-    }),
+    request: async ({ payload }) => {
+        const search = payload && typeof payload.search === 'string' ? payload.search : '';
+        const limit = payload && typeof payload.limit === 'number' ? payload.limit : 40;
+        const offset = payload && typeof payload.offset === 'number' ? payload.offset : 0;
+        const params = new URLSearchParams({
+            search,
+            limit: String(limit),
+            offset: String(offset),
+        });
+        return httpRequest({
+            method: 'GET',
+            url: `/flows/api/v1/mcp/branding?${params.toString()}`,
+        });
+    },
+});
+
+export const mcpBrandingSlugSuggestOp = createAsyncOp({
+    name: 'flows/mcp_branding_slug_suggest',
+    silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/mcp/branding/slug-suggest' },
+    request: async ({ payload }) => {
+        const search = payload && typeof payload.search === 'string' ? payload.search : '';
+        const limit = payload && typeof payload.limit === 'number' ? payload.limit : 15;
+        const params = new URLSearchParams({
+            search,
+            limit: String(limit),
+        });
+        return httpRequest({
+            method: 'GET',
+            url: `/flows/api/v1/mcp/branding/slug-suggest?${params.toString()}`,
+        });
+    },
 });
 
 export const mcpBrandingUpsertOp = createAsyncOp({

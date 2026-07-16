@@ -71,4 +71,11 @@ SERVICE_UI_REGISTRY: dict[str, ServiceUiSpec] = {
         shell_selector="worktracker-app",
         title="Tasks",
     ),
+    "litserve": ServiceUiSpec(
+        key="litserve",
+        port=9014,
+        spa_path="/litserve/",
+        shell_selector="litserve-app",
+        title=None,
+    ),
 }

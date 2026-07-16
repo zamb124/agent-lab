@@ -24,18 +24,21 @@ _SEED_ROOT = (
 
 # Tier-1 attach on every Lara entry (and platform_assistant after cutover).
 LARA_PLATFORM_SKILL_ROOTS: tuple[str, ...] = (
+    "console-platform",
     "networkle",
     "flows-platform",
     "flows-code",
+    "sync-platform",
+    "rag-platform",
+    "documents-platform",
+    "worktracker-platform",
+    "litserve-platform",
     "docs-knowledge",
     "platform-workspace",
 )
 
-# Alias kept for older tests/imports that still reference the previous name.
-PLATFORM_ASSISTANT_ATTACHED_SKILL_IDS: tuple[str, ...] = LARA_PLATFORM_SKILL_ROOTS
-
 # Seed order: depends_on targets before parents that list them.
-_SEED_SKILL_DIRS: tuple[str, ...] = (
+PLATFORM_ASSISTANT_SEED_SKILL_IDS: tuple[str, ...] = (
     "docx-templates",
     "document-workspace",
     "diagrams-viz",
@@ -53,6 +56,12 @@ _SEED_SKILL_DIRS: tuple[str, ...] = (
     "docs-knowledge",
     "networkle",
     "platform-workspace",
+    "console-platform",
+    "sync-platform",
+    "rag-platform",
+    "documents-platform",
+    "worktracker-platform",
+    "litserve-platform",
 )
 
 
@@ -66,7 +75,7 @@ async def seed_platform_assistant_skills(
         raise FileNotFoundError(f"Agent skills seed root missing: {_SEED_ROOT}")
 
     seeded = 0
-    for skill_dirname in _SEED_SKILL_DIRS:
+    for skill_dirname in PLATFORM_ASSISTANT_SEED_SKILL_IDS:
         skill_dir = _SEED_ROOT / skill_dirname
         skill_md_path = skill_dir / "SKILL.md"
         if not skill_md_path.is_file():
@@ -180,7 +189,7 @@ async def _resolve_reference_files(
 
 __all__ = [
     "LARA_PLATFORM_SKILL_ROOTS",
-    "PLATFORM_ASSISTANT_ATTACHED_SKILL_IDS",
+    "PLATFORM_ASSISTANT_SEED_SKILL_IDS",
     "ensure_platform_assistant_skills_for_company",
     "seed_platform_assistant_skills",
 ]

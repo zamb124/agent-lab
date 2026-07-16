@@ -9,6 +9,5 @@ spec:
   headers:
     customRequestHeaders:
       X-Forwarded-Proto: "https"
-      X-Forwarded-Host: {{ .Values.ingress.onlyofficeHost | quote }}
       X-Forwarded-Port: "443"
 {{- end }}

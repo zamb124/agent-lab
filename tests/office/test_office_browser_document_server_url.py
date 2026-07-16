@@ -52,3 +52,24 @@ def test_browser_document_server_url_keeps_http_for_http_request():
         _browser_document_server_url("http://onlyoffice.humanitec.ru", request)
         == "http://onlyoffice.humanitec.ru"
     )
+
+
+def test_browser_document_server_url_resolves_onlyoffice_subdomain_for_linnex_brand():
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "scheme": "https",
+            "server": ("system.linnex.io", 443),
+            "path": "/documents/api/v1/documents/binding/editor-config",
+            "headers": [
+                (b"x-forwarded-proto", b"https"),
+                (b"host", b"system.linnex.io"),
+            ],
+        }
+    )
+
+    assert (
+        _browser_document_server_url("https://onlyoffice.linnex.io", request)
+        == "https://onlyoffice.linnex.io"
+    )

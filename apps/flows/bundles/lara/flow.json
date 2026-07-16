@@ -30,9 +30,15 @@
         "ask_user"
       ],
       "agent_skills": [
+        "console-platform",
         "networkle",
         "flows-platform",
         "flows-code",
+        "sync-platform",
+        "rag-platform",
+        "documents-platform",
+        "worktracker-platform",
+        "litserve-platform",
         "docs-knowledge",
         "platform-workspace"
       ],
@@ -59,6 +65,31 @@
     "user_language": "ru"
   },
   "branches": {
+    "console": {
+      "name": "Platform Console",
+      "description": "Lara entry: platform console focus; full platform skills attached",
+      "tags": [
+        "console",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Platform Console",
+          "prompt": "prompts/console.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.2,
+            "provider": "humanitec_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user"
+          ]
+        }
+      }
+    },
     "crm": {
       "name": "CRM NetWorkle",
       "description": "Lara entry: NetWorkle CRM focus; full platform skills attached",
@@ -97,6 +128,135 @@
         "main": {
           "name": "Flows Builder",
           "prompt": "prompts/flows.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.2,
+            "provider": "humanitec_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user"
+          ]
+        }
+      }
+    },
+    "sync": {
+      "name": "Sync",
+      "description": "Lara entry: Sync collaboration focus; full platform skills attached",
+      "tags": [
+        "sync",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Sync Assistant",
+          "prompt": "prompts/sync.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.2,
+            "provider": "humanitec_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user"
+          ]
+        }
+      }
+    },
+    "rag": {
+      "name": "RAG Knowledge",
+      "description": "Lara entry: company knowledge focus; full platform skills attached",
+      "tags": [
+        "rag",
+        "knowledge",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "RAG Assistant",
+          "prompt": "prompts/rag.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.2,
+            "provider": "humanitec_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user"
+          ]
+        }
+      }
+    },
+    "documents": {
+      "name": "Documents",
+      "description": "Lara entry: Office Documents focus; full platform skills attached",
+      "tags": [
+        "documents",
+        "office",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Documents Assistant",
+          "prompt": "prompts/documents.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.2,
+            "provider": "humanitec_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user"
+          ]
+        }
+      }
+    },
+    "worktracker": {
+      "name": "Worktracker",
+      "description": "Lara entry: WorkItems and boards focus; full platform skills attached",
+      "tags": [
+        "worktracker",
+        "work",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Worktracker Assistant",
+          "prompt": "prompts/worktracker.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.2,
+            "provider": "humanitec_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user"
+          ]
+        }
+      }
+    },
+    "litserve": {
+      "name": "LitServe",
+      "description": "Lara entry: local AI provider focus; full platform skills attached",
+      "tags": [
+        "litserve",
+        "ai",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "LitServe Assistant",
+          "prompt": "prompts/litserve.md",
           "llm": {
             "model": "auto",
             "temperature": 0.2,

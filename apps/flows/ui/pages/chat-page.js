@@ -17,7 +17,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/chat/platform-chat.js';
-import { dispatchEmbedChatWindowToggle } from '@platform/lib/chat/chat-window-toggle.js';
+import { openPlatformLaraAssistant } from '@platform/lib/chat/chat-window-toggle.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import '../modals/flows-preview-share-modal.js';
 import { asArray, asString, isPlainObject, authActiveCompanyId } from '../_helpers/flows-resolvers.js';
@@ -417,7 +417,7 @@ export class ChatPage extends PlatformPage {
 
     _openLara() {
         this._overflowOpen = false;
-        dispatchEmbedChatWindowToggle('flows-lara-open', { open: true });
+        openPlatformLaraAssistant();
     }
 
     _openPreviewShare() {

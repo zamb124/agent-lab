@@ -11,7 +11,6 @@ from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.flows_loader import FlowsLoader
 from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
-    PLATFORM_ASSISTANT_ATTACHED_SKILL_IDS,
 )
 from core.context import Context, clear_context, get_context, set_context
 from core.models.identity_models import Company, User
@@ -188,7 +187,6 @@ def _assert_skill_roots_attach(flow: FlowConfig, *, flow_id_label: str) -> None:
     if main is None:
         raise AssertionError(f"{flow_id_label} missing main node")
     assert node_agent_skills(main) == list(LARA_PLATFORM_SKILL_ROOTS)
-    assert list(PLATFORM_ASSISTANT_ATTACHED_SKILL_IDS) == list(LARA_PLATFORM_SKILL_ROOTS)
     tool_ids = node_tool_ids(main)
     assert "ask_user" in tool_ids
     assert "create_file" not in tool_ids

@@ -13,7 +13,7 @@ LitServe нода:     {{ .Values.litserve.nodeName }}
 
 Платформа:    https://{{ .Values.ingress.apexHost }}
 LiveKit:      https://{{ .Values.ingress.livekitHost }}
-OnlyOffice:   https://{{ .Values.ingress.onlyofficeHost }}
+OnlyOffice:   {{ .Values.onlyoffice.publicUrl }}
 Grafana:      https://{{ .Values.ingress.grafanaHost }}
 
 Откат предыдущей ревизии:

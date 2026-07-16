@@ -12,6 +12,8 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
+MCPCatalogStoreEntry = tuple[MCPCatalogEntry, bool, bool]
+
 
 def catalog_entry_is_store_installable(entry: MCPCatalogEntry) -> bool:
     if entry.platform_approved:
@@ -41,19 +43,26 @@ def catalog_store_entry_matches_search(entry: MCPCatalogEntry, search: str) -> b
     return query in haystack
 
 
+def catalog_entry_is_search_visible(entry: MCPCatalogEntry, search: str) -> bool:
+    if not catalog_store_entry_matches_search(entry, search):
+        return False
+    if catalog_entry_is_store_installable(entry):
+        return True
+    return bool(search.strip()) and entry.platform_approved and not entry.is_deprecated
+
+
 async def list_store_catalog_entries(
     *,
     container: FlowRuntimeContainer,
     search: str,
     limit: int,
     offset: int,
-) -> tuple[list[tuple[MCPCatalogEntry, bool]], int]:
+) -> tuple[list[MCPCatalogStoreEntry], int]:
     all_entries = await container.mcp_catalog_repository.list(limit=20_000)
     store_entries = [
         entry
         for entry in all_entries
-        if catalog_entry_is_store_installable(entry)
-        and catalog_store_entry_matches_search(entry, search)
+        if catalog_entry_is_search_visible(entry, search)
     ]
     store_entries.sort(key=lambda entry: entry.title.lower())
     total = len(store_entries)
@@ -65,7 +74,14 @@ async def list_store_catalog_entries(
         for server in existing_servers
         if server.source == MCPServerSource.CATALOG and server.catalog_id is not None
     }
-    return [(entry, entry.catalog_id in installed_catalog_ids) for entry in page], total
+    return [
+        (
+            entry,
+            entry.catalog_id in installed_catalog_ids,
+            entry.platform_approved and not catalog_entry_is_store_installable(entry),
+        )
+        for entry in page
+    ], total
 
 
 async def install_catalog_entry_for_company(

@@ -20,13 +20,13 @@ Open Flows chat and click the Lara button (AI icon in the header). The built-in 
 
 ## Step 3. Prepare a platform question
 
-Ask a simple question, for example about Skills. If Lara loads a procedure, activation chips may appear — that is expected.
+Ask a simple question, for example about Skills. Lara replies in the platform assistant drawer.
 
 ![Prepare a platform question](chat-with-lara--03-lara-ready-to-ask.png)
 
 ## Step 4. Read Lara's reply
 
-**Result demonstration.** The feed shows Lara's reply about Skills — the platform assistant works in chat.
+**Result demonstration.** The drawer shows Lara's reply about Skills — the platform assistant works.
 
 **Summary.** You can open Lara and ask platform questions.
 

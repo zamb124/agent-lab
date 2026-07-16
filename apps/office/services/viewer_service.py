@@ -27,6 +27,7 @@ from core.documents.viewer.resolver import resolve_viewer_handler_id
 from core.files.models import FileRecord
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.i18n_models import Language
+from core.platform_brand.resolver import resolve_infrastructure_service_url
 
 _LOCAL_DOCUMENT_SERVER_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
@@ -67,6 +68,14 @@ def browser_public_base_url(request: Request) -> str:
     return build_service_base_url(request)
 
 
+def _request_host_header(request: Request) -> str:
+    forwarded_host = (request.headers.get("x-forwarded-host") or "").strip()
+    host = forwarded_host or (request.headers.get("host") or "").strip() or (request.url.netloc or "").strip()
+    if not host:
+        raise ValueError("request host is required for document server URL resolution")
+    return host
+
+
 def browser_document_server_url(raw_url: str, request: Request) -> str:
     value = raw_url.strip().rstrip("/")
     if not value:
@@ -80,13 +89,10 @@ def browser_document_server_url(raw_url: str, request: Request) -> str:
         if port and f":{port}" not in netloc:
             netloc = f"{request.url.hostname}:{port}"
         return f"{scheme}://{netloc}".rstrip("/")
-    if (
-        _request_public_scheme(request) == "https"
-        and parsed.scheme == "http"
-        and host not in _LOCAL_DOCUMENT_SERVER_HOSTS
-    ):
-        return parsed._replace(scheme="https").geturl().rstrip("/")
-    return value
+    request_host = _request_host_header(request)
+    resolved = resolve_infrastructure_service_url(request_host, "onlyoffice")
+    scheme = _request_public_scheme(request)
+    return urlparse(resolved)._replace(scheme=scheme).geturl().rstrip("/")
 
 
 class DocumentViewerService:

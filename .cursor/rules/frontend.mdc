@@ -365,6 +365,14 @@ WS-эффект форвардит фрейм, фронт диспатчит к�
 - При непустом `company-id` на том же узле добавляются исходящие заголовки к flows (`A2A`, apply, integrations/credentials, voice-session query): см. `_outboundFlowsRequestHeaders()` — **`X-Platform-Namespace`** из `getActivePlatformNamespaceName(companyId)` (тот же выбор, что сайдбар CRM), чтобы тулы Lara и HTTP-apply попадали в активный namespace.
 - Поток блоков действий превью продолжает идти через UI-event `action_previewed` (`_mergeBlocksFromUiEvents`), не через сырой `tool_result.actions`.
 
+### Lara в PlatformApp
+
+- Каждый authenticated сервисный SPA задаёт `static platformAssistant = { serviceId, branchId, showLauncher }`. `PlatformApp.render()` монтирует ровно один `<platform-chat display="drawer" profile="spa" flow-id="lara">`.
+- Branch задаёт только фокус точки входа; полный Agent Skill catalog одинаков во всех сервисах. Service context передаётся через `getPlatformAssistantContextVariables(routeKey, params)` как компактные canonical IDs и JSON summary без секретов и полных коллекций.
+- Открытие из UI — только `openPlatformLaraAssistant()`; единое событие `platform-lara-open`. Сервисные toggle event names запрещены.
+- Круглый launcher использует знак Linnex, двигается pointer/touch и сохраняет позицию отдельно для service branch. Открытая drawer-панель сохраняет собственный desktop drag.
+- Public/guest routes скрывают global Lara через `shouldRenderPlatformAssistant(routeKey, params)`. Docs guest assistant и embed agents остаются отдельными параметризациями того же `<platform-chat>`.
+
 ## Marketing / product pages (часть core Design System)
 
 Публичные продуктовые посадочные (`/products/*`) и будущая миграция главного лендинга — **не отдельная DS**. Канон:

@@ -15,6 +15,7 @@ import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource, MCPTransportType
 from apps.flows.src.models.mcp_catalog import MCPCatalogVerifyStatus
 from apps.flows.src.services.mcp_catalog_crawler import (
     crawl_mcp_registry,
@@ -882,6 +883,92 @@ async def test_mcp_catalog_store_list_install_uninstall_api(
 
 
 @pytest.mark.asyncio
+async def test_mcp_servers_list_search_and_pagination(
+    client,
+    local_mcp_http_url: str,
+    unique_id: str,
+) -> None:
+    first_server_id = f"search_one_{unique_id}"
+    second_server_id = f"search_two_{unique_id}"
+    first_response = await client.post(
+        "/flows/api/v1/mcp/servers",
+        json={
+            "server_id": first_server_id,
+            "name": f"Searchable Alpha {unique_id}",
+            "url": f"{local_mcp_http_url}/alpha",
+            "transport_type": "http",
+            "description": "Installed search strict test",
+        },
+    )
+    second_response = await client.post(
+        "/flows/api/v1/mcp/servers",
+        json={
+            "server_id": second_server_id,
+            "name": f"Searchable Beta {unique_id}",
+            "url": f"{local_mcp_http_url}/beta",
+            "transport_type": "http",
+            "description": "Installed search strict test",
+        },
+    )
+    assert first_response.status_code == 200, first_response.text
+    assert second_response.status_code == 200, second_response.text
+
+    search_response = await client.get(
+        "/flows/api/v1/mcp/servers",
+        params={"search": unique_id, "limit": 1, "offset": 1},
+    )
+    assert search_response.status_code == 200, search_response.text
+    body = search_response.json()
+    assert body["total"] == 2
+    assert body["limit"] == 1
+    assert body["offset"] == 1
+    assert len(body["items"]) == 1
+    assert body["items"][0]["server_id"] in {first_server_id, second_server_id}
+
+    _ = await client.delete(f"/flows/api/v1/mcp/servers/{first_server_id}")
+    _ = await client.delete(f"/flows/api/v1/mcp/servers/{second_server_id}")
+
+
+@pytest.mark.asyncio
+async def test_mcp_catalog_search_includes_platform_curated_entries(
+    client,
+    local_mcp_http_url: str,
+    unique_id: str,
+) -> None:
+    catalog_id = f"context7_catalog_{unique_id}"
+    container = as_flow_runtime_container(get_container())
+    entry = build_verified_catalog_entry(
+        catalog_id=catalog_id,
+        upstream_url=local_mcp_http_url,
+        platform_approved=True,
+        title=f"Context7 {unique_id}",
+        description="Up-to-date library documentation for LLM",
+    )
+    _ = await persist_catalog_entry(container=container, entry=entry)
+
+    empty_search_response = await client.get(
+        "/flows/api/v1/mcp/catalog",
+        params={"tier": "store", "search": "", "limit": 20, "offset": 0},
+    )
+    assert empty_search_response.status_code == 200, empty_search_response.text
+    empty_catalog_ids = [item["catalog_id"] for item in empty_search_response.json()["items"]]
+    assert catalog_id not in empty_catalog_ids
+
+    search_response = await client.get(
+        "/flows/api/v1/mcp/catalog",
+        params={"tier": "store", "search": f"context7 {unique_id}", "limit": 20, "offset": 0},
+    )
+    assert search_response.status_code == 200, search_response.text
+    body = search_response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["catalog_id"] == catalog_id
+    assert body["items"][0]["platform_curated"] is True
+    assert body["items"][0]["installed"] is False
+
+    _ = await container.mcp_catalog_repository.delete(catalog_id)
+
+
+@pytest.mark.asyncio
 async def test_auto_provisioned_catalog_entry_rejects_store_uninstall(
     client,
     local_mcp_http_url: str,
@@ -948,3 +1035,134 @@ async def test_mcp_catalog_list_rejects_unknown_tier(client) -> None:
     response = await client.get("/flows/api/v1/mcp/catalog", params={"tier": "unknown"})
     assert response.status_code == 400
     assert response.json()["detail"] == "Only tier=store is supported"
+
+
+@pytest.mark.asyncio
+async def test_mcp_catalog_store_pagination_offset(
+    client,
+    local_mcp_http_url: str,
+    unique_id: str,
+) -> None:
+    container = as_flow_runtime_container(get_container())
+    catalog_ids: list[str] = []
+    for index in range(3):
+        catalog_id = f"store_page_{index}_{unique_id}"
+        catalog_ids.append(catalog_id)
+        entry = build_verified_catalog_entry(
+            catalog_id=catalog_id,
+            upstream_url=local_mcp_http_url,
+            platform_approved=False,
+            title=f"Store Page {index} {unique_id}",
+        )
+        _ = await persist_catalog_entry(container=container, entry=entry)
+
+    first_page = await client.get(
+        "/flows/api/v1/mcp/catalog",
+        params={"tier": "store", "search": unique_id, "limit": 1, "offset": 0},
+    )
+    second_page = await client.get(
+        "/flows/api/v1/mcp/catalog",
+        params={"tier": "store", "search": unique_id, "limit": 1, "offset": 1},
+    )
+    assert first_page.status_code == 200, first_page.text
+    assert second_page.status_code == 200, second_page.text
+    first_body = first_page.json()
+    second_body = second_page.json()
+    assert first_body["total"] == 3
+    assert second_body["total"] == 3
+    assert len(first_body["items"]) == 1
+    assert len(second_body["items"]) == 1
+    assert first_body["items"][0]["catalog_id"] != second_body["items"][0]["catalog_id"]
+
+    for catalog_id in catalog_ids:
+        _ = await container.mcp_catalog_repository.delete(catalog_id)
+
+
+@pytest.mark.asyncio
+async def test_mcp_catalog_search_matches_registry_name_and_description(
+    client,
+    local_mcp_http_url: str,
+    unique_id: str,
+) -> None:
+    catalog_id = f"registry_search_{unique_id}"
+    container = as_flow_runtime_container(get_container())
+    registry_name = f"registry.search.{unique_id}/tool"
+    description = f"Description marker {unique_id}"
+    entry = build_verified_catalog_entry(
+        catalog_id=catalog_id,
+        upstream_url=local_mcp_http_url,
+        platform_approved=False,
+        registry_name=registry_name,
+        title=f"Title {unique_id}",
+        description=description,
+    )
+    _ = await persist_catalog_entry(container=container, entry=entry)
+
+    registry_response = await client.get(
+        "/flows/api/v1/mcp/catalog",
+        params={"tier": "store", "search": registry_name, "limit": 20, "offset": 0},
+    )
+    description_response = await client.get(
+        "/flows/api/v1/mcp/catalog",
+        params={"tier": "store", "search": description, "limit": 20, "offset": 0},
+    )
+    assert registry_response.status_code == 200, registry_response.text
+    assert description_response.status_code == 200, description_response.text
+    assert registry_response.json()["total"] == 1
+    assert description_response.json()["total"] == 1
+    assert registry_response.json()["items"][0]["catalog_id"] == catalog_id
+    assert description_response.json()["items"][0]["catalog_id"] == catalog_id
+
+    _ = await container.mcp_catalog_repository.delete(catalog_id)
+
+
+@pytest.mark.asyncio
+async def test_mcp_catalog_install_rejects_platform_curated(
+    client,
+    local_mcp_http_url: str,
+    unique_id: str,
+) -> None:
+    catalog_id = f"curated_install_{unique_id}"
+    container = as_flow_runtime_container(get_container())
+    entry = build_verified_catalog_entry(
+        catalog_id=catalog_id,
+        upstream_url=local_mcp_http_url,
+        platform_approved=True,
+        title=f"Curated {unique_id}",
+    )
+    _ = await persist_catalog_entry(container=container, entry=entry)
+
+    install_response = await client.post(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
+    assert install_response.status_code == 400, install_response.text
+    assert "not available in MCP Store" in install_response.json()["detail"]
+
+    _ = await container.mcp_catalog_repository.delete(catalog_id)
+
+
+@pytest.mark.asyncio
+async def test_mcp_servers_search_matches_context7_alias(
+    client,
+    local_mcp_http_url: str,
+    unique_id: str,
+) -> None:
+    container = get_container()
+    server_id = f"alias_ctx7_{unique_id}"
+    server = MCPServerConfig(
+        server_id=server_id,
+        name=f"Context7 manual {unique_id}",
+        url=f"{local_mcp_http_url}/context7",
+        transport_type=MCPTransportType.HTTP,
+        source=MCPServerSource.MANUAL,
+        catalog_id="context7_catalog",
+    )
+    _ = await container.mcp_server_repository.set(server)
+
+    search_response = await client.get(
+        "/flows/api/v1/mcp/servers",
+        params={"search": "context7", "limit": 200, "offset": 0},
+    )
+    assert search_response.status_code == 200, search_response.text
+    matched_ids = [item["server_id"] for item in search_response.json()["items"]]
+    assert server_id in matched_ids
+
+    _ = await container.mcp_server_repository.delete(server_id)

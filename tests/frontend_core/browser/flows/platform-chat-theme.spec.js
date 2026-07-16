@@ -1,6 +1,7 @@
 import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '../../../../core/frontend/static/lib/chat/platform-chat.js';
+import { platformStorageKey } from '../../../../core/frontend/static/lib/utils/storage-keys.js';
 
 const TOKENS_HREF = '/core/frontend/static/assets/css/tokens.css';
 
@@ -70,6 +71,7 @@ describe('platform-chat theme tokens', () => {
             restoreFetch = null;
         }
         fixtureCleanup();
+        window.localStorage.removeItem(platformStorageKey('crm', 'lara_launcher_position.crm'));
     });
 
     it('maps --platform-chat-panel-bg to platform glass-solid-strong', () => {
@@ -99,5 +101,92 @@ describe('platform-chat theme tokens', () => {
 
         expect(el.style.getPropertyValue('--platform-chat-accent').trim()).to.equal('');
         expect(el.style.getPropertyValue('--embed-chat-accent').trim()).to.equal('');
+    });
+
+    it('uses Linnex mark and persists dragged launcher position without opening', async () => {
+        const el = await fixture(html`
+            <platform-chat
+                display="drawer"
+                profile="spa"
+                flow-id="lara"
+                branch-id="crm"
+                launcher-storage-scope="crm"
+                flows-base-url="/flows"
+                show-launcher
+            ></platform-chat>
+        `);
+        await elementUpdated(el);
+
+        const fab = el.renderRoot.querySelector('.fab');
+        const logo = el.renderRoot.querySelector('.fab-logo');
+        expect(fab).to.exist;
+        expect(logo.getAttribute('src')).to.equal(
+            '/static/core/assets/service_logos/linnex_spinner_logo.png',
+        );
+
+        const rect = fab.getBoundingClientRect();
+        fab.dispatchEvent(new PointerEvent('pointerdown', {
+            pointerId: 11,
+            button: 0,
+            clientX: rect.left + 10,
+            clientY: rect.top + 10,
+            bubbles: true,
+        }));
+        window.dispatchEvent(new PointerEvent('pointermove', {
+            pointerId: 11,
+            clientX: 120,
+            clientY: 140,
+        }));
+        window.dispatchEvent(new PointerEvent('pointerup', {
+            pointerId: 11,
+            clientX: 120,
+            clientY: 140,
+        }));
+        fab.click();
+        await elementUpdated(el);
+
+        expect(el.open).to.equal(false);
+        const serialized = window.localStorage.getItem(
+            platformStorageKey('crm', 'lara_launcher_position.crm'),
+        );
+        expect(serialized).to.be.a('string');
+        const saved = JSON.parse(serialized);
+        expect(saved.left).to.be.at.least(8);
+        expect(saved.top).to.be.at.least(8);
+
+        fixtureCleanup();
+        const restored = await fixture(html`
+            <platform-chat
+                display="drawer"
+                profile="spa"
+                flow-id="lara"
+                branch-id="crm"
+                launcher-storage-scope="crm"
+                flows-base-url="/flows"
+                show-launcher
+            ></platform-chat>
+        `);
+        await elementUpdated(restored);
+        const restoredFab = restored.renderRoot.querySelector('.fab');
+        expect(restoredFab.style.left).to.equal(`${saved.left}px`);
+        expect(restoredFab.style.top).to.equal(`${saved.top}px`);
+    });
+
+    it('opens the Lara drawer on launcher click', async () => {
+        const el = await fixture(html`
+            <platform-chat
+                display="drawer"
+                profile="spa"
+                flow-id="lara"
+                branch-id="crm"
+                launcher-storage-scope="crm"
+                flows-base-url="/flows"
+                show-launcher
+            ></platform-chat>
+        `);
+        await elementUpdated(el);
+        el.renderRoot.querySelector('.fab').click();
+        await elementUpdated(el);
+        expect(el.open).to.equal(true);
     });
 });

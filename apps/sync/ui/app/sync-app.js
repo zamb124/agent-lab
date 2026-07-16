@@ -56,6 +56,7 @@ import { createSyncCallPrefsEffect } from '../events/sync-call-prefs.effect.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { TEAM_EVENTS } from '@platform/lib/events/reducers/team.js';
+import { buildSyncAssistantContext } from '../_helpers/platform-assistant-context.js';
 
 const SYNC_ROUTES = [
     { key: 'shell',             path: '',                titleKey: 'routes.shell' },
@@ -84,6 +85,11 @@ export class SyncApp extends PlatformApp {
     static defaultI18nNamespace = 'sync';
     static bottomNavItems = SYNC_BOTTOM_NAV_ITEMS;
     static bottomNavHideOnRoutes = SYNC_BOTTOM_NAV_HIDE_ON_ROUTES;
+    static platformAssistant = {
+        branchId: 'sync',
+        serviceId: 'sync',
+        showLauncher: true,
+    };
 
     constructor() {
         super();
@@ -92,6 +98,7 @@ export class SyncApp extends PlatformApp {
         this._typingPruneTimer = null;
         this._authUserSel = this.select((s) => s.auth && s.auth.user ? s.auth.user : null);
         this._channelsSliceSel = this.select((s) => s.syncChannels);
+        this._threadsSliceSel = this.select((s) => s.syncThreads);
         this._callUiSel = this.select((s) => s.syncCallUi);
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
@@ -363,6 +370,20 @@ export class SyncApp extends PlatformApp {
     rendersUnauthenticated() {
         if (typeof window === 'undefined') return false;
         return window.location.pathname.startsWith('/sync/join/');
+    }
+
+    shouldRenderPlatformAssistant(routeKey) {
+        return routeKey !== 'call_join';
+    }
+
+    getPlatformAssistantContextVariables(routeKey, params) {
+        return buildSyncAssistantContext(
+            routeKey,
+            params,
+            this._channelsSliceSel.value,
+            this._threadsSliceSel.value,
+            this._callUiSel.value,
+        );
     }
 
     getRoutes() {
