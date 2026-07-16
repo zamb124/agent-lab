@@ -51,22 +51,35 @@ for p in obj.get('projects',[]):
 " "$root" 2>/dev/null || true
 }
 
-# --- автоиндекс: true/false ---
+# --- конфиг single-writer ---
+# Канон (daemon): один процесс CBM за mcp-proxy (launchd com.codebase-memory-mcp.daemon),
+# auto_index=true + auto_watch=true. Клиенты Zed/Cursor ходят по URL, не спавнят stdio.
+# Без daemon (legacy): auto_*=false и ручной reindex — см. cbm_config_safe_writers.
+# Установка daemon: bash scripts/zed_search/cbm_daemon.sh install
+
 auto_index_state() {
   [ -x "$BIN" ] || { echo false; return; }
   if "$BIN" config get auto_index 2>/dev/null | grep -qi true; then echo true; else echo false; fi
 }
 
-cbm_config() {
-  "$BIN" config set auto_index true >/dev/null 2>&1 || true
-  "$BIN" config set auto_watch true >/dev/null 2>&1 || true
+auto_watch_state() {
+  [ -x "$BIN" ] || { echo false; return; }
+  if "$BIN" config get auto_watch 2>/dev/null | grep -qi true; then echo true; else echo false; fi
 }
 
-# Публичная обёртка: ставит auto_index/auto_watch в true и печатает результат.
-# Идемпотентно. Вызывается из Make на каждом zed-search / zed-search-reindex,
-# чтобы после подключения MCP автоиндексация графа гарантированно работала
-# (а не только при первой установке бинаря).
-cbm_config_autoidx() {
+CBM_LOCK_DIR="${CBM_LOCK_DIR:-$HOME/.cache/codebase-memory-mcp}"
+CBM_LOCK_FILE="$CBM_LOCK_DIR/reindex.lock"
+CBM_DAEMON_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cbm_daemon.sh"
+
+cbm_config() {
+  # Дефолт при install бинаря без daemon — безопасный multi-stdio.
+  # После cbm_daemon.sh install конфиг переключается на auto_*=true.
+  "$BIN" config set auto_index false >/dev/null 2>&1 || true
+  "$BIN" config set auto_watch false >/dev/null 2>&1 || true
+}
+
+# Legacy: MCP stdio на каждую сессию — только чтение, без watch.
+cbm_config_safe_writers() {
   if ! [ -x "$BIN" ]; then
     echo "  ❌ бинарь не установлен. Починка: make zed-search"
     return 1
@@ -75,11 +88,17 @@ cbm_config_autoidx() {
   local ai aw
   ai="$("$BIN" config get auto_index 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
   aw="$("$BIN" config get auto_watch 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-  echo "  auto_index=${ai:-?}  auto_watch=${aw:-?}"
-  if [ "$ai" != "true" ] || [ "$aw" != "true" ]; then
-    echo "  ⚠️  не удалось выставить auto_index/auto_watch в true. Проверь: $BIN config get auto_index"
+  echo "  auto_index=${ai:-?}  auto_watch=${aw:-?}  (legacy multi-stdio: оба false)"
+  if [ "$ai" != "false" ] || [ "$aw" != "false" ]; then
+    echo "  ⚠️  не удалось выставить auto_index/auto_watch в false. Проверь: $BIN config list"
     return 1
   fi
+}
+
+cbm_config_autoidx() { cbm_config_safe_writers "$@"; }
+
+cbm_daemon_installed() {
+  [ -f "${HOME}/Library/LaunchAgents/com.codebase-memory-mcp.daemon.plist" ]
 }
 
 # ============================================================================
@@ -89,7 +108,13 @@ cbm_install() {
   section "codebase-memory-mcp (структурный граф)..."
   if [ -x "$BIN" ] && "$BIN" --version >/dev/null 2>&1; then
     echo "  уже установлен: v$(installed_version) ($BIN) — пропуск"
-    cbm_config
+    if cbm_daemon_installed; then
+      echo "  daemon установлен — оставляю auto_index/auto_watch=true"
+      "$BIN" config set auto_index true >/dev/null 2>&1 || true
+      "$BIN" config set auto_watch true >/dev/null 2>&1 || true
+    else
+      cbm_config
+    fi
     return 0
   fi
 
@@ -170,24 +195,74 @@ cbm_update() {
 }
 
 # ============================================================================
-# reindex — переиндексация графа текущего проекта
+# reindex — переиндексация графа (единственный писатель; lock через fcntl, без util-linux flock)
 # ============================================================================
 cbm_reindex() {
   local root="${1:-$PROJECT_ROOT}"
+  local had_daemon=0
   section "codebase-memory-mcp: индексация графа..."
   if ! [ -x "$BIN" ]; then echo "  ❌ бинарь не установлен. Починка: make zed-search"; return 1; fi
-  # Гарантируем автоиндексацию при старте сессии (страховка от прямого вызова reindex).
-  cbm_config
+  if cbm_daemon_installed; then
+    had_daemon=1
+    echo "  останавливаю CBM daemon на время exclusive reindex..."
+    bash "$CBM_DAEMON_SH" stop >/dev/null 2>&1 || true
+  else
+    cbm_config
+  fi
+  local writers
+  writers="$(pgrep -x codebase-memory-mcp 2>/dev/null | wc -l | tr -d ' ' || true)"
+  writers="${writers:-0}"
+  if [ "$writers" -gt 0 ]; then
+    echo "  ⚠️  ещё запущено codebase-memory-mcp: $writers — жду освобождения..."
+    sleep 2
+  fi
   echo "  index_repository: $root"
-  "$BIN" cli index_repository "{\"repo_path\":\"$root\"}" 2>&1 | python3 -c "
-import sys,json
-raw=sys.stdin.read()
-i=raw.find('{\"')
-if i<0: print('  (нет JSON-ответа)'); sys.exit()
-try: obj,_=json.JSONDecoder().raw_decode(raw[i:])
-except Exception as e: print('  parse error:',e); sys.exit()
-print('  проект:', obj.get('project','?'), '| узлов:', obj.get('nodes', obj.get('expected_nodes','?')), '| рёбер:', obj.get('edges', obj.get('expected_edges','?')), '| status:', obj.get('status','?'))
-" 2>/dev/null || echo "  (индексация запущена; проверь: codebase-memory-mcp cli list_projects)"
+  mkdir -p "$CBM_LOCK_DIR"
+  set +e
+  python3 - "$CBM_LOCK_FILE" "$BIN" "$root" <<'PY'
+import fcntl, json, os, subprocess, sys
+
+lock_path, bin_path, root = sys.argv[1], sys.argv[2], sys.argv[3]
+fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o644)
+try:
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    print(f"  ❌ другой reindex уже идёт (lock: {lock_path}). Дождись.")
+    sys.exit(1)
+os.ftruncate(fd, 0)
+os.write(fd, f"{os.getpid()}\n".encode())
+
+proc = subprocess.run(
+    [bin_path, "cli", "index_repository", json.dumps({"repo_path": root})],
+    capture_output=True,
+    text=True,
+)
+raw = (proc.stdout or "") + (proc.stderr or "")
+idx = raw.find('{"')
+if idx < 0:
+    print("  (нет JSON-ответа)")
+    if raw.strip():
+        print(raw.strip()[:500])
+    sys.exit(1 if proc.returncode else 0)
+try:
+    obj, _ = json.JSONDecoder().raw_decode(raw[idx:])
+except Exception as exc:
+    print("  parse error:", exc)
+    sys.exit(1)
+nodes = obj.get("nodes", obj.get("expected_nodes", "?"))
+edges = obj.get("edges", obj.get("expected_edges", "?"))
+print(
+    f"  проект: {obj.get('project', '?')} | узлов: {nodes} | рёбер: {edges} | status: {obj.get('status', '?')}"
+)
+sys.exit(proc.returncode)
+PY
+  local rc=$?
+  set -e
+  if [ "$had_daemon" -eq 1 ]; then
+    echo "  поднимаю CBM daemon обратно..."
+    bash "$CBM_DAEMON_SH" start || true
+  fi
+  return "$rc"
 }
 
 # ============================================================================
@@ -215,12 +290,13 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ] 2>/dev/null; then
     install)           shift; cbm_install "$@" ;;
     update)            cbm_update ;;
     reindex)           shift; cbm_reindex "$@" ;;
-    config-autoidx)    cbm_config_autoidx ;;
+    config-autoidx|config-safe-writers) cbm_config_safe_writers ;;
     status)            cbm_status ;;
     installed-version) installed_version ;;
     latest-version)    latest_tag | sed 's/^v//' ;;
     project-info)      shift; project_info_for_root "${1:-}" ;;
     auto-index)        auto_index_state ;;
-    *) echo "usage: cbm.sh [install|update|reindex|config-autoidx|status|installed-version|latest-version|project-info <root>|auto-index]"; exit 1 ;;
+    auto-watch)        auto_watch_state ;;
+    *) echo "usage: cbm.sh [install|update|reindex|config-safe-writers|status|installed-version|latest-version|project-info <root>|auto-index|auto-watch]"; exit 1 ;;
   esac
 fi
