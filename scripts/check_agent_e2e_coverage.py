@@ -156,7 +156,7 @@ REQUIRED_FUNCTIONS: dict[Path, tuple[str, ...]] = {
         "test_mcp_bld_01_bundled_extensions_without_static_platform_mcp",
         "test_mcp_bld_02_default_extensions_without_platform_mcp",
         "test_mcp_bld_03_preload_exposes_toolkits_catalog_api",
-        "test_mcp_bld_04_platform_humanitec_core_after_pairing",
+        "test_mcp_bld_04_platform_lara_after_pairing",
         "test_mcp_ui_01_first_launch_bundled_order",
         "test_mcp_ui_03_chat_mcp_picker_order",
         "test_mcp_ui_04_flow_tools_visible_via_platform_mcp",
