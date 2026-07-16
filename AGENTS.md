@@ -22,13 +22,31 @@
 
 Для структурных вопросов **сначала граф** — не file-by-file `read`.
 
+## Стратегия поиска (Cursor + наш стек)
+
+Из [Cursor search docs](https://cursor.com/docs/agent/tools/search): *start specific, then go broad*; exact → grep; concept → semantic then grep; complex → semantic entry points → grep refs → read. У Cursor **нет** рецепта строки `query` для эмбеддера — только выбор стратегии.
+
+У нас цепочка: **граф → семантика → grep → snippet/read**. Concrete symbols лучше vague labels. Explore before changing.
+
+## Формулировка `claude_context_search_code.query`
+
+*Natural language* в схеме тула ≠ копипаст вопроса. Cursor user-prompt («how do we handle X?») выбирает semantic; **агентский `query`** — короткий якорь под чанки кода.
+
+- Короткие якоря (1 мысль, 5–12 слов), термины ближе к коду.
+- Один концепт = один вызов; составной вопрос → несколько вызовов.
+- Сужай `extensionFilter` (`.py` / `.js`), когда зона известна.
+- Плохо: `How does Networkle … What happens if …`
+- Хорошо: `CRM note text indexing RAG vector documents` / `EntityRepository upload_text entity_id`
+- Мусор в выдаче → не повторяй длинный query; сузь якоря / фильтр или переключись на граф/`grep`.
+
 ## Шпаргалка
 
-1. Имя/regex известны → `grep`.
+1. Имя/regex известны → `grep` (start specific).
 2. Структурный вопрос → граф (`trace_path`, `search_graph`, …).
-3. По смыслу → `claude_context_search_code`.
+3. По смыслу → `claude_context_search_code` (короткие якоря, не multi-question prose) → затем grep/граф.
 4. Тело функции → `get_code_snippet` по qualified_name.
 5. Не читай файл-за-файлом, если граф/семантика отвечают за один вызов.
+6. Перед правкой — explore existing patterns.
 
 Порядок: **граф → семантика → grep → read**.
 
@@ -73,6 +91,6 @@
 ## Правило
 
 1. Структура → codebase-memory-mcp.
-2. Смысл → claude-context.
+2. Смысл → claude-context (короткие якоря в `query`, не multi-question prose).
 3. Литералы → grep.
 4. Оба MCP — только через Compose HTTP URL.

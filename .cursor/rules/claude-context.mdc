@@ -26,6 +26,56 @@ alwaysApply: true
 
 Для структурных вопросов **сначала граф** — не file-by-file `read`. Граф отвечает за один вызов и экономит ~99% токенов vs grep/read-циклов.
 
+## Стратегия поиска (канон Cursor + наш стек)
+
+Опора на [Cursor: Semantic & Agentic Search](https://cursor.com/docs/agent/tools/search) и [Learn: Understanding Your Codebase](https://cursor.com/learn/understanding-your-codebase). У Cursor **нет** agent-facing рецепта строки `query` для эмбеддера — только выбор стратегии. Ниже — их tips + наш слой (граф, формулировка `query`).
+
+**Start specific, then go broad.** Знаешь символ/путь — начинай с него. Незнакомая зона — опиши поведение, потом сужай.
+
+| Стиль запроса | Стратегия |
+|---|---|
+| Конкретный символ, import, строка, regex | `grep` (или `search_graph` / `trace_path`, если нужен call graph) |
+| Концепт / поведение без точных имён | семантика (`claude_context_search_code`) → `grep` / граф для деталей |
+| Сложная разведка | цепочка: entry points (семантика **или** граф) → references (`grep` / `trace_path`) → `get_code_snippet` / `read` |
+
+Цепочка (адаптация Cursor *semantic → grep → read* под наш стек):
+
+**граф (структура) → семантика (смысл) → grep (литералы) → snippet/read (тело).**
+
+Дополнительно из Cursor tips:
+
+- **Concrete > vague.** `callers of processOrder` / `EntityRepository.upload_text` лучше, чем «order code» / «как заметки».
+- **Explore before changing.** Перед правкой найди существующий паттерн — не плоди дубли и не ломай конвенции.
+- Семантика + exact вместе точнее, чем один канал (у Cursor eval: ~+12.5% vs grep alone на больших репо). У нас третий канал — граф; не подменяй им семантику и наоборот.
+
+## Формулировка `claude_context_search_code.query`
+
+Схема тула: `query` = *natural language query*. Это **не** разрешение копировать вопрос пользователя целиком.
+
+Эмбеддер ищет похожие **чанки кода/доков**, а не отвечает на вопрос. Длинный разговорный multi-question запрос даёт шум (README, agent prompts, нерелевантный код). Cursor user-prompt («How does our app handle failed payments?») — для **выбора** semantic-тула человеком; **строка `query` агента** должна быть коротким якорем под чанки.
+
+| Делай | Не делай |
+|---|---|
+| Короткие смысловые якоря (1 мысль, 5–12 слов) | Целый вопрос пользователя / «How does X… What happens if Y…» |
+| Термины ближе к коду: `EntityRepository upload_text`, `note RAG index`, `vector_documents entity_id` | Абстрактный prose без доменных слов |
+| Один концепт = один вызов; составной вопрос → 2–3 вызова | Два+ независимых вопроса в одном `query` |
+| `extensionFilter: [".py"]` / `[".js"]` когда зона известна | Широкий поиск по всему репо без нужды |
+| `path` = абсолютный корень репо | Относительный path |
+
+Примеры:
+
+```text
+# плохо (копипаст multi-question)
+How does Networkle CRM collect note data and sync notes with RAG? What happens when note changes in RAG?
+
+# хорошо (отдельные вызовы — якоря под чанки)
+CRM note text indexing RAG vector documents
+EntityRepository upload_text document_id entity_id
+note attachment index_file RAG
+```
+
+Если семантика вернула мусор (README/чужой домен) — не повторяй тот же длинный query: сузь якоря + `extensionFilter`, либо переключись на граф/`grep`.
+
 ## Имя проекта в графе
 
 Тулы графа требуют `project`. Не хардкодь — узнавай через `list_projects` (разрешён, мгновенно). Для статуса/свежести индекса — `index_status`.
@@ -82,7 +132,7 @@ CBM в контейнере: `auto_index=true`, **`auto_watch=false`** (P0: rein
 ## Правило
 
 1. Структурные вопросы — **сначала codebase-memory-mcp**.
-2. Семантические — **claude_context_search_code**.
+2. Семантические — **claude_context_search_code** с короткими якорями (см. формулировку `query` выше), не копипаст вопроса пользователя.
 3. Точные литералы/regex — `grep`.
 4. Не обходи код file-by-file `read`, если граф или семантика могут ответить за один вызов.
 5. Оба MCP — только через Compose HTTP URL + X-API-Key.
