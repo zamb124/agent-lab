@@ -18,6 +18,8 @@ OLLAMA_HOST_URL="${OLLAMA_HOST_URL:-http://127.0.0.1:11434}"
 OLLAMA_MODEL="${OLLAMA_MODEL:-nomic-embed-text}"
 MILVUS_CONTAINER="${MILVUS_CONTAINER:-milvus-standalone}"
 WATCH_LABEL="${WATCH_LABEL:-com.claude-context-watch}"
+CBM_BIN="${CBM_BIN:-$HOME/.local/bin/codebase-memory-mcp}"
+CBM_SH="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/cbm.sh"
 CONTEXT_DIR="${HOME}/.context"
 SNAPSHOT_FILE="$CONTEXT_DIR/mcp-codebase-snapshot.json"
 MERKLE_DIR="$CONTEXT_DIR/merkle"
@@ -123,8 +125,39 @@ else
   check "MCP-пакет" "FAIL" "npx не найден. Починка: установи Node.js (brew install node)"
 fi
 
+# 6. codebase-memory-mcp (структурный граф знаний)
+if [ -x "$CBM_BIN" ] && "$CBM_BIN" --version >/dev/null 2>&1; then
+  cbm_ver="$(bash "$CBM_SH" installed-version 2>/dev/null || echo "")"
+  check "CBM-бинарь" "OK" "v${cbm_ver:-?} ($CBM_BIN)"
+
+  cbm_info="$(bash "$CBM_SH" project-info "$(pwd -P 2>/dev/null || pwd)" 2>/dev/null || echo "")"
+  if [ -n "$cbm_info" ]; then
+    check "CBM-граф" "OK" "проиндексирован: $(echo "$cbm_info" | awk '{print $1}') ($(echo "$cbm_info" | awk '{print $2}') узлов)"
+  else
+    check "CBM-граф" "WARN" "проект не проиндексирован. Починка: make zed-search-reindex"
+  fi
+
+  cbm_latest="$(bash "$CBM_SH" latest-version 2>/dev/null || echo "")"
+  if [ -z "$cbm_latest" ]; then
+    check "CBM-версия" "WARN" "не удалось получить актуальную версию (нет сети?). Установлена: v${cbm_ver:-?}"
+  elif [ "${cbm_ver:-}" = "$cbm_latest" ]; then
+    check "CBM-версия" "OK" "v${cbm_ver} актуальна"
+  else
+    check "CBM-версия" "WARN" "устарела: v${cbm_ver:-?}, актуальна v$cbm_latest. Починка: make zed-search-update"
+  fi
+
+  if [ "$(bash "$CBM_SH" auto-index 2>/dev/null || echo false)" = "true" ]; then
+    check "CBM-auto_index" "OK" "включён (граф автоиндексируется при старте сессии)"
+  else
+    check "CBM-auto_index" "WARN" "auto_index выключен. Починка: codebase-memory-mcp config set auto_index true"
+  fi
+else
+  check "CBM-бинарь" "FAIL" "бинарь не установлен ($CBM_BIN). Починка: make zed-search"
+fi
+
 # --- Итоговый отчёт ---
 echo "================================================================"
+echo "[zed-search-check] Health стека поиска (claude-context + codebase-memory-mcp)"
 echo "[zed-search-check] Health claude-context MCP"
 echo "================================================================"
 printf '%s\n' "${REPORT[@]}"
