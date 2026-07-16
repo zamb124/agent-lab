@@ -62,7 +62,6 @@ async def test_lara_every_effective_branch_keeps_full_roots_and_ask_user_only(
         "crm",
         "flows",
         "sync",
-        "rag",
         "documents",
         "worktracker",
         "litserve",
@@ -144,7 +143,14 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
             assert editor["depth"] == 1
             _assert_tools_include(
                 editor,
-                {"flows_patch_node", "flows_patch_flow", "flows_read_context", "push_embed_blocks"},
+                {
+                    "flows_patch_node",
+                    "flows_patch_flow",
+                    "flows_read_context",
+                    "flows_get_node",
+                    "flows_list_nodes",
+                    "push_embed_blocks",
+                },
             )
 
             docs = _load_payload(
@@ -193,16 +199,6 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 "sync_send_message",
             ]
 
-            rag = _load_payload(
-                await load_agent_skill.run({"agent_skill_id": "rag-platform"}, state)
-            )
-            assert rag["depth"] == 0
-            knowledge = _load_payload(
-                await load_agent_skill.run({"agent_skill_id": "knowledge-rag"}, state)
-            )
-            assert knowledge["depth"] == 1
-            assert "rag_search" in _tools_unlocked(knowledge)
-
             documents = _load_payload(
                 await load_agent_skill.run(
                     {"agent_skill_id": "documents-platform"},
@@ -210,7 +206,32 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 )
             )
             assert documents["depth"] == 0
-            assert set(documents["depends_on"]) == {"document-workspace", "diagrams-viz"}
+            assert set(documents["depends_on"]) == {
+                "document-workspace",
+                "documents-catalog",
+                "diagrams-viz",
+                "knowledge-rag",
+            }
+            documents_catalog = _load_payload(
+                await load_agent_skill.run(
+                    {"agent_skill_id": "documents-catalog"},
+                    state,
+                )
+            )
+            _assert_tools_include(
+                documents_catalog,
+                {
+                    "documents_list_catalog",
+                    "documents_find",
+                    "documents_read",
+                    "documents_get_link",
+                },
+            )
+            knowledge = _load_payload(
+                await load_agent_skill.run({"agent_skill_id": "knowledge-rag"}, state)
+            )
+            assert knowledge["depth"] == 1
+            assert "rag_search" in _tools_unlocked(knowledge)
             document_workspace = _load_payload(
                 await load_agent_skill.run(
                     {"agent_skill_id": "document-workspace"},

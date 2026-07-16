@@ -24,7 +24,7 @@ async function buildHumanitecProviderRequest(
   }
   return {
     engine: 'openai_compatible',
-    display_name: 'Humanitec',
+    display_name: 'Linnex',
     api_url: params.apiBaseUrl,
     api_key: params.deviceToken,
     models: params.modelIds,
@@ -36,11 +36,18 @@ async function buildHumanitecProviderRequest(
   };
 }
 
+function isPlatformLlmProviderDisplayName(displayName: string): boolean {
+  // Legacy installs used "Humanitec"; current distro UI label is "Linnex".
+  return displayName === 'Linnex' || displayName === 'Humanitec';
+}
+
 function isHumanitecProviderEntry(
   entry: { name: string; metadata: { display_name: string } },
   providerId: string,
 ): boolean {
-  return entry.name === providerId || entry.metadata.display_name === 'Humanitec';
+  return (
+    entry.name === providerId || isPlatformLlmProviderDisplayName(entry.metadata.display_name)
+  );
 }
 
 export async function isHumanitecLlmConfigured(
@@ -66,7 +73,7 @@ export async function isHumanitecLlmConfigured(
   if (defaults.providerId === providerId) {
     return true;
   }
-  return activeProvider.metadata.display_name === 'Humanitec';
+  return isPlatformLlmProviderDisplayName(activeProvider.metadata.display_name);
 }
 
 export async function ensureHumanitecLlmConfigured(

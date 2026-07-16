@@ -6,9 +6,19 @@ import pytest
 
 from apps.agent.platform_mcp import (
     _device_session_context_key,
+    _mcp_initialize_instructions,
     _resolve_flow_context_id,
     _session_context_key,
 )
+
+
+def test_mcp_initialize_instructions_lara_only() -> None:
+    lara_instructions = _mcp_initialize_instructions(toolkit_id="lara")
+    assert lara_instructions is not None
+    assert "flow_lara" in lara_instructions
+    assert "NetWorkle" in lara_instructions
+    assert _mcp_initialize_instructions(toolkit_id="networkle") is None
+    assert _mcp_initialize_instructions(toolkit_id=None) is None
 
 
 @pytest.mark.asyncio

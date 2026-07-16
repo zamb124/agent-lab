@@ -54,6 +54,10 @@ async function resolvePlatformToolkitHeaders(
   return resolvedHeaders;
 }
 
+function isLaraOnlyToolkit(toolkitId: string): boolean {
+  return toolkitId === 'lara';
+}
+
 function platformToolkitNeedsResync(
   existingExt: FixedExtensionEntry,
   catalogItem: HumanitecToolkitCatalogItem,
@@ -68,6 +72,10 @@ function platformToolkitNeedsResync(
     return true;
   }
   if (existingExt.description !== catalogItem.description) {
+    return true;
+  }
+  // LaraOnly: never leave platform_lara disabled after install/pairing.
+  if (isLaraOnlyToolkit(catalogItem.toolkit_id) && !existingExt.enabled) {
     return true;
   }
   return false;
@@ -147,7 +155,11 @@ export async function syncPlatformToolkitExtensions(
       headers: resolvedHeaders,
       bundled: true,
     };
-    const enabled = existingExt ? existingExt.enabled : catalogItem.default_enabled;
+    const enabled = isLaraOnlyToolkit(catalogItem.toolkit_id)
+      ? true
+      : existingExt
+        ? existingExt.enabled
+        : catalogItem.default_enabled;
     await addExtensionFn(extensionId, extConfig, enabled);
   }
 }

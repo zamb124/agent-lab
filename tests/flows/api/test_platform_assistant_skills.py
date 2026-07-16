@@ -26,6 +26,7 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
     assert PLATFORM_ASSISTANT_SEED_SKILL_IDS == (
         "docx-templates",
         "document-workspace",
+        "documents-catalog",
         "diagrams-viz",
         "knowledge-rag",
         "web-research",
@@ -43,7 +44,6 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
         "platform-workspace",
         "console-platform",
         "sync-platform",
-        "rag-platform",
         "documents-platform",
         "worktracker-platform",
         "litserve-platform",
@@ -65,6 +65,19 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
         for skill_id in LARA_PLATFORM_SKILL_ROOTS:
             skill = await container.agent_skill_service.get(skill_id)
             assert skill.agent_skill_id == skill_id
+        documents_platform = await container.agent_skill_service.get("documents-platform")
+        assert "knowledge-rag" in documents_platform.depends_on
+        assert "document-workspace" in documents_platform.depends_on
+        assert "documents-catalog" in documents_platform.depends_on
+        assert "diagrams-viz" in documents_platform.depends_on
+        documents_catalog = await container.agent_skill_service.get("documents-catalog")
+        catalog_tool_ids = {ref.tool_id for ref in documents_catalog.tool_refs}
+        assert catalog_tool_ids == {
+            "documents_list_catalog",
+            "documents_find",
+            "documents_read",
+            "documents_get_link",
+        }
         networkle = await container.agent_skill_service.get("networkle")
         assert "crm-entities" in networkle.depends_on
         assert "crm-notes" in networkle.depends_on

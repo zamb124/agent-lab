@@ -49,6 +49,20 @@ _MCP_SESSION_HEADER = "Mcp-Session-Id"
 _LARA_FLOW_ID = "lara"
 _LINNEX_AGENT_BRANCH_ID = "linnex_agent"
 _DEVICE_MCP_TIMEOUT_SECONDS = 120.0
+_LARA_TOOLKIT_MCP_INSTRUCTIONS = (
+    "Lara is the company platform assistant. "
+    "For NetWorkle/CRM, Flows, Sync, documents, RAG, Worktracker, console, billing, "
+    "AI settings, or any platform question: call tool flow_lara with the user's full question. "
+    "Do not invent platform answers without a successful flow_lara result. "
+    "Local PC files/shell/browser: prefer flow_lara (Lara device tools); "
+    "use local developer tools only for clearly local machine tasks."
+)
+
+
+def _mcp_initialize_instructions(*, toolkit_id: str | None) -> str | None:
+    if toolkit_id == _LARA_FLOW_ID:
+        return _LARA_TOOLKIT_MCP_INSTRUCTIONS
+    return None
 
 
 async def _reject_revoked_device_bearer(request: Request, container: FlowsContainerDep) -> None:
@@ -600,15 +614,19 @@ async def _platform_mcp_message_handler(
             if toolkit is None:
                 raise HTTPException(status_code=404, detail=f"Toolkit {toolkit_id!r} не найден")
             server_info = {"name": toolkit.name, "version": "1.0.0"}
+        initialize_result: JsonObject = {
+            "protocolVersion": _PROTOCOL_VERSION,
+            "capabilities": _SERVER_CAPABILITIES,
+            "serverInfo": server_info,
+        }
+        instructions = _mcp_initialize_instructions(toolkit_id=toolkit_id)
+        if instructions is not None:
+            initialize_result["instructions"] = instructions
         return JSONResponse(
             content={
                 "jsonrpc": "2.0",
                 "id": rpc_id,
-                "result": {
-                    "protocolVersion": _PROTOCOL_VERSION,
-                    "capabilities": _SERVER_CAPABILITIES,
-                    "serverInfo": server_info,
-                },
+                "result": initialize_result,
             },
             headers={_MCP_SESSION_HEADER: str(uuid.uuid4())},
         )

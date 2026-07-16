@@ -114,12 +114,19 @@ async def list_agent_toolkits_catalog(
     for toolkit in await list_agent_toolkits(container.agent_toolkit_repository):
         if desktop_device_id is not None and toolkit.toolkit_id != _LINNEX_AGENT_DESKTOP_TOOLKIT_ID:
             continue
+        # LaraOnly: desktop must always get platform_lara ON, even if company DB
+        # still has a stale default_enabled=false from an older bootstrap.
+        catalog_default_enabled = (
+            True
+            if toolkit.toolkit_id == _LINNEX_AGENT_DESKTOP_TOOLKIT_ID
+            else toolkit.default_enabled
+        )
         items.append(
             AgentToolkitCatalogItem(
                 toolkit_id=toolkit.toolkit_id,
                 name=toolkit.name,
                 description=toolkit.description,
-                default_enabled=toolkit.default_enabled,
+                default_enabled=catalog_default_enabled,
                 position=toolkit.position,
                 mcp_url=build_toolkit_mcp_url_for_frontend(toolkit.toolkit_id, frontend_base),
             )

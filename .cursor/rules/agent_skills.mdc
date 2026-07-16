@@ -65,12 +65,15 @@ alwaysApply: false
 
 ## Lara (канон)
 
-- `flow_id: lara` — единый ассистент восьми SPA **и** LinnexAgent desktop.
-- Service roots полного Tier-1 catalog: `console-platform`, `networkle`, `flows-platform`, `sync-platform`, `rag-platform`, `documents-platform`, `worktracker-platform`, `litserve-platform`.
+- `flow_id: lara` — единый ассистент SPA **и** LinnexAgent desktop.
+- Service roots полного Tier-1 catalog: `console-platform`, `networkle`, `flows-platform`, `sync-platform`, `documents-platform`, `worktracker-platform`, `litserve-platform`.
 - Дополнительные roots: `flows-code` (node helper entry), `docs-knowledge` (docs portal), `platform-workspace` (shared capabilities).
-- Branches `console`, `crm`, `flows`, `sync`, `rag`, `documents`, `worktracker`, `litserve`, `docs`, node-helper и **`linnex_agent`** (desktop entry) отличаются focus prompt / standing tools. Каждый наследует один Tier-1 catalog; branch не режет skill catalog.
+- Branches `console`, `crm`, `flows`, `sync`, `documents`, `worktracker`, `litserve`, `docs`, node-helper и **`linnex_agent`** (desktop entry) отличаются focus prompt / standing tools. Каждый наследует один Tier-1 catalog; branch не режет skill catalog.
 - Branch **`linnex_agent`**: Platform MCP / LinnexAgent; standing `ask_user` + `device_tools_list` + `device_tools_call` (tunnel → local PC). Канон desktop → **`humanitec_agent.mdc`** (LaraOnly).
 - Standing tools на base и во всех branches: только `ask_user`. Domain/shared tools появляются только после `load_agent_skill`.
+- Standing UI context — только IDs/скаляры (не `*_payload_json`). Flows: тела нод через `flows_get_node` / `flows_list_nodes` / лёгкий `flows_read_context` после load skill.
+- Company knowledge — child `knowledge-rag` под `documents-platform` (и `docs-knowledge`); отдельного Tier-1 `rag-platform` и Lara branch `rag` нет. Decommission сервиса `apps/rag` → Documents — отдельный эпик (backend/API/helm); tool ids `rag_*` остаются до миграции API.
+- Catalog browse/search/read/link — child `documents-catalog` под `documents-platform` (те же platform builtins, что и на любом Flows `llm_node`).
 - Methodology бывших Lara prompts — в skill bodies + `references/*-lara-methodology.md`.
 - Skill Library CTA → `flow_chat` / `lara`. `platform_assistant` — deprecated alias с теми же roots.
 - Seed: `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` / `ensure-seed`.

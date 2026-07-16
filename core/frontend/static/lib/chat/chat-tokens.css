@@ -32,11 +32,15 @@
         0 4px 16px rgba(0, 0, 0, 0.25)
     );
 
-    --platform-chat-drawer-fab-bg: var(--accent, #99a6f9);
-    --platform-chat-drawer-fab-fg: var(--text-inverse, #0f0f12);
-    --platform-chat-drawer-fab-border: var(--glass-border-medium, rgba(255, 255, 255, 0.14));
-    --platform-chat-drawer-fab-bg-hover: var(--accent-hover, #8794f0);
-    --platform-chat-drawer-fab-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+    /* Ink disc: logo reads as the only color; no lavender/accent fill. */
+    --platform-chat-drawer-fab-bg: #0c0c0f;
+    --platform-chat-drawer-fab-fg: #ffffff;
+    --platform-chat-drawer-fab-border: rgba(255, 255, 255, 0.14);
+    --platform-chat-drawer-fab-bg-hover: #16161b;
+    --platform-chat-drawer-fab-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.1) inset,
+        0 10px 28px rgba(0, 0, 0, 0.5),
+        0 2px 8px rgba(0, 0, 0, 0.35);
 
     --platform-chat-drawer-close-bg: transparent;
     --platform-chat-drawer-close-fg: var(--text-secondary, rgba(255, 255, 255, 0.85));
@@ -64,11 +68,14 @@ platform-chat[data-embed-theme='light'] {
     --platform-chat-panel-border: rgba(28, 31, 46, 0.08);
     --platform-chat-panel-shadow: 0 24px 64px rgba(22, 26, 38, 0.12);
 
-    --platform-chat-drawer-fab-border: rgba(109, 98, 232, 0.35);
-    --platform-chat-drawer-fab-bg: linear-gradient(145deg, #f0edff 0%, #e2e8ff 100%);
-    --platform-chat-drawer-fab-bg-hover: linear-gradient(145deg, #e6e2fc 0%, #d8e0fc 100%);
-    --platform-chat-drawer-fab-fg: #1c1f2e;
-    --platform-chat-drawer-fab-shadow: 0 10px 32px rgba(60, 50, 140, 0.18);
+    --platform-chat-drawer-fab-border: rgba(255, 255, 255, 0.16);
+    --platform-chat-drawer-fab-bg: #0c0c0f;
+    --platform-chat-drawer-fab-bg-hover: #1a1a20;
+    --platform-chat-drawer-fab-fg: #ffffff;
+    --platform-chat-drawer-fab-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.12) inset,
+        0 14px 40px rgba(15, 15, 20, 0.28),
+        0 4px 12px rgba(15, 15, 20, 0.14);
 
     --platform-chat-drawer-close-bg: rgba(28, 31, 46, 0.04);
     --platform-chat-drawer-close-fg: rgba(28, 31, 46, 0.75);

@@ -1056,8 +1056,8 @@ export class PublicSearchPage extends PlatformPage {
                 margin-top: 2px;
                 padding: 12px;
                 border-radius: 14px;
-                border: 1px solid rgba(137, 149, 255, 0.18);
-                background: rgba(87, 104, 254, 0.10);
+                border: 1px solid color-mix(in srgb, var(--landing-primary, var(--accent)) 14%, transparent);
+                background: transparent;
                 color: rgba(245, 245, 243, 0.84);
                 animation: resultIn 220ms ease both;
             }
@@ -1535,8 +1535,8 @@ export class PublicSearchPage extends PlatformPage {
 
             :host-context([data-theme="light"]) .source-ai-panel {
                 color: rgba(18, 19, 26, 0.84);
-                background: rgba(87, 104, 254, 0.10);
-                border-color: rgba(87, 104, 254, 0.22);
+                background: color-mix(in srgb, var(--landing-primary, var(--accent)) 8%, transparent);
+                border-color: color-mix(in srgb, var(--landing-primary, var(--accent)) 22%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-site-row {
@@ -1755,10 +1755,23 @@ export class PublicSearchPage extends PlatformPage {
                     min-height: 0;
                 }
 
+                .answer-panel[data-state='error'] {
+                    background: var(--landing-bg, var(--marketing-page-bg));
+                    border-color: rgba(255, 132, 132, 0.22);
+                }
+
                 .sources-panel,
                 .provider-panel,
                 .suggest-panel {
                     padding: 12px;
+                }
+
+                .source-ai-panel {
+                    border-radius: 0;
+                    border: 0;
+                    border-top: 1px solid color-mix(in srgb, var(--landing-primary, var(--accent)) 14%, transparent);
+                    padding: 12px 0 0;
+                    background: transparent;
                 }
 
                 .panel-label {
@@ -1833,8 +1846,18 @@ export class PublicSearchPage extends PlatformPage {
                     border-bottom-color: rgba(16, 20, 34, 0.10);
                 }
 
+                :host-context(html[data-theme="light"]) .answer-panel[data-state='error'] {
+                    background: var(--landing-bg, var(--marketing-page-bg));
+                    border-color: rgba(210, 67, 67, 0.22);
+                }
+
                 :host-context(html[data-theme="light"]) .source-card {
                     border-bottom-color: rgba(16, 20, 34, 0.08);
+                    background: transparent;
+                }
+
+                :host-context(html[data-theme="light"]) .source-ai-panel {
+                    border-top-color: color-mix(in srgb, var(--landing-primary, var(--accent)) 18%, transparent);
                     background: transparent;
                 }
 

@@ -31,6 +31,17 @@ def test_branded_prompt_sources_exist() -> None:
             raise FileNotFoundError(f"missing branded prompt: {prompt_path}")
 
 
+def test_branded_system_prompt_is_lara_first() -> None:
+    system_prompt = (
+        REPO_ROOT / "apps" / "agent" / "desktop" / "branding" / "prompts" / "system.md"
+    ).read_text(encoding="utf-8")
+    assert "flow_lara" in system_prompt
+    assert "Lara" in system_prompt
+    assert "NetWorkle" in system_prompt
+    assert "Platform first" in system_prompt
+    assert "general-purpose AI agent" not in system_prompt
+
+
 def test_apply_goosed_branding_replaces_goose_identity(distro: HumanitecDistroConfig) -> None:
     if not VENDOR_GOOSE.is_dir():
         raise FileNotFoundError(f"Goose submodule is not initialized: {VENDOR_GOOSE}")
@@ -58,6 +69,8 @@ def test_apply_goosed_branding_replaces_goose_identity(distro: HumanitecDistroCo
         for marker in FORBIDDEN_GOOSED_PROMPT_MARKERS:
             assert marker not in system_prompt
         assert distro.ui_product_name in system_prompt
+        assert "flow_lara" in system_prompt
+        assert "Lara" in system_prompt
         prompt_template = (VENDOR_GOOSE / "crates/goose/src/prompt_template.rs").read_text(
             encoding="utf-8"
         )

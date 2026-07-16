@@ -152,6 +152,8 @@ def assert_lara_attach(flow: FlowConfig) -> None:
         "flows_patch_node",
         "flows_patch_flow",
         "flows_read_context",
+        "flows_get_node",
+        "flows_list_nodes",
         "create_file",
         "read_file",
         "push_embed_blocks",

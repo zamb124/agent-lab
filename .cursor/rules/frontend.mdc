@@ -368,7 +368,7 @@ WS-эффект форвардит фрейм, фронт диспатчит к�
 ### Lara в PlatformApp
 
 - Каждый authenticated сервисный SPA задаёт `static platformAssistant = { serviceId, branchId, showLauncher }`. `PlatformApp.render()` монтирует ровно один `<platform-chat display="drawer" profile="spa" flow-id="lara">`.
-- Branch задаёт только фокус точки входа; полный Agent Skill catalog одинаков во всех сервисах. Service context передаётся через `getPlatformAssistantContextVariables(routeKey, params)` как компактные canonical IDs и JSON summary без секретов и полных коллекций.
+- Branch задаёт только фокус точки входа; полный Agent Skill catalog одинаков во всех сервисах. Service context передаётся через `getPlatformAssistantContextVariables(routeKey, params)` как компактные canonical IDs без секретов и полных коллекций. Flows editor — только IDs (`flow_id`/`node_id`/…); тела graph Lara достаёт tools (`flows_get_node` / `flows_list_nodes`), не standing `*_payload_json`.
 - Открытие из UI — только `openPlatformLaraAssistant()`; единое событие `platform-lara-open`. Сервисные toggle event names запрещены.
 - Круглый launcher использует знак Linnex, двигается pointer/touch и сохраняет позицию отдельно для service branch. Открытая drawer-панель сохраняет собственный desktop drag.
 - Public/guest routes скрывают global Lara через `shouldRenderPlatformAssistant(routeKey, params)`. Docs guest assistant и embed agents остаются отдельными параметризациями того же `<platform-chat>`.

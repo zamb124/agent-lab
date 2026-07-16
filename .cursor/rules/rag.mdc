@@ -10,6 +10,8 @@ globs:
 ---
 # RAG (Retrieval-Augmented Generation)
 
+**Продуктовый статус:** отдельный Lara Tier-1 `rag-platform` и branch `rag` удалены; company knowledge в Lara идёт через `documents-platform` → `knowledge-rag`. Полный decommission сервиса `apps/rag` (API/UI/helm → Documents) — **отдельный эпик**; до него этот rule и `/rag/api/v1/` остаются каноном backend knowledge.
+
 Сервис документов и семантического поиска с провайдерами `pgvector` (PostgreSQL+pgvector) и `agentset` (внешний SaaS). Изоляция через namespaces, асинхронная индексация через TaskIQ, оригиналы файлов в S3/MinIO. Парсинг — канонический `FileReader.read(source, ReadFileArgs) → FileExtract` (hybrid PDF OCR / vision / STT); отдельного парсера в `core/rag` нет. Embeddings — OpenAI-compatible API; дефолт в Pydantic и продуктовом `conf.json` — **`provider_litserve`** с **Qwen3-Embedding-0.6B** и размерностью из `rag.embedding.api`; альтернатива — **`openrouter`** (`rag.embedding.base_url` или ключ из `llm`).
 
 Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,ui}` + `core/rag/{base_provider,factory,models,namespace_manager,repository,providers,services,post_retrieval_rerank,rag_http_namespace_search,constants}`.

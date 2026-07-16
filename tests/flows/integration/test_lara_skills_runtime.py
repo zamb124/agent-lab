@@ -229,7 +229,7 @@ async def test_lara_crm_branch_load_then_search_entities(
 
 
 @pytest.mark.asyncio
-async def test_lara_rag_branch_load_then_search(
+async def test_lara_documents_branch_load_then_knowledge_search(
     container: FlowContainer,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
@@ -237,16 +237,20 @@ async def test_lara_rag_branch_load_then_search(
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
 ) -> None:
-    namespace_id = f"lara_rt_rag_{unique_id}"
-    marker = f"lara-rag-marker-{unique_id}"
+    namespace_id = f"lara_rt_docs_kb_{unique_id}"
+    marker = f"lara-docs-kb-marker-{unique_id}"
     _ = mock_llm_with_queue(
         [
-            {"type": "tool_call", "tool": "load_agent_skill", "args": {"agent_skill_id": "rag-platform"}},
+            {
+                "type": "tool_call",
+                "tool": "load_agent_skill",
+                "args": {"agent_skill_id": "documents-platform"},
+            },
             {"type": "tool_call", "tool": "load_agent_skill", "args": {"agent_skill_id": "knowledge-rag"}},
             {
                 "type": "tool_call",
                 "tool": "rag_create_namespace",
-                "args": {"name": namespace_id, "description": "Lara runtime RAG test"},
+                "args": {"name": namespace_id, "description": "Lara runtime Documents knowledge test"},
             },
             {
                 "type": "tool_call",
@@ -268,14 +272,14 @@ async def test_lara_rag_branch_load_then_search(
                     "limit": 5,
                 },
             },
-            {"type": "text", "content": f"Found RAG marker {marker}"},
+            {"type": "text", "content": f"Found Documents knowledge marker {marker}"},
         ]
     )
-    state = _lara_state(unique_id=unique_id, branch_id="rag", user_id=system_user_id)
+    state = _lara_state(unique_id=unique_id, branch_id="documents", user_id=system_user_id)
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
             await _seed_lara_skills(container)
-            result = await _run_lara(container, state=state, branch_id="rag")
+            result = await _run_lara(container, state=state, branch_id="documents")
 
     assert result.interrupt is None
     search_body = _tool_result_json_object(result.tool_results["rag_search"])
@@ -345,6 +349,13 @@ async def test_lara_flows_branch_load_then_read_context(
     read_body = _tool_result_json_object(result.tool_results["flows_read_context"])
     assert read_body.get("success") is True
     assert read_body.get("flow_id") == target_flow_id
+    flow_summary = read_body.get("flow")
+    assert isinstance(flow_summary, dict)
+    assert "nodes" not in flow_summary
+    assert "edges" not in flow_summary
+    nodes_index = read_body.get("nodes_index")
+    assert isinstance(nodes_index, list)
+    assert any(isinstance(item, dict) and item.get("node_id") == "main" for item in nodes_index)
     node = read_body.get("node")
     assert isinstance(node, dict)
     assert node.get("prompt") == f"Initial prompt {unique_id}"
@@ -421,7 +432,7 @@ async def test_lara_sync_branch_load_then_send_message(
 
 @pytest.mark.parametrize(
     "branch_id",
-    ["console", "crm", "flows", "sync", "rag", "documents", "worktracker", "litserve"],
+    ["console", "crm", "flows", "sync", "documents", "worktracker", "litserve"],
 )
 @pytest.mark.asyncio
 async def test_lara_any_entry_can_load_cross_service_skill(

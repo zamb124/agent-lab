@@ -142,9 +142,15 @@ def patch_service_clients_asgi(
         req_kwargs = {k: v for k, v in kwargs.items() if k != "headers"}
 
         transport = ASGITransport(app=app)
-        # В тестах все роутеры примонтированы с префиксом /{service}/api/v1.
-        # ServiceClient обычно вызывается с путем /api/v1/..., поэтому добавляем префикс если его нет.
-        service_prefix = "capability-gateway" if service == "capability_gateway" else service
+        # Роутеры create_service_app: /{url_route_segment}/api/v1.
+        # Публичный сегмент иногда ≠ ключ ServiceClient (office→documents, …).
+        # ServiceClient часто зовёт /api/v1/... — дописываем префикс; полный /documents/... не трогаем.
+        _asgi_path_prefix: dict[str, str] = {
+            "office": "documents",
+            "capability_gateway": "capability-gateway",
+            "provider_litserve": "litserve",
+        }
+        service_prefix = _asgi_path_prefix.get(service, service)
         request_path = path
         if not path.startswith(f"/{service_prefix}/"):
             request_path = f"/{service_prefix}{path}"

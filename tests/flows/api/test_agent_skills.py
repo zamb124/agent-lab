@@ -18,7 +18,7 @@ from apps.flows.src.services.agent_skill_service import (
     AgentSkillUpdateInput,
     parse_skill_md,
 )
-from apps.flows.src.services.platform_assistant_skills import _SEED_SKILL_DIRS
+from apps.flows.src.services.platform_assistant_skills import PLATFORM_ASSISTANT_SEED_SKILL_IDS
 from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from core.context import Context, clear_context, get_context, set_context
 from core.files.create_spec import FileCreateSpec
@@ -202,7 +202,7 @@ Body via import API
 @pytest.mark.asyncio
 async def test_agent_skills_api_ensure_seed_idempotent(client, unique_id: str) -> None:
     _ = unique_id
-    expected_seed_count = len(_SEED_SKILL_DIRS)
+    expected_seed_count = len(PLATFORM_ASSISTANT_SEED_SKILL_IDS)
     first = await client.post("/flows/api/v1/agent-skills/ensure-seed", json={})
     assert first.status_code == 200, first.text
     assert first.json()["seeded"] == expected_seed_count
@@ -215,6 +215,7 @@ async def test_agent_skills_api_ensure_seed_idempotent(client, unique_id: str) -
     assert list_resp.status_code == 200, list_resp.text
     ids = {item["agent_skill_id"] for item in list_resp.json()["items"]}
     assert "document-workspace" in ids
+    assert "documents-catalog" in ids
     assert "docx-templates" in ids
     assert "work-tracking" in ids
 

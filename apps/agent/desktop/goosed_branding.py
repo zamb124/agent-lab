@@ -129,6 +129,14 @@ def patch_goosed_rust_sources(vendor_goose: Path, distro: HumanitecDistroConfig)
     )
 
 
+REQUIRED_LARA_FIRST_MARKERS: tuple[str, ...] = (
+    "flow_lara",
+    "Lara",
+    "NetWorkle",
+    "Platform first",
+)
+
+
 def verify_goosed_prompt_templates(prompts_dir: Path, distro: HumanitecDistroConfig) -> None:
     system_prompt_path = prompts_dir / "system.md"
     if not system_prompt_path.is_file():
@@ -139,6 +147,9 @@ def verify_goosed_prompt_templates(prompts_dir: Path, distro: HumanitecDistroCon
             raise ValueError(f"system.md still contains forbidden marker: {marker!r}")
     if distro.ui_product_name not in system_prompt:
         raise ValueError(f"system.md missing product name: {distro.ui_product_name}")
+    for marker in REQUIRED_LARA_FIRST_MARKERS:
+        if marker not in system_prompt:
+            raise ValueError(f"system.md missing Lara-first marker: {marker!r}")
 
 
 def apply_goosed_branding(vendor_goose: Path, distro: HumanitecDistroConfig) -> None:

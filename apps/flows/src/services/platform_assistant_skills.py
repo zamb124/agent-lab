@@ -29,7 +29,6 @@ LARA_PLATFORM_SKILL_ROOTS: tuple[str, ...] = (
     "flows-platform",
     "flows-code",
     "sync-platform",
-    "rag-platform",
     "documents-platform",
     "worktracker-platform",
     "litserve-platform",
@@ -41,6 +40,7 @@ LARA_PLATFORM_SKILL_ROOTS: tuple[str, ...] = (
 PLATFORM_ASSISTANT_SEED_SKILL_IDS: tuple[str, ...] = (
     "docx-templates",
     "document-workspace",
+    "documents-catalog",
     "diagrams-viz",
     "knowledge-rag",
     "web-research",
@@ -58,7 +58,6 @@ PLATFORM_ASSISTANT_SEED_SKILL_IDS: tuple[str, ...] = (
     "platform-workspace",
     "console-platform",
     "sync-platform",
-    "rag-platform",
     "documents-platform",
     "worktracker-platform",
     "litserve-platform",

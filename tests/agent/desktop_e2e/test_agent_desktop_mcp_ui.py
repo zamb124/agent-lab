@@ -78,6 +78,12 @@ async def test_mcp_bld_04_platform_lara_after_pairing(
             ]
             assert "platform_lara" in names
             assert "platform_humanitec_core" not in names
+            lara_ext = next(
+                entry
+                for entry in extensions
+                if isinstance(entry.get("name"), str) and entry["name"] == "platform_lara"
+            )
+            assert lara_ext.get("enabled") is True
     finally:
         desktop.stop()
 
