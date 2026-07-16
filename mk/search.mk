@@ -32,6 +32,7 @@ zed-search:
 	@echo ""
 	@echo "[zed-search] Запуск первичной индексации кодовой базы..."
 	@python3 scripts/zed_search/index.py "$(CURDIR)"
+	@bash scripts/zed_search/linear.sh
 	@echo ""
 	@echo "[zed-search] ✅ Готово. Бэкенд + индекс + watcher настроены."
 	@echo "[zed-search] Проверка здоровья: make zed-search-check"
