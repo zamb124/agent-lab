@@ -1,6 +1,6 @@
 ---
 description: "claude-context MCP — семантический поиск по коду: используй claude_context_search_code по умолчанию вместо grep; health-check при старте, обновление, переиндексация, fallback"
-alwaysApply: false
+alwaysApply: true
 ---
 # claude-context MCP — семантический поиск
 
