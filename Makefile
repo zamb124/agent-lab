@@ -438,7 +438,7 @@ help:
 	@echo "============================================================================"
 	@echo "Семантический поиск по коду (claude-context MCP: Ollama + Milvus):"
 	@echo "============================================================================"
-	@echo "  make zed-search                  - Полная настройка: Ollama+Milvus+watcher (индексация авто)"
+	@echo "  make zed-search                  - Полная настройка: host Ollama Metal + Milvus + watcher"
 	@echo "  make zed-search-check            - Health-check MCP (агент зовёт при старте; ругается если сломан)"
 	@echo "  make zed-search-update           - Обновить MCP-пакет до свежей версии из npm"
 	@echo "  make zed-search-test             - Интеграционные тесты (поиск, переиндексация, healthcheck)"

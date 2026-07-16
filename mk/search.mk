@@ -1,8 +1,8 @@
 # ============================================================================
 # Поиск по коду — два движка (Docker Compose)
 # ============================================================================
-# make zed-search           поднять весь стек в Compose + wire Zed/Cursor + primary index
-#                           (Ollama + Milvus + CBM+proxy + claude-context+proxy)
+# make zed-search           поднять Compose + host Ollama Metal + wire Zed/Cursor + primary index
+#                           (macOS: brew Ollama; Compose: Milvus + CBM+proxy + claude-context+proxy)
 # make zed-search-check     health-check Compose (exit 0/1 + WARN)
 # make zed-search-update    пересобрать образы CBM/claude-context + restart
 # make zed-search-reindex   HTTP reindex обоих движков через mcp-proxy

@@ -168,7 +168,12 @@ cmd_ensure_env() {
 # Host Ollama с Apple Metal (не Linux-контейнер — там на Mac только CPU).
 ensure_host_ollama() {
   local model="${OLLAMA_MODEL:-nomic-embed-text}"
-  command -v ollama >/dev/null 2>&1 || die "ollama не найден — brew install ollama (нужен Metal GPU)"
+  if ! command -v ollama >/dev/null 2>&1; then
+    [ "$(uname -s)" = "Darwin" ] || die "ollama не найден — установи Ollama или выставь OLLAMA_MODE=docker"
+    command -v brew >/dev/null 2>&1 || die "Homebrew не найден — установи brew или выставь OLLAMA_MODE=docker"
+    log "установка host Ollama через Homebrew (Metal GPU)..."
+    brew install ollama
+  fi
 
   if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx 'zed-search-ollama'; then
     log "останавливаю docker ollama (переход на Metal host)..."
