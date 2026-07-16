@@ -86,18 +86,18 @@ note attachment index_file RAG
 
 | Компонент | Где |
 |---|---|
-| Ollama (embeddings) | контейнер `zed-search-ollama` → `127.0.0.1:11434` |
+| Ollama (embeddings) | **macOS:** host brew/app Ollama → Apple Metal GPU (`OLLAMA_MODE=metal`, `127.0.0.1:11434`); claude-context → `host.docker.internal:11434`. **Linux/CPU:** профиль `docker-ollama` → контейнер `zed-search-ollama` |
 | Milvus + etcd + MinIO | контейнеры compose; Milvus → `127.0.0.1:19530`; MinIO **без** publish |
 | CBM + mcp-proxy | `zed-search-cbm` → `http://127.0.0.1:9751/mcp` |
 | claude-context + mcp-proxy | `zed-search-claude-context` → `http://127.0.0.1:9752/mcp` |
 
 Клиенты (Zed/Cursor): только HTTP `url` + `headers: { "X-API-Key": "..." }` из `scripts/zed_search/docker/.env`. **Не** `command`/`npx` stdio.
 
-CBM в контейнере: `auto_index=true`, **`auto_watch=false`** (P0: reindex-storm на dirty git). Полный reindex — `make zed-search-reindex` (HTTP, один writer). Cron (`reindex-cron`) по умолчанию idle (`REINDEX_INTERVAL_SEC=0`); при включении — incremental (`REINDEX_FORCE=false`), не wipe.
+Автоиндексация без дублей: CBM `auto_index=true` + `auto_watch=true`; claude-context `CLAUDE_CONTEXT_BACKGROUND_SYNC=true`. Cron (`reindex-cron`) idle (`REINDEX_INTERVAL_SEC=0`) — не дублирует sync/watch. Полный wipe — `make zed-search-reindex` (HTTP, один writer).
 
 Репозиторий монтируется по **тому же абсолютному пути**, что на хосте (пути в MCP-тулах = пути IDE).
 
-**Volumes (persist):** `cbm_cache`, `claude_context_data`, `milvus_data`, `minio_data`, `etcd_data`, `ollama_data`. `compose down` без `-v` их не трогает — после рестарта индексы на месте, постоянный reindex не нужен.
+**Volumes (persist):** `cbm_cache`, `claude_context_data`, `milvus_data`, `minio_data`, `etcd_data`; `ollama_data` только при `OLLAMA_MODE=docker`. `compose down` без `-v` их не трогает — после рестарта индексы на месте, постоянный reindex не нужен.
 
 ### Запрещено агенту
 

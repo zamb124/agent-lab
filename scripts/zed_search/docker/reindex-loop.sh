@@ -1,12 +1,12 @@
 #!/bin/sh
-# Периодический incremental reindex (без wipe).
-# force=true только если REINDEX_FORCE=true — иначе индексы в volume не трогаем целиком.
-# REINDEX_INTERVAL_SEC=0 — idle (рекомендуемый дефолт: индексы живут в named volumes).
+# Опциональный periodic reindex. Дефолт REINDEX_INTERVAL_SEC=0 — idle:
+# автоиндексация живёт в CLAUDE_CONTEXT_BACKGROUND_SYNC + CBM_AUTO_WATCH, не здесь.
+# force=true только если REINDEX_FORCE=true.
 set -eu
 
 INTERVAL="${REINDEX_INTERVAL_SEC:-0}"
 if [ "$INTERVAL" = "0" ]; then
-  echo "[zed-search-reindex] REINDEX_INTERVAL_SEC=0 — idle (кэш в volumes, полный reindex только через make zed-search-reindex)"
+  echo "[zed-search-reindex] REINDEX_INTERVAL_SEC=0 — idle (авто: BACKGROUND_SYNC + CBM_AUTO_WATCH; wipe: make zed-search-reindex)"
   while true; do sleep 3600; done
 fi
 

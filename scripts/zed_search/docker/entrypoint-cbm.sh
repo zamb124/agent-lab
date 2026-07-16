@@ -1,10 +1,11 @@
 #!/bin/sh
-# Entrypoint CBM: safe writers (auto_watch=false) + mcp-proxy HTTP.
+# Entrypoint CBM: mcp-proxy HTTP. auto_index/auto_watch — единственный автопуть CBM
+# (не дублировать periodic reindex-cron поверх watch).
 set -eu
 
 : "${CBM_CACHE_DIR:=/cache}"
 : "${CBM_AUTO_INDEX:=true}"
-: "${CBM_AUTO_WATCH:=false}"
+: "${CBM_AUTO_WATCH:=true}"
 : "${MCP_API_KEY:?MCP_API_KEY is required}"
 : "${REPO_ROOT:?REPO_ROOT is required}"
 

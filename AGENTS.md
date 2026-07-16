@@ -56,22 +56,23 @@
 
 ## Runtime-канон: Docker Compose
 
-Весь стек — в `scripts/zed_search/docker/docker-compose.yml` (Ollama + Milvus/etcd/MinIO + CBM+mcp-proxy + claude-context+mcp-proxy).
+Весь стек — в `scripts/zed_search/docker/docker-compose.yml` (Milvus/etcd/MinIO + CBM+mcp-proxy + claude-context+mcp-proxy).
+Ollama embeddings: на macOS — **host Metal GPU** (`OLLAMA_MODE=metal`); docker-профиль — только Linux/CPU.
 
 | Сервис | URL на хосте |
 |---|---|
 | CBM | `http://127.0.0.1:9751/mcp` + header `X-API-Key` |
 | claude-context | `http://127.0.0.1:9752/mcp` + header `X-API-Key` |
-| Ollama | `127.0.0.1:11434` |
+| Ollama | `127.0.0.1:11434` (metal: brew/app; docker: контейнер) |
 | Milvus | `127.0.0.1:19530` |
 
 - Клиенты Zed/Cursor: только `url` + `headers.X-API-Key` — **не** stdio `command` / `npx`.
-- CBM: `auto_index=true`, **`auto_watch=false`** (полный reindex — `make zed-search-reindex`).
+- Автоиндексация (без дублей): CBM `auto_index=true` + `auto_watch=true`; claude-context `CLAUDE_CONTEXT_BACKGROUND_SYNC=true`. Cron idle (`REINDEX_INTERVAL_SEC=0`) — не дублирует sync/watch. Полный wipe — `make zed-search-reindex`.
 - Репозиторий монтируется по **тому же абсолютному пути**, что на хосте.
 - Ключ: `scripts/zed_search/docker/.env` (`MCP_API_KEY`, не коммитить).
 - **Named volumes** переживают `compose down`/`up` — полный reindex после рестарта не нужен:
-  `cbm_cache` (граф SQLite), `claude_context_data` (snapshot/merkle), `milvus_data`+`minio_data`+`etcd_data` (векторы), `ollama_data` (модели).
-- `REINDEX_INTERVAL_SEC=0` по умолчанию (cron idle). Не делай `docker compose down -v` — сотрёт кэш.
+  `cbm_cache` (граф SQLite), `claude_context_data` (snapshot/merkle), `milvus_data`+`minio_data`+`etcd_data` (векторы). `ollama_data` — только при `OLLAMA_MODE=docker`.
+- Не делай `docker compose down -v` — сотрёт кэш.
 
 **Запрещено:** `pkill` контейнерных MCP, `rm` docker volumes / `down -v` наугад, возвращать stdio spawn, параллельный `index_repository` мимо HTTP proxy.
 

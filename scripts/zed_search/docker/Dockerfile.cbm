@@ -58,6 +58,6 @@ ENV CBM_CACHE_DIR=/cache \
     CBM_MEM_BUDGET_MB=8192 \
     CBM_WORKERS=4 \
     CBM_AUTO_INDEX=true \
-    CBM_AUTO_WATCH=false
+    CBM_AUTO_WATCH=true
 EXPOSE 9751
 ENTRYPOINT ["/entrypoint-cbm.sh"]

@@ -82,7 +82,9 @@ services:
     restart: unless-stopped
     mem_limit: 4g
 
+  # Только OLLAMA_MODE=docker (Linux / без Metal). На macOS — host Ollama (Metal GPU).
   ollama:
+    profiles: ["docker-ollama"]
     image: ollama/ollama:${OLLAMA_IMAGE_TAG:-0.9.6}
     container_name: zed-search-ollama
     volumes:
@@ -99,6 +101,7 @@ services:
     mem_limit: 4g
 
   ollama-init:
+    profiles: ["docker-ollama"]
     image: ollama/ollama:${OLLAMA_IMAGE_TAG:-0.9.6}
     container_name: zed-search-ollama-init
     depends_on:
@@ -136,8 +139,8 @@ services:
       CBM_WORKERS: ${CBM_WORKERS:-4}
       CBM_SQLITE_MMAP_SIZE: "0"
       CBM_LOG_LEVEL: info
-      CBM_AUTO_INDEX: "true"
-      CBM_AUTO_WATCH: "false"
+      CBM_AUTO_INDEX: ${CBM_AUTO_INDEX:-true}
+      CBM_AUTO_WATCH: ${CBM_AUTO_WATCH:-true}
     volumes:
       - *repo-mount
       - cbm_cache:/cache
@@ -173,13 +176,16 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-nomic-embed-text}
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
       EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-2}
-      OLLAMA_HOST: http://ollama:11434
+      # metal: http://host.docker.internal:11434 | docker: http://ollama:11434
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
       MILVUS_ADDRESS: milvus:19530
-      CLAUDE_CONTEXT_BACKGROUND_SYNC: "false"
-      CLAUDE_CONTEXT_TRIGGER_WATCHER: "true"
+      CLAUDE_CONTEXT_BACKGROUND_SYNC: ${CLAUDE_CONTEXT_BACKGROUND_SYNC:-true}
+      CLAUDE_CONTEXT_TRIGGER_WATCHER: ${CLAUDE_CONTEXT_TRIGGER_WATCHER:-true}
       HYBRID_MODE: ${HYBRID_MODE:-true}
       CUSTOM_IGNORE_PATTERNS: ".search-comparison/**,.cursor/debug-*.log,documentation-dist/**,artifacts/**,test-results/**,lightpanda/**,reports/**,*.map"
       HOME: /data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - *repo-mount
       - claude_context_data:/data
@@ -188,8 +194,6 @@ services:
     depends_on:
       milvus:
         condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -214,7 +218,8 @@ services:
     environment:
       REPO_ROOT: ${REPO_ROOT}
       MCP_API_KEY: ${MCP_API_KEY}
-      # 0 = не гонять периодический reindex (индексы живут в named volumes).
+      # Cron idle по умолчанию: авто — BACKGROUND_SYNC + CBM_AUTO_WATCH, не дублировать.
+      # REINDEX_INTERVAL_SEC>0 только если нужен доп. periodic tick (обычно нет).
       REINDEX_INTERVAL_SEC: ${REINDEX_INTERVAL_SEC:-0}
       REINDEX_FORCE: ${REINDEX_FORCE:-false}
       CBM_URL: http://cbm:9751/mcp

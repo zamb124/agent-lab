@@ -16,9 +16,11 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 OLLAMA_HOST_URL="${OLLAMA_HOST_URL:-http://127.0.0.1:11434}"
 OLLAMA_MODEL="${OLLAMA_MODEL:-nomic-embed-text}"
+OLLAMA_MODE="${OLLAMA_MODE:-}"
 CBM_URL="${CBM_URL:-http://127.0.0.1:9751/mcp}"
 CLAUDE_URL="${CLAUDE_URL:-http://127.0.0.1:9752/mcp}"
 INDEX_STALE_HOURS="${INDEX_STALE_HOURS:-48}"
+CLAUDE_INDEX_MIN_COVERAGE_PCT="${CLAUDE_INDEX_MIN_COVERAGE_PCT:-70}"
 
 OK_COUNT=0
 FAIL_COUNT=0
@@ -48,7 +50,105 @@ if [ -f "$ENV_FILE" ]; then
   REPO_ROOT="${REPO_ROOT:-$REPO_ROOT}"
 fi
 
+if [ -z "${OLLAMA_MODE:-}" ]; then
+  case "$(uname -s)" in
+    Darwin) OLLAMA_MODE=metal ;;
+    *) OLLAMA_MODE=docker ;;
+  esac
+fi
+
 MCP_API_KEY="${MCP_API_KEY:-}"
+
+expected_claude_index_files() {
+  REPO_ROOT="$REPO_ROOT" python3 - <<'PY'
+import fnmatch
+import os
+import subprocess
+from pathlib import Path
+
+root = Path(os.environ["REPO_ROOT"])
+supported_extensions = {
+    ".ts", ".tsx", ".js", ".jsx", ".py", ".java", ".cpp", ".c", ".h", ".hpp",
+    ".cs", ".go", ".rs", ".php", ".rb", ".swift", ".kt", ".scala", ".m", ".mm",
+    ".dart", ".sol", ".md", ".markdown", ".ipynb",
+}
+ignore_names = {
+    ".git", ".svn", ".hg", "node_modules", "dist", "build", "out", "target",
+    "coverage", ".nyc_output", ".vscode", ".idea", ".cache", "__pycache__",
+    ".pytest_cache", "logs", "tmp", "temp",
+}
+ignore_patterns = [
+    ".search-comparison/**",
+    ".cursor/debug-*.log",
+    "documentation-dist/**",
+    "artifacts/**",
+    "test-results/**",
+    "lightpanda/**",
+    "reports/**",
+    "*.map",
+    "*.log",
+    ".env",
+    ".env.*",
+    "*.local",
+    "*.min.js",
+    "*.min.css",
+    "*.min.map",
+    "*.bundle.js",
+    "*.bundle.css",
+    "*.chunk.js",
+    "*.vendor.js",
+    "*.polyfills.js",
+    "*.runtime.js",
+]
+
+
+def ignored(relative_path: str, *, is_dir: bool) -> bool:
+    normalized = relative_path.replace(os.sep, "/")
+    name = normalized.rsplit("/", 1)[-1]
+    if name in ignore_names:
+        return True
+    if is_dir and normalized in ignore_names:
+        return True
+    for pattern in ignore_patterns:
+        if fnmatch.fnmatch(normalized, pattern) or fnmatch.fnmatch(name, pattern):
+            return True
+        if pattern.endswith("/**"):
+            prefix = pattern[:-3].rstrip("/")
+            if normalized == prefix or normalized.startswith(prefix + "/"):
+                return True
+    return False
+
+
+try:
+    candidate_files = subprocess.check_output(
+        ["git", "-C", str(root), "ls-files", "-co", "--exclude-standard"],
+        text=True,
+        stderr=subprocess.DEVNULL,
+    ).splitlines()
+except (OSError, subprocess.SubprocessError):
+    candidate_files = []
+    for current_root, dirs, files in os.walk(root):
+        base = Path(current_root)
+        rel_base = base.relative_to(root)
+        kept_dirs = []
+        for dirname in dirs:
+            rel_dir = str(rel_base / dirname) if str(rel_base) != "." else dirname
+            if not ignored(rel_dir, is_dir=True):
+                kept_dirs.append(dirname)
+        dirs[:] = kept_dirs
+        for filename in files:
+            rel_file = str(rel_base / filename) if str(rel_base) != "." else filename
+            candidate_files.append(rel_file)
+
+count = 0
+for rel_file in candidate_files:
+    if ignored(rel_file, is_dir=False):
+        continue
+    if Path(rel_file).suffix in supported_extensions:
+        count += 1
+print(count)
+PY
+}
 
 # 1. Docker
 if ! command -v docker >/dev/null 2>&1; then
@@ -61,8 +161,12 @@ else
   fi
 fi
 
-# 2. Compose-контейнеры
-for name in zed-search-ollama zed-search-milvus zed-search-cbm zed-search-claude-context; do
+# 2. Compose-контейнеры (ollama — только OLLAMA_MODE=docker; metal = host brew)
+COMPOSE_CONTAINERS=(zed-search-milvus zed-search-cbm zed-search-claude-context)
+if [ "$OLLAMA_MODE" = "docker" ]; then
+  COMPOSE_CONTAINERS=(zed-search-ollama "${COMPOSE_CONTAINERS[@]}")
+fi
+for name in "${COMPOSE_CONTAINERS[@]}"; do
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$name"; then
     health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}' "$name" 2>/dev/null || echo unknown)"
     if [ "$health" = "healthy" ] || [ "$health" = "running" ]; then
@@ -74,6 +178,14 @@ for name in zed-search-ollama zed-search-milvus zed-search-cbm zed-search-claude
     check "$name" "FAIL" "не запущен. Починка: make zed-search"
   fi
 done
+
+if [ "$OLLAMA_MODE" = "metal" ]; then
+  check "Ollama-runtime" "OK" "OLLAMA_MODE=metal (host Apple Metal GPU)"
+elif [ "$OLLAMA_MODE" = "docker" ]; then
+  check "Ollama-runtime" "OK" "OLLAMA_MODE=docker"
+else
+  check "Ollama-runtime" "WARN" "неизвестный OLLAMA_MODE=$OLLAMA_MODE"
+fi
 
 # 3. Ollama API + модель
 if curl -sf "$OLLAMA_HOST_URL/api/tags" >/dev/null 2>&1; then
@@ -131,6 +243,19 @@ else
     check "Claude-index" "WARN" "статус: $status_txt"
   else
     check "Claude-index" "FAIL" "get_indexing_status failed. $err_txt"
+  fi
+
+  indexed_files="$(printf '%s' "$combined" | python3 -c 'import re, sys; text = sys.stdin.read(); match = re.search(r"Statistics:\s*([0-9]+)\s+files", text) or re.search(r"([0-9]+)\s+files", text); print(match.group(1) if match else "")')"
+  expected_files="$(expected_claude_index_files 2>/dev/null || true)"
+  if [ -n "$indexed_files" ] && [ -n "$expected_files" ] && [ "$expected_files" -gt 0 ]; then
+    coverage_pct=$((indexed_files * 100 / expected_files))
+    if [ "$coverage_pct" -lt "$CLAUDE_INDEX_MIN_COVERAGE_PCT" ]; then
+      check "Claude-index-coverage" "WARN" "индекс покрывает ${indexed_files}/${expected_files} файлов (${coverage_pct}%). Починка: make zed-search-reindex"
+    else
+      check "Claude-index-coverage" "OK" "покрытие ${indexed_files}/${expected_files} файлов (${coverage_pct}%)"
+    fi
+  else
+    check "Claude-index-coverage" "WARN" "не удалось оценить покрытие индекса"
   fi
 fi
 

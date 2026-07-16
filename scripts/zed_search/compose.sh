@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Оркестратор zed-search Docker Compose-стека.
-# Канон: всё (Ollama, Milvus, CBM+proxy, claude-context+proxy) в Compose.
-# Хост: только Docker Desktop + IDE HTTP-клиенты (Zed/Cursor).
+# Канон: Milvus + CBM + claude-context в Compose.
+# Ollama: на macOS — host Metal GPU (OLLAMA_MODE=metal); docker-профиль — только Linux/CPU.
+# Хост: Docker Desktop + IDE HTTP-клиенты (Zed/Cursor) + (metal) brew Ollama.
 #
 # usage:
 #   bash scripts/zed_search/compose.sh up [--no-index]
@@ -39,8 +40,37 @@ require_docker() {
   docker compose version >/dev/null 2>&1 || die "docker compose недоступен"
 }
 
+# metal (Darwin default) | docker
+resolve_ollama_mode() {
+  if [ -n "${OLLAMA_MODE:-}" ]; then
+    echo "$OLLAMA_MODE"
+    return
+  fi
+  case "$(uname -s)" in
+    Darwin) echo metal ;;
+    *) echo docker ;;
+  esac
+}
+
+env_set_key() {
+  local key="$1" value="$2"
+  if grep -q "^${key}=" "$ENV_FILE"; then
+    sed -i.bak "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+  else
+    echo "${key}=${value}" >>"$ENV_FILE"
+  fi
+  rm -f "${ENV_FILE}.bak"
+}
+
 compose() {
-  docker compose --project-directory "$DOCKER_DIR" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+  local mode
+  mode="$(resolve_ollama_mode)"
+  if [ "$mode" = "docker" ]; then
+    COMPOSE_PROFILES=docker-ollama docker compose --project-directory "$DOCKER_DIR" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+  else
+    # Явно пустой profile: иначе унаследованный COMPOSE_PROFILES поднимет docker-ollama.
+    COMPOSE_PROFILES= docker compose --project-directory "$DOCKER_DIR" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+  fi
 }
 
 load_env() {
@@ -102,17 +132,89 @@ cmd_ensure_env() {
     log "сгенерирован MINIO_ROOT_PASSWORD"
   fi
 
+  # Ollama: на Darwin дефолт Metal (host GPU); иначе docker.
+  local ollama_mode ollama_host batch
+  ollama_mode="$(grep -E '^OLLAMA_MODE=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
+  if [ -z "$ollama_mode" ]; then
+    case "$(uname -s)" in
+      Darwin) ollama_mode=metal ;;
+      *) ollama_mode=docker ;;
+    esac
+    env_set_key OLLAMA_MODE "$ollama_mode"
+    log "OLLAMA_MODE=$ollama_mode"
+  fi
+  if [ "$ollama_mode" = "metal" ]; then
+    ollama_host="http://host.docker.internal:11434"
+    batch=8
+  else
+    ollama_host="http://ollama:11434"
+    batch=2
+  fi
+  env_set_key OLLAMA_HOST "$ollama_host"
+  if ! grep -q '^EMBEDDING_BATCH_SIZE=' "$ENV_FILE"; then
+    env_set_key EMBEDDING_BATCH_SIZE "$batch"
+  elif [ "$ollama_mode" = "metal" ]; then
+    # Поднять дефолтный batch=2 с docker-эпохи до Metal-friendly.
+    cur_batch="$(grep -E '^EMBEDDING_BATCH_SIZE=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
+    if [ "$cur_batch" = "2" ]; then
+      env_set_key EMBEDDING_BATCH_SIZE "$batch"
+    fi
+  fi
+
   chmod 600 "$ENV_FILE" 2>/dev/null || true
-  log "env готов: $ENV_FILE"
+  log "env готов: $ENV_FILE (OLLAMA_MODE=$ollama_mode OLLAMA_HOST=$ollama_host)"
 }
 
-# Освободить порты 11434/9751/9752 под Compose (host Ollama / stray MCP / чужой Milvus).
+# Host Ollama с Apple Metal (не Linux-контейнер — там на Mac только CPU).
+ensure_host_ollama() {
+  local model="${OLLAMA_MODEL:-nomic-embed-text}"
+  command -v ollama >/dev/null 2>&1 || die "ollama не найден — brew install ollama (нужен Metal GPU)"
+
+  if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx 'zed-search-ollama'; then
+    log "останавливаю docker ollama (переход на Metal host)..."
+    docker stop zed-search-ollama 2>/dev/null || true
+    docker rm zed-search-ollama 2>/dev/null || true
+  fi
+  if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx 'zed-search-ollama-init'; then
+    docker rm -f zed-search-ollama-init 2>/dev/null || true
+  fi
+
+  if ! curl -sf --connect-timeout 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+    log "запуск host Ollama (Metal)..."
+    if command -v brew >/dev/null 2>&1; then
+      brew services start ollama 2>/dev/null || true
+    fi
+    if ! curl -sf --connect-timeout 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+      nohup ollama serve >/tmp/zed-search-ollama-host.log 2>&1 &
+    fi
+    local i=0
+    while [ "$i" -lt 45 ]; do
+      if curl -sf --connect-timeout 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+        break
+      fi
+      i=$((i + 1))
+      sleep 2
+    done
+  fi
+  curl -sf --connect-timeout 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1 \
+    || die "host Ollama не отвечает на :11434 — brew services start ollama"
+
+  if ! curl -sf http://127.0.0.1:11434/api/tags | grep -q "$model"; then
+    log "pull $model на host Ollama..."
+    ollama pull "$model"
+  fi
+  log "host Ollama OK (Metal) model=$model"
+}
+
+# Освободить порты 9751/9752 (+11434 только в docker-режиме) под Compose.
 free_host_ports() {
   log "освобождение портов под Compose..."
 
   local watch_plist="${HOME}/Library/LaunchAgents/com.claude-context-watch.plist"
   local cbm_plist="${HOME}/Library/LaunchAgents/com.codebase-memory-mcp.daemon.plist"
   local old_milvus="${HOME}/.local/share/claude-context-milvus/docker-compose.yml"
+  local mode
+  mode="$(resolve_ollama_mode)"
 
   if [ -f "$watch_plist" ]; then
     launchctl unload "$watch_plist" 2>/dev/null || true
@@ -123,14 +225,16 @@ free_host_ports() {
     rm -f "$cbm_plist"
   fi
 
-  if command -v brew >/dev/null 2>&1; then
-    brew services stop ollama 2>/dev/null || true
-  fi
-  if lsof -nP -iTCP:11434 -sTCP:LISTEN >/dev/null 2>&1; then
-    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'zed-search-ollama'; then
-      pkill -f '/[o]llama serve' 2>/dev/null || true
-      pkill -x ollama 2>/dev/null || true
-      sleep 1
+  if [ "$mode" = "docker" ]; then
+    if command -v brew >/dev/null 2>&1; then
+      brew services stop ollama 2>/dev/null || true
+    fi
+    if lsof -nP -iTCP:11434 -sTCP:LISTEN >/dev/null 2>&1; then
+      if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'zed-search-ollama'; then
+        pkill -f '/[o]llama serve' 2>/dev/null || true
+        pkill -x ollama 2>/dev/null || true
+        sleep 1
+      fi
     fi
   fi
 
@@ -326,7 +430,7 @@ cmd_reindex() {
   local repo="$REPO_ROOT"
   log "reindex claude-context (force=true)..."
   python3 "$MCP_HTTP" --url "${CLAUDE_URL:-$CLAUDE_URL_DEFAULT}" --api-key "$MCP_API_KEY" --timeout 900 \
-    call index_codebase "{\"path\":\"$repo\",\"force\":true}" --wait-status --status-path "$repo" --max-wait-s 3600 || true
+    call index_codebase "{\"path\":\"$repo\",\"force\":true}" --wait-status --status-path "$repo" --max-wait-s 3600
   log "reindex CBM..."
   python3 "$MCP_HTTP" --url "${CBM_URL:-$CBM_URL_DEFAULT}" --api-key "$MCP_API_KEY" --timeout 900 \
     call index_repository "{\"repo_path\":\"$repo\"}"
@@ -341,8 +445,13 @@ cmd_up() {
   require_docker
   cmd_ensure_env
   load_env
+  local mode
+  mode="$(resolve_ollama_mode)"
   free_host_ports
-  log "docker compose up --build..."
+  if [ "$mode" = "metal" ]; then
+    ensure_host_ollama
+  fi
+  log "docker compose up --build (OLLAMA_MODE=$mode)..."
   compose up --build -d --remove-orphans
   wait_stack
   wire_clients
@@ -366,9 +475,15 @@ cmd_down() {
 cmd_status() {
   require_docker
   if [ -f "$ENV_FILE" ]; then
+    load_env
     compose ps
+    echo "OLLAMA_MODE=${OLLAMA_MODE:-$(resolve_ollama_mode)} OLLAMA_HOST=${OLLAMA_HOST:-}"
   fi
   echo "Ollama:  $(curl -sf http://127.0.0.1:11434/api/tags >/dev/null && echo OK || echo FAIL)"
+  if command -v ollama >/dev/null 2>&1; then
+    echo "Ollama-ps:"
+    ollama ps 2>/dev/null || true
+  fi
   echo "CBM:     $(curl -sf http://127.0.0.1:9751/ping >/dev/null && echo OK || echo FAIL)"
   echo "Claude:  $(curl -sf http://127.0.0.1:9752/ping >/dev/null && echo OK || echo FAIL)"
   echo "Milvus:  $(docker inspect --format '{{.State.Health.Status}}' zed-search-milvus 2>/dev/null || echo missing)"
@@ -388,8 +503,16 @@ cmd_update() {
   require_docker
   cmd_ensure_env
   load_env
-  log "pull инфраструктуры (milvus/ollama/etcd/minio)..."
-  compose pull etcd minio milvus ollama ollama-init || true
+  local mode
+  mode="$(resolve_ollama_mode)"
+  if [ "$mode" = "metal" ]; then
+    ensure_host_ollama
+    log "pull инфраструктуры (milvus/etcd/minio; Ollama=Metal host)..."
+    compose pull etcd minio milvus || true
+  else
+    log "pull инфраструктуры (milvus/ollama/etcd/minio)..."
+    compose pull etcd minio milvus ollama ollama-init || true
+  fi
   log "пересборка MCP-образов (latest npm/CBM, без кеша npm-слоёв)..."
   # --pull базовых FROM; без cache для proxy/build слоёв с npm install @latest
   compose build --pull --no-cache cbm claude-context

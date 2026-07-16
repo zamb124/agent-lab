@@ -1,17 +1,18 @@
 #!/bin/sh
-# Entrypoint claude-context: single writer behind mcp-proxy, no background sync storm.
+# Entrypoint claude-context: single writer behind mcp-proxy.
+# BACKGROUND_SYNC=true — автосинк merkle→Milvus; полный wipe только через force reindex.
 set -eu
 
 : "${MCP_API_KEY:?MCP_API_KEY is required}"
 : "${REPO_ROOT:?REPO_ROOT is required}"
-: "${OLLAMA_HOST:=http://ollama:11434}"
+: "${OLLAMA_HOST:=http://host.docker.internal:11434}"
 : "${MILVUS_ADDRESS:=milvus:19530}"
 : "${EMBEDDING_PROVIDER:=Ollama}"
 : "${EMBEDDING_MODEL:=nomic-embed-text}"
 : "${EMBEDDING_DIMENSION:=768}"
 : "${EMBEDDING_BATCH_SIZE:=2}"
 : "${HYBRID_MODE:=true}"
-: "${CLAUDE_CONTEXT_BACKGROUND_SYNC:=false}"
+: "${CLAUDE_CONTEXT_BACKGROUND_SYNC:=true}"
 : "${CLAUDE_CONTEXT_TRIGGER_WATCHER:=true}"
 : "${CUSTOM_IGNORE_PATTERNS:=.search-comparison/**,.cursor/debug-*.log,documentation-dist/**,artifacts/**,test-results/**,*.map}"
 

@@ -188,6 +188,16 @@ def main() -> int:
     arguments = json.loads(args.arguments_json)
     if not isinstance(arguments, dict):
         raise SystemExit("arguments_json must be a JSON object")
+    pre_status_text = ""
+    if args.wait_status:
+        path_for_pre_status = args.status_path or arguments.get("path") or arguments.get("repo_path")
+        if isinstance(path_for_pre_status, str) and path_for_pre_status:
+            try:
+                pre_status = client.call_tool(args.status_tool, {"path": path_for_pre_status})
+                pre_status_text = extract_text(pre_status)
+            except McpHttpError:
+                pre_status_text = ""
+
     result = client.call_tool(args.tool, arguments)
     text = extract_text(result)
     print(text)
@@ -200,6 +210,7 @@ def main() -> int:
             raise SystemExit("--wait-status needs path in arguments or --status-path")
         started = time.monotonic()
         last = ""
+        saw_non_completed_status = False
         while time.monotonic() - started < args.max_wait_s:
             status = client.call_tool(args.status_tool, {"path": path})
             status_text = extract_text(status)
@@ -207,8 +218,19 @@ def main() -> int:
                 print(f"[status] {status_text}", flush=True)
                 last = status_text
             low = status_text.lower()
+            if not (
+                "completed" in low
+                or "ready" in low
+                or "fully indexed" in low
+            ):
+                saw_non_completed_status = True
             if "completed" in low or "ready" in low or "fully indexed" in low:
-                return 0
+                if not pre_status_text or status_text != pre_status_text or saw_non_completed_status:
+                    return 0
+                print(
+                    "[status] still seeing pre-existing completed status; waiting for fresh indexing state",
+                    flush=True,
+                )
             if "failed" in low or "error" in low:
                 return 1
             time.sleep(args.poll_s)
