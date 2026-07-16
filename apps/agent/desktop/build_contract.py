@@ -1,5 +1,5 @@
 """
-Контракт сборки HumanitecAgent: distro, имена артефактов, префиксы GitHub Release assets.
+Контракт сборки LinnexAgent: distro, имена артефактов, префиксы GitHub Release assets.
 """
 
 from __future__ import annotations
@@ -138,4 +138,4 @@ def macos_notarize_fragment_filename(platform: str, version_sha: str, bundle_nam
 def macos_notarize_manifest_filename(version_sha: str) -> str:
     if not version_sha:
         raise ValueError("version_sha is required")
-    return f"humanitec-agent-macos-notarize-{version_sha[:7]}.json"
+    return f"linnex-agent-macos-notarize-{version_sha[:7]}.json"

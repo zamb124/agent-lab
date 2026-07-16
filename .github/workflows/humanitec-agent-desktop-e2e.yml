@@ -33,7 +33,7 @@ jobs:
       - name: Test stack
         run: make test-up
 
-      - name: Build HumanitecAgent release
+      - name: Build LinnexAgent release
         run: make agent-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT_VERSION_SHA=${{ github.sha }}
 
       - name: Desktop E2E

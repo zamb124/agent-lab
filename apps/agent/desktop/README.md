@@ -1,4 +1,4 @@
-# HumanitecAgent Desktop (Goose custom distro)
+# LinnexAgent Desktop (Goose custom distro)
 
 Брендированная сборка [Goose](https://github.com/block/goose) для Windows, macOS и Linux.
 
@@ -14,12 +14,12 @@
 
 ## Release workflow (prod)
 
-Сборка HumanitecAgent — **только вручную** через GitHub Actions → **humanitec-agent-build** → `workflow_dispatch`.
+Сборка LinnexAgent — **только вручную** через GitHub Actions → **humanitec-agent-build** → `workflow_dispatch`.
 
 | Инвариант | Значение |
 |---|---|
 | Триггер | `workflow_dispatch` (Deploy не запускает сборку) |
-| Release tag | `humanitec-agent-{short_sha}` или явный `release_tag` |
+| Release tag | `linnex-agent-{short_sha}` или явный `release_tag` |
 | `releases/latest` | `make_latest: true` на каждой публикации |
 | Release с таким tag уже есть | skip matrix; `force_rebuild=true` для пересборки |
 
@@ -28,8 +28,8 @@
 ### Локально (dev/smoke)
 
 ```bash
-make agent-release AGENT_RELEASE_TAG=humanitec-agent-v0.2.0 AGENT_VERSION_SHA=$(git rev-parse HEAD)
-make agent-release-placeholder AGENT_RELEASE_TAG=humanitec-agent-v0.2.0-dev
+make agent-release AGENT_RELEASE_TAG=linnex-agent-v0.2.0 AGENT_VERSION_SHA=$(git rev-parse HEAD)
+make agent-release-placeholder AGENT_RELEASE_TAG=linnex-agent-v0.2.0-dev
 make agent-ensure AGENT_ARTIFACT_MODE=placeholder
 ```
 
@@ -124,12 +124,12 @@ curl https://<host>/frontend/api/agent/releases/status
 
 | platform | prefix / pattern |
 |----------|------------------|
-| windows | `HumanitecAgent-Setup-` |
-| macos-arm64 | `HumanitecAgent-macos-arm64-` |
-| macos-x64 | `HumanitecAgent-macos-x64-` |
-| linux-deb | `humanitec-agent_` |
-| linux-rpm | `humanitec-agent-` |
-| linux-appimage | `HumanitecAgent-` (суффикс `.AppImage`) |
+| windows | `LinnexAgent-Setup-` |
+| macos-arm64 | `LinnexAgent-macos-arm64-` |
+| macos-x64 | `LinnexAgent-macos-x64-` |
+| linux-deb | `linnexagent_` |
+| linux-rpm | `linnexagent-` |
+| linux-appimage | `LinnexAgent-` (суффикс `.AppImage`) |
 
 ## Submodule pin
 
@@ -140,7 +140,7 @@ cd apps/agent/desktop/vendor/goose && git checkout 4f7bf8c1e281863932b42b65577b4
 
 Parent repo фиксирует commit submodule; floating `HEAD` без pin запрещён для release.
 
-## UI rebranding (Goose → Humanitec)
+## UI rebranding (Goose → Linnex)
 
 [`scripts/apply_branding.sh`](scripts/apply_branding.sh) перед `electron-forge make` патчит vendor Goose.
 Порядок в [`scripts/build.sh`](scripts/build.sh): `apply_vendor_patches pre` (base) → `post` (overlay) → `apply_branding.sh`.
@@ -154,7 +154,7 @@ Overlay строится поверх base; branding (иконки/имена) �
 | goosed prompt templates (`system.md`, fallbacks) | [`goosed_branding.py`](goosed_branding.py) + `branding/prompts/*` |
 | Platform MCP, pairing, onboarding | `branding/*` + inline patches |
 
-Поля `ui_product_name` / `ui_product_name_lower` в [`distro/humanitec.json`](distro/humanitec.json) задают короткое имя в UI (`Humanitec` / `humanitec`). `display_name` / `bundle_name` остаются `HumanitecAgent` для `.app`, `.msi`, title bar.
+Поля `ui_product_name` / `ui_product_name_lower` в [`distro/humanitec.json`](distro/humanitec.json) задают короткое имя в UI (`Linnex` / `linnex`). `display_name` / `bundle_name` — `LinnexAgent` для `.app`, `.msi`, title bar.
 
 **Намеренно не переименовываются:** бинарь `goosed`, env `GOOSE_*`, файл `.goosehints`, ключи `goosehintsModal.*`, npm `@aaif/goose-sdk`.
 
@@ -172,6 +172,6 @@ Overlay строится поверх base; branding (иконки/имена) �
 | G3 | Deep links | `humanitec://auth/callback`, `humanitec://pairing` открывают приложение |
 | G4 | Platform MCP | desktop → flows URL + device JWT → `tools/list` |
 | G5 | fail-fast branding | `scripts/apply_branding.sh` без submodule падает с понятной ошибкой |
-| G6 | Icons | иконки HumanitecAgent в `.dmg`/`.exe`/`.deb` |
+| G6 | Icons | иконки LinnexAgent в `.dmg`/`.exe`/`.deb` |
 
 CI: `test_apply_branding_script_*`, `test_distro_fields_in_release_artifact`, opt-in `@pytest.mark.agent_build_release`.

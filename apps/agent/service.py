@@ -506,7 +506,7 @@ def _release_has_pending_macos_notarization(release_payload: JsonObject) -> bool
         asset_name = asset.get("name")
         if not isinstance(asset_name, str):
             continue
-        if asset_name.startswith("humanitec-agent-macos-notarize-") and asset_name.endswith(".json"):
+        if asset_name.startswith("linnex-agent-macos-notarize-") and asset_name.endswith(".json"):
             return True
     return False
 

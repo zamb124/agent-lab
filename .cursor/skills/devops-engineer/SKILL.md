@@ -175,7 +175,7 @@ helm rollback agent-lab <REV> -n platform
 
 ## LinnexAgent desktop (CI build)
 
-**Не K8s** — отдельный GitHub Actions workflow → GitHub Release с 6 инсталляторами. На brand `humanitec.ru` продукт — HumanitecAgent; workflow paths и release tags остаются `humanitec-agent-*`.
+**Не K8s** — отдельный GitHub Actions workflow → GitHub Release с 6 инсталляторами. Workflow files остаются `humanitec-agent-build*.yml` (технический идентификатор, не user-facing); release tags — `linnex-agent-{short_sha}`, release name/asset-имена — `LinnexAgent` (через `bundle_name` из `distro/humanitec.json`).
 
 | Что | Путь |
 |---|---|
@@ -195,7 +195,7 @@ gh run list --workflow=humanitec-agent-build.yml --limit 3
 make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT_VERSION_SHA=$(git rev-parse HEAD)
 ```
 
-**Release:** tag `humanitec-agent-{short_sha}` (или input `release_tag`); matrix skip если release уже есть — `force_rebuild=true` для пересборки. Артефакты → `apps/agent/desktop/dist/*` → GitHub Release (≥6 assets).
+**Release:** tag `linnex-agent-{short_sha}` (или input `release_tag`); matrix skip если release уже есть — `force_rebuild=true` для пересборки. Артефакты → `apps/agent/desktop/dist/*` → GitHub Release (≥6 assets).
 
 **GitHub Secrets (подпись):** `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_TEAM_ID`, `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`; Windows: `WINDOWS_CERTIFICATE_FILE`, `WINDOWS_CERTIFICATE_PASSWORD`. Без macOS-секретов — unsigned `.dmg` (job не падает). **`AUTH_APPLE_PRIVATE_KEY`** (.p8) — Sign in with Apple OAuth (mobile/web), **не** codesign desktop. Developer ID — отдельный сертификат; чеклист: `apps/agent/desktop/docs/MACOS_SIGNING.md`.
 

@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Git tag for release; пусто = humanitec-agent-{short_sha} коммита"
+        description: "Git tag for release; пусто = linnex-agent-{short_sha} коммита"
         required: false
         default: ""
         type: string
@@ -52,7 +52,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.release_tag }}" ]]; then
             RELEASE_TAG="${{ github.event.inputs.release_tag }}"
           else
-            RELEASE_TAG="humanitec-agent-${SHORT_SHA}"
+            RELEASE_TAG="linnex-agent-${SHORT_SHA}"
           fi
           echo "version_sha=${VERSION_SHA}" >> "${GITHUB_OUTPUT}"
           echo "checkout_ref=${VERSION_SHA}" >> "${GITHUB_OUTPUT}"
@@ -245,7 +245,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: humanitec-agent-${{ matrix.platform }}
+          name: linnex-agent-${{ matrix.platform }}
           path: apps/agent/desktop/dist/*
           retention-days: 1
 
@@ -316,9 +316,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve-release.outputs.release_tag }}
-          name: HumanitecAgent ${{ needs.resolve-release.outputs.release_tag }}
+          name: LinnexAgent ${{ needs.resolve-release.outputs.release_tag }}
           body: |
-            HumanitecAgent release for commit ${{ needs.resolve-release.outputs.version_sha }}.
+            LinnexAgent release for commit ${{ needs.resolve-release.outputs.version_sha }}.
 
             macOS `.dmg` files are signed immediately. Apple notarization runs asynchronously
             (up to 48 hours); notarized DMG assets replace the signed ones automatically when ready.
@@ -344,7 +344,7 @@ jobs:
             echo "::error::Expected at least 6 platform assets, got ${ASSET_COUNT}"
             exit 1
           fi
-          MANIFEST_ASSETS="$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '[.assets[].name | select(startswith("humanitec-agent-macos-notarize-") and endswith(".json"))] | length')"
+          MANIFEST_ASSETS="$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '[.assets[].name | select(startswith("linnex-agent-macos-notarize-") and endswith(".json"))] | length')"
           APP_BUNDLE_ASSETS="$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '[.assets[].name | select(endswith(".app-bundle.zip"))] | length')"
           echo "macOS notarize manifest assets: ${MANIFEST_ASSETS}"
           echo "macOS app-bundle staging assets: ${APP_BUNDLE_ASSETS}"

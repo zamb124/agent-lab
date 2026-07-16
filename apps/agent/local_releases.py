@@ -1,4 +1,4 @@
-"""Локальные release-артефакты HumanitecAgent для TESTING (без GitHub API)."""
+"""Локальные release-артефакты LinnexAgent для TESTING (без GitHub API)."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DESKTOP_DIST_DIR = REPO_ROOT / "apps" / "agent" / "desktop" / "dist"
-LOCAL_RELEASE_TAG = "humanitec-agent-local"
+LOCAL_RELEASE_TAG = "linnex-agent-local"
 
 
 def detect_host_platform() -> str:
@@ -37,7 +37,7 @@ def detect_host_platform() -> str:
         return "windows"
     if system == "linux":
         return "linux-deb"
-    raise RuntimeError(f"Unsupported host OS for HumanitecAgent build: {system}")
+    raise RuntimeError(f"Unsupported host OS for LinnexAgent build: {system}")
 
 
 def release_source() -> str:
@@ -73,17 +73,17 @@ def resolve_local_release_artifact_path(platform: str) -> Path:
     artifact = contract_artifact_path(DESKTOP_DIST_DIR, platform, version_sha, distro)
     if not artifact.is_file():
         raise FileNotFoundError(
-            f"Local HumanitecAgent artifact missing: {artifact}. "
+            f"Local LinnexAgent artifact missing: {artifact}. "
             + "Run: AGENT_ARTIFACT_MODE=release make agent-ensure"
         )
     if is_placeholder_artifact(artifact):
         raise ValueError(
-            f"Local HumanitecAgent artifact is placeholder: {artifact}. "
+            f"Local LinnexAgent artifact is placeholder: {artifact}. "
             + "Run: AGENT_ARTIFACT_MODE=release make agent-ensure"
         )
     if artifact.stat().st_size < MIN_RELEASE_BYTES:
         raise ValueError(
-            f"Local HumanitecAgent artifact too small: {artifact} "
+            f"Local LinnexAgent artifact too small: {artifact} "
             + f"({artifact.stat().st_size} bytes). "
             + "Run: AGENT_ARTIFACT_MODE=release make agent-ensure"
         )

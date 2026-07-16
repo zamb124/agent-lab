@@ -10,7 +10,7 @@ Copyright (c) 2024-2026 Шведов Виктор Викторович.
 
 | Компонент | Путь | Лицензия | Источник |
 |---|---|---|---|
-| Goose (HumanitecAgent desktop upstream) | `apps/agent/desktop/vendor/goose` | Apache-2.0 | https://github.com/block/goose |
+| Goose (LinnexAgent desktop upstream) | `apps/agent/desktop/vendor/goose` | Apache-2.0 | https://github.com/block/goose |
 
 Текст лицензии upstream: `apps/agent/desktop/vendor/goose/LICENSE` (после инициализации submodule).
 

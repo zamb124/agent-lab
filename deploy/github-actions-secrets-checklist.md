@@ -137,7 +137,7 @@ Reg.ru API принимает запросы **только с whitelist IP**. �
 
 Workflow использует `GITHUB_TOKEN` для публикации GitHub Release; отдельный PAT не нужен (`permissions: contents: write`).
 
-Release tag по умолчанию: `humanitec-agent-{short_sha}` (тот же short SHA, что Helm `image.tag` после Deploy).
+Release tag по умолчанию: `linnex-agent-{short_sha}` (тот же short SHA, что Helm `image.tag` после Deploy).
 
 Phase 1 публикует signed macOS `.dmg` сразу и шлёт submit в Apple (`AGENT_MACOS_NOTARIZE=submit-only`).
 

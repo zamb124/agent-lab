@@ -1,6 +1,6 @@
-# macOS code signing и notarization HumanitecAgent
+# macOS code signing и notarization LinnexAgent
 
-HumanitecAgent для macOS распространяется **вне App Store** (`.dmg` с GitHub Releases).  
+LinnexAgent для macOS распространяется **вне App Store** (`.dmg` с GitHub Releases).  
 Нужен **Developer ID Application** + notarization. Это **не** те же артефакты, что для mobile/iOS.
 
 ## Что уже есть в платформе (mobile)
@@ -55,8 +55,8 @@ Release **не ждёт Apple**. Два workflow:
 2. `notarytool submit` — один submit на platform на release (без blocking wait).
 3. Signed `.dmg` публикуется сразу (Gatekeeper может требовать ПКМ→Открыть до notarize).
 4. Internal assets в release (не попадают в download API):
-   - `HumanitecAgent-macos-*-{sha}.app-bundle.zip` — тот же `.app`, что отправлен в Apple (для stapler).
-   - `humanitec-agent-macos-notarize-{short_sha}.json` — manifest pending/completed.
+   - `LinnexAgent-macos-*-{sha}.app-bundle.zip` — тот же `.app`, что отправлен в Apple (для stapler).
+   - `linnex-agent-macos-notarize-{short_sha}.json` — manifest pending/completed.
 
 При новом release pending manifest предыдущих releases помечается `superseded` (Apple cancel API **не существует**).
 
@@ -64,7 +64,7 @@ Release **не ждёт Apple**. Два workflow:
 
 Workflow `humanitec-agent-macos-notarize`:
 
-1. Скачивает manifest asset с release по имени `humanitec-agent-macos-notarize-*.json` (не по `targetCommitish` ветки).
+1. Скачивает manifest asset с release по имени `linnex-agent-macos-notarize-*.json` (не по `targetCommitish` ветки).
 2. `notarytool info` по submission id из manifest.
 3. `Accepted` → download app-bundle → stapler → rebuild DMG → `gh release upload --clobber` → update `checksums.txt` → delete app-bundle zip.
 4. `Rejected` → workflow error, signed DMG остаётся.
@@ -73,7 +73,7 @@ Workflow `humanitec-agent-macos-notarize`:
 Локальный poll:
 
 ```bash
-make agent-notarize-followup AGENT_RELEASE_TAG=humanitec-agent-c38f05e
+make agent-notarize-followup AGENT_RELEASE_TAG=linnex-agent-c38f05e
 # или все pending:
 make agent-notarize-followup
 ```
@@ -118,8 +118,8 @@ Private repo: секрет `AGENT__RELEASES__GITHUB_TOKEN`.
 API `AgentReleaseStatusResponse.macos_notarization_pending=true` — manifest ещё в release, DMG может быть signed-only.
 
 ```bash
-codesign -dv --verbose=4 /Applications/HumanitecAgent.app
-spctl -a -vv /Applications/HumanitecAgent.app
+codesign -dv --verbose=4 /Applications/LinnexAgent.app
+spctl -a -vv /Applications/LinnexAgent.app
 xattr -l /Applications/HumanitecAgent.app
 ```
 

@@ -388,7 +388,7 @@ help:
 	@echo "  make test-down       - Остановить test-стек"
 	@echo ""
 	@echo "============================================================================"
-	@echo "HumanitecAgent (desktop, GitHub Releases):"
+	@echo "LinnexAgent (desktop, GitHub Releases):"
 	@echo "============================================================================"
 	@echo "  make agent           - Собрать все платформы + опубликовать GitHub Release"
 	@echo "  make agent-ensure    - Собрать артефакт текущей ОС, если ещё нет (для test)"

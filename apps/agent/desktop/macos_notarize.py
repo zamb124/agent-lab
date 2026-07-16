@@ -891,7 +891,7 @@ def discover_pending_release_tags(*, repo: str) -> list[str]:
             continue
         if is_draft is True:
             continue
-        if not tag_name.startswith("humanitec-agent-"):
+        if not tag_name.startswith("linnex-agent-"):
             continue
         try:
             release_work_dir = Path(tempfile.mkdtemp(prefix="humanitec-notarize-discover-"))

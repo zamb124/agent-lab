@@ -44,7 +44,7 @@ async def test_d2_releases_status_checksums(
     assert response.status_code == 200
     body = response.json()
     assert body["ready"] is True
-    assert body["latest_tag"] == "humanitec-agent-local"
+    assert body["latest_tag"] == "linnex-agent-local"
     checksums = body.get("asset_checksums")
     assert isinstance(checksums, list)
     assert any(entry.get("asset_name") == asset_name for entry in checksums)

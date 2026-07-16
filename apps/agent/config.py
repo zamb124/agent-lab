@@ -1,5 +1,5 @@
 """
-Конфигурация HumanitecAgent (releases, tunnel).
+Конфигурация LinnexAgent (releases, tunnel).
 """
 
 import os
@@ -11,7 +11,7 @@ from core.types import JsonObject
 
 
 class AgentReleaseSettings(BaseModel):
-    """Источник артефактов HumanitecAgent для download redirect."""
+    """Источник артефактов LinnexAgent для download redirect."""
 
     github_owner: str = Field(default="zamb124", description="GitHub org/user releases")
     github_repo: str = Field(default="agent-lab", description="GitHub repo с арtefактами")
@@ -30,7 +30,7 @@ class AgentReleaseSettings(BaseModel):
 
 
 class AgentSettings(BaseModel):
-    """Настройки HumanitecAgent на frontend сервисе."""
+    """Настройки LinnexAgent на frontend сервисе."""
 
     releases: AgentReleaseSettings = Field(default_factory=AgentReleaseSettings)
     pairing_ttl_seconds: int = Field(default=600, ge=60, le=3600)
