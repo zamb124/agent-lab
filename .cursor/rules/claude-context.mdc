@@ -1,0 +1,44 @@
+---
+description: "claude-context MCP — семантический поиск по коду: используй claude_context_search_code по умолчанию вместо grep; health-check при старте, обновление, переиндексация, fallback"
+alwaysApply: false
+---
+# claude-context MCP — семантический поиск
+
+Семантический поиск по коду через claude-context MCP (Ollama + Milvus, `@zilliz/claude-context-mcp`).
+Проект большой (3000+ файлов) — `grep` по regex даёт шум, семантика + ранжирование критичны.
+
+## Какой поиск когда
+
+- `claude_context_search_code` (MCP) — основной. «где реализован X», «как работает Y», «всё связанное с Z». Без знания точных имён.
+- `find_symbol` / `get_callees` / `get_callers` (LSP) — структура: определения, дерево вызовов.
+- `grep` — fallback: точные имена, литералы, regex, когда знаешь что искать.
+- `find_path` — файлы по glob.
+
+## Health-check при старте
+
+Перед первой задачей по коду запусти `make zed-search-check`:
+
+- **exit 0** — MCP работает. Используй `claude_context_search_code`.
+- **exit 1** — MCP сломан. Сообщи пользователю первым сообщением:
+  > ⚠️ claude-context MCP не работает — семантический поиск недоступен.
+  > Запусти `make zed-search` для настройки (Ollama + Milvus + автоиндексация).
+  > Пока MCP недоступен, я буду искать через `grep`, но это хуже по качеству.
+  Продолжай через `grep`/`find_path`, явно отметив меньшую точность.
+- **WARN (exit 0)** — MCP работает, но есть риски. Обработай каждый WARN:
+  - **MCP-пакет устарел** — версия пакета отстаёт от актуальной в npm. Сообщи:
+    > ℹ️ claude-context MCP устарел (vX.Y.Z, актуальна vA.B.C).
+    > Обнови: `make zed-search-update`, затем перезапусти Zed.
+    Продолжай — старая версия обычно работает, но без свежих фич/багфиксов.
+  - **Индекс устарёл/отсутствует** — переиндексируй: `make zed-search-reindex`. Сообщи, что поиск может вернуть неполные результаты.
+  - Другие WARN — сообщи кратко и продолжай.
+
+## Команды
+
+- `make zed-search-check` — health-check MCP (exit 0/1 + WARN).
+- `make zed-search-update` — обновить MCP-пакет до актуальной версии.
+- `make zed-search-reindex` — переиндексировать кодовую базу.
+- `make zed-search` — полная настройка (Ollama + Milvus + автоиндексация).
+
+## Правило
+
+Сначала `claude_context_search_code`. `grep` — только точечные литералы/regex или когда MCP недоступен.
