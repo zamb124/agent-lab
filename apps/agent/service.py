@@ -335,12 +335,27 @@ def _frontend_origin_from_request_host(host: str, url_scheme: str) -> str:
     return origin.rstrip("/")
 
 
+def resolve_brand_frontend_base_url(request_host: str | None) -> str | None:
+    """Public brand apex for catalog/MCP URLs from Host (not register/discover reachability)."""
+    if request_host is None or not str(request_host).strip():
+        return None
+    host = str(request_host).strip()
+    if is_local(host):
+        return None
+    try:
+        _ = resolve_brand(host)
+    except UnknownPlatformDomainError:
+        return None
+    return get_frontend_public_base_url(host)
+
+
 def resolve_frontend_base_url(
     origin_override: str | None = None,
     *,
     request_host: str | None = None,
     url_scheme: str | None = None,
 ) -> str:
+    """Reachable frontend base for register/discover/tunnel (sandbox allowlist + platform public)."""
     platform_public_base_url = get_frontend_public_base_url()
     if origin_override is not None:
         ro = origin_override.rstrip("/")
@@ -352,15 +367,6 @@ def resolve_frontend_base_url(
         return ro
     if request_host is not None and str(request_host).strip():
         host = str(request_host).strip()
-        # Known brand apex (non-local): public catalog/MCP URLs use brand origin,
-        # not OAuth return-origin allowlist against platform_public_base_url.
-        if not is_local(host):
-            try:
-                _ = resolve_brand(host)
-            except UnknownPlatformDomainError:
-                pass
-            else:
-                return get_frontend_public_base_url(host)
         resolved_scheme = url_scheme if url_scheme in ("http", "https") else get_protocol(host)
         host_origin = _frontend_origin_from_request_host(host, resolved_scheme)
         if is_allowed_integration_return_origin(host_origin, platform_public_base_url):

@@ -9,6 +9,7 @@ from tests.agent.desktop_e2e.goosed_helpers import (
     goosed_call_tool,
     goosed_tools_list,
     prepare_goosed_developer_session,
+    prepare_goosed_session_with_extensions,
     resolve_tool_name,
     tool_response_text,
     wait_for_goosed_tools,
@@ -194,14 +195,18 @@ async def test_goose_plat_08_chatrecall_tools_list(
         async with async_playwright() as playwright:
             browser = await connect_desktop_browser(playwright, desktop)
             page = await find_main_app_page(browser)
-            session_id = await prepare_goosed_developer_session(
+            # Goose vendor no longer ships chatrecall; memory is a stable bundled builtin
+            # (disabled by default — enable before listing tools).
+            session_id = await prepare_goosed_session_with_extensions(
                 page,
                 workspace,
                 desktop=desktop,
                 agent_frontend_http_client=agent_frontend_http_client,
                 auth_token=auth_token,
+                enabled_extensions=["Memory"],
             )
-            tools = await goosed_tools_list(page, session_id, extension_name="chatrecall")
+            await wait_for_goosed_tools(page, session_id, name_suffix="remember_memory")
+            tools = await goosed_tools_list(page, session_id, extension_name="memory")
             assert len(tools) > 0
     finally:
         desktop.stop()
@@ -221,14 +226,18 @@ async def test_goose_plat_13_summarize_tools_list(
         async with async_playwright() as playwright:
             browser = await connect_desktop_browser(playwright, desktop)
             page = await find_main_app_page(browser)
-            session_id = await prepare_goosed_developer_session(
+            # Goose vendor no longer ships summarize; tutorial is a stable bundled builtin
+            # (disabled by default — enable before listing tools).
+            session_id = await prepare_goosed_session_with_extensions(
                 page,
                 workspace,
                 desktop=desktop,
                 agent_frontend_http_client=agent_frontend_http_client,
                 auth_token=auth_token,
+                enabled_extensions=["Tutorial"],
             )
-            tools = await goosed_tools_list(page, session_id, extension_name="summarize")
+            await wait_for_goosed_tools(page, session_id, name_suffix="load_tutorial")
+            tools = await goosed_tools_list(page, session_id, extension_name="tutorial")
             assert len(tools) > 0
     finally:
         desktop.stop()

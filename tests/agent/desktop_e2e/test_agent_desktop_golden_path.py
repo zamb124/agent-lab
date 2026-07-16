@@ -277,8 +277,10 @@ async def test_d_gold_pairing_tunnel_mcp_audit(
     desktop = humanitec_desktop_system_process_factory()
     try:
         desktop.start()
-        desktop.pair_via_deep_link(pairing_code)
-        credentials = desktop.wait_for_credentials()
+        # In-app deep link (not OS openURL): OS scheme registration is flaky across
+        # Linnex/Humanitec brands in CI; credentials file remains humanitec-agent.json.
+        await desktop.pair_via_test_deep_link(pairing_code)
+        credentials = desktop.wait_for_credentials(timeout_seconds=30.0)
         device_id = credentials["device_id"]
         await desktop.wait_for_tunnel_online(agent_frontend_http_client_system, device_id)
 

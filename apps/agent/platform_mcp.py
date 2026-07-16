@@ -230,7 +230,7 @@ async def _resolve_flow_context_id(
     """Sticky A2A context_id: explicit → MCP session → device (only without MCP session) → new UUID.
 
     New Mcp-Session-Id always gets a new context_id (new LinnexAgent dialog ≠ old Lara session).
-    Device fallback is only for callers that omit Mcp-Session-Id.
+    Device sticky key is used only when the caller omits Mcp-Session-Id.
     """
     if explicit_context_id is not None:
         await _persist_sticky_context_id(

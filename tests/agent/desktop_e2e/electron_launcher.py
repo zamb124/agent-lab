@@ -91,6 +91,9 @@ class HumanitecDesktopProcess:
     def start(self) -> None:
         if self._process is not None:
             raise RuntimeError("HumanitecAgent process already started")
+        # Restart with cleanup_user_data=False keeps the dir; still ensure layout exists.
+        self._user_data_dir.mkdir(parents=True, exist_ok=True)
+        self._goose_path_root.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
         env["HUMANITEC_FRONTEND_BASE_URL"] = self._config.frontend_base_url
         env["HUMANITEC_DEV_PROBE"] = "1"

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from apps.agent.service import resolve_frontend_base_url
+from apps.agent.service import resolve_brand_frontend_base_url, resolve_frontend_base_url
 
 
 def test_resolve_frontend_base_url_from_tenant_host() -> None:
@@ -14,6 +14,12 @@ def test_resolve_frontend_base_url_from_tenant_host() -> None:
         url_scheme="http",
     )
     assert resolved == "http://test-company.lvh.me:9004"
+
+
+def test_resolve_brand_frontend_base_url_for_catalog_host() -> None:
+    assert resolve_brand_frontend_base_url("humanitec.ru") == "https://humanitec.ru"
+    assert resolve_brand_frontend_base_url("linnex.io") == "https://linnex.io"
+    assert resolve_brand_frontend_base_url("system.lvh.me:9004") is None
 
 
 def test_resolve_frontend_base_url_explicit_origin() -> None:
