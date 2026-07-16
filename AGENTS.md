@@ -32,12 +32,16 @@
 
 *Natural language* в схеме тула ≠ копипаст вопроса. Cursor user-prompt («how do we handle X?») выбирает semantic; **агентский `query`** — короткий якорь под чанки кода.
 
+Эмбеддер ранжирует похожесть чанка, не важность файла. Prose/жаргон (`Networkle`, `collect`, `sync`) поднимает skills/prompts раньше ядра (`EntityRepository`, `upload_text`). Признак провала: топ без mutating-кода из `apps/crm` / `core/rag`.
+
 - Короткие якоря (1 мысль, 5–12 слов), термины ближе к коду.
 - Один концепт = один вызов; составной вопрос → несколько вызовов.
 - Сужай `extensionFilter` (`.py` / `.js`), когда зона известна.
 - Плохо: `How does Networkle … What happens if …`
 - Хорошо: `CRM note text indexing RAG vector documents` / `EntityRepository upload_text entity_id`
 - Мусор в выдаче → не повторяй длинный query; сузь якоря / фильтр или переключись на граф/`grep`.
+
+Полный разбор «почему слабая выдача» — `.cursor/rules/claude-context.mdc` § «Формулировка … query».
 
 ## Шпаргалка
 

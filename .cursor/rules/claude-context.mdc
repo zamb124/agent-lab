@@ -54,10 +54,14 @@ alwaysApply: true
 
 Эмбеддер ищет похожие **чанки кода/доков**, а не отвечает на вопрос. Длинный разговорный multi-question запрос даёт шум (README, agent prompts, нерелевантный код). Cursor user-prompt («How does our app handle failed payments?») — для **выбора** semantic-тула человеком; **строка `query` агента** должна быть коротким якорем под чанки.
 
+### Почему длинный prose даёт слабую выдачу
+
+Ранжирование — cosine чанка к `query`, **не** важность файла. Провалы: multi-question размывает вектор; продуктовый жаргон (`Networkle`, `collect`, `sync`) поднимает skills/prompts раньше ядра (`EntityRepository`, `upload_text`); тул отдаёт похожие фрагменты, а не call-chain. Признак: топ — `agent_skills/**` / prompts / README, нет mutating-кода в `apps/crm` / `core/rag`. Не повторяй тот же query.
+
 | Делай | Не делай |
 |---|---|
 | Короткие смысловые якоря (1 мысль, 5–12 слов) | Целый вопрос пользователя / «How does X… What happens if Y…» |
-| Термины ближе к коду: `EntityRepository upload_text`, `note RAG index`, `vector_documents entity_id` | Абстрактный prose без доменных слов |
+| Термины ближе к коду: `EntityRepository upload_text`, `note RAG index`, `vector_documents entity_id` | Абстрактный prose без доменных слов (`collect`, `sync`, `how does`) |
 | Один концепт = один вызов; составной вопрос → 2–3 вызова | Два+ независимых вопроса в одном `query` |
 | `extensionFilter: [".py"]` / `[".js"]` когда зона известна | Широкий поиск по всему репо без нужды |
 | `path` = абсолютный корень репо | Относительный path |
@@ -65,16 +69,16 @@ alwaysApply: true
 Примеры:
 
 ```text
-# плохо (копипаст multi-question)
+# плохо (копипаст multi-question → skills/prompts, не ядро)
 How does Networkle CRM collect note data and sync notes with RAG? What happens when note changes in RAG?
 
-# хорошо (отдельные вызовы — якоря под чанки)
+# хорошо (отдельные вызовы — якоря под чанки реализации)
 CRM note text indexing RAG vector documents
 EntityRepository upload_text document_id entity_id
 note attachment index_file RAG
 ```
 
-Если семантика вернула мусор (README/чужой домен) — не повторяй тот же длинный query: сузь якоря + `extensionFilter`, либо переключись на граф/`grep`.
+Если семантика вернула мусор (README / skills / чужой домен) — не повторяй тот же длинный query: сузь якоря + `extensionFilter` (часто `.py`), либо переключись на граф/`grep` по уже известным символам (`upload_text`, `search_with_similarity`).
 
 ## Имя проекта в графе
 
