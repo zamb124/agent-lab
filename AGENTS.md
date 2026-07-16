@@ -61,8 +61,8 @@
 
 `make zed-search-check` при старте.
 
-- exit 1 → скажи пользователю: запусти `make zed-search`.
-- WARN про legacy launchd / stray stdio → `make zed-search` (compose stop-legacy) + перезапуск IDE.
+- exit 1 → скажи пользователю: запусти `make zed-search` (+ перезапуск IDE, если MCP всё ещё stdio).
+- WARN про индекс → `make zed-search-reindex`.
 
 ## Команды
 

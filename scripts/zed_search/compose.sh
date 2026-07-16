@@ -30,10 +30,6 @@ CLAUDE_URL_DEFAULT="http://127.0.0.1:9752/mcp"
 ZED_SETTINGS="${ZED_SETTINGS:-$HOME/.config/zed/settings.json}"
 CURSOR_MCP="${CURSOR_MCP:-$HOME/.cursor/mcp.json}"
 
-WATCH_PLIST="${HOME}/Library/LaunchAgents/com.claude-context-watch.plist"
-CBM_DAEMON_PLIST="${HOME}/Library/LaunchAgents/com.codebase-memory-mcp.daemon.plist"
-OLD_MILVUS_COMPOSE="${HOME}/.local/share/claude-context-milvus/docker-compose.yml"
-
 log() { echo "[zed-search] $*"; }
 die() { echo "[zed-search] ERROR: $*" >&2; exit 1; }
 
@@ -110,26 +106,27 @@ cmd_ensure_env() {
   log "env готов: $ENV_FILE"
 }
 
-stop_legacy_host() {
-  log "остановка legacy host-стека (launchd / brew ollama / старый milvus / stray MCP)..."
+# Освободить порты 11434/9751/9752 под Compose (host Ollama / stray MCP / чужой Milvus).
+free_host_ports() {
+  log "освобождение портов под Compose..."
 
-  if [ -f "$WATCH_PLIST" ]; then
-    launchctl unload "$WATCH_PLIST" 2>/dev/null || true
-    rm -f "$WATCH_PLIST"
-    log "  удалён claude-context launchd watcher"
+  local watch_plist="${HOME}/Library/LaunchAgents/com.claude-context-watch.plist"
+  local cbm_plist="${HOME}/Library/LaunchAgents/com.codebase-memory-mcp.daemon.plist"
+  local old_milvus="${HOME}/.local/share/claude-context-milvus/docker-compose.yml"
+
+  if [ -f "$watch_plist" ]; then
+    launchctl unload "$watch_plist" 2>/dev/null || true
+    rm -f "$watch_plist"
   fi
-  if [ -f "$CBM_DAEMON_PLIST" ]; then
-    launchctl unload "$CBM_DAEMON_PLIST" 2>/dev/null || true
-    rm -f "$CBM_DAEMON_PLIST"
-    log "  удалён CBM launchd daemon"
+  if [ -f "$cbm_plist" ]; then
+    launchctl unload "$cbm_plist" 2>/dev/null || true
+    rm -f "$cbm_plist"
   fi
 
-  # Освобождаем 11434 под Compose Ollama.
   if command -v brew >/dev/null 2>&1; then
     brew services stop ollama 2>/dev/null || true
   fi
   if lsof -nP -iTCP:11434 -sTCP:LISTEN >/dev/null 2>&1; then
-    # Не docker — host ollama
     if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'zed-search-ollama'; then
       pkill -f '/[o]llama serve' 2>/dev/null || true
       pkill -x ollama 2>/dev/null || true
@@ -137,19 +134,16 @@ stop_legacy_host() {
     fi
   fi
 
-  if [ -f "$OLD_MILVUS_COMPOSE" ]; then
-    docker compose -f "$OLD_MILVUS_COMPOSE" down 2>/dev/null || true
+  if [ -f "$old_milvus" ]; then
+    docker compose -f "$old_milvus" down 2>/dev/null || true
   fi
   docker stop milvus-standalone milvus-minio milvus-etcd 2>/dev/null || true
   docker rm milvus-standalone milvus-minio milvus-etcd 2>/dev/null || true
 
-  # Host mcp-proxy / stray stdio writers
   pkill -f 'mcp-proxy --host 127.0.0.1 --port 9751' 2>/dev/null || true
   pkill -f 'mcp-proxy --host 127.0.0.1 --port 9752' 2>/dev/null || true
-  # Не убиваем docker-контейнерные процессы по имени бинаря — только host npx claude-context
   pkill -f 'npm exec @zilliz/claude-context-mcp' 2>/dev/null || true
   pkill -f 'node_modules/.bin/claude-context-mcp' 2>/dev/null || true
-  # Host CBM без cli (stdio)
   pkill -f "$HOME/.local/bin/codebase-memory-mcp$" 2>/dev/null || true
 
   sleep 1
@@ -347,7 +341,7 @@ cmd_up() {
   require_docker
   cmd_ensure_env
   load_env
-  stop_legacy_host
+  free_host_ports
   log "docker compose up --build..."
   compose up --build -d --remove-orphans
   wait_stack
@@ -415,9 +409,8 @@ case "${1:-}" in
   update)      cmd_update ;;
   wire)        cmd_ensure_env; wire_clients ;;
   ensure-env)  cmd_ensure_env ;;
-  stop-legacy) stop_legacy_host ;;
   *)
-    echo "usage: compose.sh {up|down|status|logs|reindex|update|wire|ensure-env|stop-legacy} [--no-index]"
+    echo "usage: compose.sh {up|down|status|logs|reindex|update|wire|ensure-env} [--no-index]"
     exit 1
     ;;
 esac

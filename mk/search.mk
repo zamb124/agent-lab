@@ -11,14 +11,9 @@
 # make zed-search-logs      логи compose (опц. SERVICE=cbm)
 # make zed-search-test      интеграционные тесты
 # make zed-search-sync-caila-models  Caila → Zed settings
-#
-# Legacy (redirect → compose):
-#   zed-search-watch* / zed-search-cbm-daemon* — больше не канон
 
 .PHONY: zed-search zed_search zed-search-check zed-search-update zed-search-test zed-search-status \
-        zed-search-down zed-search-logs zed-search-watch zed-search-watch-install \
-        zed-search-watch-uninstall zed-search-reindex zed-search-sync-caila-models \
-        zed-search-cbm-daemon zed-search-cbm-daemon-uninstall
+        zed-search-down zed-search-logs zed-search-reindex zed-search-sync-caila-models
 
 COMPOSE_SH := bash scripts/zed_search/compose.sh
 ZED_SEARCH_SERVICE ?=
@@ -53,15 +48,6 @@ zed-search-logs:
 zed-search-test:
 	@echo "[zed-search] Запуск интеграционных тестов..."
 	@.venv/bin/python3 -m pytest tests/zed_search/test_zed_search.py -c tests/zed_search/pytest.ini --timeout=300
-
-# Legacy aliases → Compose
-zed-search-watch zed-search-watch-install zed-search-cbm-daemon:
-	@echo "[zed-search] legacy target '$@' → Compose-канон"
-	@$(COMPOSE_SH) up --no-index
-
-zed-search-watch-uninstall zed-search-cbm-daemon-uninstall:
-	@echo "[zed-search] legacy uninstall '$@' → stop-legacy + compose down не трогаем стек"
-	@$(COMPOSE_SH) stop-legacy
 
 zed-search-sync-caila-models:
 	@python3 scripts/zed_search/sync_caila_models.py

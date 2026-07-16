@@ -134,8 +134,7 @@ else
   fi
 fi
 
-# 6. Legacy host writers — должны быть нули
-# pgrep возвращает 1, если процессов нет — не роняем set -e.
+# 6. Host MCP вне Compose — конфликт с :9751/:9752 (FAIL, не WARN)
 host_claude="$(pgrep -f 'npm exec @zilliz/claude-context-mcp|node_modules/.bin/claude-context-mcp' 2>/dev/null | wc -l | tr -d ' ' || true)"
 host_claude="${host_claude:-0}"
 host_cbm="$(ps -axo command= 2>/dev/null | awk '
@@ -143,29 +142,19 @@ host_cbm="$(ps -axo command= 2>/dev/null | awk '
   END { print c+0 }
 ' || true)"
 host_cbm="${host_cbm:-0}"
-if [ "$host_claude" -eq 0 ]; then
-  check "Host-claude-stdio" "OK" "нет stray npx claude-context"
-else
-  check "Host-claude-stdio" "WARN" "на хосте $host_claude процессов claude-context (stdio). Перезапусти Zed/Cursor после wire URL."
+if [ "$host_claude" -ne 0 ]; then
+  check "Host-claude" "FAIL" "на хосте $host_claude процессов claude-context вне Compose. Починка: make zed-search + перезапуск IDE"
 fi
-if [ "$host_cbm" -eq 0 ]; then
-  check "Host-CBM-stdio" "OK" "нет stray host CBM"
-else
-  check "Host-CBM-stdio" "WARN" "на хосте $host_cbm процессов CBM вне Docker. Починка: bash scripts/zed_search/compose.sh stop-legacy"
+if [ "$host_cbm" -ne 0 ]; then
+  check "Host-CBM" "FAIL" "на хосте $host_cbm процессов CBM вне Compose. Починка: make zed-search"
 fi
-
-# 7. Legacy launchd
 if [ -f "$HOME/Library/LaunchAgents/com.claude-context-watch.plist" ] || \
    launchctl list 2>/dev/null | grep -q 'com.claude-context-watch'; then
-  check "Legacy-watcher" "WARN" "launchd watcher ещё есть — удали: make zed-search (compose stop-legacy)"
-else
-  check "Legacy-watcher" "OK" "launchd watcher снят"
+  check "Host-launchd-watch" "FAIL" "launchd watcher конфликтует со стеком. Починка: make zed-search"
 fi
 if [ -f "$HOME/Library/LaunchAgents/com.codebase-memory-mcp.daemon.plist" ] || \
    launchctl list 2>/dev/null | grep -q 'com.codebase-memory-mcp.daemon'; then
-  check "Legacy-CBM-daemon" "WARN" "host launchd CBM daemon ещё есть — конфликтует с Compose :9751"
-else
-  check "Legacy-CBM-daemon" "OK" "host CBM daemon снят"
+  check "Host-launchd-cbm" "FAIL" "launchd CBM daemon конфликтует с :9751. Починка: make zed-search"
 fi
 
 echo "================================================================"
