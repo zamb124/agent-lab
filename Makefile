@@ -436,6 +436,21 @@ help:
 	@echo "  make k8s-restore FILE=<path>  - Восстановление дампа в pod postgres-0"
 	@echo ""
 	@echo "============================================================================"
+	@echo "Семантический поиск по коду (claude-context MCP: Ollama + Milvus):"
+	@echo "============================================================================"
+	@echo "  make zed-search                  - Полная настройка: Ollama+Milvus+watcher (индексация авто)"
+	@echo "  make zed-search-check            - Health-check MCP (агент зовёт при старте; ругается если сломан)"
+	@echo "  make zed-search-update           - Обновить MCP-пакет до свежей версии из npm"
+	@echo "  make zed-search-test             - Интеграционные тесты (поиск, переиндексация, healthcheck)"
+	@echo "  make zed-search-status            - Статус всех компонентов"
+	@echo "  make zed-search-down              - Остановить Milvus"
+	@echo "  make zed-search-logs              - Логи Milvus"
+	@echo "  make zed-search-watch             - Watcher автоиндексации (foreground)"
+	@echo "  make zed-search-watch-install     - launchd-агент (автозапуск при логине)"
+	@echo "  make zed-search-watch-uninstall   - убрать launchd-агент"
+	@echo "  make zed-search-reindex           - Мгновенная переиндексация (touch триггера)"
+	@echo ""
+	@echo "============================================================================"
 	@echo "Документация (Zensical):"
 	@echo "============================================================================"
 	@echo "  make doc        - docs_prepare + zensical RU/EN build → documentation-dist/"
@@ -448,6 +463,7 @@ include mk/app.mk
 include mk/agent.mk
 include mk/test.mk
 include mk/migrate.mk
+include mk/search.mk
 
 # Документация
 .PHONY: doc doc-serve doc-serve-zensical doc-docker doc-clean docs-build docs-serve docs-clean docs-docker-build
