@@ -300,9 +300,13 @@ async def test_init_company_resources_bootstraps_public_agent_toolkits(
     )
     set_context(test_context)
     try:
+        lara = await container.agent_toolkit_repository.get("lara")
+        assert lara is not None
+        assert lara.default_enabled is True
+        assert "lara" in lara.flow_ids
         toolkit = await container.agent_toolkit_repository.get("humanitec_core")
         assert toolkit is not None
-        assert toolkit.default_enabled is True
+        assert toolkit.default_enabled is False
         assert "humanitec_agent" in toolkit.flow_ids
         public_ids = {
             "humanitec_core",

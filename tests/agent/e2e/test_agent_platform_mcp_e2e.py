@@ -102,9 +102,10 @@ async def test_e2e_platform_mcp_tools_call_success(
     assert body["result"]["isError"] is False
     content = body["result"]["content"]
     assert isinstance(content, list)
-    assert content[0]["text"] == "Platform MCP E2E ok"
+    assert content[0]["text"].startswith("Platform MCP E2E ok")
     assert isinstance(body["result"]["context_id"], str)
     assert body["result"]["context_id"]
+    assert f"context_id: {body['result']['context_id']}" in content[0]["text"]
 
 
 @pytest.mark.asyncio
@@ -266,7 +267,9 @@ async def test_e2e_platform_mcp_context_id_continuity(
     assert first.status_code == 200
     first_body = first.json()
     assert first_body["result"]["context_id"] == context_id
-    assert first_body["result"]["content"][0]["text"] == "first turn"
+    first_text = first_body["result"]["content"][0]["text"]
+    assert first_text.startswith("first turn")
+    assert f"context_id: {context_id}" in first_text
 
     second = await flows_client_http.post(
         PLATFORM_MCP_PATH,
@@ -284,7 +287,9 @@ async def test_e2e_platform_mcp_context_id_continuity(
     assert second.status_code == 200
     second_body = second.json()
     assert second_body["result"]["context_id"] == context_id
-    assert second_body["result"]["content"][0]["text"] == "second turn"
+    second_text = second_body["result"]["content"][0]["text"]
+    assert second_text.startswith("second turn")
+    assert f"context_id: {context_id}" in second_text
 
 
 @pytest.mark.asyncio

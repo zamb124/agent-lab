@@ -62,9 +62,39 @@
     "company_id": "",
     "company_name": "",
     "active_namespace": "default",
-    "user_language": "ru"
+    "user_language": "ru",
+    "device_id": "",
+    "linnex_agent_client": ""
   },
   "branches": {
+    "linnex_agent": {
+      "name": "LinnexAgent",
+      "description": "Lara entry: LinnexAgent desktop; full platform skills + local device tools",
+      "tags": [
+        "linnex_agent",
+        "desktop",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "LinnexAgent Lara",
+          "prompt": "prompts/linnex_agent.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.2,
+            "provider": "humanitec_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
+          ]
+        }
+      }
+    },
     "console": {
       "name": "Platform Console",
       "description": "Lara entry: platform console focus; full platform skills attached",

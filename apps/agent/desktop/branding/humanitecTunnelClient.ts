@@ -1,4 +1,5 @@
 import type { HumanitecAgentCredentials } from './humanitecAgentStore';
+import { handleBuiltInLocalDeviceMcp } from './humanitecLocalDeviceMcp';
 
 type WebSocketLike = {
   readyState: number;
@@ -35,8 +36,13 @@ type JsonRpcResponsePayload = {
 
 export class HumanitecTunnelClient {
   private socket: WebSocketLike | null = null;
+  private devicePolicy: Record<string, unknown> | null = null;
 
   constructor(private readonly options: HumanitecTunnelClientOptions) {}
+
+  setDevicePolicy(policy: Record<string, unknown>): void {
+    this.devicePolicy = policy;
+  }
 
   connect(): void {
     if (this.socket !== null) {
@@ -107,6 +113,7 @@ export class HumanitecTunnelClient {
       if (typeof policy !== 'object' || policy === null) {
         throw new Error('humanitec tunnel policy frame invalid');
       }
+      this.devicePolicy = policy as Record<string, unknown>;
       this.options.onPolicy?.(policy as Record<string, unknown>);
       return;
     }
@@ -192,15 +199,8 @@ export class HumanitecTunnelClient {
         this.sendMcpResponse(requestId, result);
         return;
       }
-      if (method === 'tools/list') {
-        this.sendMcpResponse(requestId, { tools: [] });
-        return;
-      }
-      this.sendFrame({
-        type: 'mcp_response',
-        request_id: requestId,
-        error_detail: `device MCP unavailable for method: ${method}`,
-      });
+      const result = await handleBuiltInLocalDeviceMcp(method, params, this.devicePolicy);
+      this.sendMcpResponse(requestId, result);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.sendFrame({

@@ -65,10 +65,11 @@ alwaysApply: false
 
 ## Lara (канон)
 
-- `flow_id: lara` — единый ассистент восьми SPA.
+- `flow_id: lara` — единый ассистент восьми SPA **и** LinnexAgent desktop.
 - Service roots полного Tier-1 catalog: `console-platform`, `networkle`, `flows-platform`, `sync-platform`, `rag-platform`, `documents-platform`, `worktracker-platform`, `litserve-platform`.
 - Дополнительные roots: `flows-code` (node helper entry), `docs-knowledge` (docs portal), `platform-workspace` (shared capabilities).
-- Branches `console`, `crm`, `flows`, `sync`, `rag`, `documents`, `worktracker`, `litserve`, `docs` и node-helper branches отличаются только focus prompt. Каждый наследует один `LARA_PLATFORM_SKILL_ROOTS`; branch не режет catalog.
+- Branches `console`, `crm`, `flows`, `sync`, `rag`, `documents`, `worktracker`, `litserve`, `docs`, node-helper и **`linnex_agent`** (desktop entry) отличаются focus prompt / standing tools. Каждый наследует один Tier-1 catalog; branch не режет skill catalog.
+- Branch **`linnex_agent`**: Platform MCP / LinnexAgent; standing `ask_user` + `device_tools_list` + `device_tools_call` (tunnel → local PC). Канон desktop → **`humanitec_agent.mdc`** (LaraOnly).
 - Standing tools на base и во всех branches: только `ask_user`. Domain/shared tools появляются только после `load_agent_skill`.
 - Methodology бывших Lara prompts — в skill bodies + `references/*-lara-methodology.md`.
 - Skill Library CTA → `flow_chat` / `lara`. `platform_assistant` — deprecated alias с теми же roots.

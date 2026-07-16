@@ -1,96 +1,76 @@
 ---
-description: "LinnexAgent: desktop, pairing, tunnel WS, Platform MCP (flows как MCP tools); интеграция для внешних MCP-клиентов"
+description: "LinnexAgent: LaraOnly desktop, pairing, tunnel WS, Platform MCP; device tools via tunnel"
 alwaysApply: false
 ---
-# LinnexAgent и Platform MCP
+# LinnexAgent и Platform MCP (LaraOnly)
 
-LinnexAgent — desktop-клиент (Goose fork) с доступом к flow компании и локальным MCP на ПК пользователя. На legacy brand `humanitec.ru` продукт называется **HumanitecAgent** (`platform_brands.humanitec.ru.agent_product_name`). **Код домена** — `apps/agent/`; **маршруты** монтируются в два сервиса по зоне ответственности (как A2A живёт в flows, а не в frontend).
+LinnexAgent — desktop-клиент (Goose fork). **Канон продукта: LaraOnly** — единственное platform-окно = flow `lara` на branch `linnex_agent`; локальный ПК — через tunnel device tools внутри Lara. На legacy brand `humanitec.ru` продукт называется **HumanitecAgent**. **Код домена** — `apps/agent/`.
 
 ## Два HTTP-surface
 
 | Surface | Сервис | Базовый path | Назначение |
 |---|---|---|---|
 | **Control plane** | `frontend` (:8002) | `/frontend/api/agent/*` | pairing, register, devices, policy, audit, download, releases |
-| **Tunnel WS** | `frontend` | `WS /frontend/api/agent/tunnel?token=` | исходящее соединение desktop → platform; ping/pong, policy push, `toolkits_updated`, локальный MCP proxy |
-| **Platform MCP** | `flows` (:8001) | `/flows/api/v1/agent/platform-mcp` | Streamable HTTP MCP: полный каталог (union всех toolkits) + `device/mcp` proxy |
-| **Platform MCP (toolkit)** | `flows` | `/flows/api/v1/agent/platform-mcp/{toolkit_id}` | Streamable HTTP MCP scoped по одной группе инструментов |
-| **Toolkits catalog** | `flows` | `GET /flows/api/v1/agent/toolkits` | Каталог групп для desktop (device JWT или session) |
-| **Toolkits manage** | `flows` | `/flows/api/v1/agent/toolkits/manage` | CRUD групп (session JWT) |
-| **A2A** | `flows` | `/flows/api/v1/a2a/*` | исполнение flow (тот же runtime, другой транспорт) |
+| **Tunnel WS** | `frontend` | `WS /frontend/api/agent/tunnel?token=` | desktop → platform; ping/pong, policy, `mcp_request`/`mcp_response` |
+| **Platform MCP** | `flows` (:8001) | `/flows/api/v1/agent/platform-mcp` | Streamable HTTP MCP (union + `device/mcp`) |
+| **Platform MCP (toolkit)** | `flows` | `/flows/api/v1/agent/platform-mcp/{toolkit_id}` | scoped MCP; desktop использует **`/platform-mcp/lara`** |
+| **Toolkits catalog** | `flows` | `GET /flows/api/v1/agent/toolkits` | для **device JWT** — только toolkit `lara` |
+| **Toolkits manage** | `flows` | `/flows/api/v1/agent/toolkits/manage` | CRUD групп (session JWT; admin) |
+| **A2A** | `flows` | `/flows/api/v1/a2a/*` | исполнение flow |
 
-**Platform MCP не в frontend.** Router `apps/agent/platform_mcp.py` регистрируется в `apps/flows/main.py`. Frontend выдаёт `platform_mcp_url` и `toolkits_url` при register (`apps/agent/service.py`).
+**Platform MCP не в frontend.** Router `apps/agent/platform_mcp.py` → `apps/flows/main.py`.
 
-## AgentToolkit — группы инструментов
+## LaraOnly
 
-Database-first сущность `AgentToolkit` (`apps/flows/src/models/agent_toolkit.py`):
+| Инвариант | Деталь |
+|---|---|
+| Desktop catalog | Device JWT → только `lara` (`default_enabled: true`) |
+| MCP tool | `flow_lara` → A2A `metadata.branch = linnex_agent` |
+| Sticky session | Redis: `Mcp-Session-Id` **или** `device:{device_id}` → A2A `context_id`; result text содержит `context_id: …` |
+| Local PC | Builtin `device_tools_list` / `device_tools_call` на branch; `device_id` из variables (device JWT), не из LLM args |
+| Tunnel local MCP | Built-in desktop surface (`humanitecLocalDeviceMcp.ts`) под `DevicePolicy`; optional `HUMANITEC_LOCAL_MCP_URL` override |
+| Updates | Skills/tools/prompts Lara — DB/seed; desktop binary не пересобирать ради platform |
 
-- `toolkit_id`, `name`, `description`, `default_enabled`, `position`
-- `flow_ids[]`, `tool_ids[]` — membership (exposed = состоит хотя бы в одной группе)
-- `source`: `platform` (bootstrap из `registry.yaml` → `agent_toolkits`) или `custom`
+Не делать: Goose skills mirror platform Agent Skills; multi-toolkit flat MCP как primary desktop surface.
 
-Bootstrap: `apps/flows/registry.yaml` секция `agent_toolkits` (`public: true` копируется в новые компании через `init_company_resources`). Re-bootstrap **merge**: metadata из registry обновляется, `flow_ids`/`tool_ids` объединяются с существующими (union), custom membership не затирается. Lazy backfill: `GET /agent/toolkits` при пустом каталоге компании вызывает `ensure_agent_toolkits_bootstrapped` (для компаний, созданных до фичи). Системные группы: `humanitec_core` (default on), `networkle`, `docs`, `lara`, `files`, `browser`.
+## AgentToolkit
 
-Flows/tools API: поле `agent_toolkit_ids` вместо legacy `exposed_to_agent`. Membership хранится на toolkit (`set_flow_toolkit_membership` / `set_tool_toolkit_membership`).
-
-## Desktop: одна группа = одно расширение
-
-После pairing desktop:
-
-1. `GET toolkits_url` → каталог групп
-2. `humanitecToolkitsSync.ts` создаёт Goose extensions `platform_{toolkit_id}` (`streamable_http`, `uri` = scoped MCP URL, `Authorization: Bearer` device JWT)
-3. При первом появлении `enabled = default_enabled`; дальше состояние пользователя не трогается
-4. Push `{type:"toolkits_updated"}` на tunnel → resync extensions без пересборки приложения
-
-Корневой `/platform-mcp` остаётся для внешних MCP-хостов (полный union). Desktop использует per-toolkit endpoints.
+Database-first (`apps/flows/src/models/agent_toolkit.py`). Bootstrap: `registry.yaml` → `agent_toolkits`. Системные: `lara` (desktop default on), `humanitec_core` (legacy, default off), `networkle`, `docs`, `files`, `browser`.
 
 ## Pairing и device JWT
 
-1. **Pairing** — `POST /frontend/api/agent/pairing` (auth session). Redis `agent_pairing:{code}` → `{user_id, company_id}`.
-2. **Register** — `POST /frontend/api/agent/register`. Ответ: `device_id`, `token`, `platform_mcp_url`, `toolkits_url`, `tunnel_ws_url`, `llm`.
-3. Revoke: `DELETE /devices/{device_id}` → denylist + `publish_tunnel_disconnect`.
+1. `POST /frontend/api/agent/pairing` → Redis code  
+2. `POST /frontend/api/agent/register` → device JWT + URLs  
+3. Revoke → denylist + tunnel disconnect  
 
 ## Platform MCP — контракт
 
-Auth: **session JWT** или **device JWT**.
-
-| Method | Назначение |
+| Method | Поведение |
 |---|---|
-| `GET/POST .../platform-mcp` | полный каталог (union toolkits) |
-| `GET/POST .../platform-mcp/{toolkit_id}` | scoped catalog одной группы |
-| `tools/list` | `flow_{flow_id}` + `tool_{tool_id}` из membership toolkit (или union) |
-| `tools/call` | `flow_*` → `A2AChannel`; `tool_*` → `tool_registry.materialize` |
-| `device/mcp` | proxy на локальный MCP desktop через tunnel bus |
+| `tools/list` | membership toolkit (desktop: `flow_lara`) |
+| `tools/call` `flow_*` | A2A; для `lara` — branch `linnex_agent` + variables `device_id` / `linnex_agent_client` |
+| `tools/call` `tool_*` | `tool_registry.materialize` |
+| `device/mcp` | proxy → tunnel → local MCP (timeout 120s) |
 
-**tools/list — live relist.** Push catalog: Redis `platform:agent_tunnel_toolkits_updated` → tunnel frame `toolkits_updated`.
-
-**Sticky-сессия flow:** Redis `agent_mcp_session:{session}:flow:{flow_id}`.
+Sticky keys: `agent_mcp_session:{mcp_session}:flow:{flow_id}` и `agent_mcp_session:device:{device_id}:flow:{flow_id}`.
 
 ## Tunnel WS
 
-- После accept: `{type:"policy", policy: DevicePolicy}`
-- `{type:"toolkits_updated"}` → desktop resync extensions
-- `mcp_request` / `mcp_response` для `device/mcp`
+- `policy` → DevicePolicy (gates local MCP)
+- `mcp_request` / `mcp_response` → `device_*` tools и Platform MCP `device/mcp`
+- `toolkits_updated` → desktop resync (LaraOnly: обычно один extension `platform_lara`)
 
 ## Desktop (Goose)
 
-- Distro: `apps/agent/desktop/distro/humanitec.json` — `default_extensions`: `developer`, `computercontroller` (platform groups — runtime из catalog)
-- Branding: `humanitecToolkitsSync.ts`, `humanitecToolkitsCatalog.ts`, `humanitecAgentRuntime.ts`
-- Vendor patches (`scripts/apply_vendor_patches.sh`): каждый build — `reset --hard` upstream → **base** → **overlay** → `apply_branding.sh` (branding после overlay: binary icon hunks иначе не накладываются)
-- Releases: GitHub release tag `linnex-agent-{short_sha}`; assets `LinnexAgent-{platform}-{sha}.{ext}` (имя артефакта через `bundle_name` из `distro/humanitec.json`; на legacy brand `humanitec.ru` — HumanitecAgent)
-
-## Prod-инварианты
-
-- Toolkit CRUD / bootstrap → `apps/flows/src/services/agent_toolkit_service.py`, `apps/flows/src/api/v1/agent_toolkits.py`
-- Platform MCP → `apps/agent/platform_mcp.py`, mount только через `flows/main.py`
-- Push toolkits → `apps/flows/src/services/agent_toolkit_notify.py` + `tunnel_bus.py`
-- **Zero-fallback:** unknown `toolkit_id` → HTTP 404; flow/tool вне группы → JSON-RPC `-32602`
-- Settings UI: вкладка Agent → секция «Группы инструментов агента» (`agentToolkitsLoadOp`)
+- Distro `default_extensions`: `developer`, `computercontroller` (локальный fallback UI; канон local — Lara device tools)
+- Branding: `humanitecToolkitsSync.ts`, `humanitecTunnelClient.ts`, `humanitecLocalDeviceMcp.ts`, `humanitecAgentRuntime.ts`
+- Releases: `linnex-agent-{sha}` / `LinnexAgent-{platform}-{sha}.{ext}`
 
 ## Файлы
 
-- `apps/flows/src/models/agent_toolkit.py`, `db/agent_toolkit_repository.py`
-- `apps/flows/registry.yaml` — секция `agent_toolkits`
-- `apps/agent/platform_mcp.py`, `service.py`, `tunnel*.py`
-- `apps/agent/desktop/branding/humanitecToolkitsSync.ts`
-- `apps/frontend/ui/events/resources/agent.resource.js`
-- `tests/agent/test_platform_mcp_exposure.py`
+- `apps/flows/registry.yaml` — `agent_toolkits`
+- `apps/flows/bundles/lara/` — branch `linnex_agent`, `prompts/linnex_agent.md`
+- `apps/flows/tools/device_tools.py` — `device_tools_list` / `device_tools_call`
+- `apps/agent/platform_mcp.py`, `device_auth.py`, `tunnel*.py`
+- `apps/agent/desktop/branding/humanitecLocalDeviceMcp.ts`
+- `.cursor/rules/agent_skills.mdc` — Agent Skills ≠ AgentToolkit; Lara branch entry

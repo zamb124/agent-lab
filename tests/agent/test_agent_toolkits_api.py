@@ -124,7 +124,9 @@ async def test_catalog_device_jwt(
     assert response.status_code == 200, response.text
     items = response.json()
     assert isinstance(items, list)
-    assert len(items) >= 1
+    toolkit_ids = {item["toolkit_id"] for item in items if isinstance(item, dict)}
+    assert toolkit_ids == {"lara"}
+    assert items[0]["default_enabled"] is True
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from apps.agent.device_auth import reject_revoked_device_bearer_if_present
+from apps.agent.device_auth import (
+    extract_device_id_from_bearer,
+    reject_revoked_device_bearer_if_present,
+)
 from apps.agent.service import build_toolkit_mcp_url_for_frontend, resolve_frontend_base_url
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.agent_toolkit import AgentToolkit
@@ -21,6 +24,8 @@ from core.context import require_context
 from core.models import StrictBaseModel
 
 router = APIRouter(tags=["agent-toolkits"])
+
+_LINNEX_AGENT_DESKTOP_TOOLKIT_ID = "lara"
 
 
 class AgentToolkitResponse(StrictBaseModel):
@@ -103,8 +108,12 @@ async def list_agent_toolkits_catalog(
         request_host=request.headers.get("host"),
         url_scheme=request.url.scheme,
     )
+    # LaraOnly: paired desktop sees only the Lara toolkit extension.
+    desktop_device_id = extract_device_id_from_bearer(request)
     items: list[AgentToolkitCatalogItem] = []
     for toolkit in await list_agent_toolkits(container.agent_toolkit_repository):
+        if desktop_device_id is not None and toolkit.toolkit_id != _LINNEX_AGENT_DESKTOP_TOOLKIT_ID:
+            continue
         items.append(
             AgentToolkitCatalogItem(
                 toolkit_id=toolkit.toolkit_id,

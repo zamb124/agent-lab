@@ -1,10 +1,10 @@
 """
-Platform MCP endpoint для HumanitecAgent.
+Platform MCP endpoint для HumanitecAgent / LinnexAgent.
 
 Полноценный Streamable HTTP MCP-сервер: lifecycle (initialize/ping/notifications),
 flow компании как tools ``flow_{flow_id}`` и каталог тулов компании как
-``tool_{tool_id}``. Session continuity flow — через sticky A2A context_id,
-привязанный к ``Mcp-Session-Id`` MCP-сессии.
+``tool_{tool_id}``. Session continuity flow — sticky A2A context_id по
+``Mcp-Session-Id`` или device JWT (LaraOnly).
 """
 
 import json
@@ -15,7 +15,10 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from apps.agent.config import get_agent_settings
-from apps.agent.device_auth import reject_revoked_device_bearer_if_present
+from apps.agent.device_auth import (
+    extract_device_id_from_bearer,
+    reject_revoked_device_bearer_if_present,
+)
 from apps.agent.service import (
     build_flow_mcp_tools,
     record_agent_audit_event_redis,
@@ -43,6 +46,9 @@ _PROTOCOL_VERSION = "2024-11-05"
 _SERVER_INFO: JsonObject = {"name": "Humanitec Platform MCP", "version": "1.0.0"}
 _SERVER_CAPABILITIES: JsonObject = {"tools": {}}
 _MCP_SESSION_HEADER = "Mcp-Session-Id"
+_LARA_FLOW_ID = "lara"
+_LINNEX_AGENT_BRANCH_ID = "linnex_agent"
+_DEVICE_MCP_TIMEOUT_SECONDS = 120.0
 
 
 async def _reject_revoked_device_bearer(request: Request, container: FlowsContainerDep) -> None:
@@ -169,32 +175,89 @@ def _session_context_key(mcp_session_id: str, flow_id: str) -> str:
     return f"agent_mcp_session:{mcp_session_id}:flow:{flow_id}"
 
 
+def _device_session_context_key(device_id: str, flow_id: str) -> str:
+    return f"agent_mcp_session:device:{device_id}:flow:{flow_id}"
+
+
+async def _persist_sticky_context_id(
+    container: FlowsContainerDep,
+    *,
+    mcp_session_id: str | None,
+    device_id: str | None,
+    flow_id: str,
+    context_id: str,
+) -> None:
+    ttl_seconds = get_agent_settings().session_ttl_seconds
+    if mcp_session_id is not None:
+        _ = await container.redis_client.set(
+            _session_context_key(mcp_session_id, flow_id),
+            context_id,
+            ttl=ttl_seconds,
+        )
+    if device_id is not None:
+        _ = await container.redis_client.set(
+            _device_session_context_key(device_id, flow_id),
+            context_id,
+            ttl=ttl_seconds,
+        )
+
+
 async def _resolve_flow_context_id(
     container: FlowsContainerDep,
     *,
     mcp_session_id: str | None,
+    device_id: str | None,
     flow_id: str,
     explicit_context_id: str | None,
-) -> str | None:
-    """Sticky A2A context_id по (MCP-сессия + flow). explicit переопределяет sticky."""
-    ttl_seconds = get_agent_settings().session_ttl_seconds
+) -> str:
+    """Sticky A2A context_id: explicit → MCP session → device → new UUID."""
     if explicit_context_id is not None:
-        if mcp_session_id is not None:
-            _ = await container.redis_client.set(
-                _session_context_key(mcp_session_id, flow_id),
-                explicit_context_id,
-                ttl=ttl_seconds,
-            )
+        await _persist_sticky_context_id(
+            container,
+            mcp_session_id=mcp_session_id,
+            device_id=device_id,
+            flow_id=flow_id,
+            context_id=explicit_context_id,
+        )
         return explicit_context_id
-    if mcp_session_id is None:
-        logger.info("agent.platform_mcp.no_session_header", flow_id=flow_id)
-        return None
-    key = _session_context_key(mcp_session_id, flow_id)
-    existing = await container.redis_client.get(key)
-    if existing:
-        return existing
+
+    if mcp_session_id is not None:
+        session_key = _session_context_key(mcp_session_id, flow_id)
+        existing_session = await container.redis_client.get(session_key)
+        if isinstance(existing_session, str) and existing_session.strip():
+            await _persist_sticky_context_id(
+                container,
+                mcp_session_id=mcp_session_id,
+                device_id=device_id,
+                flow_id=flow_id,
+                context_id=existing_session.strip(),
+            )
+            return existing_session.strip()
+
+    if device_id is not None:
+        device_key = _device_session_context_key(device_id, flow_id)
+        existing_device = await container.redis_client.get(device_key)
+        if isinstance(existing_device, str) and existing_device.strip():
+            await _persist_sticky_context_id(
+                container,
+                mcp_session_id=mcp_session_id,
+                device_id=device_id,
+                flow_id=flow_id,
+                context_id=existing_device.strip(),
+            )
+            return existing_device.strip()
+
+    if mcp_session_id is None and device_id is None:
+        logger.info("agent.platform_mcp.no_sticky_anchor", flow_id=flow_id)
+
     new_context_id = str(uuid.uuid4())
-    _ = await container.redis_client.set(key, new_context_id, ttl=ttl_seconds)
+    await _persist_sticky_context_id(
+        container,
+        mcp_session_id=mcp_session_id,
+        device_id=device_id,
+        flow_id=flow_id,
+        context_id=new_context_id,
+    )
     return new_context_id
 
 
@@ -256,6 +319,7 @@ async def _execute_flow_tool_call(
     flow_id: str,
     user_message: str,
     context_id: str | None = None,
+    device_id: str | None = None,
 ) -> tuple[str, str, str]:
     flow_config = await container.flow_repository.get(flow_id)
     if flow_config is None:
@@ -273,7 +337,15 @@ async def _execute_flow_tool_call(
         context_id=resolved_context_id,
         parts=[Part(root=TextPart(text=user_message))],
     )
-    params = MessageSendParams(message=a2a_message)
+    metadata: JsonObject = {}
+    if flow_id == _LARA_FLOW_ID:
+        metadata["branch"] = _LINNEX_AGENT_BRANCH_ID
+    variables: JsonObject = {"linnex_agent_client": "linnex_agent"}
+    if device_id is not None:
+        variables["device_id"] = device_id
+    if flow_id == _LARA_FLOW_ID or device_id is not None:
+        metadata["variables"] = variables
+    params = MessageSendParams(message=a2a_message, metadata=metadata if metadata else None)
     channel = A2AChannel(
         flow_id,
         context=context,
@@ -336,6 +408,7 @@ async def _handle_flow_tools_call(
             rpc_id, -32602, f"Flow '{flow_id}' is not available for HumanitecAgent"
         )
     mcp_session_id = request.headers.get(_MCP_SESSION_HEADER)
+    device_id = extract_device_id_from_bearer(request)
     context_id_raw = arguments.get("context_id")
     explicit_context_id: str | None = None
     if isinstance(context_id_raw, str) and context_id_raw.strip():
@@ -343,6 +416,7 @@ async def _handle_flow_tools_call(
     sticky_context_id = await _resolve_flow_context_id(
         container,
         mcp_session_id=mcp_session_id,
+        device_id=device_id,
         flow_id=flow_id,
         explicit_context_id=explicit_context_id,
     )
@@ -355,37 +429,45 @@ async def _handle_flow_tools_call(
     user_message = arguments.get("message")
     if not isinstance(user_message, str) or not user_message.strip():
         return _rpc_error(rpc_id, -32602, "arguments.message is required")
-    logger.info("agent.platform_mcp.tools_call", flow_id=flow_id)
+    logger.info(
+        "agent.platform_mcp.tools_call",
+        flow_id=flow_id,
+        device_id=device_id,
+        branch=_LINNEX_AGENT_BRANCH_ID if flow_id == _LARA_FLOW_ID else None,
+    )
     try:
         response_text, used_context_id, task_state = await _execute_flow_tool_call(
             container,
             flow_id=flow_id,
             user_message=user_message.strip(),
             context_id=sticky_context_id,
+            device_id=device_id,
         )
     except HTTPException as exc:
         return _rpc_error(rpc_id, -32000, str(exc.detail))
     except ValueError as exc:
         return _rpc_error(rpc_id, -32000, str(exc))
-    if mcp_session_id is not None and used_context_id != sticky_context_id:
-        _ = await container.redis_client.set(
-            _session_context_key(mcp_session_id, flow_id),
-            used_context_id,
-            ttl=get_agent_settings().session_ttl_seconds,
-        )
+    await _persist_sticky_context_id(
+        container,
+        mcp_session_id=mcp_session_id,
+        device_id=device_id,
+        flow_id=flow_id,
+        context_id=used_context_id,
+    )
     await record_agent_audit_event_redis(
         container.redis_client,
         company_id=active_company.company_id,
         event_type="agent.platform_mcp.tools_call",
         actor_user_id=active_context.user.user_id,
-        device_id=None,
+        device_id=device_id,
         detail=f"flow_id={flow_id}",
     )
+    result_text = f"{response_text}\n\ncontext_id: {used_context_id}"
     return {
         "jsonrpc": "2.0",
         "id": rpc_id,
         "result": {
-            "content": [{"type": "text", "text": response_text}],
+            "content": [{"type": "text", "text": result_text}],
             "isError": False,
             "context_id": used_context_id,
             "task_state": task_state,
@@ -605,7 +687,7 @@ async def _platform_mcp_message_handler(
                 device_id,
                 method=mcp_method,
                 params=mcp_params,
-                timeout_seconds=2.0,
+                timeout_seconds=_DEVICE_MCP_TIMEOUT_SECONDS,
             )
         except ValueError as exc:
             return {

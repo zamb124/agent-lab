@@ -73,6 +73,10 @@ function platformToolkitNeedsResync(
   return false;
 }
 
+/**
+ * Sync Goose extensions from platform toolkits catalog.
+ * LaraOnly: device JWT catalog returns only toolkit `lara` → one extension `platform_lara`.
+ */
 export async function syncPlatformToolkitExtensions(
   existingExtensions: FixedExtensionEntry[],
   addExtensionFn: (name: string, config: ExtensionConfig, enabled: boolean) => Promise<void>,

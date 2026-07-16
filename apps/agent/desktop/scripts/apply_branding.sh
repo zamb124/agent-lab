@@ -154,6 +154,7 @@ shutil.copyfile(distro_loader_source, distro_loader_target)
 for runtime_name in (
     "humanitecAgentStore.ts",
     "humanitecTunnelClient.ts",
+    "humanitecLocalDeviceMcp.ts",
     "humanitecAgentRuntime.ts",
     "humanitecExtensionOrder.ts",
     "humanitecTestSelectors.ts",

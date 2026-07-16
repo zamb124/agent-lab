@@ -304,7 +304,7 @@ async def test_mcp_flow_two_flows_mapping(
         message="call A",
         rpc_id=309,
     )
-    assert call_a["result"]["content"][0]["text"] == "flow A response"
+    assert call_a["result"]["content"][0]["text"].startswith("flow A response")
 
     await mock_llm_with_queue([{"type": "text", "content": "flow B response"}])
     call_b = await _tools_call(
@@ -314,7 +314,7 @@ async def test_mcp_flow_two_flows_mapping(
         message="call B",
         rpc_id=310,
     )
-    assert call_b["result"]["content"][0]["text"] == "flow B response"
+    assert call_b["result"]["content"][0]["text"].startswith("flow B response")
 
 
 @pytest.mark.asyncio

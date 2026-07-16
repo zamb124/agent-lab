@@ -56,6 +56,8 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.files", "read_file"),
     ("apps.flows.tools.agent_session_tools", "reason"),
     ("apps.flows.tools.agent_session_tools", "ask_user"),
+    ("apps.flows.tools.device_tools", "device_tools_list"),
+    ("apps.flows.tools.device_tools", "device_tools_call"),
     ("apps.flows.tools.summarize_text", "summarize_text"),
     ("apps.flows.tools.agent_session_tools", "hitl_operator_task"),
     ("apps.flows.tools.agent_skill_tools", "load_agent_skill"),

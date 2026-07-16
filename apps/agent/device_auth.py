@@ -7,6 +7,28 @@ from apps.flows.src.dependencies import ContainerDep
 from core.utils.tokens import TokenService
 
 
+def extract_device_id_from_bearer(request: Request) -> str | None:
+    """Возвращает device_id из Bearer device JWT или None (session/без токена)."""
+    authorization = request.headers.get("Authorization")
+    if authorization is None:
+        return None
+    if not authorization.lower().startswith("bearer "):
+        return None
+    token = authorization.removeprefix("Bearer ").removeprefix("bearer ").strip()
+    if not token:
+        return None
+    token_data = TokenService().validate_token(token)
+    if token_data is None:
+        return None
+    metadata = token_data.metadata
+    if metadata.get("token_purpose") != "device":
+        return None
+    device_id = metadata.get("device_id")
+    if not isinstance(device_id, str) or not device_id.strip():
+        return None
+    return device_id.strip()
+
+
 async def reject_revoked_device_bearer_if_present(request: Request, container: ContainerDep) -> None:
     """Отклоняет отозванный device JWT, если Authorization передан (optional auth)."""
     authorization = request.headers.get("Authorization")

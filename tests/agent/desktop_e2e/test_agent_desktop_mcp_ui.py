@@ -52,7 +52,7 @@ async def test_mcp_bld_03_preload_exposes_toolkits_catalog_api(
 
 
 @pytest.mark.asyncio
-async def test_mcp_bld_04_platform_humanitec_core_after_pairing(
+async def test_mcp_bld_04_platform_lara_after_pairing(
     agent_frontend_http_client,
     auth_token: str,
     humanitec_desktop_process_factory,
@@ -76,7 +76,8 @@ async def test_mcp_bld_04_platform_humanitec_core_after_pairing(
                 for entry in extensions
                 if isinstance(entry.get("name"), str)
             ]
-            assert "platform_humanitec_core" in names
+            assert "platform_lara" in names
+            assert "platform_humanitec_core" not in names
     finally:
         desktop.stop()
 

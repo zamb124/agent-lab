@@ -167,6 +167,7 @@ def assert_lara_attach(flow: FlowConfig) -> None:
     tool_ids = set(node_tool_ids(main))
     assert tool_ids == {"ask_user"}
     assert not (tool_ids & forbidden_tools)
+    linnex_standing = {"ask_user", "device_tools_list", "device_tools_call"}
     for branch_id, branch in (flow.branches or {}).items():
         if branch.nodes is None:
             continue
@@ -174,7 +175,15 @@ def assert_lara_attach(flow: FlowConfig) -> None:
         if branch_main is None:
             continue
         branch_tools = set(node_tool_ids(branch_main))
-        if branch_tools and branch_tools != {"ask_user"}:
+        if not branch_tools:
+            continue
+        if branch_id == "linnex_agent":
+            if branch_tools != linnex_standing:
+                raise AssertionError(
+                    f"lara branch linnex_agent standing tools mismatch: {sorted(branch_tools)}"
+                )
+            continue
+        if branch_tools != {"ask_user"}:
             raise AssertionError(
                 f"lara branch {branch_id} has standing domain tools: {sorted(branch_tools)}"
             )

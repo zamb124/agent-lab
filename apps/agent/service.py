@@ -1027,7 +1027,11 @@ def build_flow_mcp_tools(flows: list[JsonObject]) -> list[JsonObject]:
                         },
                         "context_id": {
                             "type": "string",
-                            "description": "Optional A2A context_id for session continuity",
+                            "description": (
+                                "Optional A2A context_id for session continuity. "
+                                "Pass the context_id from the previous tool result to continue "
+                                "the same conversation; omit to use the server sticky session."
+                            ),
                         },
                     },
                     "required": ["message"],

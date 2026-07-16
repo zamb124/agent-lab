@@ -170,12 +170,23 @@ tools:
 # Группы инструментов HumanitecAgent (Platform MCP extensions)
 # public: true — копируются в новые компании при init
 agent_toolkits:
+  # LaraOnly: desktop catalog отдаёт только lara (см. GET /agent/toolkits + device JWT).
+  - id: lara
+    public: true
+    name: Lara
+    description: "LinnexAgent platform window: Lara (branch linnex_agent) + local device tools"
+    default_enabled: true
+    position: 0
+    flow_ids:
+      - lara
+    tool_ids: []
+
   - id: humanitec_core
     public: true
     name: Humanitec
-    description: "Базовый ассистент HumanitecAgent и поиск по платформе"
-    default_enabled: true
-    position: 0
+    description: "Legacy thin assistant slice (not used by LinnexAgent LaraOnly desktop)"
+    default_enabled: false
+    position: 10
     flow_ids:
       - humanitec_agent
     tool_ids:
@@ -189,7 +200,7 @@ agent_toolkits:
     name: NetWorkle
     description: "CRM NetWorkle: поиск сущностей и карточки"
     default_enabled: false
-    position: 10
+    position: 20
     flow_ids: []
     tool_ids:
       - crm_search_entities
@@ -200,20 +211,10 @@ agent_toolkits:
     name: DOCS
     description: "Поиск по документации Humanitec и NetWorkle"
     default_enabled: false
-    position: 20
+    position: 30
     flow_ids: []
     tool_ids:
       - docs_search
-
-  - id: lara
-    public: true
-    name: Lara
-    description: "Мультисервисный ассистент Lara"
-    default_enabled: false
-    position: 30
-    flow_ids:
-      - lara
-    tool_ids: []
 
   - id: files
     public: true

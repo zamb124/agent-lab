@@ -48,7 +48,8 @@ async def test_goose_cfg_01_config_extensions_platform_mcp_first(
             ]
             assert len(names) > 0
             platform_names = [name for name in names if name.startswith("platform_")]
-            assert "platform_humanitec_core" in platform_names
+            assert "platform_lara" in platform_names
+            assert "platform_humanitec_core" not in platform_names
     finally:
         desktop.stop()
 

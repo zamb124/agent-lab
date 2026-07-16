@@ -33,17 +33,23 @@ def loader(bundles_dir: Path, container) -> FlowsLoader:
 
 
 @pytest.mark.asyncio
-async def test_registry_defines_humanitec_core_toolkit(registry_path: Path, container) -> None:
+async def test_registry_defines_lara_toolkit_as_desktop_default(
+    registry_path: Path, container
+) -> None:
     loaded = await bootstrap_agent_toolkits_from_registry(
         container.agent_toolkit_repository,
         registry_path,
         filter_public=False,
     )
     assert loaded >= 1
-    toolkit = await container.agent_toolkit_repository.get("humanitec_core")
-    assert toolkit is not None
-    assert "humanitec_agent" in toolkit.flow_ids
-    assert toolkit.default_enabled is True
+    lara = await container.agent_toolkit_repository.get("lara")
+    assert lara is not None
+    assert "lara" in lara.flow_ids
+    assert lara.default_enabled is True
+    core = await container.agent_toolkit_repository.get("humanitec_core")
+    assert core is not None
+    assert "humanitec_agent" in core.flow_ids
+    assert core.default_enabled is False
 
 
 @pytest.mark.asyncio
