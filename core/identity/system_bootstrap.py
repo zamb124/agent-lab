@@ -6,7 +6,7 @@ from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.subdomain_repository import SubdomainRepository
 from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
-from core.models.identity_models import Company, User
+from core.models.identity_models import Company, User, UserStatus
 
 logger = get_logger(__name__)
 
@@ -14,6 +14,7 @@ SYSTEM_COMPANY_ID = "system"
 SYSTEM_COMPANY_SUBDOMAIN = "system"
 SYSTEM_COMPANY_NAME = "System"
 SYSTEM_ADMIN_EMAIL = "zambas124@yandex.ru"
+SYSTEM_ADMIN_USER_ID = "user_zambas124_yandex_ru_001"
 ADMIN_ROLE = "admin"
 
 
@@ -53,8 +54,8 @@ async def ensure_system_admin_membership(
     subdomain_repository: SubdomainRepository,
     user_repository: UserRepository,
     user_email: str = SYSTEM_ADMIN_EMAIL,
-) -> tuple[Company, User | None]:
-    """Гарантирует system-компанию и при наличии пользователя user_email — роль admin в ней."""
+) -> tuple[Company, User]:
+    """Гарантирует system-компанию и system admin с ролью admin (создаёт пользователя при отсутствии)."""
     system_company = await ensure_system_company_exists(
         company_repository=company_repository,
         subdomain_repository=subdomain_repository,
@@ -63,11 +64,24 @@ async def ensure_system_admin_membership(
     users = await user_repository.list(limit=10000)
     matched_users = [user for user in users if user_email in user.emails]
     if not matched_users:
-        logger.warning(
-            "Bootstrap skipped admin grant: user with email %s not found",
-            user_email,
+        target_user = User(
+            user_id=SYSTEM_ADMIN_USER_ID,
+            name="Platform System Admin",
+            status=UserStatus.ACTIVE,
+            emails=[user_email],
+            active_company_id=SYSTEM_COMPANY_ID,
+            companies={SYSTEM_COMPANY_ID: [ADMIN_ROLE]},
         )
-        return system_company, None
+        system_company.members[target_user.user_id] = [ADMIN_ROLE]
+        _ = await user_repository.set(target_user)
+        _ = await company_repository.set(system_company)
+        logger.info(
+            "Bootstrap created system admin user %s for email %s in company %s",
+            target_user.user_id,
+            user_email,
+            system_company.company_id,
+        )
+        return system_company, target_user
     if len(matched_users) > 1:
         matched_user_ids = ", ".join(user.user_id for user in matched_users)
         raise ValueError(f"Multiple users found for {user_email}: {matched_user_ids}")

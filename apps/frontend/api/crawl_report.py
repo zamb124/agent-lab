@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.frontend.config import get_frontend_settings
 from apps.frontend.dependencies import ContainerDep
+from core.clients.service_client import ServiceClientError
 from core.context import get_context
 from core.crawl.models import (
     CrawlDomain,
+    CrawlDomainCreateRequest,
+    CrawlDomainCreateResponse,
     CrawlDomainRunResponse,
     CrawlJob,
     CrawlJobCreateRequest,
@@ -24,6 +29,29 @@ from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/api/crawl-report", tags=["crawl-report"])
+
+_SEARCH_HTTP_STATUS_PREFIX = re.compile(r"^HTTP (\d{3}) при запросе к search: ", re.DOTALL)
+
+
+def _http_exception_from_search_client(exc: ServiceClientError) -> HTTPException:
+    message = str(exc)
+    match = _SEARCH_HTTP_STATUS_PREFIX.match(message)
+    if match is None:
+        return HTTPException(status_code=502, detail="Crawl report: ошибка сервиса search")
+    status_code = int(match.group(1))
+    body_text = message[match.end() :].strip()
+    detail = body_text
+    try:
+        payload = json.loads(body_text)
+        if isinstance(payload, dict):
+            detail_raw = payload.get("detail")
+            if isinstance(detail_raw, str):
+                detail = detail_raw
+    except json.JSONDecodeError:
+        pass
+    if 400 <= status_code < 600:
+        return HTTPException(status_code=status_code, detail=detail)
+    return HTTPException(status_code=502, detail=detail)
 
 
 def _require_system() -> None:
@@ -87,6 +115,19 @@ async def list_crawl_domains(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/domains", response_model=CrawlDomainCreateResponse, status_code=201)
+async def create_crawl_domain(
+    body: CrawlDomainCreateRequest,
+    container: ContainerDep,
+) -> CrawlDomainCreateResponse:
+    _require_system()
+    _require_search_db()
+    try:
+        return await container.search_client.create_crawl_domain(body)
+    except ServiceClientError as exc:
+        raise _http_exception_from_search_client(exc) from exc
 
 
 @router.get("/jobs", response_model=OffsetPage[CrawlJob])
@@ -170,5 +211,7 @@ async def run_crawl_domain(
     _require_search_db()
     try:
         return await container.search_client.run_crawl_domain(crawl_domain_id, crawl_profile_id)
+    except ServiceClientError as exc:
+        raise _http_exception_from_search_client(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

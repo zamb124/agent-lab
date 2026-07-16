@@ -23,10 +23,16 @@ from apps.search.services.crawl.fetch_service import CrawlFetchService
 from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
 from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
 from apps.search.services.crawl.report_service import CrawlReportService
+from apps.search.services.crawl.salient_terms_service import SalientTermsService
 from apps.search.services.crawl_service import SearchCrawlService
+from apps.search.services.research.live_fetch_service import LiveFetchService
+from apps.search.services.research.orchestrator_service import ResearchOrchestratorService
+from apps.search.services.research.passage_rerank_service import PassageRerankService
 from apps.search.services.search_index_service import SearchIndexService
 from apps.search.services.serp_cache import SerpCacheService
 from apps.search.services.system_context import build_search_system_context
+from core.ai.providers import AICapability
+from core.ai.resolver import resolve_ai_model
 from core.clients.browser_fetch_client import BrowserFetchClient
 from core.clients.rag_client import RagClient
 from core.clients.redis_client import RedisClient
@@ -92,11 +98,13 @@ class SearchContainer(BaseContainer):
 
     @lazy
     def index_search_provider(self) -> IndexSearchProvider:
+        settings = get_search_settings()
         return IndexSearchProvider(
-            get_search_settings().search.index,
+            settings.search.index,
             self.search_index_repository,
             self.rag_client,
             self._build_index_system_context,
+            runet_config=settings.runet,
         )
 
     @lazy
@@ -162,7 +170,12 @@ class SearchContainer(BaseContainer):
         return CrawlPageEnrichmentService(get_search_settings().crawl.enrichment)
 
     @lazy
+    def salient_terms_service(self) -> SalientTermsService:
+        return SalientTermsService(runet_config=get_search_settings().runet)
+
+    @lazy
     def crawl_orchestrator_service(self) -> CrawlOrchestratorService:
+        settings = get_search_settings()
         return CrawlOrchestratorService(
             crawl_profile_repository=self.crawl_profile_repository,
             crawl_domain_repository=self.crawl_domain_repository,
@@ -170,9 +183,11 @@ class SearchContainer(BaseContainer):
             crawl_job_repository=self.crawl_job_repository,
             fetch_service=self.crawl_fetch_service,
             page_enrichment_service=self.crawl_page_enrichment_service,
+            salient_terms_service=self.salient_terms_service,
             rag_client=self.rag_client,
             build_system_context=self._build_index_system_context,
-            crawl_config=get_search_settings().crawl,
+            crawl_config=settings.crawl,
+            runet_config=settings.runet,
         )
 
     @lazy
@@ -192,6 +207,43 @@ class SearchContainer(BaseContainer):
     @lazy
     def search_result_insight_service(self) -> SearchResultInsightService:
         return SearchResultInsightService()
+
+    @lazy
+    def live_fetch_service(self) -> LiveFetchService:
+        settings = get_search_settings()
+        return LiveFetchService(
+            crawl_fetch_service=self.crawl_fetch_service,
+            min_extract_chars=settings.crawl.min_extract_chars,
+        )
+
+    @lazy
+    def passage_rerank_service(self) -> PassageRerankService | None:
+        resolved = resolve_ai_model(
+            AICapability.RERANK,
+            include_platform_default=True,
+        )
+        if resolved is None or not resolved.endpoint_url:
+            return None
+        rr = get_search_settings()
+        rag_rr = rr.rag.reranker
+        return PassageRerankService(
+            rerank_endpoint_url=resolved.endpoint_url,
+            timeout_seconds=rag_rr.timeout_seconds if rag_rr.api is not None else 60.0,
+            cost_per_1m_tokens=rag_rr.cost_per_1m_tokens,
+            platform_markup=rag_rr.platform_markup,
+            billing_resource_id=rag_rr.billing_model_id,
+            model=resolved.model,
+            api_key=resolved.api_key,
+        )
+
+    @lazy
+    def research_orchestrator_service(self) -> ResearchOrchestratorService:
+        settings = get_search_settings()
+        return ResearchOrchestratorService(
+            live_fetch_service=self.live_fetch_service,
+            passage_rerank_service=self.passage_rerank_service,
+            pool_config=settings.runet.research,
+        )
 
 
 def _build_search_container(settings: SearchSettings) -> SearchContainer:

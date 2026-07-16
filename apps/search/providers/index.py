@@ -7,8 +7,10 @@ import math
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from typing import cast
 
 from apps.search.config import SearchIndexProviderConfig
+from apps.search.db.crawl_repositories import canonicalize_url
 from apps.search.db.search_index_repository import SearchIndexRepository
 from apps.search.errors import SearchIndexNotFoundError, SearchIndexSearchDisabledError
 from core.clients.rag_client import RagClient
@@ -18,6 +20,8 @@ from core.rag.models import RAGMetadata, RAGSearchResult
 from core.rag_indexing_schema import SearchChannelsDefaults
 from core.search import MetaSearchProviderStatus, MetaSearchRequest, WebSearchResult
 from core.search.index_models import SearchIndexDefinition
+from core.search.models import SearchResultDocType
+from core.search.pointer_models import RunetPointerConfig, is_vector_pointer_metadata
 from core.search.presentation import (
     build_favicon_proxy_url,
     extract_domain_from_url,
@@ -101,11 +105,13 @@ class IndexSearchProvider:
         search_index_repository: SearchIndexRepository,
         rag_client: RagClient,
         build_system_context: Callable[[str], Awaitable[Context]],
+        runet_config: RunetPointerConfig | None = None,
     ) -> None:
         self._config: SearchIndexProviderConfig = config
         self._search_index_repository: SearchIndexRepository = search_index_repository
         self._rag_client: RagClient = rag_client
         self._build_system_context: Callable[[str], Awaitable[Context]] = build_system_context
+        self._runet_config: RunetPointerConfig | None = runet_config
         self._cache: dict[frozenset[str], tuple[float, list[SearchIndexDefinition]]] = {}
 
     async def search(
@@ -171,6 +177,7 @@ class IndexSearchProvider:
             merged: list[WebSearchResult] = []
             for batch in batches:
                 merged.extend(batch)
+            merged = _dedup_results_by_url(merged)
             merged.sort(key=lambda item: (-item.score, item.provider_rank, item.title))
             ranked: list[WebSearchResult] = []
             for rank, item in enumerate(merged[:retrieve_limit], start=1):
@@ -226,9 +233,17 @@ class IndexSearchProvider:
         query: str,
         retrieve_limit: int,
     ) -> list[WebSearchResult]:
+        # Disable lexical FTS for vector_pointer indices: content stub is not
+        # meaningful for FTS; semantic signal is carried by the dense embedding.
+        use_lexical = definition.retrieval.lexical
+        if (
+            self._runet_config is not None
+            and self._runet_config.index_mode == "vector_pointer"
+        ):
+            use_lexical = False
         channels = SearchChannelsDefaults(
             semantic=definition.retrieval.semantic,
-            lexical=definition.retrieval.lexical,
+            lexical=use_lexical,
         )
         per_channel_top_k = definition.retrieval.per_channel_top_k
         if per_channel_top_k is None:
@@ -259,7 +274,7 @@ class IndexSearchProvider:
             )
             if mapped is not None:
                 out.append(mapped)
-        return out
+        return _collapse_multi_vector_by_document(out)
 
     def _map_result(
         self,
@@ -268,31 +283,46 @@ class IndexSearchProvider:
         definition: SearchIndexDefinition,
         provider_rank: int,
     ) -> WebSearchResult | None:
-        source_url_value = rag_result.metadata.get("source_url")
+        metadata = rag_result.metadata
+        source_url_value = metadata.get("source_url")
         if not isinstance(source_url_value, str) or not source_url_value.strip():
             return None
         source_url = source_url_value.strip()
+        is_pointer = is_vector_pointer_metadata(metadata)
         snippet_limit = definition.retrieval.snippet_max_chars
-        snippet = _resolve_index_snippet(
-            content=rag_result.content,
-            metadata=rag_result.metadata,
-            snippet_limit=snippet_limit,
-        )
-        title = _resolve_index_title(
-            document_name=rag_result.document_name,
-            metadata=rag_result.metadata,
-        )
-        heading_trail: list[str] = []
-        heading_value = rag_result.metadata.get("heading_trail")
-        if isinstance(heading_value, list):
-            for entry in heading_value:
-                if isinstance(entry, str) and entry.strip():
-                    heading_trail.append(entry.strip())
+        if is_pointer:
+            snippet = _build_snippet(rag_result, snippet_limit=snippet_limit, is_pointer=True)
+            heading_trail = _string_list(metadata.get("heading_trail"))
+            salient_terms = _string_list(metadata.get("salient_terms"))
+            title = rag_result.document_name or _optional_string(metadata.get("html_title")) or "Untitled"
+        else:
+            snippet = _resolve_index_snippet(
+                content=rag_result.content,
+                metadata=rag_result.metadata,
+                snippet_limit=snippet_limit,
+            )
+            title = _resolve_index_title(
+                document_name=rag_result.document_name,
+                metadata=rag_result.metadata,
+            )
+            heading_trail = []
+            heading_value = rag_result.metadata.get("heading_trail")
+            if isinstance(heading_value, list):
+                for entry in heading_value:
+                    if isinstance(entry, str) and entry.strip():
+                        heading_trail.append(entry.strip())
+            salient_terms = []
+        canonical_url = _optional_string(metadata.get("canonical_url")) or source_url
+        try:
+            canonical_url = canonicalize_url(canonical_url)
+        except ValueError:
+            canonical_url = source_url
         display_url = extract_domain_from_url(source_url)
         site_name = resolve_site_name(metadata=rag_result.metadata, display_url=display_url)
         preview_image_url = resolve_preview_image_url(rag_result.metadata)
         favicon_url = build_favicon_proxy_url(display_url)
         published_at = _metadata_text_field(rag_result.metadata, "date_published")
+        doc_type: SearchResultDocType | None = "vector_pointer" if is_pointer else None
         return WebSearchResult(
             title=title,
             url=source_url,
@@ -310,4 +340,82 @@ class IndexSearchProvider:
             site_name=site_name,
             favicon_url=favicon_url,
             preview_image_url=preview_image_url,
+            doc_type=doc_type,
+            canonical_url=canonical_url,
+            section_title=_optional_string(metadata.get("section_title")),
+            salient_terms=salient_terms,
+            page_summary=_optional_string(metadata.get("page_summary")),
+            html_title=_optional_string(metadata.get("html_title")),
+            meta_description=_optional_string(metadata.get("meta_description")),
+            extract_content_hash=_optional_string(metadata.get("extract_content_hash")),
+            indexed_at=_optional_string(metadata.get("indexed_at")),
         )
+
+
+def _build_snippet(
+    rag_result: RAGSearchResult,
+    *,
+    snippet_limit: int,
+    is_pointer: bool,
+) -> str:
+    if not is_pointer:
+        return rag_result.content[:snippet_limit]
+
+    metadata = rag_result.metadata
+    parts: list[str] = []
+    section_title = _optional_string(metadata.get("section_title"))
+    if section_title:
+        parts.append(section_title)
+    meta_description = _optional_string(metadata.get("meta_description"))
+    if meta_description:
+        parts.append(meta_description)
+    salient_terms = _string_list(metadata.get("salient_terms"))
+    if salient_terms:
+        parts.append(", ".join(salient_terms[:12]))
+    page_summary = _optional_string(metadata.get("page_summary"))
+    if page_summary:
+        parts.append(page_summary)
+    section_titles = _string_list(metadata.get("section_titles"))
+    if section_titles:
+        parts.append(" · ".join(section_titles[:6]))
+    snippet = " — ".join(part for part in parts if part).strip()
+    if not snippet:
+        snippet = _optional_string(metadata.get("html_title")) or rag_result.document_name or ""
+    return snippet[:snippet_limit]
+
+
+def _collapse_multi_vector_by_document(results: list[WebSearchResult]) -> list[WebSearchResult]:
+    best_by_document: dict[str, WebSearchResult] = {}
+    for item in results:
+        key = item.document_id or item.canonical_url or item.url
+        existing = best_by_document.get(key)
+        if existing is None or item.score > existing.score:
+            best_by_document[key] = item
+    return list(best_by_document.values())
+
+
+def _dedup_results_by_url(results: list[WebSearchResult]) -> list[WebSearchResult]:
+    best_by_url: dict[str, WebSearchResult] = {}
+    for item in results:
+        key = item.canonical_url or item.url
+        existing = best_by_url.get(key)
+        if existing is None or item.score > existing.score:
+            best_by_url[key] = item
+    return list(best_by_url.values())
+
+
+def _optional_string(value: object) -> str | None:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    return None
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for entry in cast(list[object], value):
+        if isinstance(entry, str) and entry.strip():
+            out.append(entry.strip())
+    return out

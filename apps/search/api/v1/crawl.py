@@ -15,6 +15,8 @@ from apps.search_worker.tasks.task_names import (
 )
 from core.crawl.models import (
     CrawlDomain,
+    CrawlDomainCreateRequest,
+    CrawlDomainCreateResponse,
     CrawlDomainRunResponse,
     CrawlJob,
     CrawlJobCreateRequest,
@@ -159,6 +161,20 @@ async def list_crawl_domains(
         limit=limit,
         offset=offset,
     )
+
+
+@router.post("/domains", response_model=CrawlDomainCreateResponse, status_code=201)
+async def create_crawl_domain(
+    body: CrawlDomainCreateRequest,
+    container: ContainerDep,
+) -> CrawlDomainCreateResponse:
+    try:
+        return await container.crawl_service.create_domain(body)
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith("domain already exists:"):
+            raise HTTPException(status_code=409, detail=message) from exc
+        raise HTTPException(status_code=400, detail=message) from exc
 
 
 @router.post("/domains/{crawl_domain_id}/run", response_model=CrawlDomainRunResponse, status_code=202)

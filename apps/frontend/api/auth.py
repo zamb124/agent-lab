@@ -6,11 +6,10 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 
 from apps.frontend.dependencies import ContainerDep
-from core.config import get_settings
 from core.identity.auth_service import AuthService
 from core.logging import get_logger
 from core.models.identity_models import AuthProvider, AuthRequest
-from core.utils.domain import build_url, get_cookie_domain, is_local
+from core.utils.domain import auth_cookie_secure, build_url, get_cookie_domain, is_local
 from core.utils.tokens import TokenService
 
 logger = get_logger(__name__)
@@ -60,14 +59,12 @@ async def auth_callback(
     if result.user is None or result.token is None:
         raise HTTPException(status_code=500, detail="OAuth result is missing user or token")
 
-    settings = get_settings()
-    is_production = settings.server.env == "production"
-
     user = result.user
     token = result.token
 
     # Используем оригинальный хост для редиректа (если был субдомен)
     target_host = original_host or request.headers.get("host", "localhost:8002")
+    cookie_secure = auth_cookie_secure(target_host)
 
     # Если был запрошен возврат на конкретный путь — используем его
     if return_path:
@@ -107,7 +104,7 @@ async def auth_callback(
         value=token,
         domain=cookie_domain,
         httponly=True,
-        secure=is_production,
+        secure=cookie_secure,
         samesite="lax",
         max_age=TokenService.SESSION_EXPIRES,
     )

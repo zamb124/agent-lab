@@ -720,6 +720,7 @@
       },
       "flow_execution_wall_time_cap_seconds": 3600,
       "node_execution_wall_time_cap_seconds": 3600,
+      "default_mcp_node_timeout_seconds": 60,
       "default_flow_timeout_seconds": 600,
       "graph_max_iterations": 100,
       "external_flows": {
@@ -793,6 +794,9 @@
           "embedding_model_id": "Qwen/Qwen3-Embedding-0.6B",
           "embedding_openai_model_id": "qwen/qwen3-embedding-0.6b",
           "rerank_openai_model_id": "qwen/qwen3-reranker-0.6b",
+          "keybert_backend": "keybert",
+          "keybert_model_id": "paraphrase-multilingual-MiniLM-L12-v2",
+          "keybert_openai_model_id": "keybert/paraphrase-multilingual-minilm-l12-v2",
           "embedding_model_ids": [],
           "sqlite_path": "./data/provider_litserve/registry.db",
           "rerank_model_ids": [],
@@ -987,6 +991,37 @@
         "taxonomies": {},
         "taxonomy_files": {
           "runet": "conf/crawl_taxonomies/runet.json"
+        }
+      },
+      "runet": {
+        "index_mode": "vector_pointer",
+        "index_study_strategy": "lexical",
+        "index_study_strategies_eval": ["lexical", "split_embed", "hybrid_study"],
+        "persist_index_content_debug": false,
+        "index_content_stub": ".",
+        "max_vectors_per_url": 12,
+        "salient_terms_max": 80,
+        "salient_terms": {
+          "backend": "keybert",
+          "fallback_to_local": true,
+          "keybert_top_n": 50,
+          "keybert_use_mmr": true,
+          "keybert_diversity": 0.7
+        },
+        "discovery_limit": 10,
+        "research": {
+          "max_urls": 10,
+          "max_depth": 2,
+          "max_fetch_ms": 30000,
+          "fetch_concurrency": 5,
+          "browser_pool_size": 3,
+          "per_url_timeout_ms": 8000,
+          "max_passages_per_url": 40,
+          "max_passages_total": 200,
+          "rerank_top_k": 10,
+          "max_passage_tokens": 400,
+          "in_page_embed_threshold_tokens": 8000,
+          "ephemeral_rag_fallback": false
         }
       }
     },

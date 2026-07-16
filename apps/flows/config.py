@@ -100,6 +100,14 @@ class FlowSettings(BaseSettings):
         le=_FLOWS_WALL_TIME_HARD_MAX_SECONDS,
         description="Верхняя граница node_timeout_seconds у нод",
     )
+    default_mcp_node_timeout_seconds: int = Field(
+        default=60,
+        ge=1,
+        le=_FLOWS_WALL_TIME_HARD_MAX_SECONDS,
+        description=(
+            "Wall-clock лимит MCP-ноды (вызов MCP tool), если node_timeout_seconds не задан в конфиге ноды"
+        ),
+    )
     capability_execution_token_ttl_seconds: int = Field(
         default=3600,
         ge=1,

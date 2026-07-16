@@ -16,6 +16,7 @@ from apps.search_worker.tasks.task_names import (
     CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
     CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
 )
+from apps.search.services.crawl.seed_loader import import_manual_domains
 from core.crawl.models import CrawlBootstrapResult
 
 
@@ -42,15 +43,25 @@ class CrawlBootstrapService:
         self._crawl_job_repository: CrawlJobRepository = crawl_job_repository
         self._crawl_config: SearchCrawlConfig = crawl_config
 
+    async def _ensure_manual_seed_domains(self, crawl_profile_id: str) -> int:
+        result = await import_manual_domains(
+            crawl_profile_id,
+            crawl_domain_repository=self._crawl_domain_repository,
+            domains=self._crawl_config.manual_seed_domains,
+        )
+        return result.imported
+
     async def ensure_crawl_pipeline_ready(self) -> CrawlBootstrapResult:
         crawl_profile_id = self._crawl_config.default_crawl_profile_id
         stale_before = datetime.now(UTC) - timedelta(hours=6)
         _ = await self._crawl_job_repository.finish_stale_running_jobs(stale_before=stale_before)
 
+        manual_inserted = await self._ensure_manual_seed_domains(crawl_profile_id)
+
         if not self._crawl_config.bootstrap_tranco_on_empty:
             domain_count = await self._crawl_domain_repository.count_for_profile(crawl_profile_id)
             pending_urls = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
-            if pending_urls > 0:
+            if pending_urls > 0 or manual_inserted > 0:
                 await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
             return CrawlBootstrapResult(
                 crawl_profile_id=crawl_profile_id,
@@ -63,24 +74,28 @@ class CrawlBootstrapService:
             raise ValueError(f"crawl profile disabled: {crawl_profile_id}")
 
         domain_count = await self._crawl_domain_repository.count_for_profile(crawl_profile_id)
-        if domain_count > 0:
-            pending_urls = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
-            if pending_urls > 0:
-                await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
+        manual_domain_count = len([domain for domain in self._crawl_config.manual_seed_domains if domain.strip()])
+        needs_tranco_seed = domain_count == 0 or (
+            manual_domain_count > 0 and domain_count <= manual_domain_count
+        )
+        if needs_tranco_seed:
+            await _kiq_task(
+                CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
+                crawl_profile_id,
+                "tranco",
+                self._crawl_config.tranco_seed_limit,
+            )
             return CrawlBootstrapResult(
                 crawl_profile_id=crawl_profile_id,
-                action="skipped_seed",
+                action="queued_seed",
                 domain_count=domain_count,
             )
 
-        await _kiq_task(
-            CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
-            crawl_profile_id,
-            "tranco",
-            self._crawl_config.tranco_seed_limit,
-        )
+        pending_urls = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
+        if pending_urls > 0 or manual_inserted > 0:
+            await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
         return CrawlBootstrapResult(
             crawl_profile_id=crawl_profile_id,
-            action="queued_seed",
-            domain_count=0,
+            action="skipped_seed",
+            domain_count=domain_count,
         )

@@ -25,8 +25,6 @@ async def build_search_system_context(
         subdomain_repository=subdomain_repository,
         user_repository=user_repository,
     )
-    if user is None:
-        raise ValueError("system admin user is required for search system context")
     roles = user.companies.get(company.company_id, [])
     auth_token = get_token_service().create_token(
         user_id=user.user_id,

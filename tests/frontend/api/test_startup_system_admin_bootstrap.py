@@ -71,7 +71,7 @@ async def test_bootstrap_adds_admin_role_to_system_company_and_user():
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_skips_admin_when_target_email_user_missing():
+async def test_bootstrap_creates_system_admin_when_target_email_user_missing():
     company = Company(company_id="system", name="System", members={})
     other_user = User(user_id="user-2", name="Other", emails=["other@example.com"], companies={})
     container = _Container(
@@ -86,8 +86,14 @@ async def test_bootstrap_skips_admin_when_target_email_user_missing():
     )
 
     assert returned_company.company_id == "system"
-    assert returned_user is None
+    assert returned_user is not None
+    assert returned_user.user_id == "user_zambas124_yandex_ru_001"
+    assert "zambas124@yandex.ru" in returned_user.emails
+    assert "admin" in returned_user.companies["system"]
     assert "user-2" not in container.company_repository._entities["system"].members
+    assert "admin" in container.company_repository._entities["system"].members[
+        "user_zambas124_yandex_ru_001"
+    ]
 
 
 @pytest.mark.asyncio

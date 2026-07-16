@@ -51,3 +51,17 @@ def resolve_rerank_device(cfg: ProviderLitserveInfraConfig, litserve_worker_devi
     if ra == "cuda":
         return "cuda:0"
     raise ValueError(f"unknown rerank_accelerator: {ra!r}")
+
+
+def resolve_keybert_device(cfg: ProviderLitserveInfraConfig, litserve_worker_device: str) -> str:
+    """Устройство для KeyBERT: ``keybert_accelerator``; ``auto`` = устройство воркера."""
+    ka = cfg.keybert_accelerator
+    if ka == "auto":
+        return litserve_worker_device
+    if ka == "cpu":
+        return "cpu"
+    if ka == "mps":
+        return "mps"
+    if ka == "cuda":
+        return "cuda:0"
+    raise ValueError(f"unknown keybert_accelerator: {ka!r}")

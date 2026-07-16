@@ -90,6 +90,20 @@ export class FrontendCrawlReportPage extends PlatformPage {
                 border-radius: var(--radius-lg);
             }
             .filters-panel .field { min-width: 200px; flex: 1 1 200px; }
+            .domains-filter-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-3);
+                align-items: flex-end;
+                width: 100%;
+            }
+            .domains-filter-row .field { flex: 1 1 240px; }
+            .domains-filter-actions {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                margin-left: auto;
+            }
             .filter-chip-row {
                 display: flex;
                 flex-wrap: wrap;
@@ -680,14 +694,26 @@ export class FrontendCrawlReportPage extends PlatformPage {
     _renderFilters() {
         if (this._activeTab === 'domains') {
             return html`
-                <platform-field
-                    class="field"
-                    type="enum"
-                    label=${this.t('crawl_report_page.filter_domain_status')}
-                    .value=${this._domainStatusFilter}
-                    .enumConfig=${{ values: this._enumValues(DOMAIN_STATUS_VALUES) }}
-                    @value-changed=${this._onDomainStatusFilterChange}
-                ></platform-field>
+                <div class="domains-filter-row">
+                    <platform-field
+                        class="field"
+                        type="enum"
+                        label=${this.t('crawl_report_page.filter_domain_status')}
+                        .value=${this._domainStatusFilter}
+                        .enumConfig=${{ values: this._enumValues(DOMAIN_STATUS_VALUES) }}
+                        @value-changed=${this._onDomainStatusFilterChange}
+                    ></platform-field>
+                    <div class="domains-filter-actions">
+                        <platform-button
+                            variant="secondary"
+                            density="compact"
+                            @click=${() => this._openAddDomainModal()}
+                        >
+                            <platform-icon name="plus" size="16"></platform-icon>
+                            ${this.t('crawl_report_page.add_domain')}
+                        </platform-button>
+                    </div>
+                </div>
             `;
         }
         if (this._activeTab === 'urls') {
@@ -753,6 +779,10 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._queueTickOp.run({ crawl_profile_id: this._profileId, trigger: 'manual' });
     }
 
+    _openAddDomainModal() {
+        this.openModal('frontend.crawl_domain_add', { crawl_profile_id: this._profileId });
+    }
+
     _renderTableLoading() {
         return html`<div class="table-loading"><glass-spinner size="sm"></glass-spinner></div>`;
     }
@@ -775,6 +805,9 @@ export class FrontendCrawlReportPage extends PlatformPage {
             return this._renderTableShell(refreshing, html`
                 <div class="state">
                     <div class="state-title">${this.t('crawl_report_page.empty_domains')}</div>
+                    <platform-button variant="secondary" density="compact" @click=${() => this._openAddDomainModal()}>
+                        ${this.t('crawl_report_page.add_domain')}
+                    </platform-button>
                 </div>
             `);
         }

@@ -259,6 +259,30 @@ def get_host_with_port(host: str) -> str:
     return base
 
 
+def auth_cookie_secure(host: str) -> bool:
+    """Secure-флаг auth-куки: только для HTTPS. Локальный http://lvh.me не Secure."""
+    return get_protocol(host) == "https"
+
+
+def oauth_callback_redirect_host(*, callback_host: str, target_host: str) -> str:
+    """
+    Хост для post-OAuth редиректа после callback на apex dev-домене.
+
+    OAuth redirect_uri зарегистрирован на apex (lvh.me), а пользователь мог
+    начать вход с company.lvh.me. Если сразу 307 на субдомен, браузер часто
+    не применяет Set-Cookie с того же ответа — /dashboard отдаёт 401 и SPA
+    уходит на лендинг. Редирект на apex dashboard/select-company; SPA
+    company-host-guard перенесёт на субдомен активной компании.
+    """
+    if not is_local(callback_host):
+        return target_host
+    if extract_subdomain(callback_host):
+        return target_host
+    if extract_subdomain(target_host):
+        return callback_host
+    return target_host
+
+
 def get_cookie_domain(host: str) -> str | None:
     """
     Домен для cookie (с точкой в начале для субдоменов на проде).

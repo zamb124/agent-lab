@@ -63,6 +63,10 @@ def test_search_settings_and_container_are_loadable() -> None:
     assert len(runet_taxonomy.primary_topics) >= 100
     assert len(runet_taxonomy.topic_tags) >= 250
     assert len(runet_taxonomy.category_paths) >= 200
+    assert settings.runet.index_mode == "vector_pointer"
+    assert settings.runet.index_study_strategy == "lexical"
+    assert settings.runet.salient_terms.backend == "keybert"
+    assert settings.runet.research.fetch_concurrency == 5
     assert container.meta_search_service is get_container().meta_search_service
 
     reset_search_container()

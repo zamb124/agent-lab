@@ -80,6 +80,7 @@ import {
     crawlJobsResource,
     crawlQueueTickOp,
     crawlDomainRunOp,
+    crawlDomainCreateOp,
     crawlUrlDetailOp,
 } from '../events/resources/crawl-report.resource.js';
 import {
@@ -299,9 +300,10 @@ export class FrontendApp extends PlatformApp {
         crawlDomainsResource,
         crawlUrlsResource,
         crawlJobsResource,
-        crawlQueueTickOp,
-        crawlDomainRunOp,
-        crawlUrlDetailOp,
+    crawlQueueTickOp,
+    crawlDomainRunOp,
+    crawlDomainCreateOp,
+    crawlUrlDetailOp,
         companiesOverviewLoadOp,
         companyResolveOp,
         pricesGlobalLoadOp,

@@ -40,6 +40,18 @@ class RerankResponseBody(BaseModel):
     scores: list[float] = Field(description="Релевантность каждого элемента ``passages`` в том же порядке.")
 
 
+class KeybertKeywordItem(BaseModel):
+    term: str = Field(min_length=1)
+    score: float
+
+
+class KeybertExtractResponseBody(BaseModel):
+    """Ответ POST ``/v1/keybert`` (``AIKeybertHTTPClient``)."""
+
+    model: str
+    keywords: list[KeybertKeywordItem] = Field(default_factory=list)
+
+
 class VADSegmentsResponseBody(BaseModel):
     """Ответ POST ``/v1/audio/vad``."""
 

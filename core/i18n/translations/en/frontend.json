@@ -92,6 +92,9 @@
         "queue_tick": "Queue tick",
         "toast_queued": "Crawl tick queued",
         "toast_domain_queued": "Domain crawl queued",
+        "toast_domain_created": "Domain added to crawl profile",
+        "toast_domain_create_failed": "Failed to add domain",
+        "add_domain": "Add domain",
         "domains_total": "Domains",
         "domains_due": "Due for crawl",
         "urls_indexed": "URLs indexed",
@@ -973,6 +976,19 @@
         "scope_rag_write_desc": "Upload and update documents, recompute embeddings",
         "scope_billing_read_name": "Billing: read",
         "scope_billing_read_desc": "View usage and billing data (read only)"
+    },
+    "crawl_domain_add_modal": {
+        "title": "Add domain",
+        "hint": "Enter a domain without scheme or path, e.g. habr.com or www.example.ru.",
+        "label_domain": "Domain",
+        "placeholder_domain": "habr.com",
+        "label_run_now": "Queue discover/fetch immediately",
+        "submit": "Add domain",
+        "cancel": "Cancel",
+        "saving": "Adding…",
+        "err_domain_required": "Domain is required",
+        "err_domain_invalid": "Domain must contain a dot, e.g. habr.com",
+        "err_domain_conflict": "This domain is already in the crawl profile"
     },
     "api_key_edit_modal": {
         "header": "Rename API key",

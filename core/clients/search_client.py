@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from core.clients.service_client import ServiceClient
-from core.crawl.models import CrawlDomainRunResponse, CrawlJobCreateRequest, CrawlJobQueuedResponse
+from core.crawl.models import (
+    CrawlDomainCreateRequest,
+    CrawlDomainCreateResponse,
+    CrawlDomainRunResponse,
+    CrawlJobCreateRequest,
+    CrawlJobQueuedResponse,
+)
 from core.search.models import MetaSearchRequest, MetaSearchResponse
 
 
@@ -35,3 +41,11 @@ class SearchClient:
             json={},
         )
         return CrawlDomainRunResponse.model_validate(response)
+
+    async def create_crawl_domain(self, body: CrawlDomainCreateRequest) -> CrawlDomainCreateResponse:
+        response = await self._client.post(
+            "search",
+            "/search/api/v1/crawl/domains",
+            json=body.model_dump(mode="json"),
+        )
+        return CrawlDomainCreateResponse.model_validate(response)

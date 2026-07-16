@@ -12,13 +12,12 @@ from apps.frontend.dependencies import ContainerDep, require_frontend_user
 from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import TASK_INIT_NEW_COMPANY
 from core.api.companies import CompanyMembershipResponse, build_my_companies_response
-from core.config import get_settings
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.models.identity_models import Company, User
 from core.pagination import ListResponse
 from core.tasks.kicker import kiq_task_name_with_context
-from core.utils.domain import build_url, get_cookie_domain
+from core.utils.domain import auth_cookie_secure, build_url, get_cookie_domain
 from core.utils.subdomain import validate_slug
 from core.utils.tokens import TokenService, get_token_service
 
@@ -108,8 +107,6 @@ async def create_company(
     Возвращает:
         Информация о созданной компании и URL для редиректа
     """
-    settings = get_settings()
-
     user = require_frontend_user()
     name = request_data.name.strip()
     slug = request_data.slug.lower().strip()
@@ -204,7 +201,7 @@ async def create_company(
 
     # Обновляем cookie
     cookie_domain = get_cookie_domain(request.headers.get("host", ""))
-    is_production = settings.server.env == "production"
+    cookie_secure = auth_cookie_secure(request.headers.get("host", ""))
 
     response = JSONResponse(
         content={
@@ -220,7 +217,7 @@ async def create_company(
         value=new_token,
         domain=cookie_domain,
         httponly=True,
-        secure=is_production,
+        secure=cookie_secure,
         samesite="lax",
         max_age=TokenService.SESSION_EXPIRES,
     )
@@ -346,13 +343,12 @@ async def leave_company_as_system_member(
             roles=system_roles,
             email=user.email,
         )
-        settings = get_settings()
         response.set_cookie(
             key="auth_token",
             value=refreshed_token,
             domain=get_cookie_domain(request.headers.get("host", "")),
             httponly=True,
-            secure=settings.server.env == "production",
+            secure=auth_cookie_secure(request.headers.get("host", "")),
             samesite="lax",
             max_age=TokenService.SESSION_EXPIRES,
         )

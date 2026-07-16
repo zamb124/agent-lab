@@ -143,3 +143,29 @@ async def import_tranco_domains(
         next_crawl_after=next_crawl,
     )
     return SeedImportResult(imported=imported, skipped=skipped)
+
+
+async def import_manual_domains(
+    crawl_profile_id: str,
+    *,
+    crawl_domain_repository: CrawlDomainRepository,
+    domains: list[str],
+) -> SeedImportResult:
+    normalized_domains = [item.strip().lower() for item in domains if item.strip()]
+    if not normalized_domains:
+        return SeedImportResult(imported=0, skipped=0)
+    seeds = [
+        CrawlDomainSeed(
+            domain=domain,
+            category=_domain_category(domain),
+        )
+        for domain in normalized_domains
+    ]
+    next_crawl = datetime.now(UTC) + timedelta(minutes=5)
+    imported = await crawl_domain_repository.upsert_seed_batch(
+        crawl_profile_id,
+        seeds,
+        next_crawl_after=next_crawl,
+    )
+    skipped = len(seeds) - imported
+    return SeedImportResult(imported=imported, skipped=skipped)

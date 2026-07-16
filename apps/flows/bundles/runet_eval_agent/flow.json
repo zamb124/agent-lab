@@ -1,0 +1,86 @@
+{
+  "flow_id": "runet_eval_agent",
+  "name": "Runet Eval Agent",
+  "description": "Агент оценки качества поиска: запускает eval harness по golden set, вычисляет метрики §20.1 (url_recall, nDCG, MRR, rare_term_recall, dedup_purity, fetch_success_rate, evidence_rate) и диагностирует проблемы по §20.4.",
+  "tags": ["search", "runet", "eval", "quality"],
+  "permission": [],
+  "entry": "eval_agent",
+  "nodes": {
+    "eval_agent": {
+      "type": "llm_node",
+      "name": "Runet Quality Eval Agent",
+      "prompt": "Ты — агент оценки качества поиска Runet (§17, §20.1, §20.4).\n\nРежим: {eval_arm}\nTop-K: {eval_limit_k}\nМакс. запросов (discover): {eval_max_queries}\n\nЗапрос пользователя: {content}\n\n---\n## Протокол оценки\n\nШаг 1. Запусти eval по нужным arm'ам:\n- Если eval_arm = 'discover' или 'both' → вызови runet_eval_harness(arm=\"discover\", limit_k={eval_limit_k}, max_queries={eval_max_queries})\n- Если eval_arm = 'research' или 'both' → вызови runet_eval_harness(arm=\"research\", limit_k={eval_limit_k}, max_queries=5)\n- Если пользователь сказал 'discover' — только discover, 'research' — только research, иначе используй eval_arm.\n\nШаг 2. Построй таблицу метрик §20.1:\n\n| Метрика | discover | research | Норма |\n|---------|----------|----------|-------|\n| url_recall@K | — | — | ≥ 0.80 |\n| rare_term_url_recall@K | — | — | ≥ 0.75 |\n| nDCG@K | — | — | ≥ 0.65 |\n| MRR@K | — | — | ≥ 0.60 |\n| dedup_purity@K | — | — | ≥ 0.90 |\n| fetch_success_rate | n/a | — | ≥ 0.80 |\n| evidence_rate | n/a | — | ≥ 0.70 |\n\nДобавь 🟢 (≥ норма), 🟡 (0.05 ниже нормы), 🔴 (>0.05 ниже нормы) к каждой ячейке.\n\nШаг 3. Разбивка по типам запросов (из by_query_type):\n- rare_term vs general vs paraphrase vs news\n- Если rare_term url_recall сильно хуже general → проблема с лексическим recall\n\nШаг 4. Диагностика по таблице §20.4:\n\n| Если падает… | Сначала проверить… | Потом включить… |\n|--|--|--|\n| rare_term_url_recall | lexical_recall vs semantic_recall split | russian tsvector → salient_terms → SPLADE |\n| url_recall (общий) | dedup, %Untitled | hybrid RRF, лучший encoder, reranker |\n| nDCG при ок recall | порядок в top-3 | cross-encoder rerank |\n| passage_recall (shadow) | chunks/doc, split strategy | structure_800 arm, contextual prepend |\n| groundedness / evidence_rate | fetch_success_rate, staleness | live fetch, CRAG, citations |\n| GB/doc (не метрика здесь) | full-chunk mirror, LLM enrich | page-card, halfvec |\n\nПрименяй каждый пункт к реальным цифрам из результатов.\n\nШаг 5. Топ провальных запросов (misses из harness), сгруппированных по типу.\n\nШаг 6. Приоритетный список рекомендаций (P0/P1/P2), опираясь только на данные eval.\n\n---\n\nЕсли пользователь задаёт конкретный вопрос о метриках или хочет проверить конкретный тип запросов — адаптируй запуск harness (используй query_types=[...]).",
+      "tools": [
+        "runet_eval_harness"
+      ],
+      "llm": {
+        "provider": "humanitec_llm",
+        "model": "auto",
+        "temperature": 0.05
+      },
+      "llm_context": {
+        "profile": "compact",
+        "budget": {
+          "max_input_tokens": 48000,
+          "output_reserve_tokens": 4000,
+          "reasoning_reserve_tokens": 0,
+          "safety_buffer_tokens": 1000,
+          "active_window_tokens": 24000,
+          "tool_result_tokens": 16000
+        }
+      }
+    }
+  },
+  "edges": [],
+  "variables": {
+    "eval_arm": "discover",
+    "eval_limit_k": 10,
+    "eval_max_queries": 20
+  },
+  "branches": {
+    "discover": {
+      "name": "Discover Eval",
+      "description": "Только pointer-index routing eval: url_recall, nDCG, MRR, rare_term_recall, dedup_purity. Быстро (только индекс, без live fetch). Все golden queries.",
+      "tags": ["eval", "discover", "fast"],
+      "permission": [],
+      "variables": {
+        "eval_arm": "discover",
+        "eval_limit_k": 10,
+        "eval_max_queries": 20
+      }
+    },
+    "research": {
+      "name": "Research Eval",
+      "description": "Только live fetch eval: fetch_success_rate, evidence_rate, groundedness, status_distribution. Медленно (live HTTP fetch). Используй max 5 запросов.",
+      "tags": ["eval", "research", "live-fetch"],
+      "permission": [],
+      "variables": {
+        "eval_arm": "research",
+        "eval_limit_k": 10,
+        "eval_max_queries": 5
+      }
+    },
+    "full": {
+      "name": "Full Eval",
+      "description": "Полная оценка: discover (все golden queries) + research (5 запросов). Выдаёт все метрики §20.1 с диагностикой §20.4.",
+      "tags": ["eval", "full"],
+      "permission": [],
+      "variables": {
+        "eval_arm": "both",
+        "eval_limit_k": 10,
+        "eval_max_queries": 20
+      }
+    },
+    "rare_term": {
+      "name": "Rare Term Eval",
+      "description": "Только rare_term запросы: CVE, версии, error-коды, exact entity. Ключевая метрика §20.1A — rare_term_url_recall@K.",
+      "tags": ["eval", "rare-term"],
+      "permission": [],
+      "variables": {
+        "eval_arm": "discover",
+        "eval_limit_k": 10,
+        "eval_max_queries": 20
+      }
+    }
+  }
+}

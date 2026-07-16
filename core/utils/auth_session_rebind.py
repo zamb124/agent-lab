@@ -7,25 +7,23 @@ from __future__ import annotations
 from fastapi import Request
 from starlette.responses import Response
 
-from core.config import get_settings
 from core.container import BaseContainer
 from core.models.identity_models import Company, User
-from core.utils.domain import get_cookie_domain
+from core.utils.domain import auth_cookie_secure, get_cookie_domain
 from core.utils.tokens import TokenData, TokenService, get_token_service
 
 
 def attach_session_auth_cookie(response: Response, request: Request, token: str) -> None:
     if not token or not str(token).strip():
         raise ValueError("attach_session_auth_cookie: token required")
-    settings = get_settings()
-    cookie_domain = get_cookie_domain(request.headers.get("host", ""))
-    is_production = settings.server.env == "production"
+    host = request.headers.get("host", "")
+    cookie_domain = get_cookie_domain(host)
     response.set_cookie(
         key="auth_token",
         value=token,
         domain=cookie_domain,
         httponly=True,
-        secure=is_production,
+        secure=auth_cookie_secure(host),
         samesite="lax",
         max_age=TokenService.SESSION_EXPIRES,
     )

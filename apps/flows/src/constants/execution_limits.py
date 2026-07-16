@@ -17,3 +17,7 @@ def get_flow_execution_wall_time_cap_seconds() -> int:
 
 def get_node_execution_wall_time_cap_seconds() -> int:
     return get_settings().node_execution_wall_time_cap_seconds
+
+
+def get_default_mcp_node_timeout_seconds() -> int:
+    return get_settings().default_mcp_node_timeout_seconds

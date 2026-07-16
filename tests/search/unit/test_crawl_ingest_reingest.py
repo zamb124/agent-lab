@@ -8,13 +8,27 @@ from unittest.mock import AsyncMock
 import pytest
 
 from apps.search.services.crawl.ingest_service import CrawlIngestService
+from apps.search.services.crawl.salient_terms_service import SalientTermsService
 from core.clients.service_client import ServiceClientError
 from core.crawl.models import CrawlDomain, CrawlFetchResult
 from core.rag.models import RAGIngestTextResponse
 from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from core.search.pointer_models import RunetPointerConfig, SalientTermsConfig
 from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
 
 pytestmark = pytest.mark.unit
+
+
+def _chunk_mirror_ingest_service(rag_client: object) -> CrawlIngestService:
+    runet_config = RunetPointerConfig(
+        index_mode="chunk_mirror",
+        salient_terms=SalientTermsConfig(backend="local"),
+    )
+    return CrawlIngestService(
+        rag_client,  # pyright: ignore[reportArgumentType]
+        runet_config,
+        SalientTermsService(runet_config=runet_config),
+    )
 
 
 @pytest.mark.asyncio
@@ -67,7 +81,7 @@ async def test_reingest_deletes_then_ingests_with_same_document_id() -> None:
         ),
     )
 
-    service = CrawlIngestService(rag_client)
+    service = _chunk_mirror_ingest_service(rag_client)
     document_id = "idx_test:abc123"
     result_id = await service.reingest_enriched_page(
         search_index=search_index,
@@ -144,7 +158,7 @@ async def test_reingest_continues_when_delete_returns_404() -> None:
         ),
     )
 
-    service = CrawlIngestService(rag_client)
+    service = _chunk_mirror_ingest_service(rag_client)
     document_id = "idx_test:abc123"
     result_id = await service.reingest_enriched_page(
         search_index=search_index,

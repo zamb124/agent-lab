@@ -135,16 +135,9 @@ async def ensure_platform_search_worker_prerequisites(
 ):
     """Worker context (build_search_system_context) и seed runet требуют system admin email."""
     _ = setup_database_before_tests
-    from core.identity.system_bootstrap import (
-        ADMIN_ROLE,
-        SYSTEM_ADMIN_EMAIL,
-        SYSTEM_COMPANY_ID,
-        ensure_system_admin_membership,
-        ensure_system_company_exists,
-    )
-    from core.models.identity_models import User
+    from core.identity.system_bootstrap import ensure_system_admin_membership, ensure_system_company_exists
 
-    company = await ensure_system_company_exists(
+    await ensure_system_company_exists(
         company_repository=frontend_container.company_repository,
         subdomain_repository=frontend_container.subdomain_repository,
     )
@@ -153,20 +146,7 @@ async def ensure_platform_search_worker_prerequisites(
         subdomain_repository=frontend_container.subdomain_repository,
         user_repository=frontend_container.user_repository,
     )
-    if admin_user is None:
-        admin_user_id = "user_zambas124_yandex_ru_test"
-        admin_user = User(
-            user_id=admin_user_id,
-            name="Platform System Admin",
-            emails=[SYSTEM_ADMIN_EMAIL],
-            companies={SYSTEM_COMPANY_ID: [ADMIN_ROLE]},
-        )
-        await frontend_container.user_repository.set(admin_user)
-        member_roles = list(company.members.get(admin_user_id, []))
-        if ADMIN_ROLE not in member_roles:
-            member_roles.append(ADMIN_ROLE)
-        company.members[admin_user_id] = member_roles
-        await frontend_container.company_repository.set(company)
+    assert admin_user is not None
 
     from tests.fixtures.search_runet import ensure_runet_platform_index_seeded
 

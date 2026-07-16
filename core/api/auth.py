@@ -23,7 +23,14 @@ from core.identity import AuthService
 from core.logging import get_logger
 from core.models import AuthProvider, AuthRequest
 from core.types import JsonObject, require_json_object
-from core.utils.domain import build_url, get_cookie_domain, get_host_with_port, is_local
+from core.utils.domain import (
+    auth_cookie_secure,
+    build_url,
+    get_cookie_domain,
+    get_host_with_port,
+    is_local,
+    oauth_callback_redirect_host,
+)
 from core.utils.tokens import TokenData, TokenService, get_token_service
 
 logger = get_logger(__name__)
@@ -97,16 +104,15 @@ def _clear_platform_auth_cookies(response: JSONResponse, request: Request) -> No
     Удаляет куки входа с теми же path/domain/secure/samesite (и httponly для auth_token),
     с какими они выставляются в login/demo, OAuth callback и switch-company.
     """
-    settings = get_settings()
-    is_production = settings.server.env == "production"
     host = request.headers.get("host", "")
     cookie_domain = get_cookie_domain(host)
+    cookie_secure = auth_cookie_secure(host)
     for httponly_auth in (False, True):
         response.delete_cookie(
             key="auth_token",
             path="/",
             domain=cookie_domain,
-            secure=is_production,
+            secure=cookie_secure,
             httponly=httponly_auth,
             samesite="lax",
         )
@@ -114,7 +120,7 @@ def _clear_platform_auth_cookies(response: JSONResponse, request: Request) -> No
         key="session_id",
         path="/",
         domain=cookie_domain,
-        secure=is_production,
+        secure=cookie_secure,
         httponly=True,
         samesite="lax",
     )
@@ -164,8 +170,8 @@ async def login_demo(
     response = JSONResponse(
         content={"redirect_url": redirect_url, "success": True},
     )
-    is_production = settings.server.env == "production"
     cookie_domain = get_cookie_domain(target_host)
+    cookie_secure = auth_cookie_secure(target_host)
     cookie_max_age = TokenService.SESSION_EXPIRES
 
     response.set_cookie(
@@ -173,7 +179,7 @@ async def login_demo(
         value=result.session.session_id,
         domain=cookie_domain,
         httponly=True,
-        secure=is_production,
+        secure=cookie_secure,
         samesite="lax",
         max_age=cookie_max_age,
     )
@@ -182,7 +188,7 @@ async def login_demo(
         value=result.token,
         domain=cookie_domain,
         httponly=False,
-        secure=is_production,
+        secure=cookie_secure,
         samesite="lax",
         max_age=cookie_max_age,
     )
@@ -285,8 +291,6 @@ async def _complete_oauth_callback(
     oauth_first_login_user_json: str | None = None,
 ) -> RedirectResponse:
     """Общая логика GET/POST callback (Apple form_post передаёт поля в теле формы)."""
-    settings = get_settings()
-
     if error:
         logger.error(f"Ошибка авторизации от {provider_name}: {error}")
         raise HTTPException(status_code=400, detail=f"Ошибка авторизации: {error}")
@@ -345,38 +349,52 @@ async def _complete_oauth_callback(
     session = result.session
     token = result.token
 
-    target_host = original_host or request.headers.get("host", "")
+    callback_host = request.headers.get("host", "")
+    target_host = original_host or callback_host
+    redirect_host = oauth_callback_redirect_host(
+        callback_host=callback_host,
+        target_host=target_host,
+    )
+    use_company_subdomain = redirect_host == target_host
+
     if return_path:
         if not return_path.startswith("/"):
             raise HTTPException(status_code=400, detail="Некорректный return_path")
         redirect_url = build_url(target_host, return_path)
     elif not user.companies or len(user.companies) == 0:
-        redirect_url = build_url(target_host, "/select-company?action=create")
+        redirect_url = build_url(redirect_host, "/select-company?action=create")
     elif len(user.companies) == 1:
         company_id = list(user.companies.keys())[0]
         company = await auth_service.get_company(company_id)
         if not company or not company.subdomain:
-            redirect_url = build_url(target_host, "/select-company?action=create")
+            redirect_url = build_url(redirect_host, "/select-company?action=create")
+        elif use_company_subdomain:
+            redirect_url = build_url(redirect_host, "/dashboard?post_login=1", company.subdomain)
         else:
-            redirect_url = build_url(target_host, "/dashboard?post_login=1", company.subdomain)
+            redirect_url = build_url(redirect_host, "/dashboard?post_login=1")
     else:
         active_company_id = user.active_company_id
         if active_company_id and active_company_id in user.companies:
             company = await auth_service.get_company(active_company_id)
             if company and company.subdomain:
-                redirect_url = build_url(target_host, "/dashboard?post_login=1", company.subdomain)
+                if use_company_subdomain:
+                    redirect_url = build_url(
+                        redirect_host, "/dashboard?post_login=1", company.subdomain
+                    )
+                else:
+                    redirect_url = build_url(redirect_host, "/dashboard?post_login=1")
             else:
-                redirect_url = build_url(target_host, "/select-company")
+                redirect_url = build_url(redirect_host, "/select-company")
         else:
-            redirect_url = build_url(target_host, "/select-company")
+            redirect_url = build_url(redirect_host, "/select-company")
 
     response = RedirectResponse(url=redirect_url)
-    is_production = settings.server.env == "production"
 
-    cookie_domain = get_cookie_domain(target_host)
+    cookie_domain = get_cookie_domain(callback_host)
+    cookie_secure = auth_cookie_secure(callback_host)
 
     logger.info(
-        f"Устанавливаем cookies: session_id={session.session_id}, auth_token={token[:8]}..., domain={cookie_domain}, secure={is_production}"
+        f"Устанавливаем cookies: session_id={session.session_id}, auth_token={token[:8]}..., domain={cookie_domain}, secure={cookie_secure}"
     )
 
     cookie_max_age = TokenService.SESSION_EXPIRES
@@ -385,7 +403,7 @@ async def _complete_oauth_callback(
         value=session.session_id,
         domain=cookie_domain,
         httponly=True,
-        secure=is_production,
+        secure=cookie_secure,
         samesite="lax",
         max_age=cookie_max_age,
     )
@@ -394,7 +412,7 @@ async def _complete_oauth_callback(
         value=token,
         domain=cookie_domain,
         httponly=False,
-        secure=is_production,
+        secure=cookie_secure,
         samesite="lax",
         max_age=cookie_max_age,
     )
@@ -533,14 +551,14 @@ async def switch_company(
         email=user.email,
     )
 
-    settings = get_settings()
+    host = request.headers.get("host", "")
     response = JSONResponse(content={"success": True, "company_id": payload.company_id})
     response.set_cookie(
         key="auth_token",
         value=issued_token,
-        domain=get_cookie_domain(request.headers.get("host", "")),
+        domain=get_cookie_domain(host),
         httponly=True,
-        secure=settings.server.env == "production",
+        secure=auth_cookie_secure(host),
         samesite="lax",
         max_age=TokenService.SESSION_EXPIRES,
     )

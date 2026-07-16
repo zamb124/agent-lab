@@ -28,6 +28,7 @@ from apps.provider_litserve.container import (
     get_provider_litserve_container,
 )
 from apps.provider_litserve.embedding.api import EmbeddingLitAPI
+from apps.provider_litserve.keybert.api import KeybertLitAPI
 from apps.provider_litserve.model_registry import (
     init_registry,
     sync_defaults_from_config,
@@ -92,6 +93,8 @@ def _cuda_required_for_inference() -> bool:
     if cfg.accelerator == "cuda":
         return True
     if cfg.embedding_accelerator == "cuda" or cfg.rerank_accelerator == "cuda":
+        return True
+    if cfg.keybert_accelerator == "cuda":
         return True
     return False
 
@@ -232,6 +235,8 @@ def _build_litserver_apis(cfg: ProviderLitserveInfraConfig) -> list[ls.LitAPI]:
         apis.append(EmbeddingLitAPI(cfg))
     if "rerank" in enabled:
         apis.append(RerankerLitAPI(cfg))
+    if "keybert" in enabled:
+        apis.append(KeybertLitAPI(cfg))
     if "stt" in enabled:
         apis.append(STTLitAPI(cfg))
     if "tts" in enabled:

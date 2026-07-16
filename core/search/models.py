@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 _SEARCH_INDEX_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 
 SearchMode = Literal["quick", "deep", "research"]
+SearchResultDocType = Literal["chunk", "vector_pointer", "page_card"]
 SearchSuggestionKind = Literal[
     "refine",
     "follow_up",
@@ -47,6 +48,15 @@ class WebSearchResult(BaseModel):
     site_name: str = ""
     favicon_url: str = ""
     preview_image_url: str = ""
+    doc_type: SearchResultDocType | None = None
+    canonical_url: str | None = None
+    section_title: str | None = None
+    salient_terms: list[str] = Field(default_factory=list)
+    page_summary: str | None = None
+    html_title: str | None = None
+    meta_description: str | None = None
+    extract_content_hash: str | None = None
+    indexed_at: str | None = None
 
 
 class MetaSearchProviderStatus(BaseModel):

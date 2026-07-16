@@ -5,10 +5,7 @@ from typing import TypedDict
 from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import IdleWorkerContainer, get_container
 from core.context import Context, clear_context, set_context
-from core.identity.system_bootstrap import (
-    SYSTEM_ADMIN_EMAIL,
-    ensure_system_admin_membership,
-)
+from core.identity.system_bootstrap import ensure_system_admin_membership
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
@@ -31,10 +28,6 @@ async def _build_scheduler_auth_context(
         subdomain_repository=container.subdomain_repository,
         user_repository=container.user_repository,
     )
-    if user is None:
-        raise ValueError(
-            f"Нет пользователя с email {SYSTEM_ADMIN_EMAIL}: контекст для фоновых задач не собрать"
-        )
     roles = user.companies.get(company.company_id, [])
     auth_token = get_token_service().create_token(
         user_id=user.user_id,

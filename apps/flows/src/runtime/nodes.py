@@ -28,6 +28,7 @@ from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.clients.mcp_client import MCPClient
+from apps.flows.src.constants.execution_limits import get_default_mcp_node_timeout_seconds
 from apps.flows.src.container_contracts import FlowRuntimeContainer, RuntimeFlowProtocol
 from apps.flows.src.durable_execution import (
     ChildWorkflowLifecyclePayload,
@@ -634,6 +635,8 @@ class BaseNode(ABC):
         inputs = self._resolve_inputs(state)
 
         node_timeout = self.config.get("node_timeout_seconds")
+        if node_timeout is None and self.node_type == NodeType.MCP:
+            node_timeout = get_default_mcp_node_timeout_seconds()
         nto: int | None = None
         try:
             if node_timeout is not None:

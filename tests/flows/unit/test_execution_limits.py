@@ -2,6 +2,8 @@
 
 import pytest
 
+from apps.flows.config import get_settings
+from apps.flows.src.constants.execution_limits import get_default_mcp_node_timeout_seconds
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
@@ -38,3 +40,8 @@ def test_node_config_node_timeout_ok() -> None:
         node_timeout_seconds=300,
     )
     assert n.node_timeout_seconds == 300
+
+
+def test_default_mcp_node_timeout_seconds() -> None:
+    assert get_default_mcp_node_timeout_seconds() == 60
+    assert get_settings().default_mcp_node_timeout_seconds == 60

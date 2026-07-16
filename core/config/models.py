@@ -1261,6 +1261,25 @@ class ProviderLitserveInfraConfig(BaseModel):
     embedding_model_ids: list[str] = Field(default_factory=list)
     rerank_model_ids: list[str] = Field(default_factory=list)
 
+    keybert_backend: Literal["placeholder", "keybert"] = Field(
+        default="keybert",
+        description="KeyBERT inference: keybert — SentenceTransformer + KeyBERT; placeholder — TF fallback.",
+    )
+    keybert_accelerator: Literal["auto", "cpu", "cuda", "mps"] = Field(
+        default="auto",
+        description="Устройство для POST /v1/keybert (multilingual salient terms).",
+    )
+    keybert_model_id: str = Field(
+        default="paraphrase-multilingual-MiniLM-L12-v2",
+        description="HuggingFace id embedding-модели для KeyBERT (RU/EN mixed).",
+    )
+    keybert_openai_model_id: str = Field(
+        default="keybert/paraphrase-multilingual-minilm-l12-v2",
+        description="OpenAI-compatible id KeyBERT-модели в payload.",
+    )
+    keybert_max_text_chars: int = Field(default=50_000, ge=1000, le=200_000)
+    keybert_default_top_n: int = Field(default=50, ge=1, le=256)
+
     stt_models: list["ProviderLitserveSTTModelEntry"] = Field(
         default_factory=lambda: [
             ProviderLitserveSTTModelEntry(
@@ -1322,9 +1341,9 @@ class ProviderLitserveInfraConfig(BaseModel):
         description="api id VAD-модели по умолчанию (должен присутствовать в vad_models).",
     )
 
-    enabled_workers: list[Literal["embedding", "rerank", "stt", "tts", "vad"]] = Field(
+    enabled_workers: list[Literal["embedding", "rerank", "keybert", "stt", "tts", "vad"]] = Field(
         default_factory=list,
-        description="Явный список LitServe-воркеров процесса. Пусто — embedding/rerank/stt/tts/vad.",
+        description="Явный список LitServe-воркеров процесса. Пусто — embedding/rerank/keybert/stt/tts/vad.",
     )
 
     hf_token: str | None = None

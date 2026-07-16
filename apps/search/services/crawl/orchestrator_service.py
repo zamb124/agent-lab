@@ -15,8 +15,9 @@ from apps.search.db.crawl_repositories import (
 )
 from apps.search.services.crawl.fetch_service import CrawlFetchService
 from apps.search.services.crawl.ingest_service import CrawlIngestService
+from apps.search.services.crawl.salient_terms_service import SalientTermsService
 from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
-from apps.search.services.crawl.seed_loader import import_tranco_domains
+from apps.search.services.crawl.seed_loader import import_manual_domains, import_tranco_domains
 from apps.search.services.crawl.sitemap_parser import SitemapDiscoveryError, discover_sitemap_urls
 from apps.search_worker.broker import broker as search_worker_broker
 from apps.search_worker.tasks.task_names import (
@@ -46,6 +47,7 @@ from core.crawl.models import (
 )
 from core.crawl.report_projection import enrichment_snapshot_from_enriched_page
 from core.search.index_models import SearchIndexDefinition
+from core.search.pointer_models import RunetPointerConfig
 
 
 async def _enqueue_task(task_name: str, *args: object, **kwargs: object) -> None:
@@ -65,9 +67,11 @@ class CrawlOrchestratorService:
         crawl_job_repository: CrawlJobRepository,
         fetch_service: CrawlFetchService,
         page_enrichment_service: CrawlPageEnrichmentService,
+        salient_terms_service: SalientTermsService,
         rag_client: RagClient,
         build_system_context: Callable[[str], Awaitable[Context]],
         crawl_config: SearchCrawlConfig,
+        runet_config: RunetPointerConfig,
     ) -> None:
         self._crawl_profile_repository: CrawlProfileRepository = crawl_profile_repository
         self._crawl_domain_repository: CrawlDomainRepository = crawl_domain_repository
@@ -75,7 +79,12 @@ class CrawlOrchestratorService:
         self._crawl_job_repository: CrawlJobRepository = crawl_job_repository
         self._fetch_service: CrawlFetchService = fetch_service
         self._page_enrichment_service: CrawlPageEnrichmentService = page_enrichment_service
-        self._ingest_service: CrawlIngestService = CrawlIngestService(rag_client)
+        self._salient_terms_service: SalientTermsService = salient_terms_service
+        self._ingest_service: CrawlIngestService = CrawlIngestService(
+            rag_client,
+            runet_config,
+            salient_terms_service,
+        )
         self._rag_client: RagClient = rag_client
         self._build_system_context: Callable[[str], Awaitable[Context]] = build_system_context
         self._crawl_config: SearchCrawlConfig = crawl_config
@@ -535,14 +544,23 @@ class CrawlOrchestratorService:
         return True
 
     async def import_seed(self, body: SeedImportRequest) -> SeedImportResult:
+        manual_result = await import_manual_domains(
+            body.crawl_profile_id,
+            crawl_domain_repository=self._crawl_domain_repository,
+            domains=self._crawl_config.manual_seed_domains,
+        )
         if body.seed_source != "tranco":
             raise ValueError(f"unsupported seed_source: {body.seed_source}")
-        return await import_tranco_domains(
+        tranco_result = await import_tranco_domains(
             body.crawl_profile_id,
             crawl_domain_repository=self._crawl_domain_repository,
             limit=body.tranco_limit,
             ru_com_whitelist=tuple(self._crawl_config.ru_com_whitelist),
             skip_categories=tuple(self._crawl_config.skip_categories),
+        )
+        return SeedImportResult(
+            imported=manual_result.imported + tranco_result.imported,
+            skipped=manual_result.skipped + tranco_result.skipped,
         )
 
     def _needs_discovery(self, domain: CrawlDomain, stale_after_seconds: int, now: datetime) -> bool:

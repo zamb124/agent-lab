@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from core.config import BaseSettings
 from core.config.loader import get_project_root, load_merged_config
 from core.search.index_models import SearchIndexCrawlTaxonomy
+from core.search.pointer_models import RunetPointerConfig
 from core.types import parse_json_object
 
 SearchProviderId = Literal["tinyfish", "linkup", "serper", "tavily", "index"]
@@ -88,6 +89,7 @@ class SearchCrawlConfig(BaseModel):
     browser_fetch_timeout_seconds: float = Field(default=120.0, ge=30.0, le=300.0)
     tranco_seed_limit: int = Field(default=2000, ge=1, le=5000)
     bootstrap_tranco_on_empty: bool = True
+    manual_seed_domains: list[str] = Field(default_factory=list)
     skip_categories: list[str] = Field(default_factory=lambda: ["ecommerce", "social"])
     ru_com_whitelist: list[str] = Field(
         default_factory=lambda: ["habr.com", "vc.ru", "tass.ru"]
@@ -153,6 +155,7 @@ class SearchIntegrationConfig(BaseModel):
 class SearchSettings(BaseSettings):
     search: SearchIntegrationConfig = Field(default_factory=SearchIntegrationConfig)
     crawl: SearchCrawlConfig = Field(default_factory=SearchCrawlConfig)
+    runet: RunetPointerConfig = Field(default_factory=RunetPointerConfig)
 
     @model_validator(mode="after")
     def _require_search_db(self) -> SearchSettings:

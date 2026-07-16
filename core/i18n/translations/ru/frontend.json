@@ -92,6 +92,9 @@
         "queue_tick": "Запустить tick",
         "toast_queued": "Crawl tick поставлен в очередь",
         "toast_domain_queued": "Краул домена поставлен в очередь",
+        "toast_domain_created": "Домен добавлен в профиль краула",
+        "toast_domain_create_failed": "Не удалось добавить домен",
+        "add_domain": "Добавить домен",
         "domains_total": "Домены",
         "domains_due": "Ожидают краула",
         "urls_indexed": "URL проиндексировано",
@@ -973,6 +976,19 @@
         "scope_rag_write_desc": "Загрузка и изменение документов, пересчёт эмбеддингов",
         "scope_billing_read_name": "Биллинг: чтение",
         "scope_billing_read_desc": "Просмотр использования и тарифных данных (только чтение)"
+    },
+    "crawl_domain_add_modal": {
+        "title": "Добавить домен",
+        "hint": "Укажите домен без схемы и пути, например habr.com или www.example.ru.",
+        "label_domain": "Домен",
+        "placeholder_domain": "habr.com",
+        "label_run_now": "Сразу поставить discover/fetch в очередь",
+        "submit": "Добавить",
+        "cancel": "Отмена",
+        "saving": "Добавление…",
+        "err_domain_required": "Укажите домен",
+        "err_domain_invalid": "Домен должен содержать точку, например habr.com",
+        "err_domain_conflict": "Этот домен уже есть в профиле краула"
     },
     "api_key_edit_modal": {
         "header": "Переименовать API ключ",

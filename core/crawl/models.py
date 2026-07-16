@@ -116,6 +116,9 @@ class CrawlFetchResult(StrictBaseModel):
     canonical_url: str
     markdown: str
     title: str
+    html_title: str | None = None
+    meta_description: str | None = None
+    publish_date: str | None = None
     heading_trail: list[str] = Field(default_factory=list)
     content_hash: str
     fetch_transport: CrawlFetchTransport = "http"
@@ -378,6 +381,18 @@ class CrawlDomainRunResponse(StrictBaseModel):
     crawl_profile_id: str
     action: Literal["discover", "fetch"]
     status: str
+
+
+class CrawlDomainCreateRequest(StrictBaseModel):
+    crawl_profile_id: str = Field(..., min_length=1, max_length=64)
+    domain: str = Field(..., min_length=3, max_length=253)
+    run_now: bool = False
+
+
+class CrawlDomainCreateResponse(StrictBaseModel):
+    domain: CrawlDomain
+    created: bool
+    run: CrawlDomainRunResponse | None = None
 
 
 class SeedImportRequest(StrictBaseModel):

@@ -3,6 +3,7 @@
 import pytest
 
 from core.utils.domain import (
+    auth_cookie_secure,
     extract_base_domain,
     extract_company_subdomain,
     extract_subdomain,
@@ -11,6 +12,7 @@ from core.utils.domain import (
     get_protocol,
     is_allowed_integration_return_origin,
     is_local,
+    oauth_callback_redirect_host,
     split_host_port,
 )
 
@@ -50,6 +52,47 @@ def test_is_local_ipv4() -> None:
 
 def test_get_protocol_local_ip() -> None:
     assert get_protocol("127.0.0.1:8002") == "http"
+
+
+def test_auth_cookie_secure_local_http() -> None:
+    assert auth_cookie_secure("lvh.me:8002") is False
+    assert auth_cookie_secure("system.lvh.me:8002") is False
+    assert auth_cookie_secure("localhost:8002") is False
+
+
+def test_auth_cookie_secure_prod_https() -> None:
+    assert auth_cookie_secure("humanitec.ru") is True
+    assert auth_cookie_secure("system.humanitec.ru") is True
+
+
+def test_oauth_callback_redirect_host_apex_bridge_on_lvh() -> None:
+    assert (
+        oauth_callback_redirect_host(
+            callback_host="lvh.me:8002",
+            target_host="system.lvh.me:8002",
+        )
+        == "lvh.me:8002"
+    )
+
+
+def test_oauth_callback_redirect_host_keeps_target_on_prod() -> None:
+    assert (
+        oauth_callback_redirect_host(
+            callback_host="humanitec.ru",
+            target_host="system.humanitec.ru",
+        )
+        == "system.humanitec.ru"
+    )
+
+
+def test_oauth_callback_redirect_host_keeps_target_when_callback_has_subdomain() -> None:
+    assert (
+        oauth_callback_redirect_host(
+            callback_host="system.lvh.me:8002",
+            target_host="system.lvh.me:8002",
+        )
+        == "system.lvh.me:8002"
+    )
 
 
 def test_get_cookie_domain_ip_is_none() -> None:

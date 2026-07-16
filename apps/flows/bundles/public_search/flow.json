@@ -106,7 +106,7 @@
         "suggestions": "search_suggestions",
         "followups": "search_followups"
       },
-      "node_timeout_seconds": 5
+      "node_timeout_seconds": 60
     },
     "emit_search_suggestions": {
       "type": "code",
@@ -130,7 +130,7 @@
       "output_mapping": {
         "insights": "search_result_insights"
       },
-      "node_timeout_seconds": 5
+      "node_timeout_seconds": 60
     },
     "emit_search_insights": {
       "type": "code",
@@ -251,10 +251,11 @@
   "branches": {
     "quick": {
       "name": "Quick Search",
-      "description": "Быстрый первичный поиск через первый доступный провайдер, краткий ответ, подсказки и источники.",
+      "description": "Discovery-only поиск по runet pointer-index: index → top-10 URL + metadata (snippet из page-card, section_title, salient_terms). Без live web fetch; depth=0. Snippet строится из page-card metadata, не из сохранённого контента.",
       "tags": [
         "search",
-        "quick"
+        "quick",
+        "discovery"
       ],
       "permission": [],
       "variables": {

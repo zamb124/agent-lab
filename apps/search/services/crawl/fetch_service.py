@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import trafilatura
 from bs4 import BeautifulSoup
+from trafilatura.metadata import extract_metadata
 
 from apps.browser.contracts.crawl_fetch_types import BrowserCrawlFetchResponse
 from apps.search.db.crawl_repositories import canonicalize_url
@@ -86,6 +87,8 @@ async def _fetch_http_markdown(
         structural_signals=structural_signals,
         min_extract_chars=min_extract_chars,
         fetch_transport="http",
+        html_bytes=response.content,
+        content_type=content_type,
     )
 
 
@@ -106,6 +109,8 @@ def _build_crawl_fetch_result_from_html(
         structural_signals=structural_signals,
         min_extract_chars=min_extract_chars,
         fetch_transport="browser",
+        html_bytes=browser_response.html.encode("utf-8"),
+        content_type="text/html",
     )
 
 
@@ -116,10 +121,16 @@ def _build_crawl_fetch_result(
     structural_signals: CrawlStructuralSignals,
     min_extract_chars: int,
     fetch_transport: CrawlFetchTransport,
+    html_bytes: bytes | None = None,
+    content_type: str = "text/html",
 ) -> CrawlFetchResult:
     if len(markdown.strip()) < min_extract_chars:
         raise CrawlExtractTooShortError(final_url)
     canonical_url = canonicalize_url(final_url)
+    page_meta = _extract_page_metadata(html_bytes, content_type) if html_bytes is not None else None
+    html_title = page_meta.html_title if page_meta is not None else None
+    meta_description = page_meta.meta_description if page_meta is not None else None
+    publish_date = page_meta.publish_date if page_meta is not None else None
     title = _resolve_title(markdown, structural_signals)
     heading_trail = _extract_heading_trail(markdown)
     content_hash = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
@@ -128,11 +139,57 @@ def _build_crawl_fetch_result(
         canonical_url=canonical_url,
         markdown=markdown,
         title=title,
+        html_title=html_title,
+        meta_description=meta_description,
+        publish_date=publish_date,
         heading_trail=heading_trail,
         content_hash=content_hash,
         fetch_transport=fetch_transport,
         structural_signals=structural_signals,
     )
+
+
+class _PageMetadata(NamedTuple):
+    html_title: str | None
+    meta_description: str | None
+    publish_date: str | None
+
+
+def _extract_page_metadata(content: bytes, content_type: str) -> _PageMetadata | None:
+    if "html" not in content_type.lower():
+        return None
+    html = content.decode("utf-8", errors="replace")
+    html_title = _extract_html_title_tag(html)
+    meta = extract_metadata(html)
+    meta_description = _clean_meta_text(meta.description)
+    publish_date = _normalize_publish_date(meta.date)
+    return _PageMetadata(html_title, meta_description, publish_date)
+
+
+def _normalize_publish_date(value: object | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.strip() or None
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
+        return str(isoformat())
+    return None
+
+
+def _extract_html_title_tag(html: str) -> str | None:
+    soup = BeautifulSoup(html, "html.parser")
+    title_tag = soup.find("title")
+    if title_tag is None:
+        return None
+    return _clean_meta_text(title_tag.get_text())
+
+
+def _clean_meta_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
 
 
 def _resolve_title(markdown: str, structural_signals: CrawlStructuralSignals) -> str:

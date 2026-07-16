@@ -1,0 +1,37 @@
+{"query_id":"ru-tech-001","query":"kubernetes ingress nginx миграция gateway api","query_type":"general","relevances":[{"url":"https://habr.com/ru/companies/gnivc/articles/992366/","grade":3}]}
+{"query_id":"ru-tech-002","query":"утечка памяти в python asyncio","query_type":"paraphrase","relevances":[{"url":"https://habr.com/ru/companies/domclick/articles/532030/","grade":3},{"url":"https://habr.com/ru/articles/777232/","grade":2}]}
+{"query_id":"ru-tech-003","query":"как найти утечку памяти asyncio","query_type":"paraphrase","relevances":[{"url":"https://habr.com/ru/companies/domclick/articles/532030/","grade":3}]}
+{"query_id":"ru-tech-004","query":"профилирование асинхронного python","query_type":"general","relevances":[{"url":"https://habr.com/ru/articles/777232/","grade":3}]}
+{"query_id":"ru-tech-005","query":"postgresql репликация","query_type":"short_ru","relevances":[{"url":"https://habr.com/ru/articles/514500/","grade":3},{"url":"https://habr.com/ru/articles/499404/","grade":2}]}
+{"query_id":"ru-tech-006","query":"потоковая репликация postgres конфликты hot standby","query_type":"general","relevances":[{"url":"https://habr.com/ru/articles/1027704/","grade":3}]}
+{"query_id":"ru-tech-007","query":"pgvector hnsw индекс postgresql","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/1014516/","grade":3}]}
+{"query_id":"ru-tech-008","query":"векторный поиск pgvector postgresql","query_type":"general","relevances":[{"url":"https://habr.com/ru/companies/selectel/articles/920824/","grade":3}]}
+{"query_id":"ru-tech-009","query":"fastapi dependency injection depends","query_type":"general","relevances":[{"url":"https://habr.com/ru/articles/777856/","grade":3}]}
+{"query_id":"ru-tech-010","query":"микросервис fastapi docker compose","query_type":"general","relevances":[{"url":"https://habr.com/ru/articles/799337/","grade":3}]}
+{"query_id":"ru-news-001","query":"ключевая ставка цб рф","query_type":"news","relevances":[{"url":"https://www.cbr.ru/hd_base/KeyRate/","grade":3}]}
+{"query_id":"ru-rare-001","query":"CVE-2024-4577","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/820409/","grade":3}]}
+{"query_id":"ru-rare-002","query":"CVE-2024-6387 regreSSHion openssh","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/news/825958/","grade":3}]}
+{"query_id":"ru-rare-003","query":"CVE-2024-3094 xz backdoor","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/804129/","grade":3}]}
+{"query_id":"ru-rare-004","query":"CVE-2024-10924 wordpress","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/news/859594/","grade":3}]}
+{"query_id":"ru-rare-005","query":"CVE-2024-45519 zimbra","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/companies/cyberok/news/845812/","grade":3}]}
+{"query_id":"ru-rare-006","query":"Python 3.12","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/companies/selectel/articles/761914/","grade":3}]}
+{"query_id":"ru-rare-007","query":"Kubernetes 1.29","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/news/779762/","grade":3}]}
+{"query_id":"ru-rare-008","query":"nginx 1.25","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/news/771410/","grade":3}]}
+{"query_id":"ru-rare-009","query":"RFC 9110","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/683202/","grade":3}]}
+{"query_id":"ru-rare-010","query":"systemd unit file","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/companies/otus/articles/1040138/","grade":3}]}
+{"query_id":"ru-rare-011","query":"TLS 1.3","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/413409/","grade":3}]}
+{"query_id":"ru-rare-012","query":"ERR_CONNECTION_REFUSED","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/148849/","grade":3}]}
+{"query_id":"ru-rare-013","query":"HTTP 451","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/companies/macloud/articles/562378/","grade":3}]}
+{"query_id":"ru-rare-014","query":"SIGSEGV segmentation fault","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/148849/","grade":2}]}
+{"query_id":"ru-rare-015","query":"pgvector ef_search","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/1014516/","grade":3}]}
+{"query_id":"ru-rare-016","query":"qwen embedding","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/965134/","grade":3}]}
+{"query_id":"ru-rare-017","query":"WSL2 kernel","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/501536/","grade":3}]}
+{"query_id":"ru-rare-018","query":"CUDA 12","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/771186/","grade":3}]}
+{"query_id":"ru-rare-019","query":"GHSA security advisory","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/804129/","grade":2}]}
+{"query_id":"ru-rare-020","query":"0x80070005 windows error","query_type":"rare_term","relevances":[{"url":"https://habr.com/ru/articles/148849/","grade":2}]}
+{"query_id":"ru-hop-001","query":"кто основал яндекс","query_type":"multi_hop","relevances":[{"url":"https://ru.wikipedia.org/wiki/%D0%AF%D0%BD%D0%B4%D0%B5%D0%BA%D1%81","grade":3},{"url":"https://habr.com/ru/companies/yandex/","grade":2}]}
+{"query_id":"ru-long-001","query":"микросервисная архитектура памятка","query_type":"long_doc","relevances":[{"url":"https://habr.com/ru/articles/795297/","grade":3,"section_title":"Микросервисная архитектура"}]}
+{"query_id":"ru-long-002","query":"полное руководство fastapi структура api","query_type":"long_doc","relevances":[{"url":"https://habr.com/ru/articles/1005390/","grade":3}]}
+{"query_id":"ru-short-001","query":"docker compose","query_type":"short_ru","relevances":[{"url":"https://habr.com/ru/articles/578258/","grade":3}]}
+{"query_id":"ru-short-002","query":"redis кэш python","query_type":"short_ru","relevances":[{"url":"https://habr.com/ru/articles/1031748/","grade":3}]}
+{"query_id":"ru-short-003","query":"git rebase","query_type":"short_ru","relevances":[{"url":"https://habr.com/ru/articles/187574/","grade":3}]}

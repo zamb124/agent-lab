@@ -8,10 +8,12 @@ from datetime import UTC, datetime
 import pytest
 
 from apps.search.services.crawl.ingest_service import CrawlIngestService
+from apps.search.services.crawl.salient_terms_service import SalientTermsService
 from core.config import get_settings
 from core.crawl.models import CrawlDomain, CrawlFetchResult, CrawlIngestPayload
 from core.rag.index_profile_registry import resolve_index_profile
 from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from core.search.pointer_models import RunetPointerConfig, SalientTermsConfig
 
 
 @pytest.mark.asyncio
@@ -75,7 +77,15 @@ async def test_ingest_page_attaches_runet_web_profile_config(unique_id) -> None:
         fetch_transport="http",
     )
 
-    ingest_service = CrawlIngestService(_RagClient())  # pyright: ignore[reportArgumentType]
+    runet_config = RunetPointerConfig(
+        index_mode="chunk_mirror",
+        salient_terms=SalientTermsConfig(backend="local"),
+    )
+    ingest_service = CrawlIngestService(
+        _RagClient(),  # pyright: ignore[reportArgumentType]
+        runet_config,
+        SalientTermsService(runet_config=runet_config),
+    )
     document_id = await ingest_service.ingest_page(
         search_index=search_index,
         crawl_job_id="job-1",

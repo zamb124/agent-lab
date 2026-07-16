@@ -143,6 +143,42 @@ export const crawlQueueTickOp = createAsyncOp({
     },
 });
 
+export const crawlDomainCreateOp = createAsyncOp({
+    name: 'frontend/crawl_domain_create',
+    successToastKey: 'frontend:crawl_report_page.toast_domain_created',
+    errorToastKey: 'frontend:crawl_report_page.toast_domain_create_failed',
+    restMirror: { method: 'POST', path: `${BASE}/domains` },
+    request: async ({ payload }) => {
+        const crawlProfileId = payload && payload.crawl_profile_id;
+        const domain = payload && payload.domain;
+        if (!crawlProfileId) throw new Error('crawl_domain_create: crawl_profile_id required');
+        if (!domain || typeof domain !== 'string' || !domain.trim()) {
+            throw new Error('crawl_domain_create: domain required');
+        }
+        return await httpRequest({
+            method: 'POST',
+            url: `${BASE}/domains`,
+            body: {
+                crawl_profile_id: crawlProfileId,
+                domain: domain.trim(),
+                run_now: Boolean(payload && payload.run_now),
+            },
+        });
+    },
+    statusMap: { 403: 'forbidden', 503: 'unavailable', 409: 'conflict', 400: 'invalid' },
+    onSuccess(ctx, _result, event) {
+        const requestPayload = event && event.payload;
+        if (!requestPayload || !requestPayload.crawl_profile_id) {
+            return;
+        }
+        _reloadSummary(ctx, requestPayload.crawl_profile_id);
+        ctx.dispatch(crawlDomainsResource.events.LIST_REQUESTED, requestPayload, { source: 'local' });
+        if (requestPayload.run_now) {
+            ctx.dispatch(crawlJobsResource.events.LIST_REQUESTED, requestPayload, { source: 'local' });
+        }
+    },
+});
+
 export const crawlDomainRunOp = createAsyncOp({
     name: 'frontend/crawl_domain_run',
     silent: true,

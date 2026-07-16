@@ -120,6 +120,34 @@ async def test_crawl_report_unavailable_without_search_db(frontend_client_system
 
 
 @pytest.mark.asyncio
+async def test_crawl_report_create_domain_conflict_system(
+    frontend_client_system,
+    search_container,
+    search_system_context,
+    unique_id,
+):
+    _ = search_system_context
+    crawl_profile_id = await _create_profile(search_container, unique_id)
+    now = datetime.now(UTC)
+    await search_container.crawl_domain_repository.upsert_seed_batch(
+        crawl_profile_id,
+        [CrawlDomainSeed(domain="frontend-dup.example.com", category="news")],
+        next_crawl_after=now,
+    )
+
+    response = await frontend_client_system.post(
+        "/frontend/api/crawl-report/domains",
+        json={
+            "crawl_profile_id": crawl_profile_id,
+            "domain": "frontend-dup.example.com",
+            "run_now": False,
+        },
+    )
+    assert response.status_code == 409
+    assert "already exists" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_crawl_report_run_domain_system(
     frontend_client_system,
     search_container,

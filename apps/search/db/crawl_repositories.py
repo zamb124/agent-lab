@@ -50,6 +50,10 @@ def _enrichment_snapshot_text(*json_path: str) -> ColumnElement[str]:
     return cast(ColumnElement[str], getattr(node, "astext"))
 
 
+def normalize_crawl_domain(domain: str) -> str:
+    return _normalize_domain(domain)
+
+
 def _normalize_domain(domain: str) -> str:
     value = domain.strip().lower()
     if value.startswith("http://") or value.startswith("https://"):
@@ -452,6 +456,18 @@ class CrawlDomainRepository:
             row = (await session.execute(stmt)).scalar_one_or_none()
         if row is None:
             raise ValueError(f"crawl domain not found: {crawl_domain_id}")
+        return _domain_row_to_model(row)
+
+    async def get_by_domain(self, crawl_profile_id: str, domain: str) -> CrawlDomain | None:
+        normalized = _normalize_domain(domain)
+        async with self._db.session() as session:
+            stmt = select(CrawlDomainRow).where(
+                CrawlDomainRow.crawl_profile_id == crawl_profile_id,
+                CrawlDomainRow.domain == normalized,
+            )
+            row = (await session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            return None
         return _domain_row_to_model(row)
 
     async def list_page(
