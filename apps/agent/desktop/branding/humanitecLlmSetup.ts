@@ -1,11 +1,15 @@
 import {
   acpCreateCustomProviderFromRequest,
+  acpDeleteCustomProvider,
   acpListProviderDetails,
   acpReadDefaults,
   acpSaveDefaults,
   acpUpdateCustomProviderFromRequest,
 } from './acp/providers';
 import type { UpdateCustomProviderRequest } from './api';
+
+/** UI label for the platform free-LLM custom provider (Goose provider picker). */
+export const PLATFORM_LLM_PROVIDER_DISPLAY_NAME = 'Linnex';
 
 export type HumanitecLlmSetupParams = {
   apiBaseUrl: string;
@@ -20,11 +24,11 @@ async function buildHumanitecProviderRequest(
   params: HumanitecLlmSetupParams,
 ): Promise<UpdateCustomProviderRequest> {
   if (params.modelIds.length === 0) {
-    throw new Error('Humanitec models catalog is empty');
+    throw new Error('Platform LLM models catalog is empty');
   }
   return {
     engine: 'openai_compatible',
-    display_name: 'Linnex',
+    display_name: PLATFORM_LLM_PROVIDER_DISPLAY_NAME,
     api_url: params.apiBaseUrl,
     api_key: params.deviceToken,
     models: params.modelIds,
@@ -37,8 +41,10 @@ async function buildHumanitecProviderRequest(
 }
 
 function isPlatformLlmProviderDisplayName(displayName: string): boolean {
-  // Legacy installs used "Humanitec"; current distro UI label is "Linnex".
-  return displayName === 'Linnex' || displayName === 'Humanitec';
+  // Legacy installs used "Humanitec"; current distro UI label is Linnex.
+  return (
+    displayName === PLATFORM_LLM_PROVIDER_DISPLAY_NAME || displayName === 'Humanitec'
+  );
 }
 
 function isHumanitecProviderEntry(
@@ -46,7 +52,9 @@ function isHumanitecProviderEntry(
   providerId: string,
 ): boolean {
   return (
-    entry.name === providerId || isPlatformLlmProviderDisplayName(entry.metadata.display_name)
+    entry.name === providerId
+    || entry.name === `custom_${providerId}`
+    || isPlatformLlmProviderDisplayName(entry.metadata.display_name)
   );
 }
 
@@ -70,7 +78,11 @@ export async function isHumanitecLlmConfigured(
   if (!activeProvider.is_configured) {
     return false;
   }
-  if (defaults.providerId === providerId) {
+  // Stale "Humanitec" label must be rewritten to Linnex on next ensure.
+  if (activeProvider.metadata.display_name !== PLATFORM_LLM_PROVIDER_DISPLAY_NAME) {
+    return false;
+  }
+  if (defaults.providerId === providerId || defaults.providerId === `custom_${providerId}`) {
     return true;
   }
   return isPlatformLlmProviderDisplayName(activeProvider.metadata.display_name);
@@ -87,6 +99,13 @@ export async function ensureHumanitecLlmConfigured(
 
   let resolvedProviderId = params.providerId;
   if (existingProvider === undefined) {
+    const created = await acpCreateCustomProviderFromRequest(providerRequest);
+    resolvedProviderId = created.provider_name;
+  } else if (
+    existingProvider.metadata.display_name !== PLATFORM_LLM_PROVIDER_DISPLAY_NAME
+  ) {
+    // Goose custom update can leave a stale display_name; recreate under Linnex label.
+    await acpDeleteCustomProvider(existingProvider.name);
     const created = await acpCreateCustomProviderFromRequest(providerRequest);
     resolvedProviderId = created.provider_name;
   } else {
