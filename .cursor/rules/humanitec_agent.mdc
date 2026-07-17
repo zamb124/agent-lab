@@ -29,7 +29,8 @@ LinnexAgent — desktop-клиент (Goose fork). **Канон продукта
 | LLM provider UI | Display name **Linnex** (tech id `humanitec` допустим) |
 | MCP tool | `flow_lara` → A2A `metadata.branch = linnex_agent` |
 | Sticky session | Redis: `Mcp-Session-Id` → A2A `context_id` (новый MCP session = новый диалог Lara); `device:{device_id}` только если нет `Mcp-Session-Id`; result text содержит `context_id: …` |
-| Local PC | Builtin `device_tools_list` / `device_tools_call` на branch; `device_id` из variables (device JWT), не из LLM args |
+| Local PC | Builtin `device_tools_list` / `device_tools_call` — **опциональны в любом flow**; у Lara стоят по умолчанию на всех SPA branches + `linnex_agent`. `device_id` в `state.variables` (не из LLM args): desktop JWT через Platform MCP **или** server-side bind online device текущего user (`apps/agent/device_binding.py` в BaseChannel для любого flow) |
+| SPA presence | Lara drawer: зелёная точка + имя online device в `panel-head` (`platform/agent_devices_load` → `GET /frontend/api/agent/devices?mine=true`) |
 | Tunnel local MCP | Built-in desktop surface (`humanitecLocalDeviceMcp.ts`) под `DevicePolicy`; optional `HUMANITEC_LOCAL_MCP_URL` override |
 | Updates | Skills/tools/prompts Lara — DB/seed; desktop binary не пересобирать ради platform |
 
@@ -79,6 +80,7 @@ Locale: desktop Platform MCP headers включают `Accept-Language: ru|en` �
 - `apps/flows/registry.yaml` — `agent_toolkits`
 - `apps/flows/bundles/lara/` — branch `linnex_agent`, `prompts/linnex_agent.md`
 - `apps/flows/tools/device_tools.py` — `device_tools_list` / `device_tools_call`
+- `apps/agent/device_binding.py` — resolve/bind online device → variables
 - `apps/agent/platform_mcp.py`, `device_auth.py`, `tunnel*.py`
 - `apps/agent/desktop/branding/humanitecLocalDeviceMcp.ts`
 - `.cursor/rules/agent_skills.mdc` — Agent Skills ≠ AgentToolkit; Lara branch entry

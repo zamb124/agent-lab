@@ -35,6 +35,7 @@ from a2a.types import (
 )
 from a2a.utils.message import new_agent_text_message
 
+from apps.agent.device_binding import bind_user_device_variables
 from apps.flows.config import get_settings
 from apps.flows.src.channels.request_context_variables import (
     flow_employee_variables_from_user,
@@ -876,6 +877,21 @@ class BaseChannel(ABC):
                 resolved_run_variables.update(override_vars)
                 resolved_run_variables.update(identity_vars)
                 state.variables = {**state.variables, **resolved_run_variables}
+            else:
+                request_scoped_variables: JsonObject = dict(override_vars)
+                request_scoped_variables.update(identity_vars)
+                if request_scoped_variables:
+                    state.variables = {**state.variables, **request_scoped_variables}
+
+            if ctx.active_company is not None:
+                await bind_user_device_variables(
+                    state.variables,
+                    container.shared_storage,
+                    company_id=ctx.active_company.company_id,
+                    user_id=user_id,
+                )
+
+            if state_is_new:
                 company_secret_keys = await container.variables_service.secret_variable_keys()
                 secret_keys = sorted(set(company_secret_keys) & set(state.variables.keys()))
                 await self._save_state(
@@ -888,11 +904,6 @@ class BaseChannel(ABC):
                     ),
                     snapshot=False,
                 )
-            else:
-                request_scoped_variables: JsonObject = dict(override_vars)
-                request_scoped_variables.update(identity_vars)
-                if request_scoped_variables:
-                    state.variables = {**state.variables, **request_scoped_variables}
 
             request_triggers_raw = params.metadata.get("triggers") if params.metadata else None
             if request_triggers_raw is not None:

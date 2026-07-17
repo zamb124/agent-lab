@@ -38,7 +38,8 @@ def _require_device_id(state: "ExecutionState") -> str:
     if not isinstance(device_id_raw, str) or not device_id_raw.strip():
         raise ValueError(
             "device_id is missing in execution variables; "
-            + "local device tools are only available from LinnexAgent desktop sessions"
+            + "bind an online LinnexAgent device to the session "
+            + "(user must have an active tunnel)"
         )
     return device_id_raw.strip()
 

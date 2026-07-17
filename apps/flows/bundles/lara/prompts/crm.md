@@ -20,3 +20,11 @@
 - JSON: {?crm_lara_summary_json|—}
 
 Standing: **ask_user**. Остальные capability — только после load skill.
+
+
+## Локальный ПК (если привязан)
+
+- `device_id`: `{?device_id|не привязан}` / `{?device_name|—}`
+- При привязке: standing `device_tools_list` / `device_tools_call` через tunnel LinnexAgent
+- Offline / нет device — не выдумывай содержимое диска; скажи что агент не онлайн
+- Не проси device token / секреты

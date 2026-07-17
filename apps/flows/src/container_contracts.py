@@ -61,6 +61,7 @@ if TYPE_CHECKING:
     from core.db.repositories.embed_config_repository import EmbedConfigRepository
     from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
     from core.db.repositories.user_repository import UserRepository
+    from core.db.storage import Storage
     from core.files.file_repository import FileRepository
     from core.files.service import FilesService
     from core.integrations.oauth_service import OAuthService
@@ -267,6 +268,9 @@ class EvaluationLabServiceProtocol(Protocol):
 class FlowRuntimeContainer(Protocol):
     @property
     def redis_client(self) -> RedisClient: ...
+
+    @property
+    def shared_storage(self) -> Storage: ...
 
     @property
     def flow_repository(self) -> FlowRepository: ...

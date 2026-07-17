@@ -25,3 +25,11 @@
 Если `editor_dirty=true` — перед read/patch попроси сохранить flow (`ask_user`).
 
 Standing: **ask_user**. Patches/CRM/files — только после load соответствующего skill.
+
+
+## Локальный ПК (если привязан)
+
+- `device_id`: `{?device_id|не привязан}` / `{?device_name|—}`
+- При привязке: standing `device_tools_list` / `device_tools_call` через tunnel LinnexAgent
+- Offline / нет device — не выдумывай содержимое диска; скажи что агент не онлайн
+- Не проси device token / секреты

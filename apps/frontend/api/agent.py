@@ -39,7 +39,10 @@ async def create_agent_pairing_code(container: ContainerDep) -> PairingCodeRespo
 
 
 @router.get("/devices", response_model=AgentDeviceListResponse, tags=["agent", "public"])
-async def list_agent_devices(container: ContainerDep) -> AgentDeviceListResponse:
+async def list_agent_devices(
+    container: ContainerDep,
+    mine: bool = False,
+) -> AgentDeviceListResponse:
     context = require_context()
     company = context.active_company
     if company is None:
@@ -47,6 +50,7 @@ async def list_agent_devices(container: ContainerDep) -> AgentDeviceListResponse
     items = await list_company_devices(
         container,
         company_id=company.company_id,
+        user_id=context.user.user_id if mine else None,
     )
     return AgentDeviceListResponse(items=items)
 

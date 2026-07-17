@@ -349,6 +349,7 @@ export class PlatformChat extends LitElement {
         toggleEventName: { type: String, attribute: 'toggle-event-name' },
         panelMaximized: { type: Boolean, state: true },
         fabUnreadCount: { type: Number, state: true },
+        activeDeviceName: { type: String, attribute: 'active-device-name' },
         _voiceOn: { state: true },
         _voiceStatus: { state: true },
         _credentials: { state: true },
@@ -724,6 +725,32 @@ export class PlatformChat extends LitElement {
             font-size: 15px;
             color: var(--platform-chat-text);
         }
+        .panel-head-device {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+            max-width: 42%;
+            min-width: 0;
+            padding: 2px 0;
+            color: var(--platform-chat-muted, var(--text-muted, #64748b));
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.2;
+        }
+        .panel-head-device-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            background: #22c55e;
+            box-shadow: 0 0 0 2px color-mix(in srgb, #22c55e 25%, transparent);
+        }
+        .panel-head-device-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         .panel-head-actions {
             display: flex;
             align-items: center;
@@ -856,6 +883,7 @@ export class PlatformChat extends LitElement {
         this.toggleEventName = 'humanitec-embed-chat-toggle';
         this.panelMaximized = false;
         this.fabUnreadCount = 0;
+        this.activeDeviceName = '';
 
         /** @type {InstanceType<typeof OperatorConversationTransport>|null} operator_handoff транспорт. */
         this._operatorTransport = null;
@@ -1748,6 +1776,25 @@ export class PlatformChat extends LitElement {
         const tpl = L.fab_aria_open_unread || L.fab_aria_open;
         const c = n > 99 ? '99+' : String(n);
         return tpl.includes('{count}') ? tpl.replace(/\{count\}/g, c) : `${L.fab_aria_open} (${c})`;
+    }
+
+    _renderActiveDevicePresence(L) {
+        const deviceName = typeof this.activeDeviceName === 'string' ? this.activeDeviceName.trim() : '';
+        if (!deviceName) {
+            return nothing;
+        }
+        const ariaTpl = typeof L.device_online_aria === 'string' && L.device_online_aria.length > 0
+            ? L.device_online_aria
+            : 'LinnexAgent online: {name}';
+        const aria = ariaTpl.includes('{name}')
+            ? ariaTpl.replace(/\{name\}/g, deviceName)
+            : `${ariaTpl} ${deviceName}`;
+        return html`
+            <span class="panel-head-device" title=${aria} aria-label=${aria}>
+                <span class="panel-head-device-dot" aria-hidden="true"></span>
+                <span class="panel-head-device-label">${deviceName}</span>
+            </span>
+        `;
     }
 
     _layerZIndex(step = 0) {
@@ -3823,6 +3870,7 @@ export class PlatformChat extends LitElement {
             >
                 <div class=${panelHeadClass} @pointerdown=${this._onPanelHeadPointerDown}>
                     <span class="panel-head-title">${headTitle}</span>
+                    ${this._renderActiveDevicePresence(L)}
                     <div class="panel-head-actions">
                         <button
                             type="button"

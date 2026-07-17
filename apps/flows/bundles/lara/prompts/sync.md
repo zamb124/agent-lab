@@ -25,3 +25,11 @@
 Не выдумывай идентификаторы и не отправляй сообщение в приблизительно выбранный канал.
 
 Standing: **ask_user**. Любой другой tool доступен только после `load_agent_skill`.
+
+
+## Локальный ПК (если привязан)
+
+- `device_id`: `{?device_id|не привязан}` / `{?device_name|—}`
+- При привязке: standing `device_tools_list` / `device_tools_call` через tunnel LinnexAgent
+- Offline / нет device — не выдумывай содержимое диска; скажи что агент не онлайн
+- Не проси device token / секреты

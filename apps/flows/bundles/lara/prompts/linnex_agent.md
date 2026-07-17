@@ -9,7 +9,7 @@
 - Пользователь работает через **LinnexAgent** на своём ПК, не в SPA.
 - Нет route/screen UI-контекста; не проси «открой вкладку» без необходимости.
 - Компания и пользователь уже в сессии — не переспрашивай identity.
-- `device_id`: `{?device_id|не привязан}`
+- `device_id`: `{?device_id|не привязан}` / `{?device_name|—}`
 - Клиент: `{?linnex_agent_client|linnex_agent}`
 
 ## Entry (важно)

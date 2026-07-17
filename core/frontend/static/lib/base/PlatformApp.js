@@ -48,11 +48,16 @@ import {
     platformWorkItemFactories,
     createPlatformWorkItemCountsAuthEffect,
 } from '../events/resources/platform-work-item.resource.js';
+import {
+    platformAgentDeviceFactories,
+    createPlatformAgentDevicesAuthEffect,
+} from '../events/resources/agent-devices.resource.js';
 import { setDefaultI18nNamespace } from '../utils/i18n-namespace.js';
 import { prefersReducedMotion } from '../utils/motion.js';
 import { resolveVoiceHttpOrigin } from '../voice/voice-http-origin.js';
 import { PLATFORM_LARA_TOGGLE_EVENT } from '../chat/chat-window-toggle.js';
 
+const AGENT_DEVICES_POLL_MS = 45000;
 import '../components/pwa-install-banner.js';
 import '../components/platform-spinner.js';
 import '../components/glass-toast.js';
@@ -123,10 +128,14 @@ export class PlatformApp extends PlatformElement {
         }
         const factories = [
             ...platformWorkItemFactories,
+            ...platformAgentDeviceFactories,
             ...(Array.isArray(ctor.factories) ? ctor.factories : []),
         ];
         const factorySlices = {};
-        const factoryEffects = [createPlatformWorkItemCountsAuthEffect()];
+        const factoryEffects = [
+            createPlatformWorkItemCountsAuthEffect(),
+            createPlatformAgentDevicesAuthEffect(),
+        ];
         if (factories.length > 0) {
             for (const factory of factories) {
                 registerFactory(factory);
@@ -177,6 +186,8 @@ export class PlatformApp extends PlatformElement {
             params: s.router.params,
             notFound: s.router.notFound,
         }));
+        this._agentDevicesOp = this.useOp('platform/agent_devices_load');
+        this._agentDevicesPollTimer = null;
         this._platformAssistantContextProvider = async () => {
             const routeValue = this._routerSelect.value;
             const routeKey = routeValue.routeKey;
@@ -219,6 +230,7 @@ export class PlatformApp extends PlatformElement {
     async connectedCallback() {
         super.connectedCallback();
         this._ensureRouteMotionSubscription();
+        this._ensureAgentDevicesPoll();
         if (this._userLoadDispatched) return;
         this._userLoadDispatched = true;
         if (this.shouldRequestUserLoadOnConnect()) {
@@ -231,6 +243,40 @@ export class PlatformApp extends PlatformElement {
             this.dispatch(CoreAuthEvents.USER_SILENT_PROBE_REQUESTED, null);
         }
         completeBootstrap();
+    }
+
+    disconnectedCallback() {
+        this._clearAgentDevicesPoll();
+        super.disconnectedCallback();
+    }
+
+    _ensureAgentDevicesPoll() {
+        if (this._agentDevicesPollTimer !== null) {
+            return;
+        }
+        this._agentDevicesPollTimer = window.setInterval(() => {
+            const auth = this._authSelect ? this._authSelect.value : null;
+            if (!auth || auth.status !== 'authenticated') {
+                return;
+            }
+            this._agentDevicesOp.run(null);
+        }, AGENT_DEVICES_POLL_MS);
+    }
+
+    _clearAgentDevicesPoll() {
+        if (this._agentDevicesPollTimer === null) {
+            return;
+        }
+        window.clearInterval(this._agentDevicesPollTimer);
+        this._agentDevicesPollTimer = null;
+    }
+
+    _activeAgentDeviceName() {
+        const state = this._agentDevicesOp ? this._agentDevicesOp.state : null;
+        if (!state || typeof state !== 'object') {
+            return '';
+        }
+        return typeof state.online_device_name === 'string' ? state.online_device_name : '';
     }
 
     _ensureRouteMotionSubscription() {
@@ -350,6 +396,7 @@ export class PlatformApp extends PlatformElement {
         }
         const voiceBaseUrl = resolveVoiceHttpOrigin();
         const voiceEnabled = voiceBaseUrl !== '';
+        const activeDeviceName = this._activeAgentDeviceName();
         return html`
             <platform-chat
                 display="drawer"
@@ -366,6 +413,7 @@ export class PlatformApp extends PlatformElement {
                 ?voice-enabled=${voiceEnabled}
                 voice-base-url=${voiceBaseUrl}
                 company-id=${companyId.trim()}
+                active-device-name=${activeDeviceName}
                 .getExtraMetadataVariables=${this._platformAssistantContextProvider}
             ></platform-chat>
         `;

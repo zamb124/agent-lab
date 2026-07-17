@@ -66,7 +66,8 @@
     "active_namespace": "default",
     "user_language": "ru",
     "device_id": "",
-    "linnex_agent_client": ""
+    "linnex_agent_client": "",
+    "device_name": ""
   },
   "branches": {
     "linnex_agent": {
@@ -117,7 +118,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -142,7 +145,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -167,7 +172,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -192,7 +199,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -218,7 +227,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -244,7 +255,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -270,7 +283,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -296,7 +311,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -322,7 +339,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -348,7 +367,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -374,7 +395,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -400,7 +423,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -426,7 +451,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -452,7 +479,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -478,7 +507,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -504,7 +535,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -530,7 +563,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -556,7 +591,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       }
@@ -590,7 +627,9 @@
           },
           "output_key": "response",
           "tools": [
-            "ask_user"
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
           ]
         }
       },

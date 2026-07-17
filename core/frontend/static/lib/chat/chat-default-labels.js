@@ -13,6 +13,7 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         panel_minimize: 'Свернуть',
         panel_fullscreen: 'Расширить окно',
         panel_exit_fullscreen: 'Обычный размер',
+        device_online_aria: 'LinnexAgent онлайн: {name}',
         greeting:
             'Привет. Могу отвечать по данным из подключённых инструментов. Задайте вопрос или приложите файл.',
         placeholder: 'Сообщение…',
@@ -80,6 +81,7 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         panel_minimize: 'Minimize',
         panel_fullscreen: 'Expand panel',
         panel_exit_fullscreen: 'Normal size',
+        device_online_aria: 'LinnexAgent online: {name}',
         greeting: 'Hi. Ask a question or attach a file — answers use your flow tools.',
         placeholder: 'Message…',
         attach: 'Attachments',
