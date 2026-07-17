@@ -5,7 +5,13 @@ import json
 import pytest
 import pytest_asyncio
 
-from apps.flows.tools.lara_crm import flows_patch_flow, flows_patch_node, flows_read_context
+from apps.flows.tools.lara_crm import (
+    flows_get_node,
+    flows_list_nodes,
+    flows_patch_flow,
+    flows_patch_node,
+    flows_read_context,
+)
 from core.state import ExecutionState
 
 pytestmark = [pytest.mark.timeout(90, func_only=True)]
@@ -87,6 +93,63 @@ async def test_flows_read_context_returns_selected_node(
     assert data["branch_id"] == "base"
     assert data["node_id"] == "main"
     assert data["node"]["prompt"] == "Initial prompt"
+    assert "nodes" not in data["flow"]
+    assert "edges" not in data["flow"]
+    assert data["flow"]["entry"] == "main"
+    assert "variables_keys" in data["flow"]
+    assert isinstance(data["nodes_index"], list)
+    assert any(item["node_id"] == "main" for item in data["nodes_index"])
+    for item in data["nodes_index"]:
+        assert "prompt" not in item
+        assert "code" not in item
+
+
+@pytest.mark.asyncio
+async def test_flows_get_node_returns_single_node_without_graph(
+    flows_service,
+    flows_client,
+    auth_headers_system,
+    lara_flows_tool_context,
+    unique_id: str,
+    system_user_id: str,
+) -> None:
+    flow_id = await _create_test_flow(flows_client, unique_id, auth_headers_system)
+    state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
+    raw = await flows_get_node._run_impl(
+        {"flow_id": flow_id, "branch_id": "base", "node_id": "main"}, state
+    )
+    data = json.loads(raw)
+    assert data["success"] is True
+    assert data["flow_id"] == flow_id
+    assert data["branch_id"] == "base"
+    assert data["node_id"] == "main"
+    assert data["node"]["prompt"] == "Initial prompt"
+    assert "flow" not in data
+    assert "nodes_index" not in data
+
+
+@pytest.mark.asyncio
+async def test_flows_list_nodes_returns_index_without_prompt_bodies(
+    flows_service,
+    flows_client,
+    auth_headers_system,
+    lara_flows_tool_context,
+    unique_id: str,
+    system_user_id: str,
+) -> None:
+    flow_id = await _create_test_flow(flows_client, unique_id, auth_headers_system)
+    state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
+    raw = await flows_list_nodes._run_impl({"flow_id": flow_id, "branch_id": "base"}, state)
+    data = json.loads(raw)
+    assert data["success"] is True
+    assert data["flow_id"] == flow_id
+    assert data["branch_id"] == "base"
+    assert data["entry"] == "main"
+    assert len(data["nodes"]) == 1
+    assert data["nodes"][0]["node_id"] == "main"
+    assert data["nodes"][0]["type"] == "llm_node"
+    assert "prompt" not in data["nodes"][0]
+    assert "ask_user" in data["nodes"][0]["tools"]
 
 
 @pytest.mark.asyncio

@@ -130,6 +130,64 @@ async def test_catalog_device_jwt(
 
 
 @pytest.mark.asyncio
+async def test_catalog_device_jwt_forces_lara_default_enabled(
+    flows_client: AsyncClient,
+    frontend_client_with_auth: AsyncClient,
+    auth_headers: dict[str, str],
+    container,
+    frontend_container,
+    unique_id: str,
+) -> None:
+    """LaraOnly: device catalog always enables lara even if company DB is stale."""
+    from apps.flows.src.services.agent_toolkit_service import ensure_agent_toolkits_bootstrapped
+    from core.context import get_context
+    from tests.agent.test_platform_mcp_exposure import _repository_context_for_auth
+
+    async with _repository_context_for_auth(auth_headers, frontend_container):
+        active_company = get_context().active_company
+        assert active_company is not None
+        _ = await ensure_agent_toolkits_bootstrapped(
+            container.agent_toolkit_repository,
+            company_id=active_company.company_id,
+        )
+        existing_lara = await container.agent_toolkit_repository.get("lara")
+        assert existing_lara is not None
+        await container.agent_toolkit_repository.set(
+            existing_lara.model_copy(update={"default_enabled": False})
+        )
+
+    manage = await flows_client.get(
+        "/flows/api/v1/agent/toolkits/manage/lara",
+        headers=auth_headers,
+    )
+    assert manage.status_code == 200, manage.text
+    assert manage.json()["default_enabled"] is False
+
+    pairing = await frontend_client_with_auth.post(f"{AGENT_API_PREFIX}/pairing")
+    assert pairing.status_code == 200, pairing.text
+    register = await frontend_client_with_auth.post(
+        f"{AGENT_API_PREFIX}/register",
+        json={
+            "pairing_code": pairing.json()["pairing_code"],
+            "device_id": f"device_lara_on_{unique_id}",
+            "device_name": f"Device {unique_id}",
+            "os": "darwin",
+            "hostname": f"host-{unique_id}",
+        },
+    )
+    assert register.status_code == 200, register.text
+    response = await flows_client.get(
+        "/flows/api/v1/agent/toolkits",
+        headers={"Authorization": f"Bearer {register.json()['token']}"},
+    )
+    assert response.status_code == 200, response.text
+    items = response.json()
+    assert len(items) == 1
+    assert items[0]["toolkit_id"] == "lara"
+    assert items[0]["default_enabled"] is True
+
+
+@pytest.mark.asyncio
 async def test_catalog_revoked_device_returns_401(
     flows_client: AsyncClient,
     frontend_client_with_auth: AsyncClient,

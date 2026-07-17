@@ -126,6 +126,11 @@ if not linnex_mark_source.is_file():
     raise SystemExit(f"linnex-mark.svg missing: {linnex_mark_source}")
 shutil.copyfile(linnex_mark_source, goose_images / "linnex-mark.svg")
 
+linnex_spinner_source = icons_dir / "linnex_spinner_logo.png"
+if not linnex_spinner_source.is_file():
+    raise SystemExit(f"linnex_spinner_logo.png missing: {linnex_spinner_source}")
+shutil.copyfile(linnex_spinner_source, goose_images / "linnex_spinner_logo.png")
+
 defaults_payload = {
     "id": distro.id,
     "display_name": distro.display_name,

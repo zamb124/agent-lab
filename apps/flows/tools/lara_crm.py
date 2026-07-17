@@ -49,6 +49,98 @@ def _require_context_namespace() -> str:
     return resolve_namespace_or_raise()
 
 
+def _normalize_flows_branch_id(raw_branch_id: str | None) -> str:
+    if raw_branch_id is None:
+        return "base"
+    cleaned = raw_branch_id.strip()
+    if not cleaned or cleaned == "default":
+        return "base"
+    return cleaned
+
+
+def _resolve_flow_node_scope(flow_data: FlowConfig, resolved_branch: str) -> dict[str, JsonObject]:
+    if resolved_branch == "base":
+        nodes = flow_data.nodes
+        if nodes is None:
+            raise ValueError("Flow base nodes are invalid")
+        return nodes
+    branch_payload = flow_data.branches.get(resolved_branch)
+    if branch_payload is None:
+        raise ValueError(f"Ветка '{resolved_branch}' не найдена во flow '{flow_data.flow_id}'")
+    nodes = branch_payload.nodes
+    if nodes is None:
+        raise ValueError(f"У ветки '{resolved_branch}' нет объекта nodes")
+    return nodes
+
+
+def _require_flow_node(
+    flow_data: FlowConfig, resolved_branch: str, required_node_id: str
+) -> JsonObject:
+    nodes = _resolve_flow_node_scope(flow_data, resolved_branch)
+    node = nodes.get(required_node_id)
+    if node is None:
+        raise ValueError(f"Node '{required_node_id}' not found in branch '{resolved_branch}'")
+    return node
+
+
+def _flow_branch_entry(flow_data: FlowConfig, resolved_branch: str) -> str | None:
+    if resolved_branch == "base":
+        return flow_data.entry
+    branch_payload = flow_data.branches.get(resolved_branch)
+    if branch_payload is None:
+        raise ValueError(f"Ветка '{resolved_branch}' не найдена во flow '{flow_data.flow_id}'")
+    return branch_payload.entry
+
+
+def _nodes_index_entries(nodes: dict[str, JsonObject]) -> list[JsonObject]:
+    entries: list[JsonObject] = []
+    for node_id, node in nodes.items():
+        tools_raw = node.get("tools")
+        tools_list: list[JsonValue] = []
+        if isinstance(tools_raw, list):
+            for tool_item in tools_raw:
+                if isinstance(tool_item, str):
+                    tools_list.append(tool_item)
+                elif isinstance(tool_item, dict):
+                    tool_id = tool_item.get("tool_id") or tool_item.get("name")
+                    if isinstance(tool_id, str) and tool_id:
+                        tools_list.append(tool_id)
+        name = node.get("name")
+        node_type = node.get("type")
+        description = node.get("description")
+        entries.append(
+            {
+                "node_id": node_id,
+                "name": name if isinstance(name, str) else None,
+                "type": node_type if isinstance(node_type, str) else None,
+                "description": description if isinstance(description, str) else None,
+                "tools": tools_list,
+            }
+        )
+    return entries
+
+
+def _flow_summary_payload(flow_data: FlowConfig) -> JsonObject:
+    return {
+        "name": flow_data.name,
+        "description": flow_data.description,
+        "tags": list(flow_data.tags) if flow_data.tags else [],
+        "entry": flow_data.entry,
+        "variables_keys": sorted(str(key) for key in flow_data.variables.keys()),
+        "branch_ids": sorted(flow_data.branches.keys()),
+    }
+
+
+async def _load_flow_config(flow_id: str) -> FlowConfig:
+    client = ServiceClient()
+    return flow_config_from_flow_api_response(
+        require_json_object(
+            await client.get("flows", f"/flows/api/v1/flows/{quote(flow_id, safe='')}"),
+            "flows.load_flow_config.response",
+        )
+    )
+
+
 class CrmSearchEntitiesArgs(BaseModel):
     """Аргументы POST /crm/api/v1/entities/query — та же семантика, что поле «Поиск» в UI."""
 
@@ -229,7 +321,31 @@ class FlowsReadContextArgs(BaseModel):
     )
     node_id: str | None = Field(
         None,
-        description="ID ноды в выбранном графе. Если не передан, вернётся только контекст flow/branch.",
+        description=(
+            "ID ноды: если передан, в ответе будет полное тело этой ноды. "
+            "Полный graph не возвращается — для одной ноды предпочитай flows_get_node."
+        ),
+    )
+
+
+class FlowsGetNodeArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    flow_id: str = Field(..., min_length=1, description="ID flow в сервисе flows.")
+    node_id: str = Field(..., min_length=1, description="ID ноды в выбранной ветке.")
+    branch_id: str | None = Field(
+        None,
+        description="ID ветки (branch). Для базового графа передай base или оставь пустым.",
+    )
+
+
+class FlowsListNodesArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    flow_id: str = Field(..., min_length=1, description="ID flow в сервисе flows.")
+    branch_id: str | None = Field(
+        None,
+        description="ID ветки (branch). Для базового графа передай base или оставь пустым.",
     )
 
 
@@ -861,10 +977,70 @@ async def push_embed_blocks(blocks_json: str, *, state: "ExecutionState") -> str
 
 
 @tool(
+    name="flows_get_node",
+    description=(
+        "Точечно возвращает одну ноду flow по flow_id + branch_id + node_id "
+        "(полный config ноды, включая prompt/code). Не отдаёт весь graph."
+    ),
+    tags=["flows", "lara", "query"],
+    parameters_model=FlowsGetNodeArgs,
+)
+async def flows_get_node(
+    flow_id: str,
+    node_id: str,
+    branch_id: str | None = None,
+    *,
+    state: "ExecutionState",
+) -> str:
+    _ = state
+    flow_config = await _load_flow_config(flow_id)
+    resolved_branch_id = _normalize_flows_branch_id(branch_id)
+    selected_node = _require_flow_node(flow_config, resolved_branch_id, node_id)
+    payload: JsonObject = {
+        "success": True,
+        "flow_id": flow_id,
+        "branch_id": resolved_branch_id,
+        "node_id": node_id,
+        "node": selected_node,
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+@tool(
+    name="flows_list_nodes",
+    description=(
+        "Индекс нод ветки flow: node_id, name, type, description, tools[]. "
+        "Без prompt/code тел нод. Для полного тела одной ноды — flows_get_node."
+    ),
+    tags=["flows", "lara", "query"],
+    parameters_model=FlowsListNodesArgs,
+)
+async def flows_list_nodes(
+    flow_id: str,
+    branch_id: str | None = None,
+    *,
+    state: "ExecutionState",
+) -> str:
+    _ = state
+    flow_config = await _load_flow_config(flow_id)
+    resolved_branch_id = _normalize_flows_branch_id(branch_id)
+    nodes = _resolve_flow_node_scope(flow_config, resolved_branch_id)
+    payload: JsonObject = {
+        "success": True,
+        "flow_id": flow_id,
+        "branch_id": resolved_branch_id,
+        "entry": _flow_branch_entry(flow_config, resolved_branch_id),
+        "nodes": _nodes_index_entries(nodes),
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+@tool(
     name="flows_read_context",
     description=(
-        "Возвращает контекст flow/branch/node для Lara в сервисе flows: текущий граф, "
-        "конфиг ноды и метаданные для принятия решения."
+        "Лёгкий обзор flow: метаданные + индекс нод выбранной ветки. "
+        "Опционально — полное тело одной ноды (node_id). "
+        "Не возвращает полный FlowConfig; для одной ноды предпочитай flows_get_node."
     ),
     tags=["flows", "lara", "query"],
     parameters_model=FlowsReadContextArgs,
@@ -876,60 +1052,21 @@ async def flows_read_context(
     *,
     state: "ExecutionState",
 ) -> str:
-    def normalize_branch_id(raw_branch_id: str | None) -> str:
-        if raw_branch_id is None:
-            return "base"
-        cleaned = raw_branch_id.strip()
-        if not cleaned or cleaned == "default":
-            return "base"
-        return cleaned
-
-    def resolve_node_scope(flow_data: FlowConfig, resolved_branch: str) -> dict[str, JsonObject]:
-        if resolved_branch == "base":
-            nodes = flow_data.nodes
-            if nodes is None:
-                raise ValueError("Flow base nodes are invalid")
-            return nodes
-        branch_payload = flow_data.branches.get(resolved_branch)
-        if branch_payload is None:
-            raise ValueError(f"Ветка '{resolved_branch}' не найдена во flow '{flow_data.flow_id}'")
-        nodes = branch_payload.nodes
-        if nodes is None:
-            raise ValueError(f"У ветки '{resolved_branch}' нет объекта nodes")
-        return nodes
-
-    def require_node(
-        flow_data: FlowConfig, resolved_branch: str, required_node_id: str
-    ) -> JsonObject:
-        nodes = resolve_node_scope(flow_data, resolved_branch)
-        node = nodes.get(required_node_id)
-        if node is None:
-            raise ValueError(
-                f"Node '{required_node_id}' not found in branch '{resolved_branch}'"
-            )
-        return node
-
     _ = state
-    client = ServiceClient()
-    flow_config = flow_config_from_flow_api_response(
-        require_json_object(
-            await client.get("flows", f"/flows/api/v1/flows/{quote(flow_id, safe='')}"),
-            "flows.read_context.response",
-        )
-    )
-    flow_payload = require_json_object(flow_config.model_dump(mode="json"), "flows.read_context.flow")
-
-    resolved_branch_id = normalize_branch_id(branch_id)
+    flow_config = await _load_flow_config(flow_id)
+    resolved_branch_id = _normalize_flows_branch_id(branch_id)
+    nodes = _resolve_flow_node_scope(flow_config, resolved_branch_id)
     selected_node: JsonObject | None = None
     if node_id:
-        selected_node = require_node(flow_config, resolved_branch_id, node_id)
+        selected_node = _require_flow_node(flow_config, resolved_branch_id, node_id)
 
     payload: JsonObject = {
         "success": True,
         "flow_id": flow_id,
         "branch_id": resolved_branch_id,
         "node_id": node_id or None,
-        "flow": flow_payload,
+        "flow": _flow_summary_payload(flow_config),
+        "nodes_index": _nodes_index_entries(nodes),
         "node": selected_node,
         "blocks": [
             {

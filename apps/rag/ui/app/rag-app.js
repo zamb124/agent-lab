@@ -63,7 +63,7 @@ export class RagApp extends PlatformApp {
     static bottomNavItems = RAG_BOTTOM_NAV_ITEMS;
     static bottomNavHideOnRoutes = [];
     static platformAssistant = {
-        branchId: 'rag',
+        branchId: 'documents',
         serviceId: 'rag',
         showLauncher: true,
     };

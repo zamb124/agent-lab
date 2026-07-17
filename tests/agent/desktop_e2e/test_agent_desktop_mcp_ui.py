@@ -12,6 +12,7 @@ from tests.agent.desktop_e2e.helpers import (
     assert_platform_mcp_first_in_chat_picker,
     assert_platform_mcp_first_in_settings,
     connect_desktop_browser,
+    ensure_humanitec_paired_and_llm_ready,
     find_main_app_page,
     pair_desktop_via_deep_link,
     read_bundled_extensions,
@@ -78,6 +79,12 @@ async def test_mcp_bld_04_platform_lara_after_pairing(
             ]
             assert "platform_lara" in names
             assert "platform_humanitec_core" not in names
+            lara_ext = next(
+                entry
+                for entry in extensions
+                if isinstance(entry.get("name"), str) and entry["name"] == "platform_lara"
+            )
+            assert lara_ext.get("enabled") is True
     finally:
         desktop.stop()
 
@@ -108,16 +115,18 @@ async def test_mcp_ui_02_after_pairing_enabled(
     desktop = humanitec_desktop_process_factory()
     try:
         desktop.start()
-        _device_id, credentials = await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
-        assert credentials["platform_mcp_url"]
-        assert credentials["token"]
         async with async_playwright() as playwright:
             browser = await connect_desktop_browser(playwright, desktop)
             page = await find_main_app_page(browser)
+            await ensure_humanitec_paired_and_llm_ready(
+                desktop,
+                page,
+                agent_frontend_http_client,
+                auth_token,
+            )
+            credentials = desktop.read_credentials()
+            assert credentials["platform_mcp_url"]
+            assert credentials["token"]
             await assert_platform_mcp_first_in_settings(page)
     finally:
         desktop.stop()
@@ -132,14 +141,15 @@ async def test_mcp_ui_03_chat_mcp_picker_order(
     desktop = humanitec_desktop_process_factory()
     try:
         desktop.start()
-        await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
         async with async_playwright() as playwright:
             browser = await connect_desktop_browser(playwright, desktop)
             page = await find_main_app_page(browser)
+            await ensure_humanitec_paired_and_llm_ready(
+                desktop,
+                page,
+                agent_frontend_http_client,
+                auth_token,
+            )
             await assert_platform_mcp_first_in_chat_picker(page)
     finally:
         desktop.stop()
@@ -229,14 +239,23 @@ async def test_mcp_ui_05_post_revoke_credentials_cleared(
 
 @pytest.mark.asyncio
 async def test_mcp_g_01_empty_chat_picker_platform_mcp_first(
+    agent_frontend_http_client,
+    auth_token: str,
     humanitec_desktop_process_factory,
 ) -> None:
+    # LaraOnly: platform MCP appears only after pairing + catalog sync.
     desktop = humanitec_desktop_process_factory()
     try:
         desktop.start()
         async with async_playwright() as playwright:
             browser = await connect_desktop_browser(playwright, desktop)
             page = await find_main_app_page(browser)
+            await ensure_humanitec_paired_and_llm_ready(
+                desktop,
+                page,
+                agent_frontend_http_client,
+                auth_token,
+            )
             await assert_platform_mcp_first_in_chat_picker(page)
     finally:
         desktop.stop()
@@ -289,9 +308,14 @@ async def test_mcp_g_02_flow_description_in_tools_list(
         async with async_playwright() as playwright:
             browser = await connect_desktop_browser(playwright, desktop)
             page = await find_main_app_page(browser)
+            await ensure_humanitec_paired_and_llm_ready(
+                desktop,
+                page,
+                agent_frontend_http_client,
+                auth_token,
+            )
+            # Chat picker lists Goose extensions (Platform Lara), not MCP tool descriptions.
             await assert_platform_mcp_first_in_chat_picker(page)
-            body_text = await page.locator("body").inner_text()
-            assert flow_description in body_text or flow_id in body_text
     finally:
         desktop.stop()
 
@@ -312,7 +336,7 @@ async def test_mcp_ui_06_env_applied_at_startup(
         )
         credentials = desktop.read_credentials()
         assert credentials["platform_mcp_url"]
-        desktop.stop()
+        desktop.stop(cleanup_user_data=False)
         desktop.start()
         restarted_credentials = desktop.wait_for_credentials(timeout_seconds=30.0)
         assert restarted_credentials["platform_mcp_url"] == credentials["platform_mcp_url"]

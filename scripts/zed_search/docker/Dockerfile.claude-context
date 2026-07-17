@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1.7
+# claude-context-mcp + mcp-proxy.
+# Multi-stage: сборка native tree-sitter на полном bookworm → runtime bookworm-slim.
+# Версии npm по умолчанию latest — обновляются при каждой сборке образа.
+ARG CLAUDE_CONTEXT_MCP_VERSION=latest
+ARG MCP_PROXY_VERSION=latest
+ARG NODE_BUILD_IMAGE=node:22-bookworm
+ARG NODE_RUNTIME_IMAGE=debian:trixie-slim
+
+FROM ${NODE_BUILD_IMAGE} AS build
+ARG CLAUDE_CONTEXT_MCP_VERSION
+ARG MCP_PROXY_VERSION
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,target=/root/.npm \
+    apt-get update \
+ && apt-get install -y --no-install-recommends python3 make g++ \
+ && npm install -g --omit=dev --no-audit --no-fund \
+      "mcp-proxy@${MCP_PROXY_VERSION}" \
+      "@zilliz/claude-context-mcp@${CLAUDE_CONTEXT_MCP_VERSION}" \
+ && mcp-proxy --version \
+ && command -v claude-context-mcp \
+ && npm ls -g --depth=0 "@zilliz/claude-context-mcp" "mcp-proxy"
+
+FROM alpine:3.21 AS rootfs
+COPY --link --from=build /usr/local/bin/node /rootfs/usr/local/bin/node
+COPY --link --from=build /usr/local/lib/node_modules/mcp-proxy /rootfs/usr/local/lib/node_modules/mcp-proxy
+COPY --link --from=build /usr/local/lib/node_modules/@zilliz /rootfs/usr/local/lib/node_modules/@zilliz
+COPY --link --chmod=755 entrypoint-claude-context.sh /rootfs/entrypoint-claude-context.sh
+RUN mkdir -p /rootfs/usr/local/bin \
+ && ln -sfn ../lib/node_modules/mcp-proxy/dist/bin/mcp-proxy.mjs /rootfs/usr/local/bin/mcp-proxy \
+ && ln -sfn ../lib/node_modules/@zilliz/claude-context-mcp/dist/index.js /rootfs/usr/local/bin/claude-context-mcp
+
+FROM ${NODE_RUNTIME_IMAGE}
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates libstdc++6 \
+ && rm -rf /var/lib/apt/lists/*
+COPY --link --from=rootfs /rootfs/ /
+ENV EMBEDDING_PROVIDER=Ollama \
+    EMBEDDING_MODEL=nomic-embed-text \
+    EMBEDDING_DIMENSION=768 \
+    EMBEDDING_BATCH_SIZE=2 \
+    OLLAMA_HOST=http://host.docker.internal:11434 \
+    MILVUS_ADDRESS=milvus:19530 \
+    CLAUDE_CONTEXT_BACKGROUND_SYNC=true \
+    CLAUDE_CONTEXT_TRIGGER_WATCHER=true \
+    HYBRID_MODE=true \
+    HOME=/data
+EXPOSE 9752
+ENTRYPOINT ["/entrypoint-claude-context.sh"]

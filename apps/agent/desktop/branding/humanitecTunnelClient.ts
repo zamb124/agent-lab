@@ -162,6 +162,7 @@ export class HumanitecTunnelClient {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.options.credentials.token}`,
+        'MCP-Protocol-Version': '2025-11-25',
       },
       body: JSON.stringify({
         jsonrpc: '2.0',

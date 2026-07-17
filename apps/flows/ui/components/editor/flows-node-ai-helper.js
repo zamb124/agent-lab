@@ -8,7 +8,6 @@ import {
     laraNodeHelperConversationKey,
 } from '../../_helpers/lara-node-helper.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
-import { normalizeFlowCodeLanguage } from '../../_helpers/flows-code-languages.js';
 
 export class FlowsNodeAiHelper extends PlatformElement {
     static properties = {
@@ -54,7 +53,6 @@ export class FlowsNodeAiHelper extends PlatformElement {
         this.branchId = 'base';
         this.nodeId = '';
         this._editor = this.useOp('flows/editor');
-        this._codeDocs = this.useOp('flows/code_documentation');
     }
 
     _nodeContext() {
@@ -79,52 +77,7 @@ export class FlowsNodeAiHelper extends PlatformElement {
         );
     }
 
-    _codeDocumentationLanguage(context) {
-        const node = isPlainObject(context.node_payload) ? context.node_payload : {};
-        const fromNode = typeof node.language === 'string' ? node.language : '';
-        const branchCode = isPlainObject(context.branch_code_payload) ? context.branch_code_payload : {};
-        const selectedCode = isPlainObject(branchCode.selected_node) ? branchCode.selected_node : {};
-        const fromSelected = typeof selectedCode.language === 'string' ? selectedCode.language : '';
-        return normalizeFlowCodeLanguage(fromNode || fromSelected || 'python');
-    }
-
-    async _codeDocumentationVariables(context) {
-        if (context.node_type !== 'code') {
-            return {};
-        }
-        const language = this._codeDocumentationLanguage(context);
-        try {
-            const result = await this._codeDocs.run({
-                language,
-                perspective: 'node',
-            });
-            const markdown = typeof result === 'string'
-                ? result
-                : result && typeof result === 'object' && typeof result.markdown === 'string'
-                    ? result.markdown
-                    : '';
-            return {
-                code_inline_documentation_language: language,
-                code_inline_documentation_md: markdown,
-                code_inline_documentation_source: 'flows/code_documentation',
-            };
-        } catch (error) {
-            return {
-                code_inline_documentation_language: language,
-                code_inline_documentation_md: '',
-                code_inline_documentation_source: 'flows/code_documentation',
-                code_inline_documentation_error: error instanceof Error ? error.message : String(error),
-            };
-        }
-    }
-
-    _chatVariables = async () => {
-        const context = this._nodeContext();
-        return {
-            ...flattenLaraFlowsContext(context),
-            ...await this._codeDocumentationVariables(context),
-        };
-    };
+    _chatVariables = async () => flattenLaraFlowsContext(this._nodeContext());
 
     _labels() {
         return {

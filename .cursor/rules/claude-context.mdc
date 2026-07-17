@@ -1,44 +1,162 @@
 ---
-description: "claude-context MCP — семантический поиск по коду: используй claude_context_search_code по умолчанию вместо grep; health-check при старте, обновление, переиндексация, fallback"
+description: "Два движка поиска по коду: codebase-memory-mcp (структурный граф) + claude-context MCP (семантика). Compose-канон, health-check, команды"
 alwaysApply: true
 ---
-# claude-context MCP — семантический поиск
+# Поиск по коду — два движка
 
-Семантический поиск по коду через claude-context MCP (Ollama + Milvus, `@zilliz/claude-context-mcp`).
-Проект большой (3000+ файлов) — `grep` по regex даёт шум, семантика + ранжирование критичны.
+В проекте два независимых поиска. Не заменяй один другим — у них разные задачи.
 
-## Какой поиск когда
+- **codebase-memory-mcp** — структурный граф знаний (tree-sitter AST + Hybrid LSP → SQLite). 158 языков: call graph, импорты, наследование, HTTP-маршруты, dead code, архитектура.
+- **claude-context MCP** (`@zilliz/claude-context-mcp`, Ollama + Milvus) — семантический векторный поиск по смыслу текста. Проект большой (3000+ файлов) — семантика + ранжирование критичны для «по смыслу» запросов.
 
-- `claude_context_search_code` (MCP) — основной. «где реализован X», «как работает Y», «всё связанное с Z». Без знания точных имён.
-- `find_symbol` / `get_callees` / `get_callers` (LSP) — структура: определения, дерево вызовов.
-- `grep` — fallback: точные имена, литералы, regex, когда знаешь что искать.
-- `find_path` — файлы по glob.
+## Какой инструмент когда
+
+| Запрос | Инструмент |
+|---|---|
+| «кто вызывает X» / «что вызывает X», call chain | `mcp:codebase-memory-mcp:trace_path` |
+| impact / blast-radius изменений | `detect_changes` |
+| архитектура: языки, пакеты, маршруты, hotspots, слои, кластеры | `get_architecture` |
+| найти функции/классы по имени/regex, по файлу, по степени | `search_graph` |
+| Cypher по графу (dead code: `WHERE NOT EXISTS { (f)<-[:CALLS]-() }`) | `query_graph` |
+| исходник функции по qualified name | `get_code_snippet` |
+| схема графа (labels, edge types) — запусти первым для ориентировки | `get_graph_schema` |
+| «где реализован X», «как работает Y», «всё связанное с Z» — по смыслу, без точных имён | `mcp:claude-context:search_code` |
+| точные имена/литералы/regex (знаешь, что искать) | `grep` |
+| файлы по glob | `find_path` |
+
+Для структурных вопросов **сначала граф** — не file-by-file `read`. Граф отвечает за один вызов и экономит ~99% токенов vs grep/read-циклов.
+
+## Продуктовый/доменный вопрос → сначала `.mdc`
+
+«Как работает X в сервисе», «что сломается если поменять Y», «откуда берутся данные Z» — **сначала читай `.cursor/rules/<svc>.mdc`** (`crm.mdc`, `rag.mdc`, `flows.mdc`, …), потом код. Правило даёт модель (источник правды, инварианты, имена символов) за один `read` и делает дальнейший поиск точечным `grep`/`get_code_snippet` по известным именам. Эмпирика: `crm.mdc` отвечает на «notes ↔ RAG» ещё до семантики.
+
+## Гочи граф-тулов (стоят вызовов впустую)
+
+- `search_graph.name_pattern` / `search_code.pattern` с `foo|bar` **требуют `regex=true`** — иначе `|` матчится литералом, выдача пустая. Для OR — `regex=true` либо `grep`.
+- `trace_path` / `get_code_snippet` по **голому имени** → `ambiguous`. Сначала `search_graph` → `qualified_name` → трасса/сниппет.
+
+## Стратегия поиска (канон Cursor + наш стек)
+
+Опора на [Cursor: Semantic & Agentic Search](https://cursor.com/docs/agent/tools/search) и [Learn: Understanding Your Codebase](https://cursor.com/learn/understanding-your-codebase). У Cursor **нет** agent-facing рецепта строки `query` для эмбеддера — только выбор стратегии. Ниже — их tips + наш слой (граф, формулировка `query`).
+
+**Start specific, then go broad.** Знаешь символ/путь — начинай с него. Незнакомая зона — опиши поведение, потом сужай.
+
+| Стиль запроса | Стратегия |
+|---|---|
+| Конкретный символ, import, строка, regex | `grep` (или `search_graph` / `trace_path`, если нужен call graph) |
+| Концепт / поведение без точных имён | семантика (`claude_context_search_code`) → `grep` / граф для деталей |
+| Сложная разведка | цепочка: entry points (семантика **или** граф) → references (`grep` / `trace_path`) → `get_code_snippet` / `read` |
+
+Цепочка (адаптация Cursor *semantic → grep → read* под наш стек):
+
+**rule (`.mdc`) → граф (структура) → семантика (смысл) → grep (литералы) → snippet/read (тело).**
+
+Проверенный fast-path для доменного «как работает X + что сломается при Y»: `read .cursor/rules/<svc>.mdc` → `grep` по литералу из правила (`upload_text`, `vector_documents`) в `apps/<svc>` → `get_code_snippet` на точке мутации (create/update) + на входе данных (`resolve_note_text`) → `read` фонового пути (`reembed_stale_documents`). Широкая семантика тут лишняя.
+
+Дополнительно из Cursor tips:
+
+- **Concrete > vague.** `callers of processOrder` / `EntityRepository.upload_text` лучше, чем «order code» / «как заметки».
+- **Explore before changing.** Перед правкой найди существующий паттерн — не плоди дубли и не ломай конвенции.
+- Семантика + exact вместе точнее, чем один канал (у Cursor eval: ~+12.5% vs grep alone на больших репо). У нас третий канал — граф; не подменяй им семантику и наоборот.
+
+## Формулировка `claude_context_search_code.query`
+
+Схема тула: `query` = *natural language query*. Это **не** разрешение копировать вопрос пользователя целиком.
+
+Эмбеддер ищет похожие **чанки кода/доков** по cosine — не отвечает на вопрос и не взвешивает важность файла. Копипаст вопроса → шум: README, agent `skills/`/`prompts/`, `*.styles.js`, пустые `__init__.py`. Cursor user-prompt («How does our app handle failed payments?») — для **выбора** semantic-тула человеком; **строка `query` агента** — короткий якорь под чанки реализации.
+
+### Универсальный transform: вопрос → `query` (4 механических шага)
+
+Применяй к любому вопросу, любому домену, до вызова тула:
+
+1. **Убери вопросную оболочку.** `how/what/why/where/when/if`, `does/do/is`, «как/что/почему/где/если/что произойдёт/расхождения». Остаётся суть.
+2. **Убери бренды и продукт-жаргон.** `Networkle`, `Lara`, `Humanitec`, `Linnex`, «сервис», «платформа», «collect», «sync», «обрабатывает» — эти слова живут в `prompts/`, `agent_skills/`, `docs/`, README, а НЕ в ядре (`EntityRepository`, `upload_text`). Оставишь — поднимешь мусор наверх.
+3. **Переведи в код-уровневые токены.** Слой/класс (`Repository`, `Service`, `provider`), операция **как она названа в коде** (`index`, `upload`, `embed`, `search` — не «collect»/«обрабатывает»), данные (`vector_documents`, `entity_id`). Не знаешь точных имён — возьми их из `.cursor/rules/<svc>.mdc` **перед** семантикой.
+4. **Один концепт = один вызов.** Составной вопрос → 2–3 отдельных `query`. Известна зона → `extensionFilter: [".py"]`/`[".js"]`; `path` = абсолютный корень репо.
+
+### Gate: нужна ли вообще семантика
+
+Перед вызовом: **можешь назвать символ** (из `.mdc` или прошлого поиска)? → да: `grep`/граф, семантику пропусти. Семантика — только когда имена ещё неизвестны. **Не запускай семантику с prose в одном батче с чтением правила**: сначала `.mdc` даёт имена, потом (если ещё нужно) код-якоря.
+
+### Признак провала и что делать
+
+Топ выдачи — `agent_skills/**` / `prompts/**` / README / `*.styles.js` / пустые `__init__.py`, нет mutating-кода из `apps/<svc>` / `core/**`. Не повторяй тот же длинный `query`: примени transform (убери бренды/вопросные слова), сузь `extensionFilter`, либо переключись на граф/`grep` по уже известным символам.
+
+| Делай | Не делай |
+|---|---|
+| Короткие код-якоря (1 мысль, 5–12 слов) | Копипаст вопроса / «How does X… What happens if Y…» |
+| `EntityRepository upload_text`, `vector_documents entity_id` | Абстрактный prose с брендом (`Networkle collect sync notes`) |
+| Один концепт = один вызов; split multi-part | Два+ независимых вопроса в одном `query` |
+| `extensionFilter` когда зона известна; `path` = абсолютный корень | Широкий репо-поиск без нужды; относительный `path` |
+
+Пример (реальный провал сессии «notes ↔ RAG»):
+
+```text
+# плохо → топ: networkle/crm-notes SKILL.md, AGENTS.md, note-page.styles.js, пустой crm/api/__init__.py
+How does Networkle CRM collect and index notes data into RAG vector documents?
+
+# transform: -«How does» -«Networkle» -«collect» → код-токены + split + extensionFilter=[".py"]
+CRM note text indexing RAG vector documents
+EntityRepository upload_text document_id entity_id
+```
+
+## Имя проекта в графе
+
+Тулы графа требуют `project`. Не хардкодь — узнавай через `list_projects` (разрешён, мгновенно). Для статуса/свежести индекса — `index_status`.
+
+## Runtime-канон: Docker Compose
+
+Весь бэкенд — `scripts/zed_search/docker/docker-compose.yml` + `scripts/zed_search/compose.sh`.
+
+| Компонент | Где |
+|---|---|
+| Ollama (embeddings) | **macOS:** host brew/app Ollama → Apple Metal GPU (`OLLAMA_MODE=metal`, `127.0.0.1:11434`); claude-context → `host.docker.internal:11434`. **Linux/CPU:** профиль `docker-ollama` → контейнер `zed-search-ollama` |
+| Milvus + etcd + MinIO | контейнеры compose; Milvus → `127.0.0.1:19530`; MinIO **без** publish |
+| CBM + mcp-proxy | `zed-search-cbm` → `http://127.0.0.1:9751/mcp` |
+| claude-context + mcp-proxy | `zed-search-claude-context` → `http://127.0.0.1:9752/mcp` |
+
+Клиенты (Zed/Cursor): только HTTP `url` + `headers: { "X-API-Key": "..." }` из `scripts/zed_search/docker/.env`. **Не** `command`/`npx` stdio.
+
+Автоиндексация без дублей: CBM `auto_index=true` + `auto_watch=true`; claude-context `CLAUDE_CONTEXT_BACKGROUND_SYNC=true`. Cron (`reindex-cron`) idle (`REINDEX_INTERVAL_SEC=0`) — не дублирует sync/watch. Полный wipe — `make zed-search-reindex` (HTTP, один writer).
+
+Репозиторий монтируется по **тому же абсолютному пути**, что на хосте (пути в MCP-тулах = пути IDE).
+
+**Volumes (persist):** `cbm_cache`, `claude_context_data`, `milvus_data`, `minio_data`, `etcd_data`; `ollama_data` только при `OLLAMA_MODE=docker`. `compose down` без `-v` их не трогает — после рестарта индексы на месте, постоянный reindex не нужен.
+
+### Запрещено агенту
+
+- Спавнить / `pkill` host `codebase-memory-mcp` / `claude-context-mcp` / host `mcp-proxy` в обход Compose.
+- `docker volume rm` / `docker compose down -v` / `rm` cache без явной просьбы пользователя.
+- Возвращать Zed/Cursor на stdio `command` для CBM или claude-context.
+- Параллельный `index_repository` / второй writer к той же SQLite.
 
 ## Health-check при старте
 
 Перед первой задачей по коду запусти `make zed-search-check`:
 
-- **exit 0** — MCP работает. Используй `claude_context_search_code`.
-- **exit 1** — MCP сломан. Сообщи пользователю первым сообщением:
-  > ⚠️ claude-context MCP не работает — семантический поиск недоступен.
-  > Запусти `make zed-search` для настройки (Ollama + Milvus + автоиндексация).
-  > Пока MCP недоступен, я буду искать через `grep`, но это хуже по качеству.
-  Продолжай через `grep`/`find_path`, явно отметив меньшую точность.
-- **WARN (exit 0)** — MCP работает, но есть риски. Обработай каждый WARN:
-  - **MCP-пакет устарел** — версия пакета отстаёт от актуальной в npm. Сообщи:
-    > ℹ️ claude-context MCP устарел (vX.Y.Z, актуальна vA.B.C).
-    > Обнови: `make zed-search-update`, затем перезапусти Zed.
-    Продолжай — старая версия обычно работает, но без свежих фич/багфиксов.
-  - **Индекс устарёл/отсутствует** — переиндексируй: `make zed-search-reindex`. Сообщи, что поиск может вернуть неполные результаты.
+- **exit 0** — Compose HTTP MCP работает. Семантика через `claude_context_search_code`.
+- **exit 1** — стек сломан. Сообщи пользователю первым сообщением:
+  > ⚠️ claude-context / Compose-стек поиска не работает — семантический поиск недоступен.
+  > Запусти `make zed-search` (Docker Compose: Ollama + Milvus + MCP proxies).
+  > Если контейнер CBM healthy — структурные запросы графа могут работать отдельно.
+  Для семантики временно через grep, но хуже по качеству.
+- **WARN (exit 0)** — обработай:
+  - **индекс пуст/не готов** — `make zed-search-reindex`.
   - Другие WARN — сообщи кратко и продолжай.
+  Host MCP / launchd вне Compose → **exit 1** (починка: `make zed-search` + перезапуск IDE).
 
 ## Команды
 
-- `make zed-search-check` — health-check MCP (exit 0/1 + WARN).
-- `make zed-search-update` — обновить MCP-пакет до актуальной версии.
-- `make zed-search-reindex` — переиндексировать кодовую базу.
-- `make zed-search` — полная настройка (Ollama + Milvus + автоиндексация).
+- `make zed-search` — `compose up --build` + wire клиентов + primary index
+- `make zed-search-check` — health Compose
+- `make zed-search-update` — rebuild CBM/claude-context images
+- `make zed-search-reindex` — HTTP reindex обоих движков
+- `make zed-search-status` / `zed-search-logs` / `zed-search-down`
 
 ## Правило
 
-Сначала `claude_context_search_code`. `grep` — только точечные литералы/regex или когда MCP недоступен.
+1. Структурные вопросы — **сначала codebase-memory-mcp**.
+2. Семантические — **claude_context_search_code** с короткими якорями (см. формулировку `query` выше), не копипаст вопроса пользователя.
+3. Точные литералы/regex — `grep`.
+4. Не обходи код file-by-file `read`, если граф или семантика могут ответить за один вызов.
+5. Оба MCP — только через Compose HTTP URL + X-API-Key.

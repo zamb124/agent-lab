@@ -174,7 +174,7 @@ agent_toolkits:
   - id: lara
     public: true
     name: Lara
-    description: "LinnexAgent platform window: Lara (branch linnex_agent) + local device tools"
+    description: "Lara platform brain for LinnexAgent: call flow_lara for NetWorkle/CRM, Flows, Sync, docs, RAG, Worktracker; local PC via Lara device tools (branch linnex_agent)"
     default_enabled: true
     position: 0
     flow_ids:

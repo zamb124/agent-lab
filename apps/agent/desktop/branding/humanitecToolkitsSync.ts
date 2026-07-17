@@ -34,6 +34,23 @@ function platformToolkitHeadersTemplate(): Record<string, string> {
   };
 }
 
+/** Platform Auth Language.RU/EN from Goose UI locale (Accept-Language exact token). */
+function resolvePlatformAcceptLanguage(): string {
+  const appConfig = (
+    window as Window & {
+      appConfig?: { get: (key: string) => unknown };
+    }
+  ).appConfig;
+  const raw = appConfig?.get('GOOSE_LOCALE');
+  if (typeof raw === 'string' && raw.trim()) {
+    const primary = raw.trim().toLowerCase().split(/[-_]/)[0] ?? '';
+    if (primary === 'ru' || primary === 'en') {
+      return primary;
+    }
+  }
+  return 'ru';
+}
+
 async function resolvePlatformToolkitHeaders(
   api: HumanitecAgentToolkitsApi,
 ): Promise<Record<string, string>> {
@@ -51,12 +68,18 @@ async function resolvePlatformToolkitHeaders(
     }
     resolvedHeaders[headerKey] = resolvedHeader;
   }
+  resolvedHeaders['Accept-Language'] = resolvePlatformAcceptLanguage();
   return resolvedHeaders;
+}
+
+function isLaraOnlyToolkit(toolkitId: string): boolean {
+  return toolkitId === 'lara';
 }
 
 function platformToolkitNeedsResync(
   existingExt: FixedExtensionEntry,
   catalogItem: HumanitecToolkitCatalogItem,
+  desiredHeaders: Record<string, string>,
 ): boolean {
   if (existingExt.type !== 'streamable_http') {
     return true;
@@ -68,6 +91,14 @@ function platformToolkitNeedsResync(
     return true;
   }
   if (existingExt.description !== catalogItem.description) {
+    return true;
+  }
+  const existingAccept = existingExt.headers?.['Accept-Language'];
+  if (existingAccept !== desiredHeaders['Accept-Language']) {
+    return true;
+  }
+  // LaraOnly: never leave platform_lara disabled after install/pairing.
+  if (isLaraOnlyToolkit(catalogItem.toolkit_id) && !existingExt.enabled) {
     return true;
   }
   return false;
@@ -129,7 +160,8 @@ export async function syncPlatformToolkitExtensions(
     const extensionId = platformToolkitExtensionId(catalogItem.toolkit_id);
     const existingExt = existingExtensions.find((ext) => nameToKey(ext.name) === extensionId);
     const needsResync =
-      existingExt !== undefined && platformToolkitNeedsResync(existingExt, catalogItem);
+      existingExt !== undefined &&
+      platformToolkitNeedsResync(existingExt, catalogItem, resolvedHeaders);
     if (existingExt !== undefined && !needsResync) {
       continue;
     }
@@ -147,7 +179,11 @@ export async function syncPlatformToolkitExtensions(
       headers: resolvedHeaders,
       bundled: true,
     };
-    const enabled = existingExt ? existingExt.enabled : catalogItem.default_enabled;
+    const enabled = isLaraOnlyToolkit(catalogItem.toolkit_id)
+      ? true
+      : existingExt
+        ? existingExt.enabled
+        : catalogItem.default_enabled;
     await addExtensionFn(extensionId, extConfig, enabled);
   }
 }

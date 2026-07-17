@@ -1,7 +1,7 @@
 ---
 name: flows-node-edit
 description: Patch a single Flows node with type-specific guidance (llm, nested flow, remote_flow, external_api, mcp, channel, hitl, resource). Use from node AI helper surfaces.
-allowed-tools: flows_patch_node
+allowed-tools: flows_get_node flows_patch_node
 ---
 
 # Flows node edit
@@ -12,11 +12,15 @@ Make narrow, confirm-first patches to the currently selected node.
 
 ## Context
 
-Rely on `flow_id`, `target_branch_id`, `node_id`, `node_type`, `node_payload_json`, `branch_node_payload_json`, `dataflow_node_json`, `lara_ui_context_json`. For code nodes prefer skill `code-node` and `branch_code_payload_json` / `code_inline_documentation_md`.
+Standing IDs: `flow_id`, `target_branch_id`, `node_id`, `node_type`, `editor_dirty`.
+Fetch the node body with `flows_get_node` before editing. For code nodes prefer skill `code-node`.
 
-## Tool
+## Tools
 
-Only `flows_patch_node`: `mode=propose` then `mode=apply` after explicit confirmation with the same `pending_action_id`. Do not patch flow-level fields, other nodes, resources, edges, or triggers here.
+1. `flows_get_node` — load the selected node from saved flow state.
+2. `flows_patch_node` — `mode=propose` then `mode=apply` after explicit confirmation with the same `pending_action_id`.
+
+Do not patch flow-level fields, other nodes, resources, edges, or triggers here.
 
 ## Specialization by `node_type` / assistant branch
 
@@ -32,11 +36,12 @@ Only `flows_patch_node`: `mode=propose` then `mode=apply` after explicit confirm
 
 ## Rules
 
-1. Briefly explain what you see in the current node and how it relates to the branch.
-2. Propose narrow edits only.
-3. If data is missing, ask a short chat question (standing `ask_user` may be available on Lara).
-4. Never invent ids or external API signatures.
-5. Always propose before apply.
+1. If `editor_dirty=true`, ask to save before get/patch.
+2. Briefly explain what you see after `flows_get_node` and how it relates to the branch.
+3. Propose narrow edits only.
+4. If data is missing, ask a short chat question (standing `ask_user` may be available on Lara).
+5. Never invent ids or external API signatures.
+6. Always propose before apply.
 
 ## Reference
 

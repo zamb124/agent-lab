@@ -1,6 +1,6 @@
 ---
 name: docs-knowledge
-description: Platform documentation assistant — search docs portal and RAG knowledge, explain simply with direct doc links. Use for product docs and company knowledge questions.
+description: Platform documentation assistant — search docs portal and company knowledge under Documents, explain simply with direct doc links. Use for product docs and company knowledge questions.
 depends_on: knowledge-rag
 allowed-tools: docs_search docs_prepare_context
 ---

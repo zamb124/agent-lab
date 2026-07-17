@@ -1,25 +1,29 @@
 ---
 name: flows-editor
-description: Read and patch Flows editor context — flow/node propose-apply patches and chat embed blocks. Use when editing a flow graph or applying Lara confirm-first patches.
-allowed-tools: flows_read_context flows_patch_node flows_patch_flow push_embed_blocks
+description: Point-fetch Flows graph by ids and apply confirm-first node/flow patches plus chat embed blocks. Use when editing a flow graph from Lara.
+allowed-tools: flows_get_node flows_list_nodes flows_read_context flows_patch_node flows_patch_flow push_embed_blocks
 ---
 
 # Flows editor
 
 ## Goal
 
-Read live editor context and apply confirm-first patches to nodes or the flow.
+Fetch only the flow/node slices you need, then apply confirm-first patches.
 
-## Context variables
+## Context variables (IDs only)
 
-Use when present: `screen`, `selection_source`, `flow_id`, `target_branch_id`, `assistant_branch_id`, `node_id`, `node_type`, `node_payload_json`, `flow_payload_json`, `lara_ui_context_json`.
+Standing metadata may include: `screen`, `selection_source`, `flow_id`, `target_branch_id`, `api_branch_id`, `assistant_branch_id`, `node_id`, `node_type`, `branch_node_count`, `branch_edge_count`, `editor_dirty`.
+
+There is **no** standing `*_payload_json` / full FlowConfig dump. Bodies come from tools. Tools read **saved** flow state; if `editor_dirty=true`, ask the user to save before read/patch.
 
 ## Procedure
 
-1. Call `flows_read_context` when editor context is incomplete.
-2. Node changes — `flows_patch_node`: `mode=propose` then after explicit user confirm `mode=apply` with the same `pending_action_id`.
-3. Flow-level changes (e.g. rename) — `flows_patch_flow` with the same confirm-first lifecycle.
-4. Structured UI — `push_embed_blocks` when helpful.
+1. Prefer `flows_get_node(flow_id, branch_id, node_id)` for a single node body (prompt/code/tools).
+2. Prefer `flows_list_nodes(flow_id, branch_id)` for a branch index without prompt/code bodies.
+3. Use `flows_read_context` for a light overview (flow summary + `nodes_index`, optional one `node`).
+4. Node changes — `flows_patch_node`: `mode=propose` then after explicit user confirm `mode=apply` with the same `pending_action_id`.
+5. Flow-level changes (e.g. rename) — `flows_patch_flow` with the same confirm-first lifecycle.
+6. Structured UI — `push_embed_blocks` when helpful.
 
 ## Rules
 

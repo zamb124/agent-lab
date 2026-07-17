@@ -24,9 +24,11 @@ LinnexAgent — desktop-клиент (Goose fork). **Канон продукта
 
 | Инвариант | Деталь |
 |---|---|
-| Desktop catalog | Device JWT → только `lara` (`default_enabled: true`) |
+| Desktop catalog | Device JWT → только `lara`; `default_enabled` всегда `true` (даже при stale DB) |
+| Desktop sync | Extension `platform_lara` всегда `enabled=true` после pairing/resync |
+| LLM provider UI | Display name **Linnex** (tech id `humanitec` допустим) |
 | MCP tool | `flow_lara` → A2A `metadata.branch = linnex_agent` |
-| Sticky session | Redis: `Mcp-Session-Id` **или** `device:{device_id}` → A2A `context_id`; result text содержит `context_id: …` |
+| Sticky session | Redis: `Mcp-Session-Id` → A2A `context_id` (новый MCP session = новый диалог Lara); `device:{device_id}` только если нет `Mcp-Session-Id`; result text содержит `context_id: …` |
 | Local PC | Builtin `device_tools_list` / `device_tools_call` на branch; `device_id` из variables (device JWT), не из LLM args |
 | Tunnel local MCP | Built-in desktop surface (`humanitecLocalDeviceMcp.ts`) под `DevicePolicy`; optional `HUMANITEC_LOCAL_MCP_URL` override |
 | Updates | Skills/tools/prompts Lara — DB/seed; desktop binary не пересобирать ради platform |
@@ -47,12 +49,14 @@ Database-first (`apps/flows/src/models/agent_toolkit.py`). Bootstrap: `registry.
 
 | Method | Поведение |
 |---|---|
+| `initialize` | для toolkit `lara` — `instructions` (Lara-first: call `flow_lara`) |
 | `tools/list` | membership toolkit (desktop: `flow_lara`) |
 | `tools/call` `flow_*` | A2A; для `lara` — branch `linnex_agent` + variables `device_id` / `linnex_agent_client` |
 | `tools/call` `tool_*` | `tool_registry.materialize` |
 | `device/mcp` | proxy → tunnel → local MCP (timeout 120s) |
 
-Sticky keys: `agent_mcp_session:{mcp_session}:flow:{flow_id}` и `agent_mcp_session:device:{device_id}:flow:{flow_id}`.
+Sticky keys: `agent_mcp_session:{mcp_session}:flow:{flow_id}` (приоритет); `agent_mcp_session:device:{device_id}:flow:{flow_id}` — только без MCP session. Новый `Mcp-Session-Id` не переиспользует device context.
+Locale: desktop Platform MCP headers включают `Accept-Language: ru|en` из Goose UI locale (`GOOSE_LOCALE`).
 
 ## Tunnel WS
 
@@ -60,10 +64,14 @@ Sticky keys: `agent_mcp_session:{mcp_session}:flow:{flow_id}` и `agent_mcp_sess
 - `mcp_request` / `mcp_response` → `device_*` tools и Platform MCP `device/mcp`
 - `toolkits_updated` → desktop resync (LaraOnly: обычно один extension `platform_lara`)
 
-## Desktop (Goose)
+## Desktop (Goose) — Lara-first shell
 
+- Goose local prompt (`branding/prompts/system.md`): оркестратор; platform-вопросы → сразу tool **`flow_lara`**
+- MCP `initialize.instructions` на `/platform-mcp/lara`: делегируй в `flow_lara` (NetWorkle/CRM/Flows/…)
+- CRM с desktop: skill **`networkle`** на branch `linnex_agent`; branch `crm` — только SPA entry, не desktop
 - Distro `default_extensions`: `developer`, `computercontroller` (локальный fallback UI; канон local — Lara device tools)
 - Branding: `humanitecToolkitsSync.ts`, `humanitecTunnelClient.ts`, `humanitecLocalDeviceMcp.ts`, `humanitecAgentRuntime.ts`
+- Loading-индикатор чата (`LoadingGoose`): `LinnexSpinner` + `branding/icons/linnex_spinner_logo.png` (тот же ассет, что platform-spinner); не Goose `FlyingBird` / `AnimatedIcons`
 - Releases: `linnex-agent-{sha}` / `LinnexAgent-{platform}-{sha}.{ext}`
 
 ## Файлы

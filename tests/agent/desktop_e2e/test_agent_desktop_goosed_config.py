@@ -50,6 +50,12 @@ async def test_goose_cfg_01_config_extensions_platform_mcp_first(
             platform_names = [name for name in names if name.startswith("platform_")]
             assert "platform_lara" in platform_names
             assert "platform_humanitec_core" not in platform_names
+            lara_ext = next(
+                entry
+                for entry in extensions
+                if isinstance(entry.get("name"), str) and entry["name"] == "platform_lara"
+            )
+            assert lara_ext.get("enabled") is True
     finally:
         desktop.stop()
 

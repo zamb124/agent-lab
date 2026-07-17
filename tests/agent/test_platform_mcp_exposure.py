@@ -10,7 +10,6 @@ from httpx import AsyncClient
 
 from apps.flows.src.models.agent_toolkit import AgentToolkit
 from apps.flows.src.models.flow_config import FlowConfig
-from apps.flows.src.models.tool_reference import ToolReference
 from core.context import clear_context, get_context, set_context
 from core.models.context_models import Context
 from tests.agent._helpers import (
@@ -363,8 +362,53 @@ async def test_platform_mcp_initialize_toolkit_server_info(
             body = result["body"]
             assert isinstance(body, dict)
             assert body["result"]["serverInfo"]["name"] == "Init Name"
+            assert "instructions" not in body["result"]
         finally:
             await container.agent_toolkit_repository.delete(toolkit_id)
+
+
+@pytest.mark.asyncio
+async def test_platform_mcp_initialize_lara_instructions(
+    flows_client: AsyncClient,
+    auth_headers: dict[str, str],
+    container,
+    frontend_container,
+) -> None:
+    """LaraOnly: /platform-mcp/lara initialize must instruct Goose to call flow_lara."""
+    async with _repository_context_for_auth(auth_headers, frontend_container):
+        existing = await container.agent_toolkit_repository.get("lara")
+        if existing is None:
+            await container.agent_toolkit_repository.set(
+                AgentToolkit(
+                    toolkit_id="lara",
+                    name="Lara",
+                    description="Lara",
+                    default_enabled=True,
+                    position=0,
+                    flow_ids=["lara"],
+                    source="platform",
+                )
+            )
+
+    result = await _mcp_jsonrpc(
+        flows_client,
+        auth_headers,
+        method="initialize",
+        toolkit_id="lara",
+        params={
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test"},
+        },
+    )
+    assert result["status_code"] == 200
+    body = result["body"]
+    assert isinstance(body, dict)
+    instructions = body["result"]["instructions"]
+    assert isinstance(instructions, str)
+    assert "flow_lara" in instructions
+    assert "NetWorkle" in instructions
+    assert body["result"]["serverInfo"]["name"] == "Lara"
 
 
 @pytest.mark.asyncio

@@ -578,6 +578,11 @@ export class PlatformChat extends LitElement {
             justify-content: center;
             padding: 0;
             box-sizing: border-box;
+            transition:
+                transform 0.18s ease,
+                background 0.18s ease,
+                border-color 0.18s ease,
+                box-shadow 0.18s ease;
         }
         :host([data-embed-position='bottom-left']) .fab {
             right: auto;
@@ -603,6 +608,11 @@ export class PlatformChat extends LitElement {
         }
         .fab:hover {
             background: var(--platform-chat-drawer-fab-bg-hover);
+            border-color: rgba(255, 255, 255, 0.22);
+            transform: translateY(-1px) scale(1.03);
+        }
+        .fab:active {
+            transform: scale(0.98);
         }
         .fab-logo {
             width: 42px;
@@ -610,6 +620,7 @@ export class PlatformChat extends LitElement {
             display: block;
             object-fit: contain;
             pointer-events: none;
+            filter: drop-shadow(0 0 10px rgba(255, 180, 220, 0.22));
         }
         @media (max-width: 767px) {
             .fab {

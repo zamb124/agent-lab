@@ -112,7 +112,10 @@ describe('service platform assistant contexts', () => {
         expect(flattened.node_type).toBe('llm_node');
         expect(flattened.assistant_branch_id).toBe('flows');
         expect(flattened.lara_request_kind).toBe('chat');
-        expect(typeof flattened.lara_ui_context_json).toBe('string');
-        expect(flattened.node_payload_json).toContain('Initial prompt');
+        expect(flattened.branch_node_count).toBe(1);
+        expect(flattened).not.toHaveProperty('lara_ui_context_json');
+        expect(flattened).not.toHaveProperty('node_payload_json');
+        expect(flattened).not.toHaveProperty('flow_payload_json');
+        expect(JSON.stringify(flattened)).not.toContain('Initial prompt');
     });
 });

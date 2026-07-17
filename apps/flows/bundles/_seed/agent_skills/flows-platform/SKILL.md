@@ -16,9 +16,9 @@ Flow = `FlowConfig` with `entry`, `nodes`, `edges`, `variables`, `resources`, `t
 
 ## Procedure
 
-1. Load `flows-editor` for read/patch/embed tools and confirm-first lifecycle.
+1. Load `flows-editor` for point-fetch/patch/embed tools and confirm-first lifecycle.
 2. Load `flows-code` (then its children) for code / llm_node / typed node helpers.
-3. Use editor variables (`lara_ui_context_json`, payloads) as source of truth.
+3. Standing variables are IDs only (`flow_id`, `node_id`, …). Fetch bodies via `flows_get_node` / `flows_list_nodes`.
 4. Answer in the user's interface language.
 
 ## Cross-domain

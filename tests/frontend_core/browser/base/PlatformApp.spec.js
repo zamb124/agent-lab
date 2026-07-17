@@ -24,7 +24,7 @@ const PLATFORM_ASSISTANT_BRANCH_MATRIX = Object.freeze([
     { serviceId: 'crm', branchId: 'crm', app: CRMApp },
     { serviceId: 'flows', branchId: 'flows', app: FlowsApp },
     { serviceId: 'sync', branchId: 'sync', app: SyncApp },
-    { serviceId: 'rag', branchId: 'rag', app: RagApp },
+    { serviceId: 'rag', branchId: 'documents', app: RagApp },
     { serviceId: 'office', branchId: 'documents', app: OfficeApp },
     { serviceId: 'worktracker', branchId: 'worktracker', app: WorktrackerApp },
     { serviceId: 'litserve', branchId: 'litserve', app: HumanitecModelsApp },

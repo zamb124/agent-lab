@@ -50,4 +50,4 @@ export function humanitecExtensionSortKey(
 
 export { comparePlatformToolkitExtensions, platformToolkitExtensionId };
 
-export const HUMANITEC_PLATFORM_MCP_DISPLAY_NAME = 'Humanitec';
+export const HUMANITEC_PLATFORM_MCP_DISPLAY_NAME = 'Linnex';

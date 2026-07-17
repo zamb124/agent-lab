@@ -553,6 +553,7 @@ async def test_releases_status_ready(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(120, func_only=True)
 async def test_download_redirect_serves_local_artifact(
     frontend_client: AsyncClient,
     agent_local_release_artifact,

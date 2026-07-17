@@ -133,7 +133,16 @@ async def test_d12_device_mcp_roundtrip(
         )
         assert response.status_code == 200
         body = response.json()
-        assert body["result"] == {"tools": []}
+        assert "result" in body, body
+        tools = body["result"]["tools"]
+        assert isinstance(tools, list)
+        tool_names = {
+            tool["name"]
+            for tool in tools
+            if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+        }
+        # Default DevicePolicy.browser_enabled → local MCP exposes device_open_url.
+        assert "device_open_url" in tool_names
         assert credentials["platform_mcp_url"]
     finally:
         desktop.stop()

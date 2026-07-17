@@ -1,14 +1,14 @@
 ---
 name: knowledge-rag
-description: Search and write company RAG knowledge and platform documentation. Use when the user asks about internal knowledge, docs portal, or storing text in a vector namespace.
+description: Search and write company knowledge (Documents) and platform documentation. Use when the user asks about internal knowledge, docs portal, or storing text in a vector namespace.
 allowed-tools: rag_search rag_add_text rag_create_namespace docs_search docs_prepare_context
 ---
 
-# Knowledge and RAG
+# Knowledge (Documents)
 
 ## Goal
 
-Retrieve grounded answers from company RAG / platform docs, and optionally ingest new text.
+Retrieve grounded answers from company knowledge under Documents / platform docs, and optionally ingest new text. There is no separate RAG SPA entry — load via `documents-platform` or `docs-knowledge`.
 
 ## Procedure
 
@@ -21,3 +21,4 @@ Retrieve grounded answers from company RAG / platform docs, and optionally inges
 
 - Prefer search before answering factual company questions.
 - Keep ingested text scoped to the namespace the user approved.
+- Tool ids still use the `rag_*` prefix while the knowledge backend API remains; product home is Documents.

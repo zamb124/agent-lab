@@ -159,7 +159,7 @@ def test_update_checksums_for_dmg_replaces_existing_line(tmp_path: Path) -> None
 
 def test_manifest_filename_uses_short_sha() -> None:
     version_sha = "c38f05eba2528021240ea9f3fface4299e4d30b2"
-    assert macos_notarize_manifest_filename(version_sha) == "humanitec-agent-macos-notarize-c38f05e.json"
+    assert macos_notarize_manifest_filename(version_sha) == "linnex-agent-macos-notarize-c38f05e.json"
 
 
 def test_write_manifest_roundtrip(tmp_path: Path) -> None:
@@ -258,7 +258,7 @@ def test_resolve_manifest_asset_name_from_release_assets() -> None:
         {
             "assets": [
                 {"name": "HumanitecAgent-macos-arm64-d719594.dmg"},
-                {"name": "humanitec-agent-macos-notarize-d719594.json"},
+                {"name": "linnex-agent-macos-notarize-d719594.json"},
             ]
         }
     )
@@ -274,24 +274,24 @@ def test_resolve_manifest_asset_name_from_release_assets() -> None:
     ):
         asset_name = resolve_manifest_asset_name(
             repo="zamb124/agent-lab",
-            release_tag="humanitec-agent-d719594",
+            release_tag="linnex-agent-d719594",
         )
-    assert asset_name == "humanitec-agent-macos-notarize-d719594.json"
+    assert asset_name == "linnex-agent-macos-notarize-d719594.json"
     with patch(
         "apps.agent.desktop.macos_notarize._run_gh_command",
         return_value=Completed(),
     ):
         explicit_name = resolve_manifest_asset_name(
             repo="zamb124/agent-lab",
-            release_tag="humanitec-agent-d719594",
+            release_tag="linnex-agent-d719594",
             version_sha=version_sha,
         )
-    assert explicit_name == "humanitec-agent-macos-notarize-d719594.json"
+    assert explicit_name == "linnex-agent-macos-notarize-d719594.json"
 
 
 def test_discover_pending_release_tags_filters_inactive_manifests() -> None:
     active_manifest = MacosNotarizeManifest(
-        release_tag="humanitec-agent-d719594",
+        release_tag="linnex-agent-d719594",
         version_sha="d71959406b132cffa0f6cc6087c9c8161bd6cfd7",
         deadline_utc="2099-01-01T00:00:00Z",
         platforms={
@@ -308,7 +308,7 @@ def test_discover_pending_release_tags_filters_inactive_manifests() -> None:
     )
     completed_manifest = active_manifest.model_copy(
         update={
-            "release_tag": "humanitec-agent-deadbeef",
+            "release_tag": "linnex-agent-deadbeef",
             "platforms": {
                 "macos-arm64": active_manifest.platforms["macos-arm64"].model_copy(
                     update={"status": MacosNotarizeStatus.COMPLETED}
@@ -318,9 +318,9 @@ def test_discover_pending_release_tags_filters_inactive_manifests() -> None:
     )
     releases_payload = json.dumps(
         [
-            {"tagName": "humanitec-agent-d719594", "isDraft": False},
-            {"tagName": "humanitec-agent-deadbeef", "isDraft": False},
-            {"tagName": "humanitec-agent-no-manifest", "isDraft": False},
+            {"tagName": "linnex-agent-d719594", "isDraft": False},
+            {"tagName": "linnex-agent-deadbeef", "isDraft": False},
+            {"tagName": "linnex-agent-no-manifest", "isDraft": False},
         ]
     )
 
@@ -339,9 +339,9 @@ def test_discover_pending_release_tags_filters_inactive_manifests() -> None:
         _ = repo
         _ = work_dir
         _ = version_sha
-        if release_tag == "humanitec-agent-d719594":
+        if release_tag == "linnex-agent-d719594":
             return active_manifest
-        if release_tag == "humanitec-agent-deadbeef":
+        if release_tag == "linnex-agent-deadbeef":
             return completed_manifest
         raise FileNotFoundError(release_tag)
 
@@ -356,4 +356,4 @@ def test_discover_pending_release_tags_filters_inactive_manifests() -> None:
         ),
     ):
         pending_tags = discover_pending_release_tags(repo="zamb124/agent-lab")
-    assert pending_tags == ["humanitec-agent-d719594"]
+    assert pending_tags == ["linnex-agent-d719594"]

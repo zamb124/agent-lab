@@ -15,12 +15,13 @@ describe('lara node helper context', () => {
         expect(laraNodeHelperBranchId('unknown')).toBe('node_helper');
     });
 
-    it('builds full branch context for selected code node', () => {
+    it('builds ID-only context for selected code node without payloads', () => {
         const editorState = {
             flowId: 'demo_flow',
             currentBranchId: 'fast',
             selectedNodeId: 'calc',
-            flowConfig: { flow_id: 'demo_flow', name: 'Demo' },
+            isDirty: true,
+            flowConfig: { flow_id: 'demo_flow', name: 'Demo', nodes: { calc: { prompt: 'huge' } } },
             branchData: {
                 entry: 'calc',
                 variables: { api_key: 'secret', limit: 3 },
@@ -31,12 +32,6 @@ describe('lara node helper context', () => {
                         name: 'Calc',
                         language: 'python',
                         code: 'async def run(args, state):\n    return {"ok": True}',
-                        parameters_schema: {
-                            type: 'object',
-                            properties: { value: { type: 'number' } },
-                            required: ['value'],
-                        },
-                        output_mapping: { result: 'answer' },
                     },
                     helper: {
                         type: 'code',
@@ -44,18 +39,6 @@ describe('lara node helper context', () => {
                         code: 'def normalize(value):\n    return value',
                     },
                     talk: { type: 'llm_node', prompt: 'hi' },
-                },
-                resources: {
-                    shared: {
-                        type: 'code',
-                        name: 'Shared',
-                        code: 'def shared():\n    return 1',
-                    },
-                },
-            },
-            dataflow: {
-                nodes: {
-                    calc: { inputs: ['value'], outputs: ['answer'] },
                 },
             },
         };
@@ -66,21 +49,29 @@ describe('lara node helper context', () => {
             selection_source: 'node_header_ai',
         });
 
-        expect(context.branch_node_payload.nodes.map((node) => node.node_id)).toEqual(['calc', 'helper', 'talk']);
-        expect(context.branch_code_payload.code_nodes.map((node) => node.node_id)).toEqual(['calc', 'helper']);
-        expect(context.branch_code_payload.code_resources[0]).toMatchObject({
-            resource_id: 'shared',
-            code: 'def shared():\n    return 1',
-        });
-        expect(context.dataflow_node).toEqual({ inputs: ['value'], outputs: ['answer'] });
+        expect(context.flow_id).toBe('demo_flow');
+        expect(context.node_id).toBe('calc');
+        expect(context.node_type).toBe('code');
+        expect(context.branch_node_count).toBe(3);
+        expect(context.branch_edge_count).toBe(1);
+        expect(context.editor_dirty).toBe(true);
+        expect(context).not.toHaveProperty('node_payload');
+        expect(context).not.toHaveProperty('flow_payload');
+        expect(context).not.toHaveProperty('branch_node_payload');
+        expect(context).not.toHaveProperty('branch_code_payload');
 
         const flat = flattenLaraFlowsContext(context);
         expect(flat.assistant_branch_id).toBe('code_helper');
         expect(flat.target_branch_id).toBe('fast');
         expect(flat.api_branch_id).toBe('fast');
-        expect(flat.selected_code_node_code).toContain('async def run');
-        expect(JSON.parse(flat.branch_node_payload_json).nodes).toHaveLength(3);
-        expect(JSON.parse(flat.branch_code_payload_json).code_nodes).toHaveLength(2);
+        expect(flat.editor_dirty).toBe(true);
+        expect(flat).not.toHaveProperty('lara_ui_context_json');
+        expect(flat).not.toHaveProperty('node_payload_json');
+        expect(flat).not.toHaveProperty('flow_payload_json');
+        expect(flat).not.toHaveProperty('branch_node_payload_json');
+        expect(flat).not.toHaveProperty('selected_code_node_code');
+        expect(JSON.stringify(flat)).not.toContain('async def run');
+        expect(JSON.stringify(flat)).not.toContain('secret');
     });
 
     it('uses default API branch for base and stable conversation key', () => {
@@ -88,6 +79,7 @@ describe('lara node helper context', () => {
             flowId: 'demo_flow',
             currentBranchId: 'base',
             selectedNodeId: 'talk',
+            isDirty: false,
             branchData: {
                 nodes: {
                     talk: { type: 'llm_node', prompt: 'hello' },
@@ -101,6 +93,7 @@ describe('lara node helper context', () => {
         const flat = flattenLaraFlowsContext(context);
 
         expect(flat.api_branch_id).toBe('default');
+        expect(flat.editor_dirty).toBe(false);
         expect(laraNodeHelperConversationKey(context)).toBe('llm_node_helper:demo_flow:base:talk');
     });
 });

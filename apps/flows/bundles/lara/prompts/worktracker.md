@@ -21,6 +21,5 @@
 - `work_queue_id`: `{?work_queue_id|—}`
 - `board_id`: `{?board_id|—}`
 - `board_column_id`: `{?board_column_id|—}`
-- Контекст UI: `{?lara_ui_context_json|—}`
 
 Standing: **ask_user**. Любой другой tool доступен только после `load_agent_skill`.

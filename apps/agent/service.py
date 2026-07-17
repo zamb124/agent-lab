@@ -45,11 +45,16 @@ from apps.frontend.container import FrontendContainer
 from core.clients.redis_client import RedisClient
 from core.db.storage import Storage
 from core.logging import get_logger
-from core.platform_brand.resolver import resolve_oauth_brand_origin
+from core.platform_brand.resolver import (
+    UnknownPlatformDomainError,
+    resolve_brand,
+    resolve_oauth_brand_origin,
+)
 from core.types import JsonObject, parse_json_object
 from core.utils.domain import (
     get_protocol,
     is_allowed_integration_return_origin,
+    is_local,
     split_host_port,
 )
 from core.utils.tokens import TokenService
@@ -330,12 +335,27 @@ def _frontend_origin_from_request_host(host: str, url_scheme: str) -> str:
     return origin.rstrip("/")
 
 
+def resolve_brand_frontend_base_url(request_host: str | None) -> str | None:
+    """Public brand apex for catalog/MCP URLs from Host (not register/discover reachability)."""
+    if request_host is None or not str(request_host).strip():
+        return None
+    host = str(request_host).strip()
+    if is_local(host):
+        return None
+    try:
+        _ = resolve_brand(host)
+    except UnknownPlatformDomainError:
+        return None
+    return get_frontend_public_base_url(host)
+
+
 def resolve_frontend_base_url(
     origin_override: str | None = None,
     *,
     request_host: str | None = None,
     url_scheme: str | None = None,
 ) -> str:
+    """Reachable frontend base for register/discover/tunnel (sandbox allowlist + platform public)."""
     platform_public_base_url = get_frontend_public_base_url()
     if origin_override is not None:
         ro = origin_override.rstrip("/")
@@ -918,15 +938,19 @@ async def mark_device_tunnel_offline(
     _ = await container.shared_storage.delete(_tunnel_online_key(device_id), force_global=True)
 
 
-async def is_device_tunnel_online(
-    container: FrontendContainer,
-    device_id: str,
-) -> bool:
-    online_raw = await container.shared_storage.get(
+async def device_tunnel_is_online(storage: Storage, device_id: str) -> bool:
+    online_raw = await storage.get(
         _tunnel_online_key(device_id),
         force_global=True,
     )
     return online_raw is not None
+
+
+async def is_device_tunnel_online(
+    container: FrontendContainer,
+    device_id: str,
+) -> bool:
+    return await device_tunnel_is_online(container.shared_storage, device_id)
 
 
 async def update_device_policy(

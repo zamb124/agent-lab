@@ -18,7 +18,8 @@ BUNDLED_EXTENSIONS_PATH = (
     REPO_ROOT
     / "apps/agent/desktop/vendor/goose/ui/desktop/src/components/settings/extensions/bundled-extensions.json"
 )
-HUMANITEC_PLATFORM_MCP_DISPLAY_NAME = "Humanitec"
+# LaraOnly: catalog display_name from registry toolkit `lara` → Settings/chat picker.
+HUMANITEC_PLATFORM_MCP_DISPLAY_NAME = "Lara"
 # `BottomMenuExtensionSelection` composer-toolbar кнопка не имеет текста (только
 # Puzzle-иконка + счётчик) — единственный надёжный accessible-признак это `title`.
 _MANAGE_EXTENSIONS_TITLE_RE = re.compile("manage extensions|управлять расширениями", re.IGNORECASE)
@@ -311,9 +312,30 @@ async def open_settings_extensions(page: Page) -> None:
     await page.wait_for_timeout(2000)
 
 
+async def _wait_for_body_text(
+    page: Page,
+    needle: str,
+    *,
+    timeout_seconds: float = _DESKTOP_WAIT_SECONDS,
+) -> str:
+    deadline = asyncio.get_event_loop().time() + timeout_seconds
+    body_text = ""
+    while asyncio.get_event_loop().time() < deadline:
+        body_text = await page.locator("body").inner_text()
+        if needle in body_text:
+            return body_text
+        await asyncio.sleep(0.5)
+    raise AssertionError(f"{needle!r} not found in body within {timeout_seconds}s")
+
+
 async def assert_platform_mcp_first_in_settings(page: Page) -> None:
     await open_settings_extensions(page)
-    body_text = await page.locator("body").inner_text()
+    # Catalog sync after pairing is async; poll until Lara appears.
+    body_text = await _wait_for_body_text(
+        page,
+        HUMANITEC_PLATFORM_MCP_DISPLAY_NAME,
+        timeout_seconds=30.0,
+    )
     platform_index = body_text.find(HUMANITEC_PLATFORM_MCP_DISPLAY_NAME)
     if platform_index < 0:
         raise AssertionError(
@@ -329,26 +351,40 @@ async def assert_platform_mcp_first_in_settings(page: Page) -> None:
 
 async def open_chat_mcp_picker(page: Page) -> None:
     await page.evaluate("window.location.hash = '/'")
-    await page.wait_for_timeout(2000)
+    await wait_for_chat_ready(page, timeout_ms=30_000)
     # `BottomMenuExtensionSelection` toolbar button — иконка + счётчик, без текста;
     # приоритет перед `[data-humanitec-mcp-picker]`, т.к. sidebar nav-пункт
     # "Extensions" использует ту же Puzzle-иконку и может получить тот же атрибут.
-    manage_extensions_button = page.get_by_title(_MANAGE_EXTENSIONS_TITLE_RE)
-    if await manage_extensions_button.count() > 0:
-        await manage_extensions_button.first.click()
-        await page.wait_for_timeout(1000)
-        return
-    mcp_button = page.locator("[data-humanitec-mcp-picker]")
-    if await mcp_button.count() > 0:
-        await mcp_button.first.click()
-        await page.wait_for_timeout(1000)
-        return
+    deadline = asyncio.get_event_loop().time() + 15.0
+    while asyncio.get_event_loop().time() < deadline:
+        manage_extensions_button = page.get_by_title(_MANAGE_EXTENSIONS_TITLE_RE)
+        if await manage_extensions_button.count() > 0:
+            await manage_extensions_button.first.click(force=True)
+            await page.wait_for_timeout(1000)
+            return
+        mcp_button = page.locator("[data-humanitec-mcp-picker]")
+        if await mcp_button.count() > 0:
+            await mcp_button.first.click(force=True)
+            await page.wait_for_timeout(1000)
+            return
+        puzzle_counter = page.locator("button").filter(
+            has=page.locator("svg.lucide-puzzle")
+        )
+        if await puzzle_counter.count() > 0:
+            await puzzle_counter.first.click(force=True)
+            await page.wait_for_timeout(1000)
+            return
+        await asyncio.sleep(0.5)
     raise AssertionError("MCP/extensions picker control not found in chat UI")
 
 
 async def assert_platform_mcp_first_in_chat_picker(page: Page) -> None:
     await open_chat_mcp_picker(page)
-    body_text = await page.locator("body").inner_text()
+    body_text = await _wait_for_body_text(
+        page,
+        HUMANITEC_PLATFORM_MCP_DISPLAY_NAME,
+        timeout_seconds=15.0,
+    )
     platform_index = body_text.find(HUMANITEC_PLATFORM_MCP_DISPLAY_NAME)
     if platform_index < 0:
         raise AssertionError(

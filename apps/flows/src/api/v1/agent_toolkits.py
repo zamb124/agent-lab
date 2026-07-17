@@ -8,7 +8,11 @@ from apps.agent.device_auth import (
     extract_device_id_from_bearer,
     reject_revoked_device_bearer_if_present,
 )
-from apps.agent.service import build_toolkit_mcp_url_for_frontend, resolve_frontend_base_url
+from apps.agent.service import (
+    build_toolkit_mcp_url_for_frontend,
+    resolve_brand_frontend_base_url,
+    resolve_frontend_base_url,
+)
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.agent_toolkit import AgentToolkit
 from apps.flows.src.services.agent_toolkit_notify import notify_agent_toolkits_updated
@@ -104,9 +108,15 @@ async def list_agent_toolkits_catalog(
         container.agent_toolkit_repository,
         company_id=active_company.company_id,
     )
-    frontend_base = resolve_frontend_base_url(
-        request_host=request.headers.get("host"),
-        url_scheme=request.url.scheme,
+    request_host = request.headers.get("host")
+    brand_base = resolve_brand_frontend_base_url(request_host)
+    frontend_base = (
+        brand_base
+        if brand_base is not None
+        else resolve_frontend_base_url(
+            request_host=request_host,
+            url_scheme=request.url.scheme,
+        )
     )
     # LaraOnly: paired desktop sees only the Lara toolkit extension.
     desktop_device_id = extract_device_id_from_bearer(request)
@@ -114,12 +124,19 @@ async def list_agent_toolkits_catalog(
     for toolkit in await list_agent_toolkits(container.agent_toolkit_repository):
         if desktop_device_id is not None and toolkit.toolkit_id != _LINNEX_AGENT_DESKTOP_TOOLKIT_ID:
             continue
+        # LaraOnly: desktop must always get platform_lara ON, even if company DB
+        # still has a stale default_enabled=false from an older bootstrap.
+        catalog_default_enabled = (
+            True
+            if toolkit.toolkit_id == _LINNEX_AGENT_DESKTOP_TOOLKIT_ID
+            else toolkit.default_enabled
+        )
         items.append(
             AgentToolkitCatalogItem(
                 toolkit_id=toolkit.toolkit_id,
                 name=toolkit.name,
                 description=toolkit.description,
-                default_enabled=toolkit.default_enabled,
+                default_enabled=catalog_default_enabled,
                 position=toolkit.position,
                 mcp_url=build_toolkit_mcp_url_for_frontend(toolkit.toolkit_id, frontend_base),
             )

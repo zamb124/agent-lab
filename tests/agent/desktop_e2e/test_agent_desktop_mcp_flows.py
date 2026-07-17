@@ -16,11 +16,13 @@ from tests.agent._helpers import (
 from tests.agent.desktop_e2e.helpers import (
     assert_platform_mcp_first_in_chat_picker,
     connect_desktop_browser,
+    ensure_humanitec_paired_and_llm_ready,
     find_main_app_page,
     pair_desktop_via_deep_link,
     send_chat_message,
 )
 from tests.agent.fixtures.flow_archetypes import ensure_interrupt_flow
+from tests.fixtures.mcp_modes_stub import MCPStubMode, default_stub_tools
 
 
 @pytest.mark.asyncio
@@ -118,14 +120,15 @@ async def test_mcp_g_03_chat_select_platform_mcp_flow_tool(
     desktop = humanitec_desktop_process_factory()
     try:
         desktop.start()
-        await pair_desktop_via_deep_link(
-            desktop,
-            agent_frontend_http_client,
-            auth_token,
-        )
         async with async_playwright() as playwright:
             browser = await connect_desktop_browser(playwright, desktop)
             page = await find_main_app_page(browser)
+            await ensure_humanitec_paired_and_llm_ready(
+                desktop,
+                page,
+                agent_frontend_http_client,
+                auth_token,
+            )
             await assert_platform_mcp_first_in_chat_picker(page)
             await send_chat_message(page, f"call flow {flow_id}")
     finally:
@@ -134,12 +137,19 @@ async def test_mcp_g_03_chat_select_platform_mcp_flow_tool(
 
 @pytest.mark.asyncio
 async def test_d11_local_mcp_url_proxy_via_device_mcp(
-    local_mcp_http_url: str,
+    mcp_modes_stub,
     agent_frontend_http_client: AsyncClient,
     flows_client_http: AsyncClient,
     auth_token: str,
     humanitec_desktop_process_factory,
 ) -> None:
+    # Desktop tunnel proxy in release may omit MCP-Protocol-Version; accept bare JSON-RPC.
+    local_mcp_http_url, _state = mcp_modes_stub(
+        MCPStubMode(
+            tools=default_stub_tools(),
+            reject_missing_protocol_version=False,
+        )
+    )
     previous_local_mcp_url = os.environ.get("HUMANITEC_LOCAL_MCP_URL")
     os.environ["HUMANITEC_LOCAL_MCP_URL"] = local_mcp_http_url
     desktop = humanitec_desktop_process_factory()
@@ -167,6 +177,7 @@ async def test_d11_local_mcp_url_proxy_via_device_mcp(
         )
         assert response.status_code == 200
         body = response.json()
+        assert "result" in body, body
         tool_names = {
             tool["name"]
             for tool in body["result"]["tools"]

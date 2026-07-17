@@ -1,0 +1,8 @@
+[
+  {
+    "label": "zed-search: check",
+    "command": "make zed-search-check",
+    "reveal": "always",
+    "hide": "on_success"
+  }
+]
