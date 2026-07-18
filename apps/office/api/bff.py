@@ -68,6 +68,8 @@ from apps.office.models.api import (
     OfficeDocumentShareItem,
     OfficeDocumentShareListResponse,
     OfficeDocumentShareResolveResponse,
+    OfficeDocumentsRagIndexStatusesRequest,
+    OfficeDocumentsRagIndexStatusesResponse,
     OfficeDocumentSyncRequest,
     OfficeEditorConfigResponse,
     OfficeEmptyCreateRequest,
@@ -1699,6 +1701,33 @@ async def bind_file_to_catalog(
         company_id=ctx.active_company.company_id,
         user_id=ctx.user.user_id,
     )
+
+
+@router.post(
+    "/documents/rag-index-statuses",
+    response_model=OfficeDocumentsRagIndexStatusesResponse,
+)
+async def documents_rag_index_statuses(
+    body: OfficeDocumentsRagIndexStatusesRequest,
+    container: ContainerDep,
+) -> OfficeDocumentsRagIndexStatusesResponse:
+    """Лёгкий batch-статус RAG для UI-poll без перезагрузки списка документов."""
+    _ = await _require_explicit_namespace(container)
+    _ = _require_office_context()
+    normalized_ids: list[str] = []
+    seen: set[str] = set()
+    for raw_id in body.file_ids:
+        file_id = raw_id.strip()
+        if file_id == "":
+            raise HTTPException(status_code=422, detail="file_ids не должен содержать пустые значения")
+        if file_id in seen:
+            continue
+        seen.add(file_id)
+        normalized_ids.append(file_id)
+    if not normalized_ids:
+        raise HTTPException(status_code=422, detail="file_ids обязателен")
+    statuses = await container.catalog_rag_index_service.batch_status_buckets(normalized_ids)
+    return OfficeDocumentsRagIndexStatusesResponse(statuses=statuses)
 
 
 @router.post("/documents/from-file", response_model=OfficeDocumentCreateResponse)

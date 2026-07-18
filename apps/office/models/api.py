@@ -38,6 +38,14 @@ class OfficeDocumentItem(BaseModel):
 OfficeDocumentListResponse = ListResponse[OfficeDocumentItem]
 
 
+class OfficeDocumentsRagIndexStatusesRequest(BaseModel):
+    file_ids: list[str] = Field(..., min_length=1, max_length=500)
+
+
+class OfficeDocumentsRagIndexStatusesResponse(BaseModel):
+    statuses: dict[str, OfficeDocumentRagIndexStatus]
+
+
 class OfficeDocumentCreateResponse(BaseModel):
     binding_id: str
     file_id: str

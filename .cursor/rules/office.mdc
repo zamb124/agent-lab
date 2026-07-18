@@ -126,7 +126,7 @@ Slice `office/documents` хранит `items`, `loadedCatalogIds`, `activeCatalo
 | `documents_public_preview` | `'p/:token'` | `<office-public-preview-page>` (без sidebar) |
 | `document_editor` | `'edit/:bindingId'` | `<office-document-editor-page>` |
 
-Открытие документа — `this.navigate('document_editor', { bindingId })` или action «Открыть» в kebab/details panel. Клик по строке/карточке — только выбор для details panel. Открытие каталога с фильтром — `_documents.setActiveCatalog({catalogId}) + setFilterCatalogs({catalogIds:[catalogId]}) + navigate('documents_list')`.
+Открытие документа — `this.navigate('document_editor', { bindingId })`, action «Открыть» в kebab/details panel, либо **двойной клик** по строке/карточке (`platform-file-row`/`platform-file-card` → событие `activate`). Одинарный клик (`open`) — только выбор для details panel. Кнопки действий в details panel — сразу после title / missing-banner, не внизу панели. Открытие каталога с фильтром — `_documents.setActiveCatalog({catalogId}) + setFilterCatalogs({catalogIds:[catalogId]}) + navigate('documents_list')`.
 
 ### Модалки
 
@@ -166,8 +166,8 @@ Slice `office/documents` хранит `items`, `loadedCatalogIds`, `activeCatalo
 - **Деиндексация:** `RagClient.delete_document_index` (только vector chunks + processing status).
 - **Batch rebuild:** TaskIQ `rag.index_office_catalog` (очередь `rag`), payload — список bindings из Office BFF.
 - **REST:** `POST /documents/api/v1/catalogs/{catalog_id}/rag-index/{enable,disable,rebuild}`, `GET .../status` (`search_options` = catalog overrides, `platform_defaults` = `resolve_platform_search_options` для UI placeholders), `PATCH .../settings` (`include_subcatalogs`), `POST .../search` (семантический поиск по scope каталога; управление settings — только owner, search/status — access как у каталога).
-- **Per-file status:** `OfficeDocumentItem.rag_index_status` ∈ `ready|pending|failed|absent|null`. `null` если у каталога `rag_index_enabled=false`; иначе batch через `RagClient.get_documents_processing_statuses` → `POST /rag/api/v1/documents/statuses` (`DocumentStatusRepository.get_by_document_ids`). Totals в `GET …/rag-index/status` тоже через batch (не N+1).
-- **Explorer UI:** иконка статуса у имени в `platform-file-row` / badge на `platform-file-card` + строка в details panel; soft-poll списка (~5с), пока есть `pending`. i18n: `rag_index.*`, `details.ragIndex`.
+- **Per-file status:** `OfficeDocumentItem.rag_index_status` ∈ `ready|pending|failed|absent|null`. `null` если у каталога `rag_index_enabled=false`; иначе batch через `RagClient.get_documents_processing_statuses` → `POST /rag/api/v1/documents/statuses`. Totals в `GET …/rag-index/status` тоже через batch.
+- **UI status poll (без мигания таблицы):** `POST /documents/api/v1/documents/rag-index-statuses` + op `office/documents_rag_statuses` → `office/documents` `PATCH_RAG_INDEX_STATUSES` (новый object только у айтемов с изменившимся статусом). List SUCCEEDED — `_mergeDocumentItems` (тот же object-ref для неизменённых; add/remove по `binding_id`). Soft-refresh того же catalog scope не обнуляет `items`. Рендер строк — `lit/directives/repeat` по `binding_id`. i18n: `rag_index.*`, `details.ragIndex`.
 - **Scope subtree:** `rag_index_include_subcatalogs` расширяет search/status/rebuild на проиндексированные подкаталоги; RAG на потомках не включается автоматически.
 - **Поиск (backend):** `OfficeCatalogRagIndexService.search_catalog` → `RagClient.search` (один namespace) или `RagClient.global_search` (несколько); enrichment binding_id/title/snippet, dedupe по `file_id`.
 - **Explorer UI (semantic):** `office-file-toolbar` — segment **Files | Semantic** в `.search-wrap`; режим `semantic` + непустой query заменяет list/grid на `office-catalog-semantic-search-results` (SERP). Semantic disabled, если в scope нет searchable namespace.

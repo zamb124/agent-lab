@@ -44,6 +44,22 @@ export const sidebarHostStyles = css`
         padding-inline: 0;
     }
 
+    /*
+     * Icon-only rail: компактный padding (8+32+8 ≤ 56px usable) и без
+     * translateX — иначе overflow-x:hidden на .sidebar-nav режет иконки.
+     */
+    :host([collapsed]) .nav-item,
+    :host([collapsed]) ::slotted(.nav-item) {
+        justify-content: center;
+        padding: var(--space-2);
+        gap: 0;
+    }
+
+    :host([collapsed]) .nav-item:hover,
+    :host([collapsed]) ::slotted(.nav-item:hover) {
+        transform: none;
+    }
+
     :host([collapsed]) .sidebar-logo {
         flex-direction: row;
         justify-content: center;
@@ -330,6 +346,20 @@ export const sidebarNavItemStyles = css`
         box-shadow: var(--glass-shadow-subtle);
         color: var(--text-primary);
         transform: translateX(4px);
+    }
+
+    :host([collapsed]) .nav-item,
+    :host-context(platform-service-sidebar[collapsed]) .nav-item,
+    :host-context(platform-sidebar[collapsed]) .nav-item {
+        justify-content: center;
+        padding: var(--space-2);
+        gap: 0;
+    }
+
+    :host([collapsed]) .nav-item:hover,
+    :host-context(platform-service-sidebar[collapsed]) .nav-item:hover,
+    :host-context(platform-sidebar[collapsed]) .nav-item:hover {
+        transform: none;
     }
 
     .nav-item.active {

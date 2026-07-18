@@ -268,6 +268,50 @@ async def test_enable_creates_namespace_and_sets_flag(
 
 
 @pytest.mark.asyncio
+async def test_documents_rag_index_statuses_batch_endpoint(
+    office_client,
+    rag_client,
+    rag_service,
+    rag_worker,
+    auth_headers_system,
+    unique_id,
+):
+    """POST /documents/rag-index-statuses — лёгкий batch без list reload."""
+    _ = rag_service, rag_worker
+    catalog_id = await _create_catalog(
+        office_client,
+        auth_headers_system,
+        f"rag-statuses-batch-{unique_id}",
+    )
+    await _enable_rag_index(office_client, catalog_id, auth_headers_system)
+    _binding_id, file_id, _needle = await _upload_searchable_csv(
+        office_client,
+        auth_headers_system,
+        catalog_id,
+        unique_id,
+        title_suffix="statuses-batch",
+    )
+    await _wait_catalog_index_ready(
+        office_client,
+        catalog_id,
+        auth_headers_system,
+        ready_count=1,
+    )
+    await _wait_rag_document_completed(rag_client, file_id, auth_headers_system)
+
+    missing_id = f"missing-file-{unique_id}"
+    response = await office_client.post(
+        "/documents/api/v1/documents/rag-index-statuses",
+        headers=auth_headers_system,
+        json={"file_ids": [file_id, missing_id]},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["statuses"][file_id] == "ready"
+    assert payload["statuses"][missing_id] == "absent"
+
+
+@pytest.mark.asyncio
 async def test_list_documents_includes_rag_index_status(
     office_client,
     rag_client,

@@ -2,6 +2,7 @@
  * platform-file-row — строка файла для табличного file manager.
  *
  * Presentational: icon, title, meta-колонки, optional checkbox и slot actions.
+ * События: `open` (клик — выбор), `activate` (двойной клик — открыть).
  */
 
 import { html, css, nothing } from 'lit';
@@ -164,14 +165,23 @@ export class PlatformFileRow extends PlatformElement {
         return formatFileSize(this.fileSize);
     }
 
+    _isInteractiveTarget(target) {
+        return target instanceof HTMLElement
+            && Boolean(target.closest('.checkbox-wrap') || target.closest('.actions'));
+    }
+
     _onRowClick(e) {
-        const target = e.target;
-        if (target instanceof HTMLElement) {
-            if (target.closest('.checkbox-wrap') || target.closest('.actions')) {
-                return;
-            }
+        if (this._isInteractiveTarget(e.target)) {
+            return;
         }
         this.emit('open', { itemKey: this.itemKey });
+    }
+
+    _onRowDblClick(e) {
+        if (this._isInteractiveTarget(e.target)) {
+            return;
+        }
+        this.emit('activate', { itemKey: this.itemKey });
     }
 
     _onCheckboxChange(e) {
@@ -215,6 +225,7 @@ export class PlatformFileRow extends PlatformElement {
                 ?draggable=${this.draggable}
                 @dragstart=${this._onDragStart}
                 @click=${this._onRowClick}
+                @dblclick=${this._onRowDblClick}
             >
                 <div class="cell checkbox-wrap" role="cell">
                     ${this.selectable ? html`

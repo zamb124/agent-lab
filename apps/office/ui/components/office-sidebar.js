@@ -124,11 +124,20 @@ export class OfficeSidebar extends PlatformElement {
             platform-service-sidebar[collapsed] .nav-label { display: none; }
             platform-service-sidebar[collapsed] .nav-item {
                 justify-content: center;
-                padding: var(--space-3);
+                padding: var(--space-2);
             }
+            platform-service-sidebar[collapsed] .nav-item:hover { transform: none; }
             platform-service-sidebar[collapsed] platform-sidebar-namespace-select { display: none; }
-            platform-service-sidebar[collapsed] .explorer-shell { display: none; }
+            platform-service-sidebar[collapsed] office-explorer-tree { display: none; }
             platform-service-sidebar[collapsed] .editor-back { display: none; }
+            platform-service-sidebar[collapsed] .office-sidebar-footer {
+                align-items: center;
+            }
+            platform-service-sidebar[collapsed] .explorer-shell {
+                margin-top: 0;
+                padding-top: 0;
+                border-top: none;
+            }
         `,
     ];
 
@@ -358,13 +367,14 @@ export class OfficeSidebar extends PlatformElement {
         const cats = this._catalogItems();
         const state = this._documents.state;
         return html`
-            <div class="explorer-shell" data-hide-collapsed>
+            <div class="explorer-shell">
                 <office-explorer-nav-rail
                     active-view=${state.explorerView}
                     deleted-enabled
                     @view-change=${this._onExplorerViewChange}
                 ></office-explorer-nav-rail>
                 <office-explorer-tree
+                    data-hide-collapsed
                     .catalogs=${cats}
                     active-catalog-id=${this._activeCatalogId()}
                     .expandedCatalogIds=${state.expandedCatalogIds || []}

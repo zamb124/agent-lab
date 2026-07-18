@@ -1,5 +1,6 @@
 /**
  * platform-file-card — карточка файла для grid view file manager.
+ * События: `open` (клик — выбор), `activate` (двойной клик — открыть).
  */
 
 import { html, css, nothing } from 'lit';
@@ -140,11 +141,22 @@ export class PlatformFileCard extends PlatformElement {
         return formatFileSize(this.fileSize);
     }
 
+    _isInteractiveTarget(target) {
+        return target instanceof HTMLElement && Boolean(target.closest('.actions'));
+    }
+
     _onClick(e) {
-        if (e.target instanceof HTMLElement && e.target.closest('.actions')) {
+        if (this._isInteractiveTarget(e.target)) {
             return;
         }
         this.emit('open', { itemKey: this.itemKey });
+    }
+
+    _onDblClick(e) {
+        if (this._isInteractiveTarget(e.target)) {
+            return;
+        }
+        this.emit('activate', { itemKey: this.itemKey });
     }
 
     _renderIndexStatus() {
@@ -169,7 +181,7 @@ export class PlatformFileCard extends PlatformElement {
     render() {
         const iconKey = resolveFileIconKey(this.fileName, this.mimeType);
         return html`
-            <div class="card" @click=${this._onClick}>
+            <div class="card" @click=${this._onClick} @dblclick=${this._onDblClick}>
                 <div class="actions" @click=${(e) => e.stopPropagation()}>
                     <slot name="actions"></slot>
                 </div>

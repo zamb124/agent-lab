@@ -506,6 +506,13 @@ export class PlatformUser extends PlatformElement {
             :host { display: inline-block; position: relative; }
             :host([block]) { display: block; width: 100%; }
 
+            :host-context(platform-sidebar[collapsed]):host([block]),
+            :host-context(platform-service-sidebar[collapsed]):host([block]) {
+                display: flex;
+                justify-content: center;
+                width: 100%;
+            }
+
             :host-context(platform-sidebar[collapsed]) .user-info,
             :host-context(platform-sidebar[collapsed]) .chevron,
             :host-context(platform-sidebar[collapsed]) .toolbar-slot,
@@ -522,6 +529,7 @@ export class PlatformUser extends PlatformElement {
                 height: 40px;
                 min-width: 40px;
                 min-height: 40px;
+                margin: 0 auto;
                 gap: 0;
                 padding: 0;
                 background: transparent;

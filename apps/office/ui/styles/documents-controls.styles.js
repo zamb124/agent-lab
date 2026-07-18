@@ -145,9 +145,8 @@ export const documentsPanelActionStyles = css`
         display: flex;
         flex-direction: column;
         gap: var(--space-2);
-        margin-top: auto;
-        padding-top: var(--space-3);
-        border-top: 1px solid var(--documents-explorer-divider, var(--glass-border-subtle));
+        padding: var(--space-3) 0;
+        border-bottom: 1px solid var(--documents-explorer-divider, var(--glass-border-subtle));
     }
 
     .actions .btn {

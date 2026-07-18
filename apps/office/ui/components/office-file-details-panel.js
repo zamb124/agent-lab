@@ -311,6 +311,42 @@ export class OfficeFileDetailsPanel extends PlatformElement {
         `;
     }
 
+    _renderDocumentActions({ fileMissing, isDeleted }) {
+        if (isDeleted) {
+            return html`
+                <div class="actions">
+                    <button class="btn btn-primary" type="button" @click=${() => this._action('restore')}>
+                        ${this.t('trash.restore')}
+                    </button>
+                    <button class="btn btn-danger" type="button" @click=${() => this._action('delete')}>
+                        ${this.t('trash.deletePermanent')}
+                    </button>
+                </div>
+            `;
+        }
+        return html`
+            <div class="actions">
+                ${fileMissing ? '' : html`
+                    <button class="btn btn-primary" type="button" @click=${() => this._action('open')}>
+                        ${this.t('list.open')}
+                    </button>
+                    <button class="btn" type="button" @click=${() => this._action('toggle-starred')}>
+                        ${this.starred ? this.t('nav.unstar') : this.t('nav.star')}
+                    </button>
+                    <button class="btn" type="button" @click=${() => this._action('share')}>
+                        ${this.t('access.menuShare')}
+                    </button>
+                    <button class="btn" type="button" @click=${() => this._action('rename')}>
+                        ${this.t('list.rename')}
+                    </button>
+                `}
+                <button class="btn btn-danger" type="button" @click=${() => this._action('delete')}>
+                    ${this.t('list.delete')}
+                </button>
+            </div>
+        `;
+    }
+
     _renderDocumentBody(doc) {
         const iconKey = resolveFileIconKey(doc.title, '');
         const fileMissing = this._isFileMissing(doc);
@@ -332,6 +368,7 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                     </div>
                 </div>
             ` : ''}
+            ${this._renderDocumentActions({ fileMissing, isDeleted })}
             <div class="meta-grid">
                 <div class="meta-row">
                     <span class="meta-label">${this.t('details.catalog')}</span>
@@ -366,34 +403,6 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                 </div>
             </div>
             ${this._renderPlatformLinks()}
-            <div class="actions">
-                ${isDeleted ? html`
-                    <button class="btn btn-primary" type="button" @click=${() => this._action('restore')}>
-                        ${this.t('trash.restore')}
-                    </button>
-                    <button class="btn btn-danger" type="button" @click=${() => this._action('delete')}>
-                        ${this.t('trash.deletePermanent')}
-                    </button>
-                ` : html`
-                    ${fileMissing ? '' : html`
-                        <button class="btn btn-primary" type="button" @click=${() => this._action('open')}>
-                            ${this.t('list.open')}
-                        </button>
-                        <button class="btn" type="button" @click=${() => this._action('toggle-starred')}>
-                            ${this.starred ? this.t('nav.unstar') : this.t('nav.star')}
-                        </button>
-                        <button class="btn" type="button" @click=${() => this._action('share')}>
-                            ${this.t('access.menuShare')}
-                        </button>
-                        <button class="btn" type="button" @click=${() => this._action('rename')}>
-                            ${this.t('list.rename')}
-                        </button>
-                    `}
-                    <button class="btn btn-danger" type="button" @click=${() => this._action('delete')}>
-                        ${this.t('list.delete')}
-                    </button>
-                `}
-            </div>
         `;
     }
 

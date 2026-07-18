@@ -5,6 +5,7 @@
  */
 
 import { html } from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { documentsExplorerStyles } from '../styles/documents-explorer.styles.js';
@@ -59,6 +60,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._permanentDelete = this.useOp('office/document_permanent_delete');
         this._shareCreate = this.useOp('office/document_share_create');
         this._catalogRagSearch = this.useOp('office/catalog_rag_search');
+        this._ragStatuses = this.useOp('office/documents_rag_statuses');
         this._lastLoadKey = '';
         this._lastSemanticSearchKey = '';
         this._ragIndexPollTimer = null;
@@ -125,22 +127,38 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         }
     }
 
+    _pendingRagFileIds() {
+        return this._visibleDocuments()
+            .filter((doc) => doc && doc.rag_index_status === 'pending')
+            .map((doc) => doc.file_id)
+            .filter((fileId) => typeof fileId === 'string' && fileId.length > 0);
+    }
+
+    _pollRagIndexStatuses() {
+        if (this._ragStatuses.busy) {
+            return;
+        }
+        const fileIds = this._pendingRagFileIds();
+        if (fileIds.length === 0) {
+            this._stopRagIndexPoll();
+            return;
+        }
+        this._ragStatuses.run({ fileIds });
+    }
+
     _syncRagIndexPoll() {
-        const docs = this._visibleDocuments();
-        const hasPending = docs.some((doc) => doc && doc.rag_index_status === 'pending');
-        if (!hasPending) {
+        const fileIds = this._pendingRagFileIds();
+        if (fileIds.length === 0) {
             this._stopRagIndexPoll();
             return;
         }
         if (this._ragIndexPollTimer != null) {
             return;
         }
+        // Сразу точечный patch статусов, затем интервал — без reload списка.
+        this._pollRagIndexStatuses();
         this._ragIndexPollTimer = setInterval(() => {
-            if (this._documents.busy) {
-                return;
-            }
-            this._lastLoadKey = '';
-            this._maybeReloadDocs();
+            this._pollRagIndexStatuses();
         }, RAG_INDEX_POLL_MS);
     }
 
@@ -819,7 +837,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                 @sort-change=${this._onSortChange}
                 @select-all-toggle=${this._onSelectAllToggle}
             >
-                ${docs.map((doc) => html`
+                ${repeat(docs, (doc) => doc.binding_id, (doc) => html`
                     <platform-file-row
                         item-key=${doc.binding_id}
                         file-name=${doc.title}
@@ -835,6 +853,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         ?draggable=${!this._isFileMissing(doc)}
                         @row-dragstart=${(e) => this._onFileDragStart(e.detail.nativeEvent, doc)}
                         @open=${() => this._onSelectDocument(doc.binding_id)}
+                        @activate=${() => this._onOpenDocument(doc.binding_id)}
                         @select-toggle=${this._onRowSelectToggle}
                     >
                         <office-file-actions-menu
@@ -852,7 +871,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         const state = this._documents.state;
         return html`
             <div class="grid" aria-label=${this.t('list.cardsAria')}>
-                ${docs.map((doc) => html`
+                ${repeat(docs, (doc) => doc.binding_id, (doc) => html`
                     <platform-file-card
                         item-key=${doc.binding_id}
                         file-name=${doc.title}
@@ -864,6 +883,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         index-status-label=${this._ragIndexStatusLabel(doc.rag_index_status)}
                         ?selected=${state.selectedBindingId === doc.binding_id}
                         @open=${() => this._onSelectDocument(doc.binding_id)}
+                        @activate=${() => this._onOpenDocument(doc.binding_id)}
                     >
                         <office-file-actions-menu
                             slot="actions"
@@ -951,9 +971,10 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         const noCatalogs = !this._catalogs.loading && cats.length === 0;
         const state = this._documents.state;
         const docs = this._visibleDocuments();
+        // Spinner только при первой загрузке пустого списка — soft-refresh не прячет таблицу.
         const docsLoading = state.explorerView === 'deleted'
-            ? this._deleted.busy
-            : this._documents.busy;
+            ? (this._deleted.busy && docs.length === 0)
+            : (this._documents.busy && docs.length === 0);
         const actionsDisabled = this._actionsDisabled();
         const selectedDoc = this._selectedDocument();
         const selectedCount = Array.isArray(state.selectedBindingIds) ? state.selectedBindingIds.length : 0;

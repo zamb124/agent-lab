@@ -239,7 +239,14 @@ export class CRMSidebar extends PlatformElement {
             platform-service-sidebar[collapsed] platform-sidebar-namespace-select,
             platform-service-sidebar[collapsed] .nav-label,
             platform-service-sidebar[collapsed] .nav-title { display: none; }
-            platform-service-sidebar[collapsed] .nav-item { justify-content: center; padding: var(--space-3); }
+            platform-service-sidebar[collapsed] .nav-item {
+                justify-content: center;
+                padding: var(--space-2);
+            }
+            platform-service-sidebar[collapsed] .nav-item:hover { transform: none; }
+            platform-service-sidebar[collapsed] .user-section {
+                align-items: center;
+            }
         `,
     ];
 

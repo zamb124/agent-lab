@@ -89,6 +89,60 @@ function _buildDocumentsQuery(ids, payload) {
     return parts.join('&');
 }
 
+const _DOCUMENT_ITEM_COMPARE_KEYS = [
+    'binding_id',
+    'catalog_id',
+    'title',
+    'file_id',
+    'file_category',
+    'onlyoffice_document_type',
+    'file_availability',
+    'file_expires_at',
+    'file_size',
+    'created_at',
+    'updated_at',
+    'created_by_user_id',
+    'created_by_display_name',
+    'created_by_avatar_url',
+    'rag_index_status',
+];
+
+function _documentItemsEqual(left, right) {
+    for (const key of _DOCUMENT_ITEM_COMPARE_KEYS) {
+        if (left[key] !== right[key]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function _sameCatalogIds(left, right) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+        return false;
+    }
+    return left.every((id, index) => id === right[index]);
+}
+
+/**
+ * Точечный merge списка: тот же object-ref для неизменённых айтемов,
+ * новые/изменённые — новые объекты, удалённые выпадают. Порядок — как у next.
+ */
+function _mergeDocumentItems(prevItems, nextItems) {
+    const prevById = new Map(
+        prevItems.map((item) => [item.binding_id, item]),
+    );
+    const merged = [];
+    for (const nextItem of nextItems) {
+        const prevItem = prevById.get(nextItem.binding_id);
+        if (prevItem && _documentItemsEqual(prevItem, nextItem)) {
+            merged.push(prevItem);
+            continue;
+        }
+        merged.push(nextItem);
+    }
+    return merged;
+}
+
 export function buildDocumentsListPayload(docState, catalogIds) {
     const ids = _normalizeCatalogIds(catalogIds);
     return {
@@ -152,6 +206,7 @@ export const documentsOp = createAsyncOp({
         SET_EXPLORER_VIEW:   'set_explorer_view',
         TOGGLE_STARRED:      'toggle_starred',
         RECORD_RECENT_OPEN:  'record_recent_open',
+        PATCH_RAG_INDEX_STATUSES: 'patch_rag_index_statuses',
     },
     actions: {
         setActiveCatalog:  'set_active_catalog',
@@ -169,10 +224,15 @@ export const documentsOp = createAsyncOp({
         setExplorerView: 'set_explorer_view',
         toggleStarred: 'toggle_starred',
         recordRecentOpen: 'record_recent_open',
+        patchRagIndexStatuses: 'patch_rag_index_statuses',
     },
     extraReducer: (state, event, events) => {
         if (event.type === events.REQUESTED) {
             const ids = _normalizeCatalogIds(event.payload.catalogIds);
+            // Soft-refresh того же scope: не обнуляем items (иначе мигает вся таблица).
+            if (_sameCatalogIds(ids, state.loadedCatalogIds) && state.items.length > 0) {
+                return { ...state, loadedCatalogIds: ids };
+            }
             return { ...state, items: [], loadedCatalogIds: ids };
         }
         if (event.type === events.SUCCEEDED) {
@@ -180,7 +240,38 @@ export const documentsOp = createAsyncOp({
             if (!result || !Array.isArray(result.items)) {
                 throw new Error('office/documents: SUCCEEDED.result.items required (array)');
             }
-            return { ...state, items: result.items };
+            if (state.items.length === 0) {
+                return { ...state, items: result.items };
+            }
+            return { ...state, items: _mergeDocumentItems(state.items, result.items) };
+        }
+        if (event.type === events.PATCH_RAG_INDEX_STATUSES) {
+            const statuses = event.payload && event.payload.statuses;
+            if (!statuses || typeof statuses !== 'object' || Array.isArray(statuses)) {
+                throw new Error('office/documents: patch_rag_index_statuses.statuses object required');
+            }
+            let changed = false;
+            const items = state.items.map((item) => {
+                if (typeof item.file_id !== 'string' || !(item.file_id in statuses)) {
+                    return item;
+                }
+                const nextStatus = statuses[item.file_id];
+                if (nextStatus !== null
+                    && nextStatus !== 'ready'
+                    && nextStatus !== 'pending'
+                    && nextStatus !== 'failed'
+                    && nextStatus !== 'absent') {
+                    throw new Error(
+                        `office/documents: invalid rag_index_status '${String(nextStatus)}'`,
+                    );
+                }
+                if (item.rag_index_status === nextStatus) {
+                    return item;
+                }
+                changed = true;
+                return { ...item, rag_index_status: nextStatus };
+            });
+            return changed ? { ...state, items } : state;
         }
         if (event.type === events.SET_ACTIVE_CATALOG) {
             const catalogId = event.payload && typeof event.payload.catalogId === 'string'
@@ -363,6 +454,56 @@ export const documentsOp = createAsyncOp({
             return { ...state, recentBindingIds: recent };
         }
         return state;
+    },
+});
+
+/**
+ * Лёгкий poll статусов RAG: только statuses по file_ids → точечный PATCH в items.
+ * Не трогает list REQUESTED и не мигает таблицей.
+ */
+export const documentsRagStatusesOp = createAsyncOp({
+    name: 'office/documents_rag_statuses',
+    silent: true,
+    restMirror: { method: 'POST', path: '/documents/api/v1/documents/rag-index-statuses' },
+    request: ({ payload, ctx }) => {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('office/documents_rag_statuses: payload required');
+        }
+        if (!Array.isArray(payload.fileIds) || payload.fileIds.length === 0) {
+            throw new Error('office/documents_rag_statuses: payload.fileIds required');
+        }
+        const fileIds = [];
+        const seen = new Set();
+        for (const rawId of payload.fileIds) {
+            if (typeof rawId !== 'string') {
+                throw new Error('office/documents_rag_statuses: fileIds must be strings');
+            }
+            const fileId = rawId.trim();
+            if (fileId.length === 0 || seen.has(fileId)) {
+                continue;
+            }
+            seen.add(fileId);
+            fileIds.push(fileId);
+        }
+        if (fileIds.length === 0) {
+            throw new Error('office/documents_rag_statuses: payload.fileIds must contain ids');
+        }
+        return httpRequest({
+            method: 'POST',
+            url: '/documents/api/v1/documents/rag-index-statuses',
+            body: { file_ids: fileIds },
+            headers: nsHeader(ctx),
+        });
+    },
+    onSuccess: (ctx, result, event) => {
+        if (!result || typeof result !== 'object' || !result.statuses || typeof result.statuses !== 'object') {
+            throw new Error('office/documents_rag_statuses: result.statuses object required');
+        }
+        ctx.dispatch(
+            documentsOp.events.PATCH_RAG_INDEX_STATUSES,
+            { statuses: result.statuses },
+            { causation_id: event.id, source: 'local' },
+        );
     },
 });
 

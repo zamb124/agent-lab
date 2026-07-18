@@ -67,6 +67,19 @@ export class OfficeExplorerNavRail extends PlatformElement {
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
+
+            :host-context(platform-service-sidebar[collapsed]) {
+                padding: var(--space-1) 0 0;
+            }
+            :host-context(platform-service-sidebar[collapsed]) .section-title,
+            :host-context(platform-service-sidebar[collapsed]) .label {
+                display: none;
+            }
+            :host-context(platform-service-sidebar[collapsed]) .item {
+                justify-content: center;
+                gap: 0;
+                padding: var(--space-2);
+            }
         `,
     ];
 
@@ -84,16 +97,17 @@ export class OfficeExplorerNavRail extends PlatformElement {
     }
 
     _renderItem(view, icon, labelKey, disabled) {
+        const label = this.t(labelKey);
         return html`
             <button
                 class="item ${this.activeView === view ? 'active' : ''}"
                 type="button"
                 ?disabled=${disabled}
-                title=${disabled ? this.t('nav.comingSoon') : ''}
+                title=${disabled ? this.t('nav.comingSoon') : label}
                 @click=${() => this._select(view)}
             >
                 <platform-icon name=${icon} size="16"></platform-icon>
-                <span class="label">${this.t(labelKey)}</span>
+                <span class="label">${label}</span>
             </button>
         `;
     }
