@@ -10,6 +10,7 @@ from core.office.ai_settings import (
     IMAGE_AUTO_MODEL_ID,
     LARA_DOCUMENTS_MODEL_ID,
     ONLYOFFICE_AI_ACTION_KEYS,
+    ONLYOFFICE_AI_BROWSER_CORS_ORIGINS,
     PLATFORM_AUTO_MODEL_ID,
     build_onlyoffice_ai_settings,
     parse_lara_branch_model_id,
@@ -21,6 +22,12 @@ def test_parse_lara_branch_model_id() -> None:
     assert parse_lara_branch_model_id("lara:documents") == "documents"
     assert parse_lara_branch_model_id("lara:") is None
     assert parse_lara_branch_model_id("auto") is None
+
+
+def test_onlyoffice_ai_browser_cors_origins_cover_cdn_and_ds() -> None:
+    assert "https://onlyoffice.github.io" in ONLYOFFICE_AI_BROWSER_CORS_ORIGINS
+    assert "https://onlyoffice.linnex.io" in ONLYOFFICE_AI_BROWSER_CORS_ORIGINS
+    assert "https://onlyoffice.humanitec.ru" in ONLYOFFICE_AI_BROWSER_CORS_ORIGINS
 
 
 def test_build_onlyoffice_ai_settings_fills_all_actions() -> None:

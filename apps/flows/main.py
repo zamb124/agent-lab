@@ -70,6 +70,7 @@ from core.logging import get_logger  # noqa: E402
 from core.models.context_models import Context  # noqa: E402
 from core.models.i18n_models import Language  # noqa: E402
 from core.models.identity_models import Company, User  # noqa: E402
+from core.office.ai_settings import ONLYOFFICE_AI_BROWSER_CORS_ORIGINS  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -270,6 +271,16 @@ if "*" in _flow_settings.cors_allow_origins:
 if _cors_regex is None and _flow_settings.server.debug and not is_testing():
     _cors_regex = _FLOWS_DEV_CORS_ORIGIN_REGEX
 
+# OnlyOffice AI plugin (CDN/DS) → browser fetch на /agent/llm; без этих Origin UI: «Ошибка: [provider]».
+_flows_cors_origins = list(
+    dict.fromkeys(
+        [
+            *_flow_settings.cors_allow_origins,
+            *ONLYOFFICE_AI_BROWSER_CORS_ORIGINS,
+        ]
+    )
+)
+
 app = create_service_app(
     service_name="flows",
     settings_class=FlowSettings,
@@ -298,7 +309,7 @@ app = create_service_app(
             },
         ),
     ],
-    cors_origins=list(_flow_settings.cors_allow_origins),
+    cors_origins=_flows_cors_origins,
     cors_allow_origin_regex=_cors_regex,
     api_version="v1",
     title=f"{_flows_brand.flows_product_label} API",

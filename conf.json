@@ -890,7 +890,11 @@
       "cors_allow_origins": [
         "https://larashved.ru",
         "https://www.larashved.ru",
-        "http://localhost:8000"
+        "http://localhost:8000",
+        "https://onlyoffice.github.io",
+        "https://onlyoffice-plugins.github.io",
+        "https://onlyoffice.linnex.io",
+        "https://onlyoffice.humanitec.ru"
       ],
       "provider_litserve": {
         "api": {

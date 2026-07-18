@@ -15,6 +15,15 @@ from core.types import JsonObject
 
 ONLYOFFICE_AI_PLUGIN_GUID: Final[str] = "asc.{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}"
 
+# Browser Origin плагина AI (CDN + DS host). flows CORS обязан их принимать —
+# иначе fetch на /agent/llm/** блокируется до proxy и UI показывает «Ошибка: [provider]».
+ONLYOFFICE_AI_BROWSER_CORS_ORIGINS: Final[tuple[str, ...]] = (
+    "https://onlyoffice.github.io",
+    "https://onlyoffice-plugins.github.io",
+    "https://onlyoffice.linnex.io",
+    "https://onlyoffice.humanitec.ru",
+)
+
 ONLYOFFICE_AI_CAPABILITY_CHAT: Final[int] = 0x01
 ONLYOFFICE_AI_CAPABILITY_IMAGE: Final[int] = 0x02
 ONLYOFFICE_AI_CAPABILITY_VISION: Final[int] = 0x80
@@ -151,6 +160,7 @@ __all__ = [
     "LARA_DOCUMENTS_MODEL_ID",
     "LARA_MODEL_PREFIX",
     "ONLYOFFICE_AI_ACTION_KEYS",
+    "ONLYOFFICE_AI_BROWSER_CORS_ORIGINS",
     "ONLYOFFICE_AI_CAPABILITY_CHAT",
     "ONLYOFFICE_AI_CAPABILITY_CHAT_VISION",
     "ONLYOFFICE_AI_CAPABILITY_IMAGE",

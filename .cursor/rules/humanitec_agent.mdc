@@ -34,7 +34,7 @@ LinnexAgent — desktop-клиент (Goose fork). **Канон продукта
 | Chat routing | `auto` / `<provider>:<model>` → `core.ai` + **`LLMClient` only**; `lara:<branch>` → Lara A2A (`apps/agent/llm_lara.py`); unknown → 400 |
 | Lara flow | `flow_repository.get("lara")` только в namespace `active_company`; нет flow → 503 (не читать из `system`) |
 | Images | `POST /images/generations` model=`image-auto` → `NanoBananaClient` / `AICapability.IMAGE_GEN` |
-| OnlyOffice | `POST /proxy` unwrap `{target,method,headers,data}` + Bearer editor JWT |
+| OnlyOffice | `POST /proxy` unwrap `{target,method,headers,data}` + Bearer editor JWT; flows CORS обязан включать `ONLYOFFICE_AI_BROWSER_CORS_ORIGINS` |
 | Errors | OpenAI/OR envelope `{"error":{"message","type","code"}}` на этом surface |
 | Zero-guess | нет валидного токена → 401; пустой/неизвестный `lara:` branch → 400 |
 

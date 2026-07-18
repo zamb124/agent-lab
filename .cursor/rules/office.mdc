@@ -63,6 +63,7 @@ globs:
 | Actions | Chat → `lara:documents`; Summarization/Translation/TextAnalyze/OCR/Vision → `auto`; ImageGeneration → `image-auto` |
 | DS infra | Helm `onlyoffice.ai.*` + ConfigMap `onlyoffice-ai` (fragment + entrypoint merge в `local.json`); compose монтирует те же files из `deploy/helm/agent-lab/files/` |
 | Builder | `core/office/ai_settings.py::build_onlyoffice_ai_settings`; fixture `tests/office/fixtures/onlyoffice_ai_settings.json` |
+| flows CORS | Browser Origin плагина (`ONLYOFFICE_AI_BROWSER_CORS_ORIGINS`: CDN + `onlyoffice.<brand>`) **обязателен** в CORS `flows`. Без него fetch на `/agent/llm` блокируется → UI «Ошибка: [provider]» без логов proxy |
 
 Инвариант: ни один dropdown «Конфигурация ИИ» не пустой. Отдельный `/documents/.../oo-ai` stack **запрещён**.
 
