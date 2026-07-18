@@ -32,6 +32,7 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
         catalogId: { type: String },
         catalogTitle: { type: String },
         _retrievalPanel: { state: true },
+        _platformDefaults: { state: true },
     };
 
     static styles = [
@@ -107,6 +108,7 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
         this.catalogId = '';
         this.catalogTitle = '';
         this._retrievalPanel = defaultRetrievalPanelValue();
+        this._platformDefaults = null;
         this._status = this.useOp(STATUS_OP);
         this._enable = this.useOp(ENABLE_OP);
         this._disable = this.useOp(DISABLE_OP);
@@ -139,6 +141,10 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
         this._retrievalPanel = panelValueFromSearchOptions(
             searchOptions && typeof searchOptions === 'object' ? searchOptions : null,
         );
+        const platformDefaults = status.platform_defaults;
+        this._platformDefaults = platformDefaults && typeof platformDefaults === 'object'
+            ? platformDefaults
+            : null;
     }
 
     renderHeader() {
@@ -297,6 +303,7 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
                         <platform-rag-retrieval-panel
                             compact
                             .value=${this._retrievalPanel}
+                            .platformDefaults=${this._platformDefaults}
                             ?disabled=${busy}
                             @change=${this._onRetrievalPanelChange}
                         ></platform-rag-retrieval-panel>

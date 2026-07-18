@@ -228,6 +228,22 @@ class DocumentStatusRepository:
                 return DocumentStatusModel.model_validate(db_status)
             return None
 
+    async def get_by_document_ids(
+        self,
+        document_ids: list[str],
+    ) -> dict[str, DocumentStatusModel]:
+        """Статусы по списку document_id (без фильтра namespace)."""
+        if not document_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(document_ids))
+        session_factory = await self._get_session_factory()
+        async with session_factory() as session:
+            result = await session.execute(
+                select(DBDocumentStatus).where(DBDocumentStatus.document_id.in_(unique_ids))
+            )
+            rows = result.scalars().all()
+            return {str(row.document_id): DocumentStatusModel.model_validate(row) for row in rows}
+
     async def get_by_task_id(self, task_id: str) -> DocumentStatusModel | None:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:

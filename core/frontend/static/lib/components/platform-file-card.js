@@ -2,11 +2,18 @@
  * platform-file-card — карточка файла для grid view file manager.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import { formatFileSize } from '../utils/format-file-size.js';
 import './platform-icon.js';
+
+const RAG_INDEX_ICON_BY_STATUS = {
+    ready: 'check',
+    pending: 'hourglass-top',
+    failed: 'alert-triangle',
+    absent: 'database',
+};
 
 export class PlatformFileCard extends PlatformElement {
     static properties = {
@@ -18,6 +25,8 @@ export class PlatformFileCard extends PlatformElement {
         typeLabel: { type: String, attribute: 'type-label' },
         selected: { type: Boolean, reflect: true },
         itemKey: { type: String, attribute: 'item-key' },
+        indexStatus: { type: String, attribute: 'index-status' },
+        indexStatusLabel: { type: String, attribute: 'index-status-label' },
     };
 
     static styles = [
@@ -55,6 +64,39 @@ export class PlatformFileCard extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                position: relative;
+            }
+            .index-status {
+                position: absolute;
+                right: -0.25rem;
+                bottom: -0.25rem;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 1.125rem;
+                height: 1.125rem;
+                border-radius: var(--radius-full);
+                background: var(--glass-solid-strong, var(--bg-primary, #fff));
+                box-shadow: var(--glass-shadow-subtle);
+                color: var(--text-tertiary);
+            }
+            .index-status--ready {
+                color: var(--success);
+            }
+            .index-status--pending {
+                color: var(--warning);
+                animation: index-status-pulse 1.6s ease-in-out infinite;
+            }
+            .index-status--failed {
+                color: var(--error);
+            }
+            .index-status--absent {
+                color: var(--text-tertiary);
+                opacity: 0.85;
+            }
+            @keyframes index-status-pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.45; }
             }
             .title {
                 font-size: var(--text-base);
@@ -87,6 +129,8 @@ export class PlatformFileCard extends PlatformElement {
         this.typeLabel = '';
         this.selected = false;
         this.itemKey = '';
+        this.indexStatus = '';
+        this.indexStatusLabel = '';
     }
 
     _sizeLabel() {
@@ -103,6 +147,25 @@ export class PlatformFileCard extends PlatformElement {
         this.emit('open', { itemKey: this.itemKey });
     }
 
+    _renderIndexStatus() {
+        const status = typeof this.indexStatus === 'string' ? this.indexStatus.trim() : '';
+        const iconName = RAG_INDEX_ICON_BY_STATUS[status];
+        if (!iconName) {
+            return nothing;
+        }
+        const label = typeof this.indexStatusLabel === 'string' ? this.indexStatusLabel : '';
+        return html`
+            <span
+                class="index-status index-status--${status}"
+                role="img"
+                title=${label}
+                aria-label=${label}
+            >
+                <platform-icon name=${iconName} size="12"></platform-icon>
+            </span>
+        `;
+    }
+
     render() {
         const iconKey = resolveFileIconKey(this.fileName, this.mimeType);
         return html`
@@ -112,6 +175,7 @@ export class PlatformFileCard extends PlatformElement {
                 </div>
                 <div class="icon-wrap">
                     <platform-icon file-icon name=${iconKey} size="32"></platform-icon>
+                    ${this._renderIndexStatus()}
                 </div>
                 <div class="title" title=${this.fileName}>${this.fileName}</div>
                 <div class="meta">${this._sizeLabel()} · ${this.dateLabel}</div>

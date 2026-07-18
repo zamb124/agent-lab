@@ -27,7 +27,7 @@ import {
     documentIngestTextOp,
 } from '../events/resources/documents.resource.js';
 import { documentStatusResource } from '../events/resources/document-status.resource.js';
-import { searchOp } from '../events/resources/search.resource.js';
+import { searchOp, searchDefaultsOp } from '../events/resources/search.resource.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { buildRagAssistantContext } from '../_helpers/platform-assistant-context.js';
@@ -85,6 +85,7 @@ export class RagApp extends PlatformApp {
         documentIngestTextOp,
         documentStatusResource,
         searchOp,
+        searchDefaultsOp,
         platformFileCreateOp,
     ];
 

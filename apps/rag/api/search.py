@@ -14,7 +14,12 @@ from core.billing.exceptions import BillingBalanceBlockedError
 from core.logging import get_logger
 from core.rag.base_provider import validate_metadata_filters
 from core.rag.factory import get_rag_provider
-from core.rag.models import RAGGlobalSearchRequest, RAGNamespaceSearchRequest, RAGSearchResult
+from core.rag.models import (
+    RAGGlobalSearchRequest,
+    RAGNamespaceSearchRequest,
+    RAGSearchOptions,
+    RAGSearchResult,
+)
 from core.rag.post_retrieval_rerank import (
     apply_rerank_after_retrieve,
     apply_rerank_after_retrieve_grouped,
@@ -37,6 +42,13 @@ class SearchResponse(BaseModel):
     query: str
     namespace_id: str
     provider: str
+
+
+@router.get("/search-defaults", response_model=RAGSearchOptions)
+async def get_search_defaults(container: ContainerDep) -> RAGSearchOptions:
+    """Platform retrieval defaults из ``rag.document_indexing.search_defaults``."""
+    _ = container
+    return resolve_platform_search_options(settings=get_rag_settings())
 
 
 @router.post("/namespaces/{namespace_id}/search", response_model=SearchResponse)

@@ -4,12 +4,19 @@
  * Presentational: icon, title, meta-колонки, optional checkbox и slot actions.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import { formatFileSize } from '../utils/format-file-size.js';
 import './platform-icon.js';
 import './platform-user-chip.js';
+
+const RAG_INDEX_ICON_BY_STATUS = {
+    ready: 'check',
+    pending: 'hourglass-top',
+    failed: 'alert-triangle',
+    absent: 'database',
+};
 
 export class PlatformFileRow extends PlatformElement {
     static properties = {
@@ -25,6 +32,8 @@ export class PlatformFileRow extends PlatformElement {
         selectable: { type: Boolean, reflect: true },
         draggable: { type: Boolean, reflect: true },
         itemKey: { type: String, attribute: 'item-key' },
+        indexStatus: { type: String, attribute: 'index-status' },
+        indexStatusLabel: { type: String, attribute: 'index-status-label' },
     };
 
     static styles = [
@@ -66,6 +75,39 @@ export class PlatformFileRow extends PlatformElement {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
+            }
+            .cell-title-text {
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .index-status {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                width: 1.25rem;
+                height: 1.25rem;
+                color: var(--text-tertiary);
+            }
+            .index-status--ready {
+                color: var(--success);
+            }
+            .index-status--pending {
+                color: var(--warning);
+                animation: index-status-pulse 1.6s ease-in-out infinite;
+            }
+            .index-status--failed {
+                color: var(--error);
+            }
+            .index-status--absent {
+                color: var(--text-tertiary);
+                opacity: 0.85;
+            }
+            @keyframes index-status-pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.45; }
             }
             .cell-meta {
                 white-space: nowrap;
@@ -111,6 +153,8 @@ export class PlatformFileRow extends PlatformElement {
         this.selectable = false;
         this.draggable = false;
         this.itemKey = '';
+        this.indexStatus = '';
+        this.indexStatusLabel = '';
     }
 
     _sizeLabel() {
@@ -142,6 +186,26 @@ export class PlatformFileRow extends PlatformElement {
         this.emit('row-dragstart', { itemKey: this.itemKey, nativeEvent: e });
     }
 
+    _renderIndexStatus() {
+        const status = typeof this.indexStatus === 'string' ? this.indexStatus.trim() : '';
+        const iconName = RAG_INDEX_ICON_BY_STATUS[status];
+        if (!iconName) {
+            return nothing;
+        }
+        const label = typeof this.indexStatusLabel === 'string' ? this.indexStatusLabel : '';
+        return html`
+            <span
+                class="index-status index-status--${status}"
+                role="img"
+                title=${label}
+                aria-label=${label}
+                @click=${(e) => e.stopPropagation()}
+            >
+                <platform-icon name=${iconName} size="14"></platform-icon>
+            </span>
+        `;
+    }
+
     render() {
         const iconKey = resolveFileIconKey(this.fileName, this.mimeType);
         return html`
@@ -165,7 +229,8 @@ export class PlatformFileRow extends PlatformElement {
                 </div>
                 <div class="cell cell-title" role="cell">
                     <platform-icon file-icon name=${iconKey} size="20"></platform-icon>
-                    <span>${this.fileName}</span>
+                    <span class="cell-title-text">${this.fileName}</span>
+                    ${this._renderIndexStatus()}
                 </div>
                 <div class="cell cell-meta cell-hide-mobile" role="cell">${this._sizeLabel()}</div>
                 <div class="cell cell-meta cell-hide-mobile" role="cell">${this.dateLabel}</div>

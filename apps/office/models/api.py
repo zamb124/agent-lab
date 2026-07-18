@@ -14,6 +14,9 @@ from core.rag.models import RAGNamespaceSearchRequest, RAGSearchOptions
 SpreadsheetCellValue: TypeAlias = str | int | float | bool | None
 
 
+OfficeDocumentRagIndexStatus: TypeAlias = Literal["ready", "pending", "failed", "absent"]
+
+
 class OfficeDocumentItem(BaseModel):
     binding_id: str
     catalog_id: str
@@ -29,6 +32,7 @@ class OfficeDocumentItem(BaseModel):
     created_by_user_id: str
     created_by_display_name: str
     created_by_avatar_url: str | None = None
+    rag_index_status: OfficeDocumentRagIndexStatus | None = None
 
 
 OfficeDocumentListResponse = ListResponse[OfficeDocumentItem]
@@ -372,6 +376,7 @@ class OfficeCatalogRagIndexStatusResponse(BaseModel):
     rag_namespace_id: str
     include_subcatalogs: bool
     search_options: RAGSearchOptions | None = None
+    platform_defaults: RAGSearchOptions
     totals: OfficeCatalogRagIndexStatusTotals
     rag_index_updated_at: datetime | None = None
 

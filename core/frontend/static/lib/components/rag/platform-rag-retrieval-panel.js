@@ -14,6 +14,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
 
     static properties = {
         value: { type: Object },
+        platformDefaults: { type: Object },
         disabled: { type: Boolean },
         showPlatformDefaultsToggle: { type: Boolean, attribute: 'show-platform-defaults-toggle' },
         compact: { type: Boolean },
@@ -53,6 +54,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
     constructor() {
         super();
         this.value = defaultRetrievalPanelValue();
+        this.platformDefaults = null;
         this.disabled = false;
         this.showPlatformDefaultsToggle = true;
         this.compact = false;
@@ -63,6 +65,63 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
             return { ...defaultRetrievalPanelValue(), ...this.value };
         }
         return defaultRetrievalPanelValue();
+    }
+
+    _defaults() {
+        if (this.platformDefaults && typeof this.platformDefaults === 'object' && !Array.isArray(this.platformDefaults)) {
+            return this.platformDefaults;
+        }
+        return null;
+    }
+
+    /**
+     * @param {string} key
+     * @returns {string}
+     */
+    _placeholderNumber(key) {
+        const defaults = this._defaults();
+        if (!defaults) {
+            return '';
+        }
+        const raw = defaults[key];
+        if (typeof raw === 'number' && Number.isFinite(raw)) {
+            return String(raw);
+        }
+        return '';
+    }
+
+    /**
+     * @returns {'hybrid' | 'semantic' | 'lexical' | null}
+     */
+    _defaultRetrievalMode() {
+        const defaults = this._defaults();
+        if (!defaults || !defaults.channels || typeof defaults.channels !== 'object') {
+            return null;
+        }
+        const semantic = defaults.channels.semantic === true;
+        const lexical = defaults.channels.lexical === true;
+        if (semantic && lexical) {
+            return 'hybrid';
+        }
+        if (lexical) {
+            return 'lexical';
+        }
+        if (semantic) {
+            return 'semantic';
+        }
+        return null;
+    }
+
+    /**
+     * @param {string} baseLabel
+     * @param {string | null | undefined} display
+     * @returns {string}
+     */
+    _inheritLabel(baseLabel, display) {
+        if (typeof display !== 'string' || display.length === 0) {
+            return baseLabel;
+        }
+        return this.t('rag_retrieval_panel.inherit_effective', { value: display });
     }
 
     _emitValue(next) {
@@ -85,18 +144,38 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
     }
 
     _retrievalModeEnumConfig() {
+        const defaultMode = this._defaultRetrievalMode();
+        const platformLabel = this._inheritLabel(
+            this.t('rag_retrieval_panel.retrieval_mode_platform'),
+            defaultMode ? this.t(`rag_retrieval_panel.retrieval_mode_${defaultMode}`) : null,
+        );
         return {
             values: RETRIEVAL_MODE_VALUES.map((mode) => ({
                 value: mode,
-                label: this.t(`rag_retrieval_panel.retrieval_mode_${mode}`),
+                label: mode === 'platform'
+                    ? platformLabel
+                    : this.t(`rag_retrieval_panel.retrieval_mode_${mode}`),
             })),
         };
     }
 
     _rerankEnumConfig() {
+        const defaults = this._defaults();
+        let rerankDisplay = null;
+        if (defaults && typeof defaults.rerank === 'boolean') {
+            rerankDisplay = defaults.rerank
+                ? this.t('rag_retrieval_panel.rerank_enabled')
+                : this.t('rag_retrieval_panel.rerank_disabled');
+        }
         return {
             values: [
-                { value: '', label: this.t('rag_retrieval_panel.rerank_inherit') },
+                {
+                    value: '',
+                    label: this._inheritLabel(
+                        this.t('rag_retrieval_panel.rerank_inherit'),
+                        rerankDisplay,
+                    ),
+                },
                 { value: 'true', label: this.t('rag_retrieval_panel.rerank_enabled') },
                 { value: 'false', label: this.t('rag_retrieval_panel.rerank_disabled') },
             ],
@@ -140,6 +219,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.rrf_k')}
                         .value=${typeof panel.rrfK === 'string' ? panel.rrfK : ''}
+                        .placeholder=${this._placeholderNumber('rrf_k')}
                         ?disabled=${fieldsDisabled}
                         @change=${(e) => this._onFieldChange(e, 'rrfK', (ev) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
@@ -150,6 +230,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.per_channel_top_k')}
                         .value=${typeof panel.perChannelTopK === 'string' ? panel.perChannelTopK : ''}
+                        .placeholder=${this._placeholderNumber('per_channel_top_k')}
                         ?disabled=${fieldsDisabled}
                         @change=${(e) => this._onFieldChange(e, 'perChannelTopK', (ev) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
@@ -171,6 +252,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.rerank_max_candidates')}
                         .value=${typeof panel.rerankMaxCandidates === 'string' ? panel.rerankMaxCandidates : ''}
+                        .placeholder=${this._placeholderNumber('rerank_max_candidates')}
                         ?disabled=${fieldsDisabled}
                         @change=${(e) => this._onFieldChange(e, 'rerankMaxCandidates', (ev) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
@@ -181,6 +263,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.freshness_weight')}
                         .value=${typeof panel.freshnessWeight === 'string' ? panel.freshnessWeight : ''}
+                        .placeholder=${this._placeholderNumber('freshness_weight')}
                         ?disabled=${fieldsDisabled}
                         @change=${(e) => this._onFieldChange(e, 'freshnessWeight', (ev) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
@@ -191,6 +274,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.freshness_half_life_days')}
                         .value=${typeof panel.freshnessHalfLifeDays === 'string' ? panel.freshnessHalfLifeDays : ''}
+                        .placeholder=${this._placeholderNumber('freshness_half_life_days')}
                         ?disabled=${fieldsDisabled}
                         @change=${(e) => this._onFieldChange(e, 'freshnessHalfLifeDays', (ev) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''

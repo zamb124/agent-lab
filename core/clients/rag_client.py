@@ -167,6 +167,41 @@ class RagClient:
         out = await self._http.get("rag", path)
         return _json_object_response(out, operation="get_document_processing_status")
 
+    async def get_documents_processing_statuses(
+        self,
+        document_ids: list[str],
+    ) -> dict[str, JsonObject | None]:
+        """Batch-статусы; отсутствующий document_id → None."""
+        if not document_ids:
+            return {}
+        path = f"{RAG_API_V1_PREFIX}/documents/statuses"
+        out = _json_object_response(
+            await self._http.post("rag", path, json={"document_ids": document_ids}),
+            operation="get_documents_processing_statuses",
+        )
+        raw_statuses = out.get("statuses")
+        if not isinstance(raw_statuses, dict):
+            raise ValueError("RAG get_documents_processing_statuses.response.statuses must be an object")
+        result: dict[str, JsonObject | None] = {}
+        for document_id, status_payload in raw_statuses.items():
+            if document_id.strip() == "":
+                raise ValueError("RAG statuses keys must be non-empty strings")
+            if status_payload is None:
+                result[document_id] = None
+                continue
+            result[document_id] = require_json_object(
+                status_payload,
+                f"RAG get_documents_processing_statuses.statuses[{document_id}]",
+            )
+        return result
+
+    async def get_search_defaults(self) -> RAGSearchOptions:
+        """Platform retrieval defaults (`GET /rag/api/v1/search-defaults`)."""
+        response = await self._http.get("rag", f"{RAG_API_V1_PREFIX}/search-defaults")
+        return RAGSearchOptions.model_validate(
+            _json_object_response(response, operation="get_search_defaults")
+        )
+
     async def get_namespace_document_content(
         self,
         namespace_id: str,

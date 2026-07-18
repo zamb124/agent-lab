@@ -109,6 +109,15 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                 letter-spacing: 0.04em;
             }
             .meta-value { font-size: var(--text-sm); color: var(--text-primary); }
+            .rag-index-value {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+            .rag-index-value--ready { color: var(--success); }
+            .rag-index-value--pending { color: var(--warning); }
+            .rag-index-value--failed { color: var(--error); }
+            .rag-index-value--absent { color: var(--text-tertiary); }
             .link-row {
                 display: flex;
                 flex-direction: column;
@@ -275,6 +284,33 @@ export class OfficeFileDetailsPanel extends PlatformElement {
         `;
     }
 
+    _ragIndexIconName(status) {
+        if (status === 'ready') return 'check';
+        if (status === 'pending') return 'hourglass-top';
+        if (status === 'failed') return 'alert-triangle';
+        if (status === 'absent') return 'database';
+        throw new Error(`office-file-details-panel: unknown rag_index_status '${status}'`);
+    }
+
+    _renderRagIndexRow(doc) {
+        const status = doc.rag_index_status;
+        if (typeof status !== 'string') {
+            return '';
+        }
+        if (status !== 'ready' && status !== 'pending' && status !== 'failed' && status !== 'absent') {
+            throw new Error(`office-file-details-panel: unknown rag_index_status '${status}'`);
+        }
+        return html`
+            <div class="meta-row">
+                <span class="meta-label">${this.t('details.ragIndex')}</span>
+                <span class="meta-value rag-index-value rag-index-value--${status}">
+                    <platform-icon name=${this._ragIndexIconName(status)} size="16"></platform-icon>
+                    ${this.t(`rag_index.${status}`)}
+                </span>
+            </div>
+        `;
+    }
+
     _renderDocumentBody(doc) {
         const iconKey = resolveFileIconKey(doc.title, '');
         const fileMissing = this._isFileMissing(doc);
@@ -313,6 +349,7 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                     <span class="meta-label">${this.t('details.retention')}</span>
                     <span class="meta-value">${this._retentionLabel(doc)}</span>
                 </div>
+                ${this._renderRagIndexRow(doc)}
                 <div class="meta-row">
                     <span class="meta-label">${this.t('details.updated')}</span>
                     <span class="meta-value">${this._formatDate(doc.updated_at)}</span>

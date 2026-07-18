@@ -34,9 +34,9 @@ globs:
 1. **Префикс** `/rag/api/v1/` — всегда. Без префикса — запрещено.
 2. **При отправке файла НЕ передавать `Content-Type: application/json`** — `ServiceClient`/`RagClient` сами выставят `multipart`. `data={"metadata": json.dumps(...)}` — единственный канон. `json={...}` рядом с `files=` запрещено.
 3. **NamespaceManager для scope** (`core/rag/namespace_manager.py::NamespaceManager.resolve_namespace(scope, context_id?, session_id?) -> str`); `scope ∈ {"flow","company","session"}`. Хардкод `f"flow:{...}"` запрещён.
-4. **Async-индексация** — mutating-операции в воркере через TaskIQ (`process_document_upload`, `index_rag_document_s3_task`, `delete_document_task` в `apps/rag_worker/tasks/indexing_tasks.py` и связанные задачи). Синхронный `parse_document` в API — запрещён.
+4. **Async-индексация** — mutating-операции в воркере через TaskIQ (`process_document_upload`, `index_rag_document_s3_task`, `delete_document_task` в `apps/rag_worker/tasks/indexing_tasks.py` и связанные задачи). Синхронный `parse_document` в API — запрещён. В индекс только категории из `core/rag/indexable.py::RAG_INDEXABLE_FILE_CATEGORIES`; `signature`/archive/unknown — skip (не `failed`).
 5. **Доступ к namespace** — для `ingest-text` и `search` обязательна проверка `namespace_repository.get(id)` + совпадение `company_id` с контекстом; иначе 404/403. Для `POST /rag/api/v1/search` проверка для каждого `namespace_ids[i]`.
-6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `index_file`, `delete_namespace_document`, `get_document_processing_status`, `search`, `global_search`. Не плодить `ServiceClient("rag", path=...)` в peer-сервисах в обход `RagClient`.
+6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `index_file`, `delete_namespace_document`, `get_document_processing_status`, `get_documents_processing_statuses` (`POST /rag/api/v1/documents/statuses`), `search`, `global_search`. Не плодить `ServiceClient("rag", path=...)` в peer-сервисах в обход `RagClient`.
 
 ## TTL документов и retention
 
@@ -100,7 +100,7 @@ globs:
 
 Peer-сервис (Office и т.п.), у которого `FileRecord` уже в shared S3, индексирует через **`POST /rag/api/v1/namespaces/{namespace_id}/documents/index-file`** (`RagClient.index_file`). Worker — тот же `rag.index_document_s3`; новый S3-объект не создаётся. В metadata обязательны `document_id=file_id`, `company_id`, `uploaded_by_user_id`, `ttl_seconds` (Office — `0`).
 
-**Office catalog semantic search — слои overrides:** `office_document_catalogs.rag_index_search_options` (JSONB, partial `RAGSearchOptions`) задаёт per-catalog defaults в модалке RAG indexing; при `search_catalog` merge: **request > catalog > platform** (`merge_search_request_options` + `resolve_platform_search_options`). UI: `platform-rag-retrieval-panel` в `catalog-rag-modal`; explorer читает `rag_index_search_options` из list catalogs и передаёт в `office/catalog_rag_search`.
+**Office catalog semantic search — слои overrides:** `office_document_catalogs.rag_index_search_options` (JSONB, partial `RAGSearchOptions`) задаёт per-catalog defaults в модалке RAG indexing; при `search_catalog` merge: **request > catalog > platform** (`merge_search_request_options` + `resolve_platform_search_options`). UI: `platform-rag-retrieval-panel` в `catalog-rag-modal`; explorer читает `rag_index_search_options` из list catalogs и передаёт в `office/catalog_rag_search`. **Platform defaults для UI placeholders:** `GET /rag/api/v1/search-defaults` (`resolve_platform_search_options`) и поле `platform_defaults` в `GET …/catalogs/{id}/rag-index/status`; панель показывает числа в `.placeholder` и resolved enum inherit labels (паттерн как `llm-context-editor`).
 
 Деиндексация без удаления файла — **`DELETE /rag/api/v1/namespaces/{namespace_id}/documents/{document_id}/index`** (`RagClient.delete_document_index`). Полный **`DELETE .../documents/{document_id}`** удаляет `FileRecord` + S3 — для Office **запрещён**; только index-only delete.
 
@@ -122,6 +122,7 @@ Peer-сервис (Office и т.п.), у которого `FileRecord` уже в
 | `rag/document_ingest_text` | `createAsyncOp` | `POST /rag/api/v1/namespaces/:namespace_id/ingest-text` |
 | `rag/document_status` | `createAsyncOp` (self-rescheduling poll) | `GET /rag/api/v1/documents/:document_id/status` |
 | `rag/search` | `createAsyncOp` | `POST /rag/api/v1/namespaces/:namespace_id/search` |
+| `rag/search_defaults` | `createAsyncOp` | `GET /rag/api/v1/search-defaults` |
 
 `rag/document_upload.onSuccess` стартует `rag/document_status.REQUESTED`; `rag/document_status` ребут через `setTimeout` пока статус `pending`/`processing`. На `completed`/`failed` — `UI_TOAST_SHOW`. `namespace-page` через `useEvent('rag/document_status/succeeded')` перезагружает список документов.
 

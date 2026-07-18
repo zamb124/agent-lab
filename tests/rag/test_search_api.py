@@ -8,6 +8,7 @@
 
 import pytest
 
+from core.rag.search_options_resolver import resolve_platform_search_options
 from tests.rag.helpers import upload_rag_document_bytes, wait_rag_document_status
 
 # Несколько HTTP + эмбеддинг/поиск за один тест; глобальный timeout=5s ловит SIGALRM,
@@ -496,4 +497,25 @@ async def test_search_invalid_filter_matrix_returns_400(
             headers=auth_headers_system,
         )
         assert response.status_code == 400, filters
+
+
+@pytest.mark.asyncio
+async def test_get_search_defaults_matches_resolver(
+    rag_client,
+    auth_headers_system,
+):
+    """GET /rag/api/v1/search-defaults совпадает с resolve_platform_search_options."""
+    response = await rag_client.get(
+        "/rag/api/v1/search-defaults",
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    expected = resolve_platform_search_options()
+    assert payload["rrf_k"] == expected.rrf_k
+    assert payload["per_channel_top_k"] == expected.per_channel_top_k
+    assert payload["rerank"] == expected.rerank
+    assert payload["rerank_max_candidates"] == expected.rerank_max_candidates
+    assert expected.channels is not None
+    assert payload["channels"] == expected.channels.model_dump()
 

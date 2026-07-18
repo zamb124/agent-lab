@@ -41,3 +41,17 @@ export const searchOp = createAsyncOp({
         });
     },
 });
+
+/**
+ * Platform retrieval defaults для placeholders в advanced search panel.
+ * GET /rag/api/v1/search-defaults → RAGSearchOptions
+ */
+export const searchDefaultsOp = createAsyncOp({
+    name: 'rag/search_defaults',
+    silent: true,
+    restMirror: { method: 'GET', path: '/rag/api/v1/search-defaults' },
+    request: () => httpRequest({
+        method: 'GET',
+        url: '/rag/api/v1/search-defaults',
+    }),
+});

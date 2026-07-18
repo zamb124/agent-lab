@@ -86,6 +86,20 @@ export class SearchPage extends PlatformPage {
         this._retrievalPanel = defaultRetrievalPanelValue();
         this._namespaces = this.useResource('rag/namespaces', { autoload: true });
         this._search = this.useOp('rag/search');
+        this._searchDefaults = this.useOp('rag/search_defaults');
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._searchDefaults.run();
+    }
+
+    _platformDefaults() {
+        const result = this._searchDefaults.lastResult;
+        if (!result || typeof result !== 'object') {
+            return null;
+        }
+        return result;
     }
 
     _runSearch(e) {
@@ -255,6 +269,7 @@ export class SearchPage extends PlatformPage {
                     <div class="advanced-wrap">
                         <platform-rag-retrieval-panel
                             .value=${this._retrievalPanel}
+                            .platformDefaults=${this._platformDefaults()}
                             ?disabled=${loading}
                             @change=${this._onRetrievalPanelChange}
                         ></platform-rag-retrieval-panel>

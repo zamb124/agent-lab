@@ -183,6 +183,51 @@ async def test_document_status_not_found(rag_client, auth_headers_system):
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
+async def test_documents_statuses_batch_returns_found_and_null(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    taskiq_broker,
+    auth_headers_system,
+):
+    """POST /documents/statuses: найденные id → status, отсутствующие → null."""
+    _ = taskiq_broker
+    ns_response = await rag_client.post(
+        "/rag/api/v1/namespaces",
+        json={"name": unique_namespace_name},
+        headers=auth_headers_system,
+    )
+    assert ns_response.status_code == 201
+    namespace_id = ns_response.json()["name"]
+
+    upload = await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="batch_status.txt",
+        content=b"batch status content",
+        content_type="text/plain",
+    )
+    document_id = upload["document_id"]
+    await wait_rag_document_status(rag_client, document_id, auth_headers_system)
+
+    missing_id = "missing-document-id-for-batch-status"
+    batch_response = await rag_client.post(
+        "/rag/api/v1/documents/statuses",
+        json={"document_ids": [document_id, missing_id]},
+        headers=auth_headers_system,
+    )
+    assert batch_response.status_code == 200
+    payload = batch_response.json()
+    assert "statuses" in payload
+    assert payload["statuses"][document_id]["status"] == "completed"
+    assert payload["statuses"][document_id]["document_id"] == document_id
+    assert payload["statuses"][missing_id] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.real_taskiq
 async def test_multiple_documents_processing(
     frontend_client,
     rag_client,

@@ -23,6 +23,7 @@ from apps.office.models.api import (
 )
 from apps.office.services.callback_token import encode_callback_context_token
 from apps.office.services.catalog_rag_index_service import OFFICE_CATALOG_RAG_NAMESPACE_PREFIX
+from core.rag.search_options_resolver import resolve_platform_search_options
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 from tests.office.helpers import upload_office_file_bytes
 
@@ -244,15 +245,19 @@ async def test_enable_creates_namespace_and_sets_flag(
     rag_namespace_id = payload["rag_namespace_id"]
 
     status_payload = await _rag_index_status(office_client, catalog_id, auth_headers_system)
+    expected_platform_defaults = resolve_platform_search_options().model_dump(mode="json")
     assert status_payload == {
         "enabled": True,
         "rag_namespace_id": rag_namespace_id,
         "include_subcatalogs": False,
         "search_options": None,
+        "platform_defaults": expected_platform_defaults,
         "totals": status_payload["totals"],
         "rag_index_updated_at": status_payload["rag_index_updated_at"],
     }
     assert status_payload["rag_index_updated_at"] is not None
+    assert status_payload["platform_defaults"]["rrf_k"] is not None
+    assert status_payload["platform_defaults"]["per_channel_top_k"] is not None
 
     probe = await rag_client.post(
         f"/rag/api/v1/namespaces/{rag_namespace_id}/search",
@@ -260,6 +265,70 @@ async def test_enable_creates_namespace_and_sets_flag(
         headers=auth_headers_system,
     )
     assert probe.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_list_documents_includes_rag_index_status(
+    office_client,
+    rag_client,
+    rag_service,
+    rag_worker,
+    auth_headers_system,
+    unique_id,
+):
+    """GET /documents: rag_index_status null без индекса; pending→ready при включённом RAG."""
+    _ = rag_service, rag_worker
+    catalog_id = await _create_catalog(
+        office_client,
+        auth_headers_system,
+        f"rag-list-status-{unique_id}",
+    )
+    binding_id, file_id, _needle = await _upload_searchable_csv(
+        office_client,
+        auth_headers_system,
+        catalog_id,
+        unique_id,
+        title_suffix="list-status",
+    )
+
+    list_before = await office_client.get(
+        f"/documents/api/v1/documents?catalog_id={catalog_id}",
+        headers=auth_headers_system,
+    )
+    assert list_before.status_code == 200
+    items_before = list_before.json()["items"]
+    assert len(items_before) == 1
+    assert items_before[0]["binding_id"] == binding_id
+    assert items_before[0]["rag_index_status"] is None
+
+    await _enable_rag_index(office_client, catalog_id, auth_headers_system)
+
+    list_pending = await office_client.get(
+        f"/documents/api/v1/documents?catalog_id={catalog_id}",
+        headers=auth_headers_system,
+    )
+    assert list_pending.status_code == 200
+    items_pending = list_pending.json()["items"]
+    assert len(items_pending) == 1
+    assert items_pending[0]["rag_index_status"] in ("pending", "ready")
+
+    await _wait_catalog_index_ready(
+        office_client,
+        catalog_id,
+        auth_headers_system,
+        ready_count=1,
+    )
+    await _wait_rag_document_completed(rag_client, file_id, auth_headers_system)
+
+    list_ready = await office_client.get(
+        f"/documents/api/v1/documents?catalog_id={catalog_id}",
+        headers=auth_headers_system,
+    )
+    assert list_ready.status_code == 200
+    items_ready = list_ready.json()["items"]
+    assert len(items_ready) == 1
+    assert items_ready[0]["file_id"] == file_id
+    assert items_ready[0]["rag_index_status"] == "ready"
 
 
 @pytest.mark.asyncio
@@ -1045,6 +1114,89 @@ async def test_rebuild_when_rag_disabled_returns_409(
     )
     assert rebuild_response.status_code == 409
     assert rebuild_response.json()["detail"] == "RAG-индекс для каталога не включён"
+
+
+@pytest.mark.asyncio
+async def test_signature_sidecar_skipped_from_catalog_rag_index(
+    office_client,
+    rag_client,
+    rag_service,
+    rag_worker,
+    auth_headers_system,
+    unique_id,
+):
+    """CryptoPro .sig sidecar не ставится в rag.index_document_s3; totals.failed=0."""
+    _ = rag_service, rag_worker
+    catalog_id = await _create_catalog(
+        office_client,
+        auth_headers_system,
+        f"rag-sig-skip-{unique_id}",
+    )
+    await _enable_rag_index(office_client, catalog_id, auth_headers_system)
+
+    _binding_csv, file_csv, _needle = await _upload_searchable_csv(
+        office_client,
+        auth_headers_system,
+        catalog_id,
+        unique_id,
+        title_suffix="with-sig",
+    )
+    sig_content = b"\x30\x82\x02\x00fake-cryptopro-detached-signature"
+    sig_response = await office_client.post(
+        "/documents/api/v1/documents",
+        headers=auth_headers_system,
+        files={
+            "file": (
+                f"contract-{unique_id}.pdf.sig",
+                io.BytesIO(sig_content),
+                "application/octet-stream",
+            )
+        },
+        data={"title": f"sig {unique_id}", "catalog_id": catalog_id},
+    )
+    assert sig_response.status_code == 200
+    sig_body = sig_response.json()
+    file_sig = sig_body["file_id"]
+    assert sig_body["file_category"] == "signature"
+
+    await _wait_catalog_index_ready(
+        office_client,
+        catalog_id,
+        auth_headers_system,
+        ready_count=1,
+    )
+    status_payload = await _rag_index_status(office_client, catalog_id, auth_headers_system)
+    totals = OfficeCatalogRagIndexStatusTotals.model_validate(status_payload["totals"])
+    assert totals == OfficeCatalogRagIndexStatusTotals(
+        ready=1,
+        pending=0,
+        failed=0,
+        absent=1,
+    )
+
+    sig_status = await rag_client.get(
+        f"/rag/api/v1/documents/{file_sig}/status",
+        headers=auth_headers_system,
+    )
+    assert sig_status.status_code == 404
+    await _wait_rag_document_completed(rag_client, file_csv, auth_headers_system)
+
+    rebuild_response = await office_client.post(
+        f"/documents/api/v1/catalogs/{catalog_id}/rag-index/rebuild",
+        headers=auth_headers_system,
+    )
+    assert rebuild_response.status_code == 202
+    await _wait_catalog_index_ready(
+        office_client,
+        catalog_id,
+        auth_headers_system,
+        ready_count=1,
+    )
+    after_rebuild = await _rag_index_status(office_client, catalog_id, auth_headers_system)
+    rebuild_totals = OfficeCatalogRagIndexStatusTotals.model_validate(after_rebuild["totals"])
+    assert rebuild_totals.failed == 0
+    assert rebuild_totals.absent == 1
+    assert rebuild_totals.ready == 1
 
 
 @pytest.mark.asyncio

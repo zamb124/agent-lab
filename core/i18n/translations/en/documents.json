@@ -185,7 +185,14 @@
         "retention": "Retention",
         "size": "Size",
         "updated": "Modified",
-        "created": "Created"
+        "created": "Created",
+        "ragIndex": "Index"
+    },
+    "rag_index": {
+        "ready": "Indexed",
+        "pending": "Indexing queue",
+        "failed": "Indexing failed",
+        "absent": "Not in index"
     },
     "bulk": {
         "selected": "{{count}} selected"

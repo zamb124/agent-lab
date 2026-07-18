@@ -495,6 +495,7 @@
     "rag_retrieval_panel": {
         "title": "Retrieval options",
         "platform_defaults": "Use platform defaults",
+        "inherit_effective": "Platform defaults ({value})",
         "retrieval_mode": "Channel mode",
         "retrieval_mode_platform": "Platform defaults",
         "retrieval_mode_hybrid": "Hybrid (semantic + lexical)",

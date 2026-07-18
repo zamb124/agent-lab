@@ -185,7 +185,14 @@
         "retention": "Хранение",
         "size": "Размер",
         "updated": "Изменён",
-        "created": "Создан"
+        "created": "Создан",
+        "ragIndex": "Индекс"
+    },
+    "rag_index": {
+        "ready": "В индексе",
+        "pending": "В очереди индексации",
+        "failed": "Ошибка индексации",
+        "absent": "Не в индексе"
     },
     "bulk": {
         "selected": "Выбрано: {{count}}"

@@ -60,6 +60,14 @@ class IndexFileResponse(StrictBaseModel):
     file_id: str
 
 
+class DocumentStatusesBatchRequest(StrictBaseModel):
+    document_ids: list[str] = Field(..., min_length=1, max_length=500)
+
+
+class DocumentStatusesBatchResponse(StrictBaseModel):
+    statuses: dict[str, DocumentProcessingStatus | None]
+
+
 @router.post("/namespaces/{namespace_id}/ingest-text", response_model=RAGIngestTextResponse)
 async def ingest_text(
     namespace_id: str,
@@ -390,3 +398,28 @@ async def get_document_status(
     if not status:
         raise HTTPException(status_code=404, detail="Document status not found")
     return status
+
+
+@router.post("/documents/statuses", response_model=DocumentStatusesBatchResponse)
+async def get_documents_statuses_batch(
+    body: DocumentStatusesBatchRequest,
+    container: ContainerDep,
+) -> DocumentStatusesBatchResponse:
+    """Batch-статусы обработки документов; отсутствующие id → null."""
+    normalized_ids: list[str] = []
+    seen: set[str] = set()
+    for raw_id in body.document_ids:
+        document_id = raw_id.strip()
+        if document_id == "":
+            raise HTTPException(status_code=422, detail="document_ids не должен содержать пустые значения")
+        if document_id in seen:
+            continue
+        seen.add(document_id)
+        normalized_ids.append(document_id)
+    if not normalized_ids:
+        raise HTTPException(status_code=422, detail="document_ids обязателен")
+    found = await container.document_status_repository.get_by_document_ids(normalized_ids)
+    statuses: dict[str, DocumentProcessingStatus | None] = {
+        document_id: found.get(document_id) for document_id in normalized_ids
+    }
+    return DocumentStatusesBatchResponse(statuses=statuses)

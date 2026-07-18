@@ -10,6 +10,11 @@ from core.context import Context, clear_context, set_context
 from core.logging import get_logger
 from core.models.identity_models import User
 from core.rag.factory import get_rag_provider
+from core.rag.indexable import (
+    effective_rag_file_category,
+    is_rag_indexable_file_category,
+    rag_file_category_for_document_name,
+)
 from core.rag.models import RAGMetadata
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
@@ -119,6 +124,31 @@ async def index_rag_document_s3_task(
             binding = UploadProfileBinding(config=settings.rag.document_indexing)
 
             await status_repo.try_mark_processing(document_id)
+
+            meta_file_category = metadata.get("file_category")
+            if isinstance(meta_file_category, str) and meta_file_category.strip() != "":
+                resolved_category = effective_rag_file_category(
+                    file_category=meta_file_category,
+                    document_name=document_name,
+                )
+            else:
+                resolved_category = rag_file_category_for_document_name(document_name)
+
+            if not is_rag_indexable_file_category(resolved_category):
+                logger.info(
+                    "RAG Worker: skip non-indexable document_id=%s document_name=%s file_category=%s",
+                    document_id,
+                    document_name,
+                    resolved_category,
+                )
+                _ = await status_repo.record_indexing_done(document_id, 0)
+                return {
+                    "document_id": document_id,
+                    "document_name": document_name,
+                    "namespace": namespace_id,
+                    "status": "skipped",
+                    "reason": "non_indexable_file_category",
+                }
 
             rag_provider = (
                 get_rag_provider(provider, settings=settings)
@@ -232,6 +262,24 @@ async def index_office_catalog_task(
             continue
         if file_record.company_id != company_id:
             raise ValueError(f"FileRecord {file_id} не принадлежит company_id={company_id}")
+
+        resolved_category = effective_rag_file_category(
+            file_category=file_category_value,
+            document_name=file_record.original_name,
+        )
+        if not is_rag_indexable_file_category(resolved_category):
+            logger.info(
+                (
+                    "Office catalog index skip: non-indexable file_id=%s binding_id=%s "
+                    "catalog_id=%s file_category=%s document_name=%s"
+                ),
+                file_id,
+                binding_id,
+                catalog_id,
+                resolved_category,
+                file_record.original_name,
+            )
+            continue
 
         metadata: RAGMetadata = {
             "source": "office",

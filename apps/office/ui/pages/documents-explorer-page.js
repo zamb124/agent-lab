@@ -26,6 +26,8 @@ import '../components/office-catalog-semantic-search-results.js';
 
 const VIEW_MODE_STORAGE_KEY = 'documents_explorer_view_mode';
 const SEARCH_DEBOUNCE_MS = 300;
+const RAG_INDEX_POLL_MS = 5000;
+const RAG_INDEX_STATUS_VALUES = new Set(['ready', 'pending', 'failed', 'absent']);
 
 export class OfficeDocumentsExplorerPage extends PlatformPage {
     static i18nNamespace = 'documents';
@@ -59,6 +61,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._catalogRagSearch = this.useOp('office/catalog_rag_search');
         this._lastLoadKey = '';
         this._lastSemanticSearchKey = '';
+        this._ragIndexPollTimer = null;
         this._localeSel = this.select((s) => s.i18n.locale);
     }
 
@@ -72,6 +75,11 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             this._documents.setExplorerView({ explorerView: 'recent' });
         }
         this.useEvent(CoreEvents.UI_DOCUMENTS_RELOAD_REQUESTED, () => this._onNamespaceReload());
+    }
+
+    disconnectedCallback() {
+        this._stopRagIndexPoll();
+        super.disconnectedCallback();
     }
 
     _restoreViewMode() {
@@ -100,6 +108,40 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._maybeReloadDocs();
         this._maybeRunSemanticSearch();
         this._ensureActiveCatalog();
+        this._syncRagIndexPoll();
+    }
+
+    _ragIndexStatusLabel(status) {
+        if (typeof status !== 'string' || !RAG_INDEX_STATUS_VALUES.has(status)) {
+            return '';
+        }
+        return this.t(`rag_index.${status}`);
+    }
+
+    _stopRagIndexPoll() {
+        if (this._ragIndexPollTimer != null) {
+            clearInterval(this._ragIndexPollTimer);
+            this._ragIndexPollTimer = null;
+        }
+    }
+
+    _syncRagIndexPoll() {
+        const docs = this._visibleDocuments();
+        const hasPending = docs.some((doc) => doc && doc.rag_index_status === 'pending');
+        if (!hasPending) {
+            this._stopRagIndexPoll();
+            return;
+        }
+        if (this._ragIndexPollTimer != null) {
+            return;
+        }
+        this._ragIndexPollTimer = setInterval(() => {
+            if (this._documents.busy) {
+                return;
+            }
+            this._lastLoadKey = '';
+            this._maybeReloadDocs();
+        }, RAG_INDEX_POLL_MS);
     }
 
     _semanticSearchAvailable() {
@@ -786,6 +828,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         retention-label=${this._retentionLabel(doc)}
                         type-label=${this._docTypeLabel(doc)}
                         author-user-id=${doc.created_by_user_id}
+                        index-status=${typeof doc.rag_index_status === 'string' ? doc.rag_index_status : ''}
+                        index-status-label=${this._ragIndexStatusLabel(doc.rag_index_status)}
                         ?selected=${state.selectedBindingId === doc.binding_id || selectedIds.has(doc.binding_id)}
                         selectable
                         ?draggable=${!this._isFileMissing(doc)}
@@ -816,6 +860,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         date-label=${this._formatDate(doc.updated_at)}
                         retention-label=${this._retentionLabel(doc)}
                         type-label=${this._docTypeLabel(doc)}
+                        index-status=${typeof doc.rag_index_status === 'string' ? doc.rag_index_status : ''}
+                        index-status-label=${this._ragIndexStatusLabel(doc.rag_index_status)}
                         ?selected=${state.selectedBindingId === doc.binding_id}
                         @open=${() => this._onSelectDocument(doc.binding_id)}
                     >

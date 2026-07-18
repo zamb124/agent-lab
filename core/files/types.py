@@ -24,6 +24,7 @@ class FileCategory(StrEnum):
     EMAIL = "email"
     EBOOK = "ebook"
     VIZ = "viz"
+    SIGNATURE = "signature"
 
 
 @dataclass(frozen=True)
@@ -180,6 +181,22 @@ FILE_TYPE_REGISTRY: tuple[FileTypeEntry, ...] = (
         ".viz",
         ("application/vnd.platform.viz+json",),
         FileCategory.VIZ,
+    ),
+    # --- SIGNATURE (detached CryptoPro / PKCS#7 sidecars; не для RAG) ---
+    FileTypeEntry(
+        ".sig",
+        ("application/octet-stream", "application/pgp-signature"),
+        FileCategory.SIGNATURE,
+    ),
+    FileTypeEntry(
+        ".p7s",
+        ("application/pkcs7-signature", "application/octet-stream"),
+        FileCategory.SIGNATURE,
+    ),
+    FileTypeEntry(
+        ".sgn",
+        ("application/octet-stream",),
+        FileCategory.SIGNATURE,
     ),
 )
 

@@ -24,6 +24,7 @@ from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import get_context
 from core.logging import get_logger
+from core.rag.indexable import effective_rag_file_category, is_rag_indexable_file_category
 from core.rag.models import RAGMetadata, RAGSearchOptions, RAGSearchResult
 from core.rag.rag_http_namespace_search import (
     filter_search_request_options,
@@ -200,6 +201,24 @@ class OfficeCatalogRagIndexService:
         file_record = await self._file_repository.get(binding.file_id)
         if file_record is None:
             raise ValueError(f"FileRecord не найден: {binding.file_id}")
+
+        resolved_category = effective_rag_file_category(
+            file_category=binding.file_category,
+            document_name=file_record.original_name,
+        )
+        if not is_rag_indexable_file_category(resolved_category):
+            logger.info(
+                (
+                    "Office catalog RAG index skip non-indexable binding_id=%s file_id=%s "
+                    "catalog_id=%s file_category=%s document_name=%s"
+                ),
+                binding.binding_id,
+                binding.file_id,
+                catalog.catalog_id,
+                resolved_category,
+                file_record.original_name,
+            )
+            return None
 
         metadata = self._binding_metadata(
             binding=binding,
@@ -393,7 +412,8 @@ class OfficeCatalogRagIndexService:
             workspace_namespace=workspace_namespace,
         )
 
-        totals = OfficeCatalogRagIndexStatusTotals()
+        indexable_file_ids: list[str] = []
+        non_indexable_count = 0
         for searchable_catalog_id in searchable_catalog_ids:
             bindings = await self._document_binding_repository.list_by_company_namespace_and_catalog(
                 company_id,
@@ -401,35 +421,67 @@ class OfficeCatalogRagIndexService:
                 searchable_catalog_id,
             )
             for binding in bindings:
-                bucket = await self._status_bucket_for_file(binding.file_id)
-                if bucket == "ready":
-                    totals.ready += 1
-                elif bucket == "pending":
-                    totals.pending += 1
-                elif bucket == "failed":
-                    totals.failed += 1
-                else:
-                    totals.absent += 1
+                file_record = await self._file_repository.get(binding.file_id)
+                document_name = (
+                    file_record.original_name if file_record is not None else binding.title
+                )
+                if not is_rag_indexable_file_category(
+                    effective_rag_file_category(
+                        file_category=binding.file_category,
+                        document_name=document_name,
+                    )
+                ):
+                    # Подписи/архивы/unknown не в индексе; старые failed-статусы в UI не считаем.
+                    non_indexable_count += 1
+                    continue
+                indexable_file_ids.append(binding.file_id)
+
+        buckets = await self.batch_status_buckets(indexable_file_ids)
+        totals = OfficeCatalogRagIndexStatusTotals(absent=non_indexable_count)
+        for file_id in indexable_file_ids:
+            bucket = buckets[file_id]
+            if bucket == "ready":
+                totals.ready += 1
+            elif bucket == "pending":
+                totals.pending += 1
+            elif bucket == "failed":
+                totals.failed += 1
+            else:
+                totals.absent += 1
 
         return OfficeCatalogRagIndexStatusResponse(
             enabled=catalog.rag_index_enabled,
             rag_namespace_id=rag_namespace_id,
             include_subcatalogs=catalog.rag_index_include_subcatalogs,
             search_options=self.catalog_search_options_model(catalog),
+            platform_defaults=resolve_platform_search_options(settings=get_settings()),
             totals=totals,
             rag_index_updated_at=catalog.rag_index_updated_at,
         )
 
-    async def _status_bucket_for_file(
+    async def batch_status_buckets(
         self,
-        file_id: str,
+        file_ids: list[str],
+    ) -> dict[str, Literal["ready", "pending", "failed", "absent"]]:
+        """Один batch-запрос к RAG на список file_id → bucket статуса индексации."""
+        if not file_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(file_ids))
+        result: dict[str, Literal["ready", "pending", "failed", "absent"]] = {}
+        chunk_size = 500
+        for offset in range(0, len(unique_ids), chunk_size):
+            chunk = unique_ids[offset : offset + chunk_size]
+            statuses = await self._rag_client.get_documents_processing_statuses(chunk)
+            for file_id in chunk:
+                result[file_id] = self._bucket_from_status_payload(statuses.get(file_id))
+        return result
+
+    @staticmethod
+    def _bucket_from_status_payload(
+        status_payload: JsonObject | None,
     ) -> Literal["ready", "pending", "failed", "absent"]:
-        try:
-            status_payload = await self._rag_client.get_document_processing_status(file_id)
-        except ServiceClientError as exc:
-            if str(exc).startswith("HTTP 404"):
-                return "absent"
-            raise
+        if status_payload is None:
+            return "absent"
         status_value = status_payload.get("status")
         if not isinstance(status_value, str):
             raise ValueError("RAG status response.status must be a string")
@@ -440,6 +492,13 @@ class OfficeCatalogRagIndexService:
         if status_value == "completed":
             return "ready"
         raise ValueError(f"Неизвестный статус индексации RAG: {status_value}")
+
+    async def _status_bucket_for_file(
+        self,
+        file_id: str,
+    ) -> Literal["ready", "pending", "failed", "absent"]:
+        buckets = await self.batch_status_buckets([file_id])
+        return buckets[file_id]
 
     @staticmethod
     def _catalog_id_from_search_hit(hit: RAGSearchResult) -> str | None:
