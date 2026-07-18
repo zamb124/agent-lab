@@ -43,7 +43,7 @@ def rag_file_category_for_document_name(document_name: str) -> str:
 
 
 def effective_rag_file_category(*, file_category: str, document_name: str) -> str:
-    """Категория binding; для legacy ``unknown`` — повторный резолв по имени (реестр мог расшириться)."""
+    """Категория binding; для ``unknown`` — повторный резолв по имени (реестр мог расшириться)."""
     normalized = file_category.strip()
     if normalized == "":
         raise ValueError("file_category обязателен")

@@ -5,6 +5,7 @@ HTTP helpers для HumanitecAgent тестов.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from httpx import AsyncClient
 
@@ -14,7 +15,15 @@ from apps.agent.service import (
     TUNNEL_ONLINE_PREFIX,
     _audit_storage_key,
 )
+from apps.flows.src.container import get_container as get_flows_container
+from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
+from core.context import Context, clear_context, set_context
+from core.models.i18n_models import Language
 from core.utils.tokens import get_token_service
+
+_FLOWS_ROOT = Path(__file__).resolve().parents[2] / "apps" / "flows"
+_FLOWS_REGISTRY_PATH = _FLOWS_ROOT / "registry.yaml"
+_FLOWS_BUNDLES_DIR = _FLOWS_ROOT / "bundles"
 
 AGENT_API_PREFIX = "/frontend/api/agent"
 AGENT_TEST_PUBLIC_ORIGIN = "http://system.lvh.me:9004"
@@ -24,6 +33,8 @@ FLOWS_HTTP_BASE = "http://127.0.0.1:9001"
 PLATFORM_MCP_PATH = "/flows/api/v1/agent/platform-mcp"
 LLM_MODELS_PATH = "/flows/api/v1/agent/llm/v1/models"
 LLM_CHAT_COMPLETIONS_PATH = "/flows/api/v1/agent/llm/v1/chat/completions"
+LLM_IMAGES_GENERATIONS_PATH = "/flows/api/v1/agent/llm/v1/images/generations"
+LLM_ONLYOFFICE_PROXY_PATH = "/flows/api/v1/agent/llm/v1/proxy"
 
 
 async def agent_base_url_from_token(auth_token: str, frontend_container) -> str:
@@ -115,6 +126,68 @@ def company_id_from_auth_token(auth_token: str) -> str:
     if token_data is None:
         raise AssertionError("invalid auth token")
     return token_data.company_id
+
+
+async def ensure_company_public_flows(company_id: str) -> None:
+    """
+    Материализует public flow ``lara`` в namespace компании.
+
+    Без чтения/фолбека на company ``system``: seed и runtime — только эта company.
+    """
+    if not company_id.strip():
+        raise AssertionError("company_id обязателен")
+    if company_id == "system":
+        raise AssertionError("seed lara в company system запрещён в agent LLM proxy тестах")
+    container = get_flows_container()
+    company = await container.company_repository.get(company_id)
+    if company is None:
+        raise AssertionError(f"company {company_id} not found")
+    if company.owner_user_id is None or not company.owner_user_id.strip():
+        raise AssertionError(f"company {company_id} без owner_user_id")
+    owner = await container.user_repository.get(company.owner_user_id)
+    if owner is None:
+        raise AssertionError(
+            f"owner {company.owner_user_id!r} компании {company_id} не найден"
+        )
+    if company_id not in owner.companies:
+        raise AssertionError(
+            f"owner {owner.user_id} не состоит в company {company_id}"
+        )
+
+    set_context(
+        Context(
+            user=owner,
+            host="test",
+            session_id=f"ensure_public_flows_{company_id}",
+            channel="test",
+            language=Language.RU,
+            active_company=company,
+            user_companies=[company],
+            trace_id=f"test:ensure_public_flows:{company_id}",
+        )
+    )
+    try:
+        existing_lara = await container.flow_repository.get("lara")
+        if existing_lara is not None:
+            return
+        _ = await load_tools_to_db(container.tool_repository)
+        loader = FlowsLoader(
+            bundles_dir=_FLOWS_BUNDLES_DIR,
+            flow_repository=container.flow_repository,
+            node_repository=container.node_repository,
+            tool_repository=container.tool_repository,
+            registry_path=_FLOWS_REGISTRY_PATH,
+        )
+        loaded_flow_id = await loader.reload_flow_bundle("lara")
+        if loaded_flow_id != "lara":
+            raise AssertionError(
+                f"ожидали reload lara, получили {loaded_flow_id!r} для company {company_id}"
+            )
+        lara_after = await container.flow_repository.get("lara")
+        if lara_after is None:
+            raise AssertionError(f"flow lara отсутствует в company {company_id} после seed")
+    finally:
+        clear_context()
 
 
 async def seed_pairing_in_storage(

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 
 from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL
@@ -13,10 +15,18 @@ from tests.agent._helpers import (
     AGENT_API_PREFIX,
     LLM_CHAT_COMPLETIONS_PATH,
     LLM_MODELS_PATH,
+    company_id_from_auth_token,
+    ensure_company_public_flows,
     pair_and_register_device,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _seed_public_flows_for_llm_proxy_e2e(auth_token: str) -> AsyncIterator[None]:
+    await ensure_company_public_flows(company_id_from_auth_token(auth_token))
+    yield
 
 
 async def test_e2e_llm_proxy_models_list_auto(

@@ -1,0 +1,67 @@
+{
+  "version": 4,
+  "actionsOverride": true,
+  "timeout": "5m",
+  "proxy": "https://example.com/flows/api/v1/agent/llm/v1/proxy",
+  "allowedCorsOrigins": [
+    "https://onlyoffice.github.io",
+    "https://onlyoffice-plugins.github.io"
+  ],
+  "providers": {
+    "platform": {
+      "name": "Platform LLMs",
+      "url": "https://example.com/flows/api/v1/agent/llm",
+      "key": "",
+      "addon": "v1",
+      "models": [
+        {
+          "id": "lara:documents",
+          "name": "lara:documents",
+          "endpoints": [1],
+          "options": {}
+        },
+        {
+          "id": "auto",
+          "name": "auto",
+          "endpoints": [1],
+          "options": {}
+        },
+        {
+          "id": "image-auto",
+          "name": "image-auto",
+          "endpoints": [17],
+          "options": {}
+        }
+      ]
+    }
+  },
+  "models": [
+    {
+      "id": "lara:documents",
+      "name": "Lara Documents",
+      "provider": "platform",
+      "capabilities": 1
+    },
+    {
+      "id": "auto",
+      "name": "Platform Auto",
+      "provider": "platform",
+      "capabilities": 129
+    },
+    {
+      "id": "image-auto",
+      "name": "Platform Image",
+      "provider": "platform",
+      "capabilities": 2
+    }
+  ],
+  "actions": {
+    "Chat": { "model": "lara:documents" },
+    "Summarization": { "model": "auto" },
+    "Translation": { "model": "auto" },
+    "TextAnalyze": { "model": "auto" },
+    "OCR": { "model": "auto" },
+    "Vision": { "model": "auto" },
+    "ImageGeneration": { "model": "image-auto" }
+  }
+}

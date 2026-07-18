@@ -50,6 +50,22 @@ globs:
 - **Локально:** office на хосте, DS в Docker → `callback_public_base_url = http://host.docker.internal:8008` (DS ходит за файлом на этот URL); если office тоже в compose — `http://office:8008`.
 - **Образ:** `onlyoffice/documentserver:latest` (CE) — без `TRIAL DEVELOPER MODE`. В шапке остаётся брендинг ONLYOFFICE; `customization.logo` из JWT в CE часто не подхватывается (DocumentServer#1550). Compose dev/test: `docker-compose-dev.yaml` (8088, `extra_hosts: host.docker.internal:host-gateway`), `docker-compose-test.yaml` (18088). Прод: Deployment `onlyoffice` в Helm (`60-external/onlyoffice.yaml`); JWT — `JWT_ENABLED`, `JWT_SECRET = ONLYOFFICE_JWT_SECRET / OFFICE__JWT_SECRET` из Kubernetes Secret `platform-secrets`. Тема: ConfigMap `onlyoffice-theme` (источник `deploy/helm/agent-lab/files/onlyoffice-theme.json`). DE-фичи без trial — коммерческая лицензия Docs, не «флажок» в CE.
 
+## OnlyOffice AI (из коробки)
+
+Платформенный AI plugin без BYOK: Document Server `aiSettings` указывает на тот же OpenAI API, что и LinnexAgent.
+
+| Слой | Канон |
+|---|---|
+| API | `/flows/api/v1/agent/llm` (+ addon `v1`); proxy unwrap — `…/v1/proxy` |
+| Auth | Editor JWT целиком (`Asc.plugin.info.jwt`) → multi-auth в `apps/agent/llm_auth.py` |
+| Claims | Top-level `platformAi` в signed editor config: `company_id`, `user_id`, `namespace`, `binding_id`, `file_id`, `binding_kind` (`OnlyOfficeViewerHandler`) |
+| Autostart | `editorConfig.plugins.autostart = ["asc.{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}"]` для session editors; **public link** (`public_link_token_hash`) — без AI claims и без autostart |
+| Actions | Chat → `lara:documents`; Summarization/Translation/TextAnalyze/OCR/Vision → `auto`; ImageGeneration → `image-auto` |
+| DS infra | Helm `onlyoffice.ai.*` + ConfigMap `onlyoffice-ai` (fragment + entrypoint merge в `local.json`); compose монтирует те же files из `deploy/helm/agent-lab/files/` |
+| Builder | `core/office/ai_settings.py::build_onlyoffice_ai_settings`; fixture `tests/office/fixtures/onlyoffice_ai_settings.json` |
+
+Инвариант: ни один dropdown «Конфигурация ИИ» не пустой. Отдельный `/documents/.../oo-ai` stack **запрещён**.
+
 ## `editorConfig.customization`
 
 `apps/office/api/bff.py`, блок `editor_customization`: `compact_toolbar`, `compact_header`, `ui_theme`, `features_tips`. Шапка платформы: при `platform_header_branding: true` и пустом `logo_image_url` → `logo` + `customer`. URL логотипа: `branding_public_base_url`, иначе `platform_public_base_url` → `frontend_service_url` → `office_service_url` (внутренний `http://office:8008` в JWT для браузера не подходит). Путь `/static/core/assets/service_logos/frontend_logo.svg`. Ссылка `…/documents` или `logo_link_url`.
@@ -60,7 +76,7 @@ globs:
 
 **Используем:** viewer handler registry (`core/documents/viewer/` + `apps/office/services/viewer_handlers/` + `DocumentViewerService`); единый контракт `GET …/editor-config` → `DocumentOpenConfigResponse` (`handler` + `capabilities` + typed payload); UI shell `<platform-document-viewer-host>` (OnlyOffice → `platform-onlyoffice-host`; image/media/text/binary/viz → native Lit hosts); OnlyOffice для office_doc/spreadsheet/presentation/pdf (`OnlyOfficeViewerHandler`); **viz** (`FileCategory.VIZ`, `.viz`, MIME `application/vnd.platform.viz+json`) → `VizViewerHandler` + `<platform-viz-host>` (ECharts/Mermaid); image/media/text/binary handlers + anonymous `viewer-stream`/`viewer-save`; upload любого файла с `file_category` из `core.files.types`; `onlyoffice_document_type` (`word|cell|slide`) только для OnlyOffice JWT; JWT на конфиг OnlyOffice (с `document.permissions`); callback (статусы 2 и 6); `office-download`; mutations gated by `capabilities.server_mutations`; sync/preview через capabilities matrix.
 
-**Намеренно вне BFF:** отдельный режим `mode: view` с разными `permissions` по ролям, plugins, forcesave как UX, Conversion API как сервис, embedded без нашего UI, мобильные SDK, co-editing вне выдачи нашего `editor-config` (co-edit идёт внутри DS при двух клиентах с одним `document.key`).
+**Намеренно вне BFF:** отдельный режим `mode: view` с разными `permissions` по ролям (кроме AI autostart/platformAi выше), forcesave как UX, Conversion API как сервис, embedded без нашего UI, мобильные SDK, co-editing вне выдачи нашего `editor-config` (co-edit идёт внутри DS при двух клиентах с одним `document.key`).
 
 ## Глобальный File Viewer
 

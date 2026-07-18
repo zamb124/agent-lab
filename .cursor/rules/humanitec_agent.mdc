@@ -17,8 +17,32 @@ LinnexAgent — desktop-клиент (Goose fork). **Канон продукта
 | **Toolkits catalog** | `flows` | `GET /flows/api/v1/agent/toolkits` | для **device JWT** — только toolkit `lara` |
 | **Toolkits manage** | `flows` | `/flows/api/v1/agent/toolkits/manage` | CRUD групп (session JWT; admin) |
 | **A2A** | `flows` | `/flows/api/v1/a2a/*` | исполнение flow |
+| **OpenAI LLM proxy** | `flows` | `/flows/api/v1/agent/llm/v1` | OpenAI-compatible: models, chat/completions, images/generations, OnlyOffice `/proxy` |
 
 **Platform MCP не в frontend.** Router `apps/agent/platform_mcp.py` → `apps/flows/main.py`.
+
+## OpenAI LLM proxy (`apps/agent/llm_proxy.py`)
+
+Единый OpenAI-compatible surface для **LinnexAgent** и **OnlyOffice AI** (без второго completions API).
+
+| Инвариант | Деталь |
+|---|---|
+| Path | `/flows/api/v1/agent/llm/v1` (BC: device flow не меняется) |
+| Auth | Route `/flows/api/v1/agent/llm/*` — `anonymous` в `route_config` (middleware не режет OO JWT); handler: **device JWT** (`token_purpose=device`) **или** OnlyOffice editor JWT с claim `platformAi` (`apps/agent/llm_auth.py`) |
+| Company context | После auth — `set_context(active_company)` **только** из `company_id` токена/claims. Нет `company_id` / нет membership → 401/403. **Запрещён** фолбек на company `system` для Lara/flows/billing |
+| Models | `auto`, free-pool refs, `lara:<branch_id>`, `image-auto` (`GET /models`) — OpenAI list shape (`object=list`, без OR `total_count`/`links`) |
+| Chat routing | `auto` / `<provider>:<model>` → `core.ai` + **`LLMClient` only**; `lara:<branch>` → Lara A2A (`apps/agent/llm_lara.py`); unknown → 400 |
+| Lara flow | `flow_repository.get("lara")` только в namespace `active_company`; нет flow → 503 (не читать из `system`) |
+| Images | `POST /images/generations` model=`image-auto` → `NanoBananaClient` / `AICapability.IMAGE_GEN` |
+| OnlyOffice | `POST /proxy` unwrap `{target,method,headers,data}` + Bearer editor JWT |
+| Errors | OpenAI/OR envelope `{"error":{"message","type","code"}}` на этом surface |
+| Zero-guess | нет валидного токена → 401; пустой/неизвестный `lara:` branch → 400 |
+
+**Архитектурный инвариант:** proxy — **thin OpenAI adapter** (parse → route → encode). Запрещён второй completions engine: нормализация messages/tools/fallback/billing spans — только `LLMClient` + `core.ai.runtime`. Response/SSE codec — `core/clients/llm/openai_api_codec.py`. OR-only request fields (`provider`, `models`, `plugins`, …) принимаются и игнорируются (`extra=ignore`), без второго роутера.
+
+**Contract fixtures / tests:** `tests/agent/fixtures/openrouter.openapi.json` (ChatRequest/ChatResult/ChatStreamChunk); строгий suite — `tests/agent/contract/` (MockLLM-only, schema validate, без monkeypatch `LLMClient`/`resolve_ai_model`/Lara). Smoke BC — `tests/agent/e2e/test_agent_llm_proxy_e2e.py`.
+
+Файлы: `apps/agent/llm_proxy.py`, `llm_auth.py`, `llm_lara.py`; claims — `core/office/platform_ai_claims.py`; DS `aiSettings` — `core/office/ai_settings.py`.
 
 ## LaraOnly
 

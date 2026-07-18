@@ -78,6 +78,7 @@ from tests.fixtures.test_database_env import TEST_HS256_JWT_SECRET  # noqa: E402
 os.environ.setdefault("AUTH__JWT_SECRET_KEY", TEST_HS256_JWT_SECRET)
 os.environ.setdefault("OFFICE__DOCUMENT_SERVER_PUBLIC_URL", "http://localhost:18088")
 os.environ.setdefault("OFFICE__CALLBACK_PUBLIC_BASE_URL", "http://host.docker.internal:9008")
+os.environ.setdefault("OFFICE__JWT_SECRET", "test-onlyoffice-jwt-secret")
 os.environ["SERVER__DOCUMENT_SERVER_DEV_UPSTREAM_URL"] = os.environ[
     "OFFICE__DOCUMENT_SERVER_PUBLIC_URL"
 ]

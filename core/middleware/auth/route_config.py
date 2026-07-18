@@ -436,6 +436,8 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/flows/api/v1/tool-runtime/call", context_type="anonymous", auth_required=False),
     RouteRule("/flows/api/v1/internal/*", context_type="anonymous", auth_required=False),
     RouteRule("/flows/api/v1/browser-preview/*", context_type="anonymous", auth_required=False),
+    # OpenAI LLM proxy: multi-auth device JWT | OnlyOffice editor JWT (см. apps/agent/llm_auth.py)
+    RouteRule("/flows/api/v1/agent/llm/*", auth_required=False, context_type="anonymous"),
     RouteRule("/flows/api/v1/auth/me", context_type="api", auth_required=True),
     RouteRule("/flows/api/v1/*", context_type="api", auth_required=True),
 

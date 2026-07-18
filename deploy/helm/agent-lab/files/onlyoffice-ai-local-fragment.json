@@ -1,0 +1,98 @@
+{
+  "aiSettings": {
+    "version": 4,
+    "actionsOverride": true,
+    "timeout": "5m",
+    "proxy": "__PLATFORM_LLM_PROXY__",
+    "allowedCorsOrigins": [
+      "https://onlyoffice.github.io",
+      "https://onlyoffice-plugins.github.io"
+    ],
+    "providers": {
+      "platform": {
+        "name": "__PROVIDER_DISPLAY_NAME__",
+        "url": "__PLATFORM_LLM_BASE__",
+        "key": "",
+        "addon": "v1",
+        "models": [
+          {
+            "id": "lara:documents",
+            "name": "lara:documents",
+            "endpoints": [
+              1
+            ],
+            "options": {}
+          },
+          {
+            "id": "auto",
+            "name": "auto",
+            "endpoints": [
+              1
+            ],
+            "options": {}
+          },
+          {
+            "id": "image-auto",
+            "name": "image-auto",
+            "endpoints": [
+              17
+            ],
+            "options": {}
+          }
+        ]
+      }
+    },
+    "models": [
+      {
+        "id": "lara:documents",
+        "name": "Lara Documents",
+        "provider": "platform",
+        "capabilities": 1
+      },
+      {
+        "id": "auto",
+        "name": "__PROVIDER_DISPLAY_NAME__ Auto",
+        "provider": "platform",
+        "capabilities": 129
+      },
+      {
+        "id": "image-auto",
+        "name": "__PROVIDER_DISPLAY_NAME__ Image",
+        "provider": "platform",
+        "capabilities": 2
+      }
+    ],
+    "actions": {
+      "Chat": {
+        "model": "lara:documents"
+      },
+      "Summarization": {
+        "model": "auto"
+      },
+      "Translation": {
+        "model": "auto"
+      },
+      "TextAnalyze": {
+        "model": "auto"
+      },
+      "OCR": {
+        "model": "auto"
+      },
+      "Vision": {
+        "model": "auto"
+      },
+      "ImageGeneration": {
+        "model": "image-auto"
+      }
+    }
+  },
+  "services": {
+    "CoAuthoring": {
+      "plugins": {
+        "autostart": [
+          "asc.{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}"
+        ]
+      }
+    }
+  }
+}

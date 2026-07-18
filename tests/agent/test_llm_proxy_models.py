@@ -62,7 +62,9 @@ def test_validate_requested_agent_model_accepts_auto() -> None:
 
 
 @pytest.mark.asyncio
-async def test_read_agent_llm_model_ids_uses_catalog_and_llm_models_service() -> None:
+async def test_read_agent_llm_model_ids_uses_catalog_and_llm_models_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     catalog_record = AIModelRecord(
         provider="openrouter",
         model_id="qwen/qwen3-coder:free",
@@ -81,16 +83,24 @@ async def test_read_agent_llm_model_ids_uses_catalog_and_llm_models_service() ->
     container.llm_models_service.get_model_ids_by_provider_capability = AsyncMock(
         return_value=[],
     )
+    monkeypatch.setattr(
+        "apps.agent.llm_proxy.load_lara_branch_ids",
+        AsyncMock(return_value=["documents"]),
+    )
 
     model_ids = await _read_agent_llm_model_ids(container)
 
     assert model_ids[0] == HUMANITEC_LLM_AUTO_MODEL
+    assert "image-auto" in model_ids
+    assert "lara:documents" in model_ids
     assert "openrouter:qwen/qwen3-coder:free" in model_ids
     container.llm_models_service.get_model_ids_by_provider_capability.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_read_agent_llm_model_ids_falls_back_to_humanitec_llm_options() -> None:
+async def test_read_agent_llm_model_ids_falls_back_to_humanitec_llm_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     container = MagicMock()
     container.llm_models_service.get_configured_providers_by_capability.return_value = [
         HUMANITEC_LLM_PROVIDER,
@@ -104,10 +114,17 @@ async def test_read_agent_llm_model_ids_falls_back_to_humanitec_llm_options() ->
             {"value": "groq:llama-3.1-8b-instant", "label": "groq / llama-3.1-8b-instant"},
         ],
     )
+    monkeypatch.setattr(
+        "apps.agent.llm_proxy.load_lara_branch_ids",
+        AsyncMock(return_value=["documents"]),
+    )
 
     model_ids = await _read_agent_llm_model_ids(container)
 
-    assert model_ids == [HUMANITEC_LLM_AUTO_MODEL, "groq:llama-3.1-8b-instant"]
+    assert model_ids[0] == HUMANITEC_LLM_AUTO_MODEL
+    assert "image-auto" in model_ids
+    assert "lara:documents" in model_ids
+    assert "groq:llama-3.1-8b-instant" in model_ids
 
 
 def test_resolve_agent_llm_model_auto_uses_humanitec_llm(

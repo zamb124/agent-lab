@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
-from apps.agent.llm_proxy import router as agent_llm_proxy_router  # noqa: E402
+from apps.agent import llm_proxy as agent_llm_proxy  # noqa: E402
 from apps.agent.platform_mcp import router as agent_platform_mcp_router  # noqa: E402
 from apps.flows.config import FlowSettings, get_settings  # noqa: E402
 from apps.flows.src.api import (  # noqa: E402
@@ -282,7 +282,7 @@ app = create_service_app(
         websocket_router,
         a2a_router,
         agent_platform_mcp_router,
-        agent_llm_proxy_router,
+        agent_llm_proxy.router,
     ],
     on_startup=on_startup,
     on_shutdown=on_shutdown,
@@ -305,6 +305,7 @@ app = create_service_app(
     description="Сервис flows: конфигурации, runtime и A2A",
     version="2.0.0",
 )
+agent_llm_proxy.install_llm_proxy_exception_handlers(app)
 
 if _flow_settings.dynamic_embed_cors_enabled:
     app.add_middleware(EmbedDynamicCorsMiddleware, container=get_container())

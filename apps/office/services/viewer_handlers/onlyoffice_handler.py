@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import ClassVar
+from typing import ClassVar, Literal
 from urllib.parse import quote
 
 from apps.office.services.callback_token import encode_callback_context_token
@@ -24,6 +24,8 @@ from core.documents.viewer.models import (
     OnlyOfficeOpenPayload,
 )
 from core.files.models import FileRecord
+from core.office.ai_settings import ONLYOFFICE_AI_PLUGIN_GUID
+from core.office.platform_ai_claims import OFFICE_AI_JWT_CLAIM_KEY, OfficePlatformAiClaims
 from core.types import JsonObject
 
 
@@ -95,6 +97,19 @@ class OnlyOfficeViewerHandler:
             "print": True,
             "review": can_edit,
         }
+        enable_platform_ai = ctx.public_link_token_hash is None
+        editor_config: JsonObject = {
+            "mode": editor_mode,
+            "callbackUrl": callback_url if can_edit else "",
+            "user": {"id": ctx.user_id, "name": ctx.user_name},
+            "lang": ctx.editor_lang,
+            "coEditing": {"mode": "fast"},
+            "customization": onlyoffice_editor_customization_payload(),
+        }
+        if enable_platform_ai:
+            editor_config["plugins"] = {
+                "autostart": [ONLYOFFICE_AI_PLUGIN_GUID],
+            }
         config: JsonObject = {
             "type": "desktop",
             "width": "100%",
@@ -107,15 +122,22 @@ class OnlyOfficeViewerHandler:
                 "permissions": document_permissions,
             },
             "documentType": editor_document_type,
-            "editorConfig": {
-                "mode": editor_mode,
-                "callbackUrl": callback_url if can_edit else "",
-                "user": {"id": ctx.user_id, "name": ctx.user_name},
-                "lang": ctx.editor_lang,
-                "coEditing": {"mode": "fast"},
-                "customization": onlyoffice_editor_customization_payload(),
-            },
+            "editorConfig": editor_config,
         }
+        if enable_platform_ai:
+            if ctx.namespace is None or not ctx.namespace.strip():
+                raise ValueError("namespace обязателен для OnlyOffice platform AI claims")
+            binding_kind_claim: Literal["document", "file"] = (
+                "file" if binding_kind == "file" else "document"
+            )
+            config[OFFICE_AI_JWT_CLAIM_KEY] = OfficePlatformAiClaims(
+                company_id=ctx.company_id,
+                user_id=ctx.user_id,
+                namespace=ctx.namespace,
+                binding_id=ctx.binding_id,
+                file_id=ctx.file_record.file_id,
+                binding_kind=binding_kind_claim,
+            ).model_dump(mode="json")
         token = encode_editor_config(config, ctx.jwt_secret)
         content_type = ctx.file_record.content_type or "application/octet-stream"
         caps = self.capabilities(

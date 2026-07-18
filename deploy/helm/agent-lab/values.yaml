@@ -805,6 +805,12 @@ onlyoffice:
   nodeName: master
   image: onlyoffice/documentserver:9.3.1
   publicUrl: https://onlyoffice.linnex.io
+  # Platform OpenAI-compatible LLM proxy (browser → flows). Addon v1 добавляет плагин.
+  ai:
+    enabled: true
+    llmApiBaseUrl: https://linnex.io/flows/api/v1/agent/llm
+    proxyUrl: https://linnex.io/flows/api/v1/agent/llm/v1/proxy
+    providerDisplayName: Linnex LLMs
   resources:
     requests:
       cpu: 500m
