@@ -128,6 +128,9 @@ jobs:
         with:
           context: .
           push: true
+          # pull=true: иначе Buildx/GHA cache может собрать FROM agent-lab-base:latest
+          # со старым digest после свежего Build Base (новые deps вроде aioimaplib не попадут).
+          pull: true
           target: full
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -152,6 +155,7 @@ jobs:
           context: .
           file: Dockerfile.gpu
           push: true
+          pull: true
           tags: ${{ steps.meta_gpu.outputs.tags }}
           labels: ${{ steps.meta_gpu.outputs.labels }}
           cache-from: type=gha,scope=gpu
