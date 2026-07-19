@@ -33,7 +33,7 @@ export class GlassModal extends PlatformElement {
         _fullscreenMotionRun: { type: Boolean, state: true },
         hideHeaderClose: { type: Boolean },
         headerSavePrimary: { type: Boolean },
-        skipEnterMotion: { type: Boolean },
+        skipEnterMotion: { type: Boolean, reflect: true, attribute: 'skip-enter-motion' },
     };
 
     static styles = [
@@ -129,6 +129,17 @@ export class GlassModal extends PlatformElement {
 
             :host([open]:not([closing])) .modal-overlay {
                 animation: glassModalBackdropIn var(--modal-overlay-duration, var(--duration-normal)) var(--modal-enter-easing, var(--easing-smooth)) both;
+            }
+
+            :host([open][skip-enter-motion]:not([closing])) .modal-overlay {
+                animation: none;
+                opacity: 1;
+            }
+
+            :host([open][skip-enter-motion]:not([closing])) .modal {
+                animation: none !important;
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
             }
 
             :host([closing]) .modal-overlay {
