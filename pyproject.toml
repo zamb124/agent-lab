@@ -109,6 +109,8 @@ core = [
     "yt-dlp>=2024.0.0",
     "structlog>=25.5.0",
     "trafilatura>=2.0.0",
+    "aiosmtplib>=5.1.2",
+    "aioimaplib>=2.0.1",
 ]
 
 agents = [

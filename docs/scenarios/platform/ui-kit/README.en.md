@@ -51,6 +51,7 @@ Catalog of core `platform-*` components with contract tests, Playwright scenario
 | [platform-llm-context-editor](../platform-llm-context-editor/) | T0 | backlog |
 | [platform-log-viewer](../platform-log-viewer/) | T0 | backlog |
 | [platform-mermaid-host](../platform-mermaid-host/) | T2 | backfill |
+| [platform-markdown-editor](../platform-markdown-editor/) | T0 | backlog |
 | [platform-metric-card](../platform-metric-card/) | T0 | backfill |
 | [platform-mini-bar-chart](../platform-mini-bar-chart/) | T0 | backlog |
 | [platform-modal-search-field](../platform-modal-search-field/) | T0 | backlog |

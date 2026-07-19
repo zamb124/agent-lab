@@ -229,6 +229,21 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
+- component: platform-mail-calendar-rail
+  doc_slug: platform-mail-calendar-rail
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
+- component: platform-mail-modal
+  doc_slug: platform-mail-modal
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
+- component: platform-markdown-editor
+  doc_slug: platform-markdown-editor
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-modal-search-field
   doc_slug: platform-modal-search-field
   status: backlog

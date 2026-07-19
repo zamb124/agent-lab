@@ -32,6 +32,7 @@ import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import './platform-icon.js';
 import './platform-calendar-modal.js';
+import './platform-mail-modal.js';
 const COMPANY_SWITCH_STORAGE_KEY = 'platform:company-switch';
 
 export class PlatformUser extends PlatformElement {
@@ -194,6 +195,11 @@ export class PlatformUser extends PlatformElement {
     _openCalendar() {
         this._menuOpen = false;
         this.openModal('platform.calendar', {});
+    }
+
+    _openMail() {
+        this._menuOpen = false;
+        this.openModal('platform.mail', {});
     }
 
     _openDocumentation() {
@@ -457,6 +463,11 @@ export class PlatformUser extends PlatformElement {
                     <button class="menu-item" data-menu-action="calendar" @click=${this._openCalendar}>
                         <platform-icon class="menu-icon" name="calendar" size="18"></platform-icon>
                         <span class="menu-item-label">${this.t('menu.calendar')}</span>
+                    </button>
+
+                    <button class="menu-item" data-menu-action="mail" @click=${this._openMail}>
+                        <platform-icon class="menu-icon" name="mail" size="18"></platform-icon>
+                        <span class="menu-item-label">${this.t('menu.mail')}</span>
                     </button>
 
                     <button class="menu-item" data-menu-action="documentation" @click=${this._openDocumentation}>

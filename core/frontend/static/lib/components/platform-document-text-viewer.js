@@ -1,10 +1,12 @@
 /**
- * platform-document-text-viewer — Lit viewer для text handler (CodeMirror, без iframe).
+ * platform-document-text-viewer — Lit viewer для text handler (CodeMirror / HTML preview / Markdown preview).
  */
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
+import { flowsChatMarkdownToHtml } from '../chat/markdown.js';
 import './platform-json-editor.js';
 import './platform-code-editor.js';
+import './platform-markdown-editor.js';
 
 function languageFromFileName(originalName, contentType) {
     const normalizedType = typeof contentType === 'string' ? contentType.split(';', 1)[0].trim() : '';
@@ -41,6 +43,23 @@ function languageFromFileName(originalName, contentType) {
     return 'text';
 }
 
+function normalizePresentation(value) {
+    if (value === 'html' || value === 'markdown' || value === 'code') {
+        return value;
+    }
+    return 'code';
+}
+
+function normalizeViewMode(value, presentation) {
+    if (presentation === 'code') {
+        return 'source';
+    }
+    if (value === 'preview' || value === 'source') {
+        return value;
+    }
+    return 'preview';
+}
+
 export class PlatformDocumentTextViewer extends PlatformElement {
     static i18nNamespace = 'platform';
 
@@ -50,6 +69,8 @@ export class PlatformDocumentTextViewer extends PlatformElement {
         originalName: { type: String, attribute: 'original-name' },
         contentType: { type: String, attribute: 'content-type' },
         editMode: { type: Boolean, attribute: 'edit-mode' },
+        presentation: { type: String },
+        viewMode: { type: String, attribute: 'view-mode' },
     };
 
     static styles = [
@@ -92,9 +113,35 @@ export class PlatformDocumentTextViewer extends PlatformElement {
                 min-height: 0;
             }
             platform-json-editor,
-            platform-code-editor {
+            platform-code-editor,
+            platform-markdown-editor {
                 flex: 1;
                 min-height: 0;
+            }
+            .html-preview-frame {
+                flex: 1;
+                min-width: 0;
+                min-height: 0;
+                width: 100%;
+                height: 100%;
+                border: 0;
+                background: #fff;
+            }
+            .markdown-preview-shell {
+                display: flex;
+                flex: 1;
+                min-height: 0;
+                overflow: auto;
+                padding: var(--space-4);
+                background: var(--bg-primary);
+            }
+            .markdown-preview-shell platform-markdown-editor {
+                width: 100%;
+                max-width: 920px;
+                margin: 0 auto;
+                --markdown-editor-min-height: 0;
+                --markdown-editor-body-min-height: 0;
+                --markdown-editor-body-max-height: none;
             }
         `,
     ];
@@ -106,6 +153,8 @@ export class PlatformDocumentTextViewer extends PlatformElement {
         this.originalName = '';
         this.contentType = '';
         this.editMode = false;
+        this.presentation = 'code';
+        this.viewMode = 'source';
         this._content = '';
         this._loading = false;
         this._error = '';
@@ -123,6 +172,20 @@ export class PlatformDocumentTextViewer extends PlatformElement {
         if (changed.has('streamUrl')) {
             void this._loadContent();
         }
+    }
+
+    get _resolvedPresentation() {
+        return normalizePresentation(this.presentation);
+    }
+
+    get _resolvedViewMode() {
+        return normalizeViewMode(this.viewMode, this._resolvedPresentation);
+    }
+
+    get _isPreviewMode() {
+        const presentation = this._resolvedPresentation;
+        return this._resolvedViewMode === 'preview'
+            && (presentation === 'html' || presentation === 'markdown');
     }
 
     async _loadContent() {
@@ -163,6 +226,9 @@ export class PlatformDocumentTextViewer extends PlatformElement {
     }
 
     async _saveContent(value) {
+        if (this._isPreviewMode) {
+            return;
+        }
         const saveUrl = this.saveUrl;
         if (typeof saveUrl !== 'string' || saveUrl.length === 0) {
             return;
@@ -187,6 +253,9 @@ export class PlatformDocumentTextViewer extends PlatformElement {
     }
 
     _onSave(event) {
+        if (this._isPreviewMode) {
+            return;
+        }
         const detail = event.detail;
         if (!detail || typeof detail.value !== 'string') {
             return;
@@ -195,6 +264,9 @@ export class PlatformDocumentTextViewer extends PlatformElement {
     }
 
     _onChange(event) {
+        if (this._isPreviewMode) {
+            return;
+        }
         const detail = event.detail;
         if (!detail || typeof detail.value !== 'string') {
             return;
@@ -203,13 +275,34 @@ export class PlatformDocumentTextViewer extends PlatformElement {
         this.emit('document-state', { dirty: true });
     }
 
-    render() {
-        if (this._loading) {
-            return html`<div class="state">${this.t('document_viewer.loading')}</div>`;
-        }
-        if (this._error) {
-            return html`<div class="state state-error">${this._error}</div>`;
-        }
+    _renderHtmlPreview() {
+        return html`
+            <iframe
+                class="html-preview-frame"
+                title=${this.originalName || this.t('document_viewer.html_preview')}
+                sandbox=""
+                srcdoc=${this._content}
+            ></iframe>
+        `;
+    }
+
+    _renderMarkdownPreview() {
+        const htmlValue = flowsChatMarkdownToHtml(this._content, { streaming: false });
+        return html`
+            <div class="markdown-preview-shell">
+                <platform-markdown-editor
+                    readonly
+                    .htmlValue=${htmlValue}
+                    .showPrimary=${false}
+                    .showAttach=${false}
+                    .showDiscard=${false}
+                    .showFormatToggle=${false}
+                ></platform-markdown-editor>
+            </div>
+        `;
+    }
+
+    _renderSourceEditor() {
         const language = languageFromFileName(this.originalName, this.contentType);
         const readonly = !this.editMode;
         const showToolbar = this.editMode && typeof this.saveUrl === 'string' && this.saveUrl.length > 0;
@@ -244,6 +337,22 @@ export class PlatformDocumentTextViewer extends PlatformElement {
                 `}
             </div>
         `;
+    }
+
+    render() {
+        if (this._loading) {
+            return html`<div class="state">${this.t('document_viewer.loading')}</div>`;
+        }
+        if (this._error) {
+            return html`<div class="state state-error">${this._error}</div>`;
+        }
+        if (this._isPreviewMode && this._resolvedPresentation === 'html') {
+            return this._renderHtmlPreview();
+        }
+        if (this._isPreviewMode && this._resolvedPresentation === 'markdown') {
+            return this._renderMarkdownPreview();
+        }
+        return this._renderSourceEditor();
     }
 }
 

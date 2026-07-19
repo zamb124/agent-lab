@@ -35,6 +35,7 @@ from core.api.auth import router as core_auth_router
 from core.api.calendar import router as core_calendar_router
 from core.api.companies import router as core_companies_router
 from core.api.integrations import router as core_integrations_router
+from core.api.mail import router as core_mail_router
 from core.api.platform_brand import router as platform_brand_router
 from core.api.team import router as core_team_router
 from core.app.file_types_route import register_platform_file_types_route
@@ -429,6 +430,10 @@ def create_service_app(
         calendar_prefix = f"/{public_segment}/api/calendar"
         logger.info("service.router_attached", router="core_calendar", prefix=calendar_prefix)
         app.include_router(core_calendar_router, prefix=calendar_prefix, tags=["calendar"])
+
+        mail_prefix = f"/{public_segment}/api/mail"
+        logger.info("service.router_attached", router="core_mail", prefix=mail_prefix)
+        app.include_router(core_mail_router, prefix=mail_prefix, tags=["mail"])
 
         integrations_prefix = f"/{public_segment}"
         logger.info("service.router_attached", router="core_integrations", prefix=integrations_prefix)

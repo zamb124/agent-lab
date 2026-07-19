@@ -20,6 +20,8 @@ from core.config.models import (
     LegalConfig,
     LLMConfig,
     LoggingConfig,
+    MailConfig,
+    MailSyncConfig,
     MCPBrandingConfig,
     MCPCatalogConfig,
     MediaTranscriberConfig,
@@ -117,6 +119,8 @@ class BaseSettings(PydanticBaseSettings):
     billing: BillingConfig = Field(default_factory=BillingConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     calendar_sync: CalendarSyncConfig = Field(default_factory=CalendarSyncConfig)
+    mail_sync: MailSyncConfig = Field(default_factory=MailSyncConfig)
+    mail: MailConfig = Field(default_factory=MailConfig)
     push: PushConfig = Field(default_factory=PushConfig)
     calls: CallsConfig = Field(default_factory=CallsConfig)
     media_transcriber: MediaTranscriberConfig = Field(default_factory=MediaTranscriberConfig)
@@ -303,6 +307,14 @@ class _SettingsProxy:
     @property
     def calendar_sync(self) -> CalendarSyncConfig:
         return get_settings().calendar_sync
+
+    @property
+    def mail_sync(self) -> MailSyncConfig:
+        return get_settings().mail_sync
+
+    @property
+    def mail(self) -> MailConfig:
+        return get_settings().mail
 
     @property
     def push(self) -> PushConfig:

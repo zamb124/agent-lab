@@ -1,0 +1,83 @@
+# Opt-in live mail against ISPmanager / IMAP / SMTP (linnex.io).
+# Requires repo secrets:
+#   MAIL_ISPMANAGER_BASE_URL
+#   MAIL_ISPMANAGER_AUTHINFO_USER
+#   MAIL_ISPMANAGER_AUTHINFO_PASSWORD
+# Authinfo IP whitelist: GitHub egress is dynamic — prefer self-hosted or open RestrictAuthinfo for test user.
+
+name: Mail live (ISPmanager)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: mail-live-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mail-live:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: platform_user
+          POSTGRES_PASSWORD: platform_password
+          POSTGRES_DB: platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U platform_user -d platform_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE__SHARED_URL: postgresql+asyncpg://platform_user:platform_password@localhost:5432/platform_test
+      DATABASE__FLOWS_URL: postgresql+asyncpg://platform_user:platform_password@localhost:5432/platform_test
+      DATABASE__CRM_URL: postgresql+asyncpg://platform_user:platform_password@localhost:5432/platform_test
+      DATABASE__SYNC_URL: postgresql+asyncpg://platform_user:platform_password@localhost:5432/platform_test
+      DATABASE__RAG_URL: postgresql+asyncpg://platform_user:platform_password@localhost:5432/platform_test
+      DATABASE__REDIS_URL: redis://localhost:6379/0
+      MAIL__LIVE_TEST__ENABLED: "true"
+      MAIL__LIVE_TEST__MAILBOX_PREFIX: "plt-"
+      MAIL__LIVE_TEST__ALLOW_DELETE: "true"
+      MAIL__SYSTEM__ENABLED: "true"
+      MAIL__SYSTEM__MAIL_DOMAIN: "linnex.io"
+      MAIL__SYSTEM__PROVIDER: "ispmanager"
+      MAIL__SYSTEM__IMAP_HOST: "sm36.hosting.reg.ru"
+      MAIL__SYSTEM__IMAP_PORT: "993"
+      MAIL__SYSTEM__SMTP_HOST: "sm36.hosting.reg.ru"
+      MAIL__SYSTEM__SMTP_PORT: "465"
+      MAIL__SYSTEM__USE_SSL: "true"
+      MAIL__SYSTEM__ISPMANAGER__BASE_URL: ${{ secrets.MAIL_ISPMANAGER_BASE_URL }}
+      MAIL__SYSTEM__ISPMANAGER__AUTHINFO_USER: ${{ secrets.MAIL_ISPMANAGER_AUTHINFO_USER }}
+      MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD: ${{ secrets.MAIL_ISPMANAGER_AUTHINFO_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require mail secrets
+        run: |
+          test -n "${{ secrets.MAIL_ISPMANAGER_BASE_URL }}"
+          test -n "${{ secrets.MAIL_ISPMANAGER_AUTHINFO_USER }}"
+          test -n "${{ secrets.MAIL_ISPMANAGER_AUTHINFO_PASSWORD }}"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Live mail suite
+        run: uv run pytest -q tests/core/mail/live -m network --tb=short -n0

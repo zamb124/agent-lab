@@ -55,9 +55,17 @@ async def test_files_service_create_persists_record(app):
     assert record.file_size == len(data)
     assert record.url.startswith("/frontend/api/v1/files/download/")
     assert record.is_public is True
+    assert record.metadata["source_kind"] == FileSourceKind.PLATFORM_AUXILIARY.value
 
     loaded = await container.files_service.get(record.file_id)
     assert loaded.file_id == record.file_id
+
+
+def test_source_kind_metadata_value_accepts_enum_and_str() -> None:
+    from core.files.service import _source_kind_metadata_value
+
+    assert _source_kind_metadata_value(FileSourceKind.MAIL_MESSAGE) == "mail_message"
+    assert _source_kind_metadata_value("mail_message") == "mail_message"
 
 
 @pytest.mark.asyncio

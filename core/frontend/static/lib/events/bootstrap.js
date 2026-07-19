@@ -30,6 +30,7 @@ import { createFilesEffect } from './effects/files.effect.js';
 import { createCompaniesEffect } from './effects/companies.effect.js';
 import { createTeamEffect } from './effects/team.effect.js';
 import { createCalendarEffect } from './effects/calendar.effect.js';
+import { createMailEffect } from './effects/mail.effect.js';
 import { createUiEffect } from './effects/ui.effect.js';
 
 function _normalizePlatformApex(originStr) {
@@ -105,6 +106,7 @@ export function bootstrapPlatformBus(options) {
     bus.registerEffect(createCompaniesEffect({ baseUrl }));
     bus.registerEffect(createTeamEffect({ baseUrl }));
     bus.registerEffect(createCalendarEffect({ baseUrl }));
+    bus.registerEffect(createMailEffect({ baseUrl }));
     bus.registerEffect(createUiEffect());
     bus.registerEffect(createAuthEffect({ baseUrl }));
     bus.registerEffect(createAuthCompanyNavigationEffect());

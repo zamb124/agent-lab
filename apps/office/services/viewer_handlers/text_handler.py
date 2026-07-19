@@ -16,6 +16,7 @@ from core.documents.viewer.models import (
     DocumentViewerHandlerId,
     TextOpenPayload,
 )
+from core.documents.viewer.text_presentation import resolve_text_presentation
 from core.files.models import FileRecord
 
 TEXT_MAX_EDIT_BYTES = 512_000
@@ -39,6 +40,10 @@ class TextViewerHandler:
     async def build_open_config(self, ctx: ViewerOpenContext) -> DocumentOpenConfigResponse:
         content_type = ctx.file_record.content_type or "text/plain"
         normalized = content_type.split(";", 1)[0].strip()
+        presentation, default_view_mode = resolve_text_presentation(
+            original_name=ctx.file_record.original_name,
+            content_type=normalized,
+        )
         caps = self.capabilities(file_record=ctx.file_record, integration_configured=True)
         can_edit = caps.edit and ctx.link_permission == "edit"
         stream_url = viewer_stream_url(
@@ -79,5 +84,7 @@ class TextViewerHandler:
                 content_type=normalized,
                 edit_mode=can_edit,
                 max_edit_bytes=TEXT_MAX_EDIT_BYTES,
+                presentation=presentation,
+                default_view_mode=default_view_mode,
             ),
         )

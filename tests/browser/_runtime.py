@@ -8,8 +8,18 @@ from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
 from core.clients.redis_client import RedisClient
 from core.context import get_context
 from core.db.storage import Storage
+from core.documents.placement import DocsBindResult, DocsPlacement
 from core.files.file_repository import FileRepository
 from core.files.service import FilesService
+
+
+async def _test_docs_bind_hook(placement: DocsPlacement) -> DocsBindResult:
+    return DocsBindResult(
+        file_id=placement.file_id,
+        catalog_id="test-catalog",
+        created=True,
+        catalog_path=placement.path_segments if placement.path_segments is not None else [],
+    )
 
 
 def build_test_facade(view: BrowserRuntimeSettingsView) -> BrowserRuntimeFacade:
@@ -26,5 +36,8 @@ def build_test_facade(view: BrowserRuntimeSettingsView) -> BrowserRuntimeFacade:
         raise ValueError("database.shared_url обязателен для тестового фасада browser")
     redis_client = RedisClient(redis_url)
     storage = Storage(db_url=shared_url, get_context_func=get_context)
-    files_service = FilesService(file_repository=FileRepository(storage=storage))
+    files_service = FilesService(
+        file_repository=FileRepository(storage=storage),
+        docs_bind_hook=_test_docs_bind_hook,
+    )
     return BrowserRuntimeFacade(view, redis_client=redis_client, files_service=files_service)

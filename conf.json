@@ -1312,6 +1312,41 @@
     "sync_meeting_reminder_cron": "*/1 * * * *",
     "sync_meeting_reminder_limit": 500
   },
+  "mail_sync": {
+    "enabled": true,
+    "cron": "*/1 * * * *",
+    "batch_size": 100,
+    "max_bindings_per_tick": 1000,
+    "max_parallel_bindings": 10,
+    "max_new_messages_per_binding": 20,
+    "notification_dedup_ttl_seconds": 86400,
+    "auth_error_cooldown_seconds": 3600
+  },
+  "mail": {
+    "system": {
+      "enabled": false,
+      "mail_domain": "linnex.io",
+      "provider": "ispmanager",
+      "imap_host": null,
+      "imap_port": 993,
+      "smtp_host": null,
+      "smtp_port": 465,
+      "use_ssl": true,
+      "ispmanager": {
+        "base_url": null,
+        "authinfo_user": null,
+        "authinfo_password": null
+      },
+      "role_mailboxes": ["support", "hr", "pr", "sales", "info", "noreply"],
+      "user_local_part_strategy": "slug_unique",
+      "protected_local_parts": ["support", "hr", "pr", "sales", "info", "noreply"]
+    },
+    "live_test": {
+      "enabled": false,
+      "mailbox_prefix": "plt-",
+      "allow_delete": true
+    }
+  },
   "mcp_catalog": {
     "auto_provision": "approved_only"
   },

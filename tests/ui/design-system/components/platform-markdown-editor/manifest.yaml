@@ -1,0 +1,13 @@
+component: platform-markdown-editor
+doc_slug: platform-markdown-editor
+tier: T0
+title_ru: Markdown Editor
+title_en: Markdown Editor
+import: "@platform/lib/components/platform-markdown-editor.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

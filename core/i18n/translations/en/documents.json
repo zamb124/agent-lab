@@ -271,7 +271,10 @@
             "backAria": "Back to document list",
             "saved": "Saved",
             "saving": "Saving…",
-            "untitled": "Untitled"
+            "untitled": "Untitled",
+            "view_preview": "Preview",
+            "view_raw": "Raw",
+            "view_mode_group": "View mode"
         }
     },
     "namespace_modal": {

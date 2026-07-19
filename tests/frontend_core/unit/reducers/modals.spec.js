@@ -76,4 +76,21 @@ describe('modalsReducer', () => {
         const next = modalsReducer(seeded, ev(CoreEvents.UI_MODAL_CLOSED, { id: 'm1' }));
         expect(next.stack).toEqual([]);
     });
+
+    it('UI_MODAL_OPEN.replaceKinds мгновенно заменяет пару mail/calendar', () => {
+        let s = modalsReducer(
+            initialModalsState,
+            ev(CoreEvents.UI_MODAL_OPEN, { id: 'mail1', kind: 'platform.mail' }),
+        );
+        const next = modalsReducer(
+            s,
+            ev(CoreEvents.UI_MODAL_OPEN, {
+                id: 'cal1',
+                kind: 'platform.calendar',
+                replaceKinds: ['platform.mail', 'platform.calendar'],
+            }),
+        );
+        expect(next.stack.map((m) => m.kind)).toEqual(['platform.calendar']);
+        expect(next.stack[0].id).toBe('cal1');
+    });
 });

@@ -15,7 +15,9 @@
 
 import { html, css, render as litRender } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
+import { CoreEvents } from '../events/contract.js';
 import { NOTIFICATIONS_EVENTS } from '../events/reducers/notifications.js';
+import { MAIL_EVENTS } from '../events/reducers/mail.js';
 import { PWA_EVENTS } from '../events/effects/pwa.effect.js';
 import { translate } from '../events/effects/i18n.effect.js';
 import { mergePlatformI18nVars } from '../utils/platform-i18n-vars.js';
@@ -265,15 +267,40 @@ export class PlatformNotificationManager extends PlatformElement {
 
     _onItemClick(item) {
         this.dispatch(NOTIFICATIONS_EVENTS.READ, { id: item.id });
+        if (item.scope === 'mail' && item.kind === 'mail_new_message') {
+            this._openMailFromNotification(item);
+            this._panelOpen = false;
+            return;
+        }
         const href = this._safeHref(item.action_url);
         if (href) {
             window.location.href = href;
         }
     }
 
+    _openMailFromNotification(item) {
+        const data = item && item.data && typeof item.data === 'object' ? item.data : {};
+        const bindingId = typeof data.mailbox_binding_id === 'string' ? data.mailbox_binding_id : '';
+        const uid = typeof data.uid === 'string' ? data.uid : '';
+        if (bindingId.length === 0 || uid.length === 0) {
+            throw new Error('platform-notification-manager: mail notification requires mailbox_binding_id and uid');
+        }
+        this.dispatch(CoreEvents.UI_MODAL_OPEN, { kind: 'platform.mail', props: {} });
+        this.dispatch(MAIL_EVENTS.OPEN_FROM_NOTIFICATION, {
+            mailbox_binding_id: bindingId,
+            uid,
+        });
+    }
+
     _onActionClick(event, item) {
+        event.preventDefault();
         event.stopPropagation();
         this.dispatch(NOTIFICATIONS_EVENTS.READ, { id: item.id });
+        if (item.scope === 'mail' && item.kind === 'mail_new_message') {
+            this._openMailFromNotification(item);
+            this._panelOpen = false;
+            return;
+        }
         this._panelOpen = false;
     }
 
@@ -365,6 +392,14 @@ export class PlatformNotificationManager extends PlatformElement {
             seen.add(href);
             out.push({ ...raw, href, label: this._resolveActionLabel(raw) });
         };
+        if (item.scope === 'mail' && item.kind === 'mail_new_message') {
+            add({
+                url: '#mail',
+                label_i18n_key: 'mail:notifications.open_message',
+                label: 'Open message',
+            });
+            return out;
+        }
         if (Array.isArray(item.actions)) {
             for (const action of item.actions) add(action);
         }

@@ -1,19 +1,21 @@
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformModal } from './glass-modal.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import './platform-icon.js';
+import './platform-mail-calendar-rail.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import './platform-date-picker.js';
 import './platform-timezone-picker.js';
 import './platform-switch.js';
 import { CALENDAR_EVENTS } from '../events/reducers/calendar.js';
+import { MAIL_EVENTS } from '../events/reducers/mail.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
 import { FILES_EVENTS } from '../events/reducers/files.js';
 import { buildCalendarEventFileCreateSpecJson } from '../utils/file-create-spec.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 
-import { COLOR_PALETTE } from '@platform/lib/utils/color-palette.js';
+import { COLOR_PALETTE, resolvePaletteColor } from '@platform/lib/utils/color-palette.js';
 
 const EVENT_COLOR_KEY = 'event_color';
 const DEFAULT_EVENT_COLOR = 'default';
@@ -331,24 +333,28 @@ export class PlatformCalendarModal extends PlatformModal {
                 transform: none !important;
             }
 
+            /* Chrome как у platform.mail: без platform-header, контент edge-to-edge. */
             :host([open]) .modal .modal-content,
             :host([open]) .modal.full .modal-content,
             :host([open]) .modal.fullscreen .modal-content {
                 margin: 0 !important;
                 border-radius: 0 !important;
-                padding: var(--space-5, 20px) var(--space-6, 24px) !important;
+                padding: 0 !important;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                height: 100%;
             }
 
             :host([open]) .modal .modal-header,
             :host([open]) .modal.fullscreen .modal-header {
-                padding: var(--space-4, 16px) var(--space-6, 24px) 0 var(--space-6, 24px) !important;
+                display: none !important;
             }
 
             :host([open]) .modal .modal-actions,
             :host([open]) .modal.fullscreen .modal-actions {
-                margin-left: 0 !important;
-                margin-right: 0 !important;
-                padding: var(--space-3, 12px) var(--space-6, 24px) var(--space-4, 16px) !important;
+                display: none !important;
             }
 
             @media (max-width: 768px) {
@@ -361,28 +367,32 @@ export class PlatformCalendarModal extends PlatformModal {
                     max-height: 100dvh !important;
                     border-radius: 0 !important;
                 }
+            }
 
-                :host([open]) .modal .modal-content,
-                :host([open]) .modal.fullscreen .modal-content {
-                    padding: var(--space-3, 12px) var(--space-3, 12px) max(var(--space-3, 12px), env(safe-area-inset-bottom, 0px)) !important;
-                }
-
-                :host([open]) .modal .modal-header,
-                :host([open]) .modal.fullscreen .modal-header {
-                    padding: max(var(--space-3, 12px), env(safe-area-inset-top, 0px)) var(--space-3, 12px) 0 var(--space-3, 12px) !important;
-                }
+            .calendar-shell-wrap {
+                position: relative;
+                flex: 1;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                background: var(--bg-primary);
+                color: var(--text-primary);
             }
 
             .calendar-shell {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-3);
+                display: grid;
+                grid-template-columns: var(--mail-rail-width, 64px) minmax(0, 1fr);
+                gap: 0;
                 min-height: 0;
-                height: 100%;
+                flex: 1;
+                background: var(--bg-primary);
+            }
+            platform-mail-calendar-rail {
+                min-height: 0;
             }
 
             .calendar-sidebar {
-                border-right: 1px solid var(--glass-border-subtle);
+                border-right: 1px solid var(--border-subtle);
                 padding-right: var(--space-4);
                 display: flex;
                 flex-direction: column;
@@ -397,7 +407,8 @@ export class PlatformCalendarModal extends PlatformModal {
                 min-width: 0;
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-3);
+                gap: 0;
+                background: var(--bg-primary);
             }
 
             .toolbar {
@@ -405,8 +416,10 @@ export class PlatformCalendarModal extends PlatformModal {
                 align-items: center;
                 justify-content: space-between;
                 gap: var(--space-2);
-                padding: var(--space-2) 0;
-                border-bottom: 1px solid var(--glass-border-subtle);
+                padding: var(--space-3) var(--space-5);
+                border-bottom: 1px solid var(--border-subtle);
+                background: var(--bg-surface);
+                flex-shrink: 0;
             }
 
             .toolbar-left,
@@ -483,18 +496,19 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .calendar-panel {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-xl);
-                background: var(--glass-solid-subtle);
+                border: none;
+                border-radius: 0;
+                background: var(--bg-primary);
                 min-height: 0;
+                flex: 1;
                 overflow: auto;
-                padding: var(--space-2);
+                padding: var(--space-3) var(--space-4);
             }
 
             .calendar-panel--day {
                 border: none;
                 background: transparent;
-                padding: 0;
+                padding: var(--space-2) var(--space-3);
                 overflow: visible;
             }
 
@@ -1073,7 +1087,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 border: none;
                 color: #4f5eb6;
                 border-radius: var(--radius-sm);
-                padding: 8px 10px;
+                padding: 8px 10px 8px 12px;
                 cursor: pointer;
                 text-align: left;
                 display: grid;
@@ -1081,6 +1095,18 @@ export class PlatformCalendarModal extends PlatformModal {
                 min-width: 0;
                 flex-shrink: 0;
                 align-content: start;
+                position: relative;
+            }
+
+            .event-chip::before {
+                content: '';
+                position: absolute;
+                left: 0;
+                top: 4px;
+                bottom: 4px;
+                width: 3px;
+                border-radius: 2px;
+                background: var(--mailbox-ribbon, transparent);
             }
 
             .event-chip.active {
@@ -1998,7 +2024,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
             @media (max-width: 1279px) {
                 .calendar-shell {
-                    grid-template-columns: 1fr;
+                    grid-template-columns: var(--mail-rail-width, 64px) minmax(0, 1fr);
                 }
 
                 .calendar-sidebar {
@@ -2134,6 +2160,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._calendarSyncingSelect = this.select((s) => s.calendar.syncing);
         this._teamMembersSelect = this.select((s) => s.team.members);
         this._localeSelect = this.select((s) => s.i18n.locale);
+        this._mailSelect = this.select((s) => s.mail);
         const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
         const now = new Date();
         const defaultEnd = addDays(now, 0);
@@ -2233,6 +2260,10 @@ export class PlatformCalendarModal extends PlatformModal {
     _kickInitialLoad() {
         const range = this._viewRange();
         this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
+        const mail = this._mailSelect.value;
+        if (!Array.isArray(mail.bindings) || mail.bindings.length === 0) {
+            this.dispatch(MAIL_EVENTS.BINDINGS_LOAD_REQUESTED, null);
+        }
         this.dispatch(CALENDAR_EVENTS.INTEGRATIONS_LOAD_REQUESTED, null);
         this.dispatch(CALENDAR_EVENTS.EVENTS_LOAD_REQUESTED, {
             start_at: range.start.toISOString(),
@@ -2243,6 +2274,26 @@ export class PlatformCalendarModal extends PlatformModal {
         if (this._view === 'day' || this._view === 'week') {
             this._scrollToWorkZone();
         }
+    }
+
+    _mailboxRibbonStyle(event) {
+        const mailboxBindingId = event && event.mailbox_binding_id;
+        if (typeof mailboxBindingId !== 'string' || mailboxBindingId.length === 0) {
+            return nothing;
+        }
+        const mail = this._mailSelect.value;
+        const binding = Array.isArray(mail.bindings)
+            ? mail.bindings.find((item) => item.mailbox_binding_id === mailboxBindingId)
+            : null;
+        if (!binding || typeof binding.calendar_color !== 'string') {
+            return nothing;
+        }
+        const color = resolvePaletteColor(binding.calendar_color);
+        return `--mailbox-ribbon: ${color}`;
+    }
+
+    _openCalendarRailSettings() {
+        this._integrationsMenuOpen = true;
     }
 
     _reload() {
@@ -2804,6 +2855,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                 type="button"
                                 class="event-chip"
                                 data-color=${normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY])}
+                                style=${this._mailboxRibbonStyle(event)}
                                 @click=${() => this._fillFormFromEvent(event)}
                             >
                                 <span class="event-chip-title">${event.title}</span>
@@ -2829,20 +2881,25 @@ export class PlatformCalendarModal extends PlatformModal {
                                 ${showNow && nowTop !== null ? html`
                                     <div class="day-now-line" style=${`top:${nowTop}px`}></div>
                                 ` : ''}
-                                ${layoutTimed.map(({ event, top, height, colorKey, visibleStartMs }) => html`
+                                ${layoutTimed.map(({ event, top, height, colorKey, visibleStartMs }) => {
+                                    const ribbon = this._mailboxRibbonStyle(event);
+                                    const layoutStyle = `top:${top}px;height:${height}px;touch-action:none`;
+                                    const style = ribbon === nothing ? layoutStyle : `${layoutStyle};${ribbon}`;
+                                    return html`
                                     <button
                                         type="button"
                                         class="day-event-block event-chip"
                                         data-color=${colorKey}
                                         ?data-dragging=${this._dragEvent?.event_id === event.event_id}
-                                        style=${`top:${top}px;height:${height}px;touch-action:none`}
+                                        style=${style}
                                         @click=${() => this._fillFormFromEvent(event)}
                                         @pointerdown=${(e) => this._onDragStart(event, e)}
                                     >
                                         <span class="event-chip-time">${this._formatWallClockFromMs(visibleStartMs)}</span>
                                         <span class="event-chip-title">${event.title}</span>
                                     </button>
-                                `)}
+                                `;
+                                })}
                             </div>
                         </div>
                     </div>
@@ -3241,6 +3298,11 @@ export class PlatformCalendarModal extends PlatformModal {
             this.toast('err_edit_remote', { type: 'error', vars: { label: this._sourceLabel(this._selectedEventSource) } });
             return;
         }
+        const activeMailboxBindingId = this._mailSelect.value.activeMailboxBindingId;
+        if (typeof activeMailboxBindingId !== 'string' || activeMailboxBindingId.length === 0) {
+            this.toast('err_mailbox_required', { type: 'error' });
+            return;
+        }
         const payload = {
             title: this._eventForm.title.trim(),
             kind: String(this._eventForm.kind || '').trim(),
@@ -3259,6 +3321,7 @@ export class PlatformCalendarModal extends PlatformModal {
             recurrence_id: null,
             series_id: null,
             deep_link: null,
+            mailbox_binding_id: activeMailboxBindingId,
             metadata: buildEventMetadata(
                 {
                     ...this._eventMetadata,
@@ -3444,6 +3507,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                             type="button"
                                             class="event-chip"
                                             data-color=${normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY])}
+                                            style=${this._mailboxRibbonStyle(event)}
                                             @click=${() => this._fillFormFromEvent(event)}
                                         >
                                             <span class="event-chip-title">${event.title}</span>
@@ -3476,20 +3540,25 @@ export class PlatformCalendarModal extends PlatformModal {
                                         ${showNowLine && nowTop !== null ? html`
                                             <div class="day-now-line" style=${`top:${nowTop}px`}></div>
                                         ` : ''}
-                                        ${timedLayout.map(({ event, top, height, colorKey, visibleStartMs }) => html`
+                                        ${timedLayout.map(({ event, top, height, colorKey, visibleStartMs }) => {
+                                            const ribbon = this._mailboxRibbonStyle(event);
+                                            const layoutStyle = `top:${top}px;height:${height}px;touch-action:none`;
+                                            const style = ribbon === nothing ? layoutStyle : `${layoutStyle};${ribbon}`;
+                                            return html`
                                             <button
                                                 type="button"
                                                 class="day-event-block event-chip"
                                                 data-color=${colorKey}
                                                 ?data-dragging=${this._dragEvent?.event_id === event.event_id}
-                                                style=${`top:${top}px;height:${height}px;touch-action:none`}
+                                                style=${style}
                                                 @click=${() => this._fillFormFromEvent(event)}
                                                 @pointerdown=${(e) => this._onDragStart(event, e)}
                                             >
                                                 <span class="event-chip-time">${this._formatWallClockFromMs(visibleStartMs)}</span>
                                                 <span class="event-chip-title">${event.title}</span>
                                             </button>
-                                        `)}
+                                        `;
+                                        })}
                                     </div>
                                 </div>
                             `;
@@ -3516,7 +3585,12 @@ export class PlatformCalendarModal extends PlatformModal {
                     >
                         <div class="date-label">${cell.date.getDate()}</div>
                         <div class="month-cell-events">
-                            ${cell.events.map((event) => html`
+                            ${cell.events.map((event) => {
+                                const ribbon = this._mailboxRibbonStyle(event);
+                                const style = ribbon === nothing
+                                    ? 'touch-action: none;'
+                                    : `touch-action: none;${ribbon}`;
+                                return html`
                                 <button
                                     class="event-chip ${this._selectedEventId === event.event_id ? 'active' : ''}"
                                     data-color=${normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY])}
@@ -3528,7 +3602,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                     }}
                                     @pointerdown=${(e) => this._onDragStart(event, e)}
                                     title=${`${this._sourceLabel(event.source)} • ${this._kindLabel(event.kind)}`}
-                                    style="touch-action: none;"
+                                    style=${style}
                                 >
                                     <span class="event-chip-top">
                                         <span class="event-badge" data-source=${this._sourceKey(event.source)}>${this._sourceLabel(event.source)}</span>
@@ -3544,7 +3618,8 @@ export class PlatformCalendarModal extends PlatformModal {
                                         <span class="event-chip-time">${this._eventStartTimeLabel(event)}</span>${event.title}
                                     </span>
                                 </button>
-                            `)}
+                            `;
+                            })}
                         </div>
                     </article>
                 `)}
@@ -4070,153 +4145,84 @@ export class PlatformCalendarModal extends PlatformModal {
         `;
     }
 
-    render() {
-        if (!this.open || !this._isCompactLayout) {
-            return super.render();
-        }
-        const modalClasses = [
-            'modal',
-            this.size,
-            this._isFullscreen ? 'fullscreen' : '',
-            this._isDragging ? 'dragging' : '',
-            this.open && this._panelEnterActive ? 'panel-enter-active' : '',
-        ].filter(Boolean).join(' ');
-
-        const tm = (key) => (this.t(key) || key);
-        const v = (key) => this._calT(key);
-
-        return html`
-            <div class="modal-svg-hidden" aria-hidden="true">
-                <svg width="0" height="0">
-                    <defs>
-                        <filter id="liquidGlassFilter" x="-10%" y="-10%" width="120%" height="120%">
-                            <feTurbulence
-                                type="fractalNoise"
-                                baseFrequency="0.012 0.012"
-                                numOctaves="3"
-                                seed="15"
-                                result="noise"
-                            />
-                            <feDisplacementMap
-                                in="SourceGraphic"
-                                in2="noise"
-                                scale="6"
-                                xChannelSelector="R"
-                                yChannelSelector="G"
-                            />
-                        </filter>
-                    </defs>
-                </svg>
-            </div>
-
-            <div class="modal-overlay" @click=${this._handleOverlayClick}>
-                <div class="modal-scrim" aria-hidden="true" @click=${() => this.close()}></div>
-                <div
-                    class="${modalClasses}"
-                    style="${this._getModalStyle()}"
-                    @animationend=${this._handlePanelEnterAnimationEnd}
-                    @click=${(e) => e.stopPropagation()}
-                >
-                    <div class="modal-header modal-header--calendar-compact" @mousedown=${this._handleMouseDown}>
-                        <h2 class="modal-title calendar-modal-title">${this.title}</h2>
-                        ${this._renderCompactHeaderDateNav(v)}
-                        <div class="header-buttons">
-                            ${this._renderIntegrationsMenuBlock(v, true)}
-                            ${this.renderSaveHeaderButton()}
-                            <button
-                                class="header-btn fullscreen-btn"
-                                @click=${this.toggleFullscreen}
-                                title="${this._isFullscreen ? tm('modal.fullscreen_exit') : tm('modal.fullscreen_enter')}"
-                            >
-                                <platform-icon
-                                    name="${this._isFullscreen ? 'minimize' : 'maximize'}"
-                                    size="16"
-                                ></platform-icon>
-                            </button>
-                            ${this.hideHeaderClose
-                                ? ''
-                                : html`
-                                      <button
-                                          class="header-btn"
-                                          @click=${() => this.close()}
-                                          title=${tm('modal.close')}
-                                      >
-                                          <platform-icon name="close" size="16"></platform-icon>
-                                      </button>
-                                  `}
-                        </div>
-                    </div>
-
-                    <div class="modal-content">
-                        ${this.renderBody()}
-                    </div>
-
-                    <div class="modal-actions">
-                        ${this.renderFooter()}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
     renderBody() {
         const v = (key) => this._calT(key);
         const compact = this._isCompactLayout;
         return html`
-            <div class="calendar-shell">
-                <section class="calendar-main">
-                    ${!compact ? html`
-                    <div class="toolbar">
-                        <div class="toolbar-left">
-                            <div class="title">${this._periodLabel()}</div>
-                            <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(-1); }}>
-                                <platform-icon name="chevron-left" size="16"></platform-icon>
-                            </button>
-                            <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(1); }}>
-                                <platform-icon name="chevron-right" size="16"></platform-icon>
-                            </button>
-                            <div class="view-segment">
-                                <button class=${this._view === 'day' ? 'active' : ''} type="button" @click=${() => this._onViewChange('day')}>${v('view_day')}</button>
-                                <button class=${this._view === 'week' ? 'active' : ''} type="button" @click=${() => this._onViewChange('week')}>${v('view_week')}</button>
-                                <button class=${this._view === 'month' ? 'active' : ''} type="button" @click=${() => this._onViewChange('month')}>${v('view_month')}</button>
+            <div class="calendar-shell-wrap">
+                <div class="calendar-shell">
+                    <platform-mail-calendar-rail
+                        surface="calendar"
+                        show-settings
+                        @settings-click=${() => this._openCalendarRailSettings()}
+                    ></platform-mail-calendar-rail>
+                    <section class="calendar-main">
+                        <div class="toolbar ${compact ? 'toolbar--compact' : ''}">
+                            <div class="toolbar-left">
+                                ${compact
+                                    ? this._renderCompactHeaderDateNav(v)
+                                    : html`
+                                        <div class="title">${this._periodLabel()}</div>
+                                        <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(-1); }}>
+                                            <platform-icon name="chevron-left" size="16"></platform-icon>
+                                        </button>
+                                        <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(1); }}>
+                                            <platform-icon name="chevron-right" size="16"></platform-icon>
+                                        </button>
+                                    `}
+                                <div class="view-segment">
+                                    <button class=${this._view === 'day' ? 'active' : ''} type="button" @click=${() => this._onViewChange('day')}>${v('view_day')}</button>
+                                    <button class=${this._view === 'week' ? 'active' : ''} type="button" @click=${() => this._onViewChange('week')}>${v('view_week')}</button>
+                                    <button class=${this._view === 'month' ? 'active' : ''} type="button" @click=${() => this._onViewChange('month')}>${v('view_month')}</button>
+                                </div>
+                            </div>
+                            <div class="toolbar-right">
+                                <button
+                                    class="btn btn-primary btn-calendar-create toolbar-create"
+                                    type="button"
+                                    title=${v('create_event')}
+                                    aria-label=${v('create_event')}
+                                    @click=${() => this._openCreateEventDialog(parseDateInputLocal(this._anchorDate))}
+                                >
+                                    <platform-icon name="plus" size="16"></platform-icon>
+                                </button>
+                                ${this._renderIntegrationsMenuBlock(v, compact)}
+                                ${!compact ? html`
+                                    <button
+                                        class="btn-icon"
+                                        type="button"
+                                        @click=${() => this.close()}
+                                        title=${v('modal.close')}
+                                        aria-label=${v('modal.close')}
+                                    >
+                                        <platform-icon name="close" size="16"></platform-icon>
+                                    </button>
+                                ` : nothing}
                             </div>
                         </div>
-                        <div class="toolbar-right">
-                            <button
-                                class="btn btn-primary btn-calendar-create toolbar-create"
-                                type="button"
-                                title=${v('create_event')}
-                                aria-label=${v('create_event')}
-                                @click=${() => this._openCreateEventDialog(parseDateInputLocal(this._anchorDate))}
-                            >
-                                <platform-icon name="plus" size="16"></platform-icon>
-                            </button>
-                            ${this._renderIntegrationsMenuBlock(v, false)}
+                        <div class="calendar-panel ${this._view === 'day' ? 'calendar-panel--day' : ''}">
+                            ${this._renderCalendarPanel()}
                         </div>
-                    </div>
-                    ` : ''}
-                    <div class="calendar-panel ${this._view === 'day' ? 'calendar-panel--day' : ''}">
-                        ${this._renderCalendarPanel()}
-                    </div>
-                </section>
-            </div>
-            ${compact ? html`
-                <button
-                    type="button"
-                    class="calendar-fab"
-                    title=${v('create_event')}
-                    aria-label=${v('create_event')}
-                    @click=${() => this._openCreateEventDialog(parseDateInputLocal(this._anchorDate))}
-                >+</button>
-            ` : ''}
-            ${this._renderDateSheet()}
-            ${this._renderEventDialog()}
-            ${this._renderIntegrationModal()}
-            ${this._dragEvent && this._dragOrigin?.started ? html`
-                <div class="drag-ghost" style=${`top:${this._dragGhostTop}px;left:${this._dragGhostLeft}px`}>
-                    ${this._dragEvent.title}
+                    </section>
                 </div>
-            ` : ''}
+                ${compact ? html`
+                    <button
+                        type="button"
+                        class="calendar-fab"
+                        title=${v('create_event')}
+                        aria-label=${v('create_event')}
+                        @click=${() => this._openCreateEventDialog(parseDateInputLocal(this._anchorDate))}
+                    >+</button>
+                ` : nothing}
+                ${this._renderDateSheet()}
+                ${this._renderEventDialog()}
+                ${this._renderIntegrationModal()}
+                ${this._dragEvent && this._dragOrigin?.started ? html`
+                    <div class="drag-ghost" style=${`top:${this._dragGhostTop}px;left:${this._dragGhostLeft}px`}>
+                        ${this._dragEvent.title}
+                    </div>
+                ` : nothing}
+            </div>
         `;
     }
 }

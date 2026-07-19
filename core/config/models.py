@@ -1574,6 +1574,63 @@ class CalendarSyncConfig(BaseModel):
     sync_meeting_reminder_limit: int = 500
 
 
+class MailSyncConfig(BaseModel):
+    """Фоновая синхронизация IMAP-курсоров и notify о новых письмах."""
+
+    enabled: bool = True
+    cron: str = "*/1 * * * *"
+    batch_size: int = 100
+    max_bindings_per_tick: int = 1000
+    max_parallel_bindings: int = 10
+    max_new_messages_per_binding: int = 20
+    notification_dedup_ttl_seconds: int = 86400
+    auth_error_cooldown_seconds: int = 3600
+
+
+class MailIspmanagerConfig(BaseModel):
+    """ISPmanager API для provision ящиков."""
+
+    base_url: str | None = None
+    authinfo_user: str | None = None
+    authinfo_password: str | None = None
+
+
+class MailSystemConfig(BaseModel):
+    """Auto-seed CompanyMailConnection для company_id=system."""
+
+    enabled: bool = False
+    mail_domain: str = "linnex.io"
+    provider: str = "ispmanager"
+    imap_host: str | None = None
+    imap_port: int = 993
+    smtp_host: str | None = None
+    smtp_port: int = 465
+    use_ssl: bool = True
+    ispmanager: MailIspmanagerConfig = Field(default_factory=MailIspmanagerConfig)
+    role_mailboxes: list[str] = Field(
+        default_factory=lambda: ["support", "hr", "pr", "sales", "info", "noreply"]
+    )
+    user_local_part_strategy: str = "slug_unique"
+    protected_local_parts: list[str] = Field(
+        default_factory=lambda: ["support", "hr", "pr", "sales", "info", "noreply"]
+    )
+
+
+class MailLiveTestConfig(BaseModel):
+    """Opt-in live тесты против реального mail-сервера."""
+
+    enabled: bool = False
+    mailbox_prefix: str = "plt-"
+    allow_delete: bool = True
+
+
+class MailConfig(BaseModel):
+    """Платформенная почта: system auto-seed + live test gates."""
+
+    system: MailSystemConfig = Field(default_factory=MailSystemConfig)
+    live_test: MailLiveTestConfig = Field(default_factory=MailLiveTestConfig)
+
+
 class OpenAIProviderConfig(BaseModel):
     """Конфигурация OpenAI провайдера"""
 

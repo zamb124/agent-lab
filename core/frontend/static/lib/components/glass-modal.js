@@ -33,6 +33,7 @@ export class GlassModal extends PlatformElement {
         _fullscreenMotionRun: { type: Boolean, state: true },
         hideHeaderClose: { type: Boolean },
         headerSavePrimary: { type: Boolean },
+        skipEnterMotion: { type: Boolean },
     };
 
     static styles = [
@@ -940,7 +941,7 @@ export class GlassModal extends PlatformElement {
     willUpdate(changedProperties) {
         super.willUpdate(changedProperties);
         if (changedProperties.has('open') || changedProperties.has('closing')) {
-            if (this.open && !this.closing) {
+            if (this.open && !this.closing && this.skipEnterMotion !== true) {
                 this._panelEnterActive = true;
             } else {
                 this._panelEnterActive = false;

@@ -1,0 +1,13 @@
+component: platform-mail-modal
+doc_slug: platform-mail-modal
+tier: T0
+title_ru: Mail Modal
+title_en: Mail Modal
+import: "@platform/lib/components/platform-mail-modal.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

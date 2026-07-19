@@ -1,0 +1,13 @@
+component: platform-mail-calendar-rail
+doc_slug: platform-mail-calendar-rail
+tier: T0
+title_ru: Mail Calendar Rail
+title_en: Mail Calendar Rail
+import: "@platform/lib/components/platform-mail-calendar-rail.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

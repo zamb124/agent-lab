@@ -1,5 +1,6 @@
 /**
  * platform-file-attachments — список FileRef с upload/open.
+ * layout: stack (колонка) | tiles (горизонтальный ряд равных карточек).
  */
 
 import { html, css, nothing } from '../lit-shim.js';
@@ -7,6 +8,11 @@ import { PlatformElement } from '../platform-element/index.js';
 import { formatFileSize } from '../utils/format-file-size.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import './platform-icon.js';
+
+const LAYOUTS = Object.freeze({
+    stack: 'stack',
+    tiles: 'tiles',
+});
 
 function _fileRefFromUploadResult(result) {
     if (!result || typeof result !== 'object') {
@@ -33,6 +39,16 @@ function _fileRefFromUploadResult(result) {
     };
 }
 
+function _normalizeLayout(value) {
+    if (value === LAYOUTS.tiles) {
+        return LAYOUTS.tiles;
+    }
+    if (value === LAYOUTS.stack || value === '' || value == null) {
+        return LAYOUTS.stack;
+    }
+    throw new Error(`platform-file-attachments: unknown layout "${String(value)}"`);
+}
+
 export class PlatformFileAttachments extends PlatformElement {
     static i18nNamespace = 'platform';
 
@@ -42,6 +58,7 @@ export class PlatformFileAttachments extends PlatformElement {
         uploadOpName: { type: String, attribute: 'upload-op-name' },
         uploadSpec: { type: String, attribute: 'upload-spec' },
         openSource: { type: String, attribute: 'open-source' },
+        layout: { type: String, reflect: true },
         compact: { type: Boolean, reflect: true },
         _uploading: { state: true },
     };
@@ -49,12 +66,18 @@ export class PlatformFileAttachments extends PlatformElement {
     static styles = css`
         :host {
             display: block;
+            --file-attachment-tile-width: var(--mail-attachment-tile, 200px);
         }
         .list {
             display: flex;
             flex-direction: column;
             align-items: flex-start;
             gap: var(--space-2);
+        }
+        .list[data-layout='tiles'] {
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: stretch;
         }
         .row {
             display: inline-flex;
@@ -68,10 +91,21 @@ export class PlatformFileAttachments extends PlatformElement {
             border-radius: var(--radius-md);
             background: var(--glass-tint-subtle);
         }
+        .list[data-layout='tiles'] .row {
+            display: flex;
+            width: var(--file-attachment-tile-width);
+            flex: 0 0 var(--file-attachment-tile-width);
+            max-width: 100%;
+            min-height: 52px;
+        }
         .meta {
             flex: 0 1 auto;
             min-width: 0;
             max-width: min(320px, 100%);
+        }
+        .list[data-layout='tiles'] .meta {
+            flex: 1 1 auto;
+            max-width: none;
         }
         .name {
             font-size: var(--text-sm);
@@ -113,6 +147,9 @@ export class PlatformFileAttachments extends PlatformElement {
             font-size: var(--text-sm);
             padding: var(--space-1) var(--space-2);
         }
+        .list[data-layout='tiles'] .attach-btn {
+            align-self: center;
+        }
         .empty {
             font-size: var(--text-sm);
             color: var(--text-tertiary);
@@ -129,9 +166,14 @@ export class PlatformFileAttachments extends PlatformElement {
         this.uploadOpName = 'platform/file_create';
         this.uploadSpec = '';
         this.openSource = 'platform_file_attachments';
+        this.layout = LAYOUTS.stack;
         this.compact = false;
         this._uploading = false;
         this._uploadOp = null;
+    }
+
+    get _layout() {
+        return _normalizeLayout(this.layout);
     }
 
     _ensureUploadOp() {
@@ -226,8 +268,9 @@ export class PlatformFileAttachments extends PlatformElement {
 
     render() {
         const rows = Array.isArray(this.files) ? this.files : [];
+        const layout = this._layout;
         return html`
-            <div class="list">
+            <div class="list" data-layout=${layout}>
                 ${rows.length === 0 && this.readonly
                     ? html`<div class="empty">${this.t('file_attachments.empty')}</div>`
                     : rows.map((fileRef) => this._renderRow(fileRef))}

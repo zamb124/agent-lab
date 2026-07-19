@@ -102,24 +102,27 @@ class _InMemorySchedulerService:
                 )
         raise AssertionError(f"task not found: {schedule_task_id}")
 
-    async def reconcile_payload(
+    async def reconcile_cron(
         self,
         *,
         company_id: str,
         schedule_task_id: str,
+        cron: str,
         payload: dict[str, Any],
         recreate_schedule: bool = False,
     ) -> PlatformScheduledTask:
+        _ = recreate_schedule
         self.reconciled_ids.append(schedule_task_id)
         for index, task in enumerate(self.tasks):
             if task.company_id == company_id and task.schedule_task_id == schedule_task_id:
                 repaired = task.model_copy(
                     update={
+                        "cron": cron,
                         "payload": {
                             **dict(payload),
                             "schedule_task_id": schedule_task_id,
                             "company_id": company_id,
-                        }
+                        },
                     }
                 )
                 self.tasks[index] = repaired

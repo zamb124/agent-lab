@@ -20,6 +20,7 @@ import { filesSlice } from './files.js';
 import { companiesSlice } from './companies.js';
 import { teamSlice } from './team.js';
 import { calendarSlice } from './calendar.js';
+import { mailSlice } from './mail.js';
 import { notificationsSlice } from './notifications.js';
 import { uiSlice } from './ui.js';
 import { bottomSheetsSlice } from './bottom_sheets.js';
@@ -41,6 +42,7 @@ export const coreSlices = Object.freeze({
     companies:     companiesSlice,
     team:          teamSlice,
     calendar:      calendarSlice,
+    mail:          mailSlice,
     notifications: notificationsSlice,
 });
 

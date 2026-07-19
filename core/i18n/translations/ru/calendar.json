@@ -85,6 +85,7 @@
     "err_edit_remote": "Событие в {label} нельзя редактировать здесь",
     "err_title_required": "Введите название",
     "err_kind_required": "Выберите тип события",
+    "err_mailbox_required": "Выберите почтовый ящик в левой панели",
     "err_end_after_start": "Окончание должно быть позже начала",
     "err_no_event_selected": "Событие не выбрано",
     "err_delete_remote": "Событие в {label} нельзя удалить здесь",

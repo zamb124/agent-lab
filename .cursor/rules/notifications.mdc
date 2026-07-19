@@ -35,6 +35,8 @@ await notify_user(
 
 Разрешено из service/worker/TaskIQ/endpoint. **Хранить уведомления в БД нельзя** — канал только real-time.
 
+Типы (фрагмент): `MAIL_NEW_MESSAGE` (`service="mail"`, event `notify/mail/mail_new_message_received`) — фоновый `mail_sync_tick`; `CALENDAR_NEW_EVENT` — `calendar_sync_tick`. Dedup для mail/calendar — в `shared_storage`, не в Postgres.
+
 ## Офлайн: Web Push и APNs
 
 Если у пользователя нет активного WS к `/<svc>/api/ws/notifications`, `notify_user` дополнительно вызывает `deliver_offline_push` (`core/push/delivery.py`):

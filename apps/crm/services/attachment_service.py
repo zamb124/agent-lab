@@ -125,7 +125,11 @@ class AttachmentService:
         content_type = "application/octet-stream"
         spec = FileCreateSpec(
             source_kind=FileSourceKind.CRM_ENTITY,
-            source_ref=FileSourceRef(entity_id=entity_id),
+            source_ref=FileSourceRef(
+                entity_id=entity_id,
+                entity_type=entity.entity_type,
+                entity_title=entity.name,
+            ),
             retention=default_retention_for_source(FileSourceKind.CRM_ENTITY),
             post_create=FilePostCreate(
                 rag_index_namespace=namespace,

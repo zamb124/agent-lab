@@ -794,6 +794,20 @@ class CalendarService:
         status = payload.status
         want_sync = source == CalendarEventSource.PLATFORM and payload.kind == "meeting"
 
+        mailbox_binding_id = payload.mailbox_binding_id
+        if mailbox_binding_id is not None and not mailbox_binding_id.strip():
+            raise ValueError("mailbox_binding_id must not be empty")
+        if source == CalendarEventSource.PLATFORM:
+            if event_id is None:
+                if mailbox_binding_id is None:
+                    raise ValueError("mailbox_binding_id is required for platform calendar events")
+            elif mailbox_binding_id is None and current is not None:
+                mailbox_binding_id = current.mailbox_binding_id
+                if mailbox_binding_id is None:
+                    raise ValueError("mailbox_binding_id is required for platform calendar events")
+        elif mailbox_binding_id is None and current is not None:
+            mailbox_binding_id = current.mailbox_binding_id
+
         deep_link_final = payload.deep_link
         if source == CalendarEventSource.PLATFORM:
             handled, dl = await self._reconcile_platform_sync_meeting(
@@ -833,6 +847,7 @@ class CalendarService:
             deep_link=deep_link_final,
             external_refs=(current.external_refs if current else []),
             metadata=md,
+            mailbox_binding_id=mailbox_binding_id,
             created_by_user_id=created_by,
             updated_by_user_id=user_id,
             created_at=created_at,

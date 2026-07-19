@@ -14,6 +14,7 @@
         "apps": "Apps",
         "profile": "Профиль",
         "calendar": "Календарь",
+        "mail": "Почта",
         "documentation": "Документация",
         "theme_light": "Светлая тема",
         "theme_dark": "Тёмная тема",
@@ -43,6 +44,7 @@
         "quick_title": "Быстрый доступ",
         "quick_profile": "Профиль",
         "quick_calendar": "Календарь",
+        "quick_mail": "Почта",
         "quick_documentation": "Документация",
         "settings_title": "Управление",
         "preferences_title": "Настройки",
@@ -129,7 +131,10 @@
         "restore": "Развернуть",
         "open_failed": "Не удалось открыть файл в редакторе: {message}",
         "close_failed": "Не удалось сохранить изменения перед закрытием",
-        "download": "Скачать"
+        "download": "Скачать",
+        "view_preview": "Превью",
+        "view_raw": "Код",
+        "view_mode_group": "Режим просмотра"
     },
     "file_attachments": {
         "attach": "Прикрепить файл",
@@ -157,7 +162,8 @@
         "missing_stream_url": "Не задан URL потока",
         "missing_download_url": "Не задан URL скачивания",
         "download": "Скачать",
-        "unknown_type": "Неизвестный тип"
+        "unknown_type": "Неизвестный тип",
+        "html_preview": "Превью HTML"
     },
     "company": {
         "create_title": "Создание компании",
@@ -520,6 +526,25 @@
         "rerank_max_candidates": "Rerank max candidates",
         "freshness_weight": "Freshness weight (0–1)",
         "freshness_half_life_days": "Freshness half-life (дни)"
+    },
+    "markdown_editor": {
+        "placeholder": "Напишите сообщение…",
+        "primary": "Отправить",
+        "format_toolbar": "Форматирование",
+        "format_toggle": "Показать форматирование",
+        "bold": "Полужирный",
+        "italic": "Курсив",
+        "underline": "Подчёркнутый",
+        "strikethrough": "Зачёркнутый",
+        "ul": "Маркированный список",
+        "ol": "Нумерованный список",
+        "quote": "Цитата",
+        "link": "Ссылка",
+        "link_prompt": "URL ссылки",
+        "attach": "Прикрепить файл",
+        "attach_remove": "Убрать вложение",
+        "attach_too_large": "Файл «{filename}» больше {max_mb} МБ",
+        "discard": "Отменить"
     },
     "prompt_editor": {
         "label_default": "Промпт",

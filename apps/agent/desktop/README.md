@@ -140,6 +140,8 @@ cd apps/agent/desktop/vendor/goose && git checkout 4f7bf8c1e281863932b42b65577b4
 
 Parent repo фиксирует commit submodule; floating `HEAD` без pin запрещён для release.
 
+Кастомизации **не** коммитятся внутрь `vendor/goose` (это upstream `block/goose`, пуш туда не наш). Источник правды — `patches/*.patch` + branding-скрипты; сборка каждый раз делает `reset --hard` pin и накатывает патчи. В `.gitmodules` стоит `ignore = dirty`, поэтому локально пропатченное дерево не светится как «незакоммиченное» в `git status` родителя. Смена pin-SHA по-прежнему видна.
+
 ## UI rebranding (Goose → Linnex)
 
 [`scripts/apply_branding.sh`](scripts/apply_branding.sh) перед `electron-forge make` патчит vendor Goose.

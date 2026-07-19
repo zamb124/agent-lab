@@ -82,16 +82,30 @@ globs:
 
 ## Глобальный File Viewer
 
-Файлы из любой части платформы открываются **без строки каталога**. Источник правды — shared `FileRecord`. `office_document_bindings` (PK=`file_id`) — только каталог «Документы».
+Файлы из любой части платформы открываются по `file_id`. Источник правды — shared `FileRecord`. Durable create через Files API автоматически создаёт `office_document_bindings` + дерево каталогов по `FileSourceKind` (см. **`files.mdc`**). Строка каталога нужна для explorer/AI namespace; open без binding остаётся возможен для legacy/exempt.
 
 Контракт:
 
 - UI: `this.openFile(fileOrId)` → `files.effect.js` → `GET /documents/api/v1/files/{file_id}/editor-config` → modal `platform.file_viewer`.
 - `<platform-file-viewer-modal>` рендерит `<platform-document-viewer-host>`; sync при закрытии только если `capabilities.sync_on_close`.
-- BFF: `viewer_scope="file"` + публичный id = `file_id` (без synthetic id, без строки каталога).
+- BFF: `viewer_scope="file"` + публичный id = `file_id`. Namespace для OnlyOffice AI: binding (`get_by_file_and_company`) → иначе `Context.active_namespace`; без namespace AI claims не выставляются (не 422).
 - OnlyOffice callback для `viewer_scope="file"` перезаписывает S3 + `FileRecord.checksum/file_size`.
 - Non-OnlyOffice: JWT `typ=office_view` на `viewer-stream`/`viewer-frame`; text edit — `viewer-save`.
 - OnlyOffice-eligible без configured integration → **503** `office_integration_not_configured` (не fallback на binary).
+
+### Text presentation subtypes
+
+`handler=text` остаётся единым; subtype задаёт `TextOpenPayload.presentation` + `default_view_mode` (`core/documents/viewer/text_presentation.py::resolve_text_presentation`):
+
+| presentation | default_view_mode | Preview surface | Raw |
+|---|---|---|---|
+| `html` | `preview` | sandbox iframe `srcdoc` | CodeMirror |
+| `markdown` | `preview` | `platform-markdown-editor` readonly (MD→HTML через `flowsChatMarkdownToHtml`) | CodeMirror |
+| `code` | `source` | — | CodeMirror / JSON editor |
+
+- Edit/save только в `view_mode=source` (preview не мутирует файл).
+- Type-actions Preview/Raw: в `platform.file_viewer` modal-header (группа `.header-type-actions`, визуально отделена от download/minimize/close) и в `document-editor-page` stage-bar.
+- Mode не персистится: каждый open → `default_view_mode`.
 
 ## Иконки типов файлов
 

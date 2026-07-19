@@ -88,9 +88,34 @@ def _check_single_http_mount() -> list[str]:
     return errors
 
 
+def _check_docs_placement_coverage() -> list[str]:
+    """Every FileSourceKind must be auto-placement or explicit exempt."""
+    from core.files.create_spec import FileSourceKind
+    from core.files.registry import (
+        DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS,
+        SOURCE_KIND_TO_DOCS_PLACEMENT,
+    )
+
+    errors: list[str] = []
+    for kind in FileSourceKind:
+        if kind in DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS:
+            if kind in SOURCE_KIND_TO_DOCS_PLACEMENT:
+                errors.append(
+                    f"FileSourceKind.{kind.name} is both exempt and mapped for DocsPlacement"
+                )
+            continue
+        if kind not in SOURCE_KIND_TO_DOCS_PLACEMENT:
+            errors.append(
+                f"FileSourceKind.{kind.name} missing from docs auto-placement mapping "
+                f"(add to SOURCE_KIND_TO_DOCS_PLACEMENT or DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS)"
+            )
+    return errors
+
+
 def main() -> int:
     errors = _scan_for_legacy()
     errors.extend(_check_single_http_mount())
+    errors.extend(_check_docs_placement_coverage())
     if errors:
         print("check_files_canon: FAIL", file=sys.stderr)
         for err in errors:

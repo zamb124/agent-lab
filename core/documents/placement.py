@@ -15,13 +15,17 @@ DocsPlacementSourceKind = Literal[
     "work_item",
     "work_item_comment",
     "work_item_resolution",
+    "sync_message",
     "sync_channel_message",
     "sync_call_recording",
     "sync_speech_segment",
     "sync_channel_asset",
     "calendar_event",
+    "browser_artifact",
     "browser_session",
+    "rag_document",
     "rag_namespace",
+    "mail_message",
     "office_manual",
     "manual",
 ]
@@ -37,6 +41,8 @@ class DocsPlacementAnchor(StrictBaseModel):
     flow_slug: str | None = None
     session_id: str | None = None
     work_item_id: str | None = None
+    work_queue_id: str | None = None
+    board_id: str | None = None
     comment_id: str | None = None
     channel_id: str | None = None
     message_id: str | None = None
@@ -45,6 +51,10 @@ class DocsPlacementAnchor(StrictBaseModel):
     event_id: str | None = None
     browser_session_id: str | None = None
     namespace_id: str | None = None
+    mailbox_binding_id: str | None = None
+    mail_uid: str | None = None
+    mailbox_email: str | None = None
+    mail_subject: str | None = None
 
 
 class DocsPlacement(StrictBaseModel):

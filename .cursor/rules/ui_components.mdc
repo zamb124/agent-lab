@@ -10,12 +10,13 @@ alwaysApply: false
 
 ## Категории
 
-1. **Presentational** (`glass-button`, `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`, `platform-modal-search-field`, `tag-input`, `platform-icon-picker`, `platform-help-hint`, `platform-timezone-picker`, `platform-cron-field`, `platform-palette-color-picker`, `platform-trace-viewer`, `platform-log-viewer`, `platform-shell-page`, `layout/platform-sidebar-nav-tree`, `layout/*`, `fields/*`):
+1. **Presentational** (`glass-button`, `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`, `platform-modal-search-field`, `tag-input`, `platform-icon-picker`, `platform-help-hint`, `platform-timezone-picker`, `platform-cron-field`, `platform-palette-color-picker`, `platform-trace-viewer`, `platform-log-viewer`, `platform-shell-page`, `platform-markdown-editor`, `layout/platform-sidebar-nav-tree`, `layout/*`, `fields/*`):
    - Не читают state платформы (только `t()` для подписей).
    - Не диспатчат в bus, кроме `CoreEvents.UI_TOAST_SHOW` (через `this.toast(...)`).
    - Локальные DOM-события `this.emit('change', detail)` для родителя.
+   - **`platform-markdown-editor`** — общий Gmail-like WYSIWYG compose (`htmlValue`/`textValue`, format toolbar Aa, optional attach/primary/discard). i18n — `platform.markdown_editor.*`. Не путать с `prompt-editor` (промпты + `{vars}`).
 
-2. **Container** (`platform-icon`, `platform-user`, `platform-user-chip`, `platform-user-info-modal`, `platform-notification-manager`, `platform-deployment-version`, `pwa-install-banner`, `glass-modal` и наследники, `platform-breadcrumbs`, `platform-audio-message-player`, `platform-date-picker`, `platform-calendar-modal`, `auth-modal`, `company-modal`, `file-text-preview-modal`, `prompt-editor`, `app-loader`, `glass-toast`, `platform-modal-stack`, `layout/platform-sidebar`, `layout/platform-service-sidebar`):
+2. **Container** (`platform-icon`, `platform-user`, `platform-user-chip`, `platform-user-info-modal`, `platform-notification-manager`, `platform-deployment-version`, `pwa-install-banner`, `glass-modal` и наследники, `platform-breadcrumbs`, `platform-audio-message-player`, `platform-date-picker`, `platform-calendar-modal`, `platform-mail-modal`, `auth-modal`, `company-modal`, `file-text-preview-modal`, `prompt-editor`, `app-loader`, `glass-toast`, `platform-modal-stack`, `layout/platform-sidebar`, `layout/platform-service-sidebar`):
    - **`prompt-editor`** — единый markdown + prompt-variables редактор (CodeMirror): `{var}`, `{?opt}`, `{for}`, `@var:`, `@state:`, preview/split/fullscreen, `variant="embed"` для встраивания в карточки (worktracker description, flows prompt). i18n — `platform.prompt_editor.*`.
    - Читают срез через `this.select(...)` (или ставят свой `useResource`/`useOp`).
    - Действия — через `this.dispatch(<CoreEvents.X>, payload)` (реализация helpers `PlatformElement`).
@@ -114,6 +115,7 @@ CSS variables из `core/frontend/static/assets/css/tokens.css`: `--space-*`, `-
 Все модалки — через события и реестр:
 
 - Открытие: `this.openModal(SomeModal, props)` (helper диспатчит `CoreEvents.UI_MODAL_OPEN`).
+- Мгновенная замена поверхности (mail↔calendar): `this.openModal(kind, props, { replaceKinds: ['platform.mail', 'platform.calendar'], skipEnterMotion: true })` — reducer сразу выкидывает `replaceKinds` из stack без exit-motion; `skipEnterMotion` гасит enter-анимацию у `GlassModal`.
 - Закрытие: `this.close()` внутри модалки (диспатчит `UI_MODAL_CLOSE`).
 - Стек живёт в `state.modals.stack` (`core/frontend/static/lib/events/reducers/modals.js`).
 - Рендер — `<platform-modal-stack>`, монтируется один раз в `PlatformApp.render()`.

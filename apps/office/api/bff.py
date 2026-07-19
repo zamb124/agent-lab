@@ -690,6 +690,15 @@ async def file_editor_config(
         meta.original_name,
         (meta.content_type or "application/octet-stream").split(";")[0].strip(),
     )
+    binding = await container.document_binding_repository.get_by_file_and_company(
+        file_id,
+        ctx.active_company.company_id,
+    )
+    namespace: str | None = None
+    if binding is not None and binding.namespace.strip():
+        namespace = binding.namespace
+    elif ctx.active_namespace is not None and ctx.active_namespace.strip():
+        namespace = ctx.active_namespace.strip()
     user_name = ctx.user.name or ctx.user.email or ctx.user.user_id
     editor_lang = container.viewer_service.default_editor_lang(ctx.language)
     return await container.viewer_service.open_config_for_file(
@@ -701,6 +710,7 @@ async def file_editor_config(
         editor_lang=editor_lang,
         file_category=file_category,
         onlyoffice_document_type=onlyoffice_document_type,
+        namespace=namespace,
     )
 
 

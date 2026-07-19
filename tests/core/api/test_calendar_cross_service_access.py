@@ -63,6 +63,7 @@ async def test_calendar_events_created_in_one_service_visible_in_all_services(
         "title": f"Cross service calendar event {unique_id}",
         "kind": "event",
         "source": "platform",
+        "mailbox_binding_id": f"mailbind_cal_{unique_id}",
         "source_id": None,
         "namespace": None,
         "description": "Cross-service visibility check",

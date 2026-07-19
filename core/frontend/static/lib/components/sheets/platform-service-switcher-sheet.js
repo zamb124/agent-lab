@@ -27,6 +27,7 @@ import '../platform-icon.js';
 import '../platform-services-launcher.js';
 import '../platform-notification-manager.js';
 import '../platform-calendar-modal.js';
+import '../platform-mail-modal.js';
 
 export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'platform.service_switcher';
@@ -392,6 +393,11 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         this.openModal('platform.calendar', {});
     }
 
+    _openMail() {
+        this._requestClose();
+        this.openModal('platform.mail', {});
+    }
+
     _openDocumentation() {
         this._requestClose();
         const url = buildScenarioDocumentationUrl({
@@ -606,6 +612,10 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
                         <button type="button" class="link-btn" @click=${() => this._openCalendar()}>
                             <platform-icon name="calendar" size="20"></platform-icon>
                             <span>${this.t('service_switcher.quick_calendar')}</span>
+                        </button>
+                        <button type="button" class="link-btn" @click=${() => this._openMail()}>
+                            <platform-icon name="mail" size="20"></platform-icon>
+                            <span>${this.t('service_switcher.quick_mail')}</span>
                         </button>
                         <button type="button" class="link-btn" @click=${() => this._openDocumentation()}>
                             <platform-icon name="book-open" size="20"></platform-icon>

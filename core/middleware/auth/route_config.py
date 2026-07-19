@@ -350,6 +350,10 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/api/calendar/*", context_type="api", auth_required=True),
     RouteRule("/*/api/calendar/*", context_type="api", auth_required=True),
 
+    # Core mail API на всех сервисах
+    RouteRule("/api/mail/*", context_type="api", auth_required=True),
+    RouteRule("/*/api/mail/*", context_type="api", auth_required=True),
+
     # Универсальный эндпоинт информации о пользователе (доступен на всех сервисах)
     RouteRule("/api/auth/me", context_type="api", auth_required=True),
     RouteRule("/api/auth/me/*", context_type="api", auth_required=True),

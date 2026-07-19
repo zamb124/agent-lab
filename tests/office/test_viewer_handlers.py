@@ -17,6 +17,7 @@ from core.documents.viewer.resolver import (
     resolve_file_category_for_upload,
     resolve_viewer_handler_id,
 )
+from core.documents.viewer.text_presentation import resolve_text_presentation
 from core.files.models import FileRecord
 from core.files.types import FileCategory
 
@@ -97,9 +98,104 @@ async def test_text_handler_urls_use_browser_base_not_docker_internal() -> None:
     assert config.text is not None
     assert "system.lvh.me:8008" in config.text.stream_url
     assert "host.docker.internal" not in config.text.stream_url
+    assert config.text.presentation == "code"
+    assert config.text.default_view_mode == "source"
     if config.text.save_url:
         assert "system.lvh.me:8008" in config.text.save_url
         assert "host.docker.internal" not in config.text.save_url
+
+
+@pytest.mark.parametrize(
+    ("original_name", "content_type", "presentation", "default_view_mode"),
+    [
+        ("slide.html", "text/html", "html", "preview"),
+        ("index.htm", "text/plain", "html", "preview"),
+        ("notes.md", "text/markdown", "markdown", "preview"),
+        ("readme.markdown", "text/plain", "markdown", "preview"),
+        ("data.json", "application/json", "code", "source"),
+        ("script.py", "text/x-python", "code", "source"),
+    ],
+)
+def test_resolve_text_presentation(
+    original_name: str,
+    content_type: str,
+    presentation: str,
+    default_view_mode: str,
+) -> None:
+    resolved_presentation, resolved_mode = resolve_text_presentation(
+        original_name=original_name,
+        content_type=content_type,
+    )
+    assert resolved_presentation == presentation
+    assert resolved_mode == default_view_mode
+
+
+@pytest.mark.asyncio
+async def test_text_handler_html_presentation_preview_default() -> None:
+    request = _request()
+    file_record = _sample_file_record(
+        file_id="f-html",
+        original_name="deck.html",
+        content_type="text/html",
+        file_size=400,
+    )
+    ctx = ViewerOpenContext(
+        handler_id="text",
+        viewer_scope="file",
+        file_record=file_record,
+        title="deck",
+        file_category=FileCategory.TEXT.value,
+        onlyoffice_document_type=None,
+        namespace=None,
+        company_id="c1",
+        user_id="u1",
+        user_name="User",
+        editor_lang="ru",
+        callback_public_base_url="http://host.docker.internal:8008",
+        document_server_public_url="http://localhost:8002",
+        jwt_secret="test-onlyoffice-jwt-secret",
+        download_token_ttl_seconds=3600,
+        browser_public_base_url=browser_public_base_url(request),
+        browser_document_server_url="http://system.lvh.me:8008",
+    )
+    config = await TextViewerHandler().build_open_config(ctx)
+    assert config.text is not None
+    assert config.text.presentation == "html"
+    assert config.text.default_view_mode == "preview"
+
+
+@pytest.mark.asyncio
+async def test_text_handler_markdown_presentation_preview_default() -> None:
+    request = _request()
+    file_record = _sample_file_record(
+        file_id="f-md",
+        original_name="notes.md",
+        content_type="text/markdown",
+        file_size=400,
+    )
+    ctx = ViewerOpenContext(
+        handler_id="text",
+        viewer_scope="file",
+        file_record=file_record,
+        title="notes",
+        file_category=FileCategory.TEXT.value,
+        onlyoffice_document_type=None,
+        namespace=None,
+        company_id="c1",
+        user_id="u1",
+        user_name="User",
+        editor_lang="ru",
+        callback_public_base_url="http://host.docker.internal:8008",
+        document_server_public_url="http://localhost:8002",
+        jwt_secret="test-onlyoffice-jwt-secret",
+        download_token_ttl_seconds=3600,
+        browser_public_base_url=browser_public_base_url(request),
+        browser_document_server_url="http://system.lvh.me:8008",
+    )
+    config = await TextViewerHandler().build_open_config(ctx)
+    assert config.text is not None
+    assert config.text.presentation == "markdown"
+    assert config.text.default_view_mode == "preview"
 
 
 def test_resolve_file_category_png() -> None:

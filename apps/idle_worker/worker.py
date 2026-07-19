@@ -121,6 +121,7 @@ register_worker_events(
 import apps.idle_worker.tasks.mcp_catalog_tasks as _mcp_catalog_tasks  # noqa: E402
 import apps.idle_worker.tasks.file_retention_tasks as _file_retention_tasks  # noqa: E402
 import apps.idle_worker.tasks.calendar_sync_tasks as _calendar_sync_tasks  # noqa: E402
+import apps.idle_worker.tasks.mail_sync_tasks as _mail_sync_tasks  # noqa: E402
 import apps.idle_worker.tasks.company_init_tasks as _company_init_tasks  # noqa: E402
 import apps.idle_worker.tasks.llm_models_tasks as _llm_models_tasks  # noqa: E402
 import apps.idle_worker.tasks.platform_free_models_tasks as _platform_free_models_tasks  # noqa: E402
@@ -134,6 +135,7 @@ _TASK_REGISTRATION_MODULES = (
     _file_retention_tasks,
     _mcp_catalog_tasks,
     _calendar_sync_tasks,
+    _mail_sync_tasks,
     _company_init_tasks,
     _llm_models_tasks,
     _platform_free_models_tasks,

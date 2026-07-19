@@ -36,6 +36,7 @@ export class PlatformDocumentViewerHost extends PlatformElement {
     static properties = {
         openConfig: { type: Object, attribute: false },
         fileId: { type: String, attribute: 'file-id' },
+        viewMode: { type: String, attribute: 'view-mode' },
         suspended: { type: Boolean, reflect: true },
     };
 
@@ -59,7 +60,25 @@ export class PlatformDocumentViewerHost extends PlatformElement {
         super();
         this.openConfig = null;
         this.fileId = '';
+        this.viewMode = '';
         this.suspended = false;
+    }
+
+    _textViewMode(payload) {
+        if (typeof this.viewMode === 'string' && this.viewMode.length > 0) {
+            return this.viewMode;
+        }
+        if (payload && typeof payload.default_view_mode === 'string' && payload.default_view_mode.length > 0) {
+            return payload.default_view_mode;
+        }
+        return 'source';
+    }
+
+    _textPresentation(payload) {
+        if (payload && typeof payload.presentation === 'string' && payload.presentation.length > 0) {
+            return payload.presentation;
+        }
+        return 'code';
     }
 
     _onlyofficeHostConfig() {
@@ -105,6 +124,8 @@ export class PlatformDocumentViewerHost extends PlatformElement {
                     save-url=${payload.save_url || ''}
                     original-name=${openConfig.original_name || ''}
                     content-type=${payload.content_type || openConfig.content_type || ''}
+                    presentation=${this._textPresentation(payload)}
+                    view-mode=${this._textViewMode(payload)}
                     ?edit-mode=${payload.edit_mode === true}
                     @editor-error=${this._onEditorError}
                     @document-state=${this._onDocumentState}

@@ -32,6 +32,7 @@ async def test_platform_calendar_sync_meeting_creates_sync_link_and_delete_remov
         "title": f"Sync meeting {unique_id}",
         "kind": "meeting",
         "source": "platform",
+        "mailbox_binding_id": f"mailbind_cal_{unique_id}",
         "source_id": None,
         "namespace": "tests",
         "description": None,

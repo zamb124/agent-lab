@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from apps.office.services.viewer_context import ViewerOpenContext
@@ -95,6 +97,27 @@ async def test_public_link_editor_skips_platform_ai(
     config = await OnlyOfficeViewerHandler().build_open_config(
         _ctx(public_link_token_hash="hash_public"),
     )
+    assert config.onlyoffice is not None
+    payload = verify_onlyoffice_jwt_hs256(
+        config.onlyoffice.token,
+        "test-onlyoffice-jwt-secret",
+    )
+    assert OFFICE_AI_JWT_CLAIM_KEY not in payload
+    editor_config = payload.get("editorConfig")
+    assert isinstance(editor_config, dict)
+    assert "plugins" not in editor_config
+
+
+@pytest.mark.asyncio
+async def test_file_scope_without_namespace_skips_platform_ai(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "apps.office.services.viewer_handlers.onlyoffice_handler.onlyoffice_editor_customization_payload",
+        lambda **_kwargs: {},
+    )
+    ctx = replace(_ctx(), viewer_scope="file", namespace=None)
+    config = await OnlyOfficeViewerHandler().build_open_config(ctx)
     assert config.onlyoffice is not None
     payload = verify_onlyoffice_jwt_hs256(
         config.onlyoffice.token,

@@ -78,7 +78,7 @@ Reply-типы выводятся механически: `<type без _request
   - `factory-registry.js` — singleton lookup (`registerFactory`,
     `getFactory(name, expectedKind?)`, `hasFactory`, `clearFactoryRegistry`).
   - `reducers/` — core slices: `auth`, `theme`, `i18n`, `notify`, `modals`,
-    `network`, `router`, `pwa`, `companies`, `team`, `calendar`, `icon`,
+    `network`, `router`, `pwa`, `companies`, `team`, `calendar`, `mail`, `icon`,
     `files`, `file_types`, `notifications`, `ui`.
   - `effects/` — core effects: `auth`, `theme`, `i18n`, `notify`, `router`,
     `network`, `ws`, `storage`, `pwa`, `ui`, `companies`, `team`,
@@ -109,7 +109,7 @@ UI-типы из `CoreEvents` (диспатчить **только** через 
 | Helper в `PlatformElement` | Соответствующий CoreEvent |
 |---|---|
 | `this.toast(key, opts)`            | `UI_TOAST_SHOW` |
-| `this.openModal(kind, props)`      | `UI_MODAL_OPEN` |
+| `this.openModal(kind, props, options?)` | `UI_MODAL_OPEN` (`options.replaceKinds`, `options.skipEnterMotion`) |
 | `this.closeModal(kind?)`           | `UI_MODAL_CLOSE` |
 | `this.openSidebar()`               | `UI_SIDEBAR_OPEN_REQUESTED` |
 | `this.closeSidebar()`              | `UI_SIDEBAR_CLOSE_REQUESTED` |

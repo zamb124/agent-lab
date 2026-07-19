@@ -31,6 +31,7 @@ export { FILES_EVENTS, buildFileDownloadUrl } from './reducers/files.js';
 export { COMPANIES_EVENTS } from './reducers/companies.js';
 export { TEAM_EVENTS } from './reducers/team.js';
 export { CALENDAR_EVENTS } from './reducers/calendar.js';
+export { MAIL_EVENTS } from './reducers/mail.js';
 export { NOTIFICATIONS_EVENTS } from './reducers/notifications.js';
 export { PWA_EVENTS } from './effects/pwa.effect.js';
 export { I18N_NAMESPACE_SET_REQUESTED } from './reducers/i18n.js';

@@ -21,7 +21,9 @@ from core.db.models.platform import (  # noqa: F401 — регистрируют
     Base,
     CalendarEventRecord,
     CalendarIntegrationRecord,
+    CompanyMailConnectionRecord,
     IntegrationCredentialRecord,
+    MailboxBindingRecord,
     Namespaces,
     PlatformShortLink,
     PushSubscription,
@@ -44,6 +46,7 @@ MANAGED_TABLES = {
     "namespaces", "push_subscriptions",
     "calendar_events", "calendar_integrations", "integration_credentials",
     "scheduler_tasks", "platform_short_links", "api_keys",
+    "company_mail_connections", "mailbox_bindings",
 }
 
 

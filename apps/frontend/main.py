@@ -304,6 +304,14 @@ async def on_startup(app: FastAPI, container: FrontendContainer, settings: Front
         user_repository=container.user_repository,
         subdomain_repository=container.subdomain_repository,
     )
+    if get_settings().mail.system.enabled:
+        reconcile_result = await container.mail_service.reconcile_system()
+        logger.info(
+            "mail.system.reconcile",
+            connection_ensured=reconcile_result.connection_ensured,
+            role_count=len(reconcile_result.role_mailboxes_ensured),
+            user_count=len(reconcile_result.user_bindings_ensured),
+        )
     await _seed_platform_pronunciation_rules(container)
     await _seed_llm_model_scores(container)
     n = await container.billing_service.ensure_settlement_rules_materialized_for_all_companies()

@@ -94,7 +94,8 @@ class OnlyOfficeViewerHandler:
             "print": True,
             "review": can_edit,
         }
-        enable_platform_ai = ctx.public_link_token_hash is None
+        namespace = ctx.namespace.strip() if ctx.namespace is not None else ""
+        enable_platform_ai = ctx.public_link_token_hash is None and bool(namespace)
         editor_config: JsonObject = {
             "mode": editor_mode,
             "callbackUrl": callback_url if can_edit else "",
@@ -122,12 +123,10 @@ class OnlyOfficeViewerHandler:
             "editorConfig": editor_config,
         }
         if enable_platform_ai:
-            if ctx.namespace is None or not ctx.namespace.strip():
-                raise ValueError("namespace обязателен для OnlyOffice platform AI claims")
             config[OFFICE_AI_JWT_CLAIM_KEY] = OfficePlatformAiClaims(
                 company_id=ctx.company_id,
                 user_id=ctx.user_id,
-                namespace=ctx.namespace,
+                namespace=namespace,
                 file_id=ctx.file_record.file_id,
                 viewer_scope=ctx.viewer_scope,
             ).model_dump(mode="json")

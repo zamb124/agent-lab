@@ -11,6 +11,8 @@ from core.types import JsonObject
 DocumentViewerHandlerId = Literal["onlyoffice", "media", "image", "text", "binary", "viz"]
 MediaViewerKind = Literal["audio", "video"]
 OfficeViewerScope = Literal["catalog", "file"]
+TextPresentation = Literal["code", "html", "markdown"]
+TextViewMode = Literal["preview", "source"]
 VizViewerEngine = Literal["echarts", "mermaid"]
 VizViewerKind = Literal["chart", "flowchart", "gantt", "sequence", "timeline"]
 
@@ -49,6 +51,21 @@ class TextOpenPayload(BaseModel):
     content_type: str
     edit_mode: bool
     max_edit_bytes: int = Field(default=512_000, ge=1)
+    presentation: TextPresentation = "code"
+    default_view_mode: TextViewMode = "source"
+
+    @model_validator(mode="after")
+    def presentation_matches_default_view_mode(self) -> Self:
+        if self.presentation == "code" and self.default_view_mode != "source":
+            raise ValueError("default_view_mode для presentation=code должен быть source")
+        if self.presentation in {"html", "markdown"} and self.default_view_mode not in {
+            "preview",
+            "source",
+        }:
+            raise ValueError(
+                f"default_view_mode недопустим для presentation={self.presentation}"
+            )
+        return self
 
 
 class BinaryOpenPayload(BaseModel):

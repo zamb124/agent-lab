@@ -42,6 +42,7 @@ class NotificationType(StrEnum):
     CRM_TASK_UPDATED = "crm_task_updated"
     CALENDAR_NEW_EVENT = "calendar_new_event"
     CALENDAR_SYNC_MEETING_REMINDER = "calendar_sync_meeting_reminder"
+    MAIL_NEW_MESSAGE = "mail_new_message"
     OFFICE_DOCUMENT_SAVED = "office_document_saved"
     WORK_ITEM_ASSIGNED = "work_item_assigned"
     WORK_ITEM_UPDATED = "work_item_updated"

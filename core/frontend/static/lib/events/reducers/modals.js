@@ -3,6 +3,9 @@
  *
  * Поля state.modals:
  *   stack: Array<{ id, kind, props, openedAt, closing?, closingAt? }>
+ *
+ * UI_MODAL_OPEN.payload.replaceKinds?: string[] — мгновенно убрать эти kind из stack
+ * (без closing/exit-motion) и добавить новую модалку. Для skip enter — props.skipEnterMotion.
  */
 
 import { CoreEvents } from '../contract.js';
@@ -89,6 +92,17 @@ export function modalsReducer(state = initialModalsState, event) {
                 props: p.props || {},
                 openedAt: event.meta.ts,
             };
+            // replaceKinds — мгновенная замена без exit/enter motion (mail↔calendar).
+            const replaceKinds = Array.isArray(p.replaceKinds) ? p.replaceKinds : null;
+            if (replaceKinds !== null) {
+                for (const replaceKind of replaceKinds) {
+                    if (typeof replaceKind !== 'string' || replaceKind.length === 0) {
+                        throw new Error('UI_MODAL_OPEN.replaceKinds: each kind must be a non-empty string');
+                    }
+                }
+                const kept = state.stack.filter((item) => !replaceKinds.includes(item.kind));
+                return { ...state, stack: [...kept, modal] };
+            }
             return { ...state, stack: [...state.stack, modal] };
         }
         case CoreEvents.UI_MODAL_CLOSE: {

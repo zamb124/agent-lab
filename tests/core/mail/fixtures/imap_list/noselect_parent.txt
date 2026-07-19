@@ -1,0 +1,8 @@
+* LIST (\Noselect \HasChildren) "/" "[Gmail]"
+* LIST (\HasNoChildren) "/" "[Gmail]/All Mail"
+* LIST (\HasNoChildren \Sent) "/" "[Gmail]/Sent Mail"
+* LIST (\HasNoChildren \Drafts) "/" "[Gmail]/Drafts"
+* LIST (\HasNoChildren \Trash) "/" "[Gmail]/Trash"
+* LIST (\HasNoChildren) "/" INBOX
+* NAMESPACE (("" "/")) NIL NIL
+OK List completed.

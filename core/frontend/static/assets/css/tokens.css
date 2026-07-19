@@ -647,6 +647,24 @@
     --flows-avatar-hover-shadow: var(--glass-shadow-medium);
     --flows-micro-control-size: 28px;
     --flows-card-action-size: var(--flows-micro-control-size);
+
+    /* Mail workspace (platform.mail) — Gmail/Superhuman-like 3-pane density */
+    --mail-rail-width: 64px;
+    --mail-nav-width: 260px;
+    --mail-list-width: 400px;
+    --mail-unread-dot: var(--accent-secondary);
+    --mail-surface: var(--bg-elevated);
+    --mail-row-height: 72px;
+    --mail-attachment-tile: 200px;
+    --mail-compose-min-height: 96px;
+    --mail-action-bar-height: 48px;
+
+    /* platform-markdown-editor (shared Gmail-like compose) */
+    --markdown-editor-min-height: 160px;
+    --markdown-editor-body-min-height: 120px;
+    --markdown-editor-body-max-height: 40vh;
+    --markdown-editor-action-bar-height: 48px;
+
     --flows-chrome-control-size: 32px;
     --flows-chrome-row-min-height: 40px;
     --flows-editor-chrome-row-min-height: var(--flows-chrome-row-min-height);

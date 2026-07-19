@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import TypeAlias, override
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -215,6 +216,7 @@ class CalendarEventRecord(Base):
         nullable=False,
         server_default=text("'{}'::jsonb"),
     )
+    mailbox_binding_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     created_by_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     updated_by_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -586,4 +588,118 @@ class CompanyPronunciationRule(Base):
         Index("ix_company_pronunciation_rules_company_id", "company_id"),
         Index("ix_company_pronunciation_rules_company_enabled", "company_id", "enabled"),
         UniqueConstraint("company_id", "id", name="uq_company_pronunciation_rules_company_id"),
+    )
+
+
+class CompanyMailConnectionRecord(Base):
+    """Подключение компании к почтовому серверу."""
+
+    __tablename__: str = "company_mail_connections"
+
+    company_mail_connection_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    mail_domain: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    imap_host: Mapped[str] = mapped_column(String(255), nullable=False)
+    imap_port: Mapped[int] = mapped_column(Integer, nullable=False)
+    smtp_host: Mapped[str] = mapped_column(String(255), nullable=False)
+    smtp_port: Mapped[int] = mapped_column(Integer, nullable=False)
+    use_ssl: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    supports_provision: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    ispmanager_base_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    ispmanager_authinfo_user: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ispmanager_authinfo_password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__: _TableArgs = (
+        UniqueConstraint("company_id", name="uq_company_mail_connections_company_id"),
+        CheckConstraint(
+            "provider IN ('ispmanager','generic_imap_smtp')",
+            name="company_mail_connections_provider_check",
+        ),
+        CheckConstraint(
+            "status IN ('active','degraded','disabled')",
+            name="company_mail_connections_status_check",
+        ),
+        Index("ix_company_mail_connections_mail_domain", "mail_domain"),
+    )
+
+
+class MailboxBindingRecord(Base):
+    """Привязка сотрудника или role-ящика к адресу на mail-сервере компании."""
+
+    __tablename__: str = "mailbox_bindings"
+
+    mailbox_binding_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    company_mail_connection_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    email_address: Mapped[str] = mapped_column(String(320), nullable=False)
+    local_part: Mapped[str] = mapped_column(String(255), nullable=False)
+    sync_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    calendar_color: Mapped[str] = mapped_column(String(32), nullable=False, default="default")
+    password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__: _TableArgs = (
+        UniqueConstraint(
+            "company_id",
+            "email_address",
+            name="uq_mailbox_bindings_company_email",
+        ),
+        CheckConstraint(
+            "kind IN ('user','role')",
+            name="mailbox_bindings_kind_check",
+        ),
+        Index("ix_mailbox_bindings_local_part", "company_id", "local_part"),
+        Index(
+            "ix_mailbox_bindings_user_default",
+            "company_id",
+            "user_id",
+            "is_default",
+        ),
+    )
+
+
+class MailboxSyncCursorRecord(Base):
+    """IMAP UID-курсор фоновой синхронизации ящика (не тела писем)."""
+
+    __tablename__: str = "mailbox_sync_cursors"
+
+    mailbox_binding_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    folder: Mapped[str] = mapped_column(String(255), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    uidvalidity: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    last_uid: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_message: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
+    __table_args__: _TableArgs = (
+        CheckConstraint(
+            "last_error_kind IS NULL OR last_error_kind IN ('auth','network','validation','unknown')",
+            name="mailbox_sync_cursors_error_kind_check",
+        ),
+        Index("ix_mailbox_sync_cursors_last_synced_at", "last_synced_at"),
     )

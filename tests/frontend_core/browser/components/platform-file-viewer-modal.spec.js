@@ -92,6 +92,35 @@ function base64urlJson(value) {
 }
 
 function editorConfigFor(fileId, title = `${fileId}.docx`) {
+    if (title.toLowerCase().endsWith('.html') || title.toLowerCase().endsWith('.htm')) {
+        return {
+            handler: 'text',
+            file_id: fileId,
+            title,
+            original_name: title,
+            content_type: 'text/html',
+            file_category: 'text',
+            onlyoffice_document_type: null,
+            download_url: `/documents/api/v1/office-download?file_id=${encodeURIComponent(fileId)}`,
+            capabilities: {
+                view: true,
+                edit: true,
+                preview: true,
+                sync_on_close: true,
+                download: true,
+                server_mutations: false,
+            },
+            text: {
+                stream_url: `/documents/api/v1/viewer-stream?file_id=${encodeURIComponent(fileId)}`,
+                save_url: `/documents/api/v1/viewer-save?file_id=${encodeURIComponent(fileId)}`,
+                content_type: 'text/html',
+                edit_mode: true,
+                max_edit_bytes: 512000,
+                presentation: 'html',
+                default_view_mode: 'preview',
+            },
+        };
+    }
     const claims = {
         type: 'desktop',
         documentType: 'word',
@@ -177,6 +206,17 @@ function installOfficeFetchMock() {
                         restore: 'Restore',
                         open_failed: 'Open failed: {message}',
                         close_failed: 'Close failed',
+                        download: 'Download',
+                        view_preview: 'Preview',
+                        view_raw: 'Raw',
+                        view_mode_group: 'View mode',
+                    },
+                    document_viewer: {
+                        loading: 'Loading file',
+                        missing_stream_url: 'Missing stream',
+                        load_failed: 'Load failed {status}',
+                        html_preview: 'HTML preview',
+                        save_hint: 'Save hint',
                     },
                 },
                 sync: {
@@ -194,7 +234,18 @@ function installOfficeFetchMock() {
         const editorMatch = url.pathname.match(/^\/documents\/api\/v1\/files\/([^/]+)\/editor-config$/);
         if (method === 'GET' && editorMatch) {
             const fileId = decodeURIComponent(editorMatch[1]);
-            return jsonResponse(editorConfigFor(fileId, `${fileId}.docx`));
+            const titleHint = url.searchParams.get('title');
+            const title = typeof titleHint === 'string' && titleHint.length > 0
+                ? titleHint
+                : (fileId.includes('html') ? `${fileId}.html` : `${fileId}.docx`);
+            return jsonResponse(editorConfigFor(fileId, title));
+        }
+
+        if (method === 'GET' && url.pathname === '/documents/api/v1/viewer-stream') {
+            return new Response('<!DOCTYPE html><html><body><h1>Preview Deck</h1></body></html>', {
+                status: 200,
+                headers: { 'content-type': 'text/html; charset=utf-8' },
+            });
         }
 
         const syncMatch = url.pathname.match(/^\/documents\/api\/v1\/files\/([^/]+)\/sync$/);
@@ -534,6 +585,50 @@ describe('platform-file-viewer-modal global viewer', () => {
         await Promise.all(modals.map((modal) => waitForOnlyOfficeIframe(modal)));
         expect(modals.map((modal) => modal.fileId).sort()).to.deep.equal(['first-docx', 'second-docx']);
         expect(document.querySelectorAll('platform-file-viewer-modal[open]').length).to.equal(2);
+    });
+
+    it('HTML text presentation defaults to preview iframe and switches to raw code via header actions', async () => {
+        await mountStack();
+        await clickOpenButton({
+            file_id: 'deck-html',
+            original_name: 'BACKEND-STATUS-REQUEST.html',
+            content_type: 'text/html',
+        });
+
+        const [modal] = await waitForViewerCount(1);
+        await waitUntil(
+            () => Boolean(modal.config?.text?.presentation === 'html'),
+            'html open config assigned',
+        );
+
+        const typeActions = modal.shadowRoot.querySelector('.header-type-actions');
+        expect(typeActions).to.exist;
+        const modeButtons = [...typeActions.querySelectorAll('.header-btn-label')];
+        expect(modeButtons).to.have.length(2);
+        expect(modeButtons[0].getAttribute('aria-pressed')).to.equal('true');
+        expect(modeButtons[1].getAttribute('aria-pressed')).to.equal('false');
+
+        const viewerHost = queryDocumentViewerHost(modal);
+        await waitUntil(
+            () => Boolean(viewerHost?.shadowRoot?.querySelector('platform-document-text-viewer')),
+            'text viewer mounted',
+        );
+        const textViewer = viewerHost.shadowRoot.querySelector('platform-document-text-viewer');
+        await waitUntil(
+            () => Boolean(textViewer.shadowRoot?.querySelector('iframe.html-preview-frame')),
+            'html preview iframe rendered',
+        );
+        expect(textViewer.shadowRoot.querySelector('platform-code-editor')).to.equal(null);
+
+        modeButtons[1].click();
+        await elementUpdated(modal);
+        await waitUntil(
+            () => Boolean(textViewer.shadowRoot?.querySelector('platform-code-editor')),
+            'raw code editor rendered after Raw click',
+        );
+        expect(textViewer.shadowRoot.querySelector('iframe.html-preview-frame')).to.equal(null);
+        expect(modeButtons[0].getAttribute('aria-pressed')).to.equal('false');
+        expect(modeButtons[1].getAttribute('aria-pressed')).to.equal('true');
     });
 });
 

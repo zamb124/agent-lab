@@ -1,0 +1,6 @@
+* LIST (\Unmarked \HasChildren) "." INBOX
+* LIST (\Unmarked \HasNoChildren) "." INBOX.Sent
+* LIST (\Unmarked \HasNoChildren) "." INBOX.Drafts
+* LIST (\Unmarked \HasNoChildren) "." INBOX.Trash
+* NAMESPACE (("INBOX." ".")) NIL NIL
+OK LIST completed

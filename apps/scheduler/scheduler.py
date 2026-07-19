@@ -22,6 +22,7 @@ import apps.flows.src.tasks.tool_tasks as _flows_tool_tasks  # noqa: E402
 import apps.idle_worker.tasks.calendar_sync_tasks as _idle_calendar_sync_tasks  # noqa: E402
 import apps.idle_worker.tasks.file_retention_tasks as _idle_file_retention_tasks  # noqa: E402
 import apps.idle_worker.tasks.llm_models_tasks as _idle_llm_models_tasks  # noqa: E402
+import apps.idle_worker.tasks.mail_sync_tasks as _idle_mail_sync_tasks  # noqa: E402
 import apps.idle_worker.tasks.mcp_catalog_tasks as _mcp_catalog_tasks  # noqa: E402
 import apps.idle_worker.tasks.payment_sync_tasks as _idle_payment_sync_tasks  # noqa: E402
 import apps.idle_worker.tasks.platform_free_models_tasks as _idle_platform_free_models_tasks  # noqa: E402
@@ -56,6 +57,7 @@ _TASK_REGISTRATION_MODULES = (
     _idle_file_retention_tasks,
     _mcp_catalog_tasks,
     _idle_calendar_sync_tasks,
+    _idle_mail_sync_tasks,
     _idle_llm_models_tasks,
     _idle_platform_free_models_tasks,
     _idle_platform_schedules_gc_tasks,
@@ -89,6 +91,7 @@ _IDLE_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "payment_sync_tick",
     "calendar_sync_tick",
     "calendar_sync_meeting_reminder_tick",
+    "mail_sync_tick",
     "span_billing_settlement_tick",
     "file_retention_purge_tick",
     "file_retention_backfill_tick",

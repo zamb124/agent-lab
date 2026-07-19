@@ -70,6 +70,7 @@ class CalendarEvent(StrictBaseModel):
     deep_link: str | None = None
     external_refs: list[CalendarExternalRef] = Field(default_factory=list)
     metadata: dict[str, str] = Field(default_factory=dict)
+    mailbox_binding_id: str | None = None
     created_by_user_id: str | None = None
     updated_by_user_id: str | None = None
     created_at: datetime
@@ -95,6 +96,7 @@ class CalendarEventUpsertPayload(StrictBaseModel):
     series_id: str | None = None
     deep_link: str | None = None
     metadata: dict[str, str] = Field(default_factory=dict)
+    mailbox_binding_id: str | None = None
 
 
 class CalendarIntegrationCredentials(StrictBaseModel):

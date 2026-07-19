@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
+from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import require_active_company, require_context
 from core.documents.placement import DocsBindResult, DocsPlacement
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind
 from core.files.file_repository import FileRepository
 from core.files.models import FileRecord
+from core.files.registry import default_docs_placement
 from core.files.retention import FileRetentionKind
 from core.files.retention_promote import promote_file_retention_record
 from core.files.storage import FileStorage, retention_fields_from_spec
@@ -20,6 +22,11 @@ logger = get_logger(__name__)
 
 RagIndexHook = Callable[[str, str, JsonObject | None], Awaitable[None]]
 DocsBindHook = Callable[[DocsPlacement], Awaitable[DocsBindResult]]
+
+
+def _source_kind_metadata_value(source_kind: FileSourceKind | str) -> str:
+    """StrictBaseModel(use_enum_values=True) хранит source_kind как str — нормализуем в wire value."""
+    return FileSourceKind(source_kind).value
 
 
 class FilesService:
@@ -58,7 +65,7 @@ class FilesService:
         is_public = post_create.is_public
 
         metadata: JsonObject = dict(spec.metadata) if spec.metadata else {}
-        metadata["source_kind"] = spec.source_kind
+        metadata["source_kind"] = _source_kind_metadata_value(spec.source_kind)
 
         file_record = await self._storage.upload_bytes(
             data=data,
@@ -75,9 +82,7 @@ class FilesService:
         )
 
         await self._run_post_create(file_record, spec, post_create)
-        if spec.placement is not None:
-            placement = spec.placement.model_copy(update={"file_id": file_record.file_id})
-            _ = await self.bind(file_record.file_id, placement)
+        await self._bind_after_create(file_record, spec, title=original_name)
         return file_record
 
     async def register_s3(
@@ -103,7 +108,7 @@ class FilesService:
         retention_kind, ttl_seconds = retention_fields_from_spec(spec.retention)
         post_create = spec.post_create if spec.post_create is not None else FilePostCreate()
         metadata: JsonObject = dict(spec.metadata) if spec.metadata else {}
-        metadata["source_kind"] = spec.source_kind
+        metadata["source_kind"] = _source_kind_metadata_value(spec.source_kind)
 
         file_record = await self._storage.register_s3_object(
             s3_key=s3_key,
@@ -120,9 +125,7 @@ class FilesService:
             tags=spec.tags,
         )
         await self._run_post_create(file_record, spec, post_create)
-        if spec.placement is not None:
-            placement = spec.placement.model_copy(update={"file_id": file_record.file_id})
-            _ = await self.bind(file_record.file_id, placement)
+        await self._bind_after_create(file_record, spec, title=original_name)
         return file_record
 
     async def get(self, file_id: str) -> FileRecord:
@@ -164,6 +167,34 @@ class FilesService:
         if not changed:
             return record
         return await self.save(promoted)
+
+    async def _bind_after_create(
+        self,
+        file_record: FileRecord,
+        spec: FileCreateSpec,
+        *,
+        title: str,
+    ) -> None:
+        placement = spec.placement
+        if placement is None:
+            placement = default_docs_placement(
+                spec.source_kind,
+                spec.source_ref,
+                title=title,
+            )
+        if placement is None:
+            return
+        bound = placement.model_copy(update={"file_id": file_record.file_id})
+        try:
+            _ = await self.bind(file_record.file_id, bound)
+        except ServiceClientError as exc:
+            # Office peer down/timeout — FileRecord уже durable; bind догонит при следующем open/repair.
+            logger.warning(
+                "docs_bind_after_create_failed",
+                file_id=file_record.file_id,
+                source_kind=_source_kind_metadata_value(spec.source_kind),
+                error=str(exc),
+            )
 
     async def _run_post_create(
         self,

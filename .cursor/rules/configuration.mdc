@@ -51,6 +51,7 @@ LEGAL__COMPANY_NAME_RU=...
 | **`primary_platform_domain`** | Primary registrable apex (`linnex.io`). Используется для дефолтных публичных URL, OAuth primary callbacks, smoke. |
 | **`platform_brands`** | Per-apex бренд: `platform_name`, `support_email`, `agent_product_name` (LinnexAgent / HumanitecAgent), `models_product_name`, `legal`, `embed_*`, `auth_apple_client_id`, `vapid_email`. Ключ — registrable apex (`linnex.io`, `humanitec.ru`, …). Runtime: `core/platform_brand/resolver.py` (`resolve_brand`, `resolve_brand_domain`). **Не хардкодить** один домен/бренд в сервисах — резолвить по `Host`. |
 | **`calendar_sync`** | Фоновая синхронизация (`CalendarSyncConfig`), в т.ч. `sync_meeting_reminder_*` — напоминания о встречах Sync за ~15 минут. |
+| **`mail_sync`** | Фоновая IMAP-синхронизация курсоров (`MailSyncConfig`): `mail_sync_tick`, notify о новых письмах INBOX. |
 | **`voice`** | Deployment-default провайдеров речи: `voice.stt`, `voice.tts`, `voice.vad`. Ключ cloud.ru STT — `VOICE__STT__CLOUD_RU__API_KEY`. |
 | **`media_transcriber`** | Единый ffmpeg-pipeline чанкования/таймаутов (Sync batch STT и файловый слой). |
 | **`calls`** | LiveKit/TURN. `calls.speech_to_chat` (`SpeechToChatConfig`). Finalize записи: `finalize_recording_egress_poll_interval_seconds`, `finalize_recording_egress_wait_timeout_seconds`. |

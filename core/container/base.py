@@ -66,6 +66,13 @@ from core.identity.integration_external_author import IntegrationExternalAuthorS
 from core.integrations.oauth_service import OAuthService
 from core.integrations.repository import IntegrationCredentialRepository
 from core.logging import get_logger
+from core.mail.attachment_index import MailAttachmentFileIndex
+from core.mail.repositories import (
+    CompanyMailConnectionRepository,
+    MailboxBindingRepository,
+    MailboxSyncCursorRepository,
+)
+from core.mail.service import MailService
 from core.models.billing_models import TariffPlan
 from core.namespace import NamespaceService
 from core.push.repository import PushSubscriptionRepository
@@ -451,6 +458,35 @@ class BaseContainer:
             user_repository=self.user_repository,
             company_repository=self.company_repository,
             service_client=self.service_client,
+        )
+
+    @lazy
+    def company_mail_connection_repository(self) -> CompanyMailConnectionRepository:
+        return CompanyMailConnectionRepository(db_url=self.required_shared_db_url)
+
+    @lazy
+    def mailbox_binding_repository(self) -> MailboxBindingRepository:
+        return MailboxBindingRepository(db_url=self.required_shared_db_url)
+
+    @lazy
+    def mailbox_sync_cursor_repository(self) -> MailboxSyncCursorRepository:
+        return MailboxSyncCursorRepository(db_url=self.required_shared_db_url)
+
+    @lazy
+    def mail_attachment_file_index(self) -> MailAttachmentFileIndex:
+        return MailAttachmentFileIndex(storage=self.shared_storage)
+
+    @lazy
+    def mail_service(self) -> MailService:
+        return MailService(
+            connection_repository=self.company_mail_connection_repository,
+            binding_repository=self.mailbox_binding_repository,
+            sync_cursor_repository=self.mailbox_sync_cursor_repository,
+            company_repository=self.company_repository,
+            user_repository=self.user_repository,
+            mail_config=get_settings().mail,
+            files_service=self.files_service,
+            attachment_file_index=self.mail_attachment_file_index,
         )
 
     @lazy

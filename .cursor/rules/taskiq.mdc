@@ -127,6 +127,10 @@ HTTP-процесс flows **не** ставит и не выполняет тя�
 
 Задача `calendar_sync_tick` (`apps/idle_worker/tasks/calendar_sync_tasks.py`). Регистрация cron в `apps/scheduler/main.py` на старте через `SchedulerService`: `company_id="system"`, cron `*/1 * * * *`, idempotency (есть `pending` — дубль не создаётся; есть `paused` — задача резюмируется). Модуль `calendar_sync_tasks` обязан быть импортирован в `apps/idle_worker/worker.py` и в `apps/scheduler/scheduler.py`. Параметры в `settings.calendar_sync`: `lookback_days`, `lookahead_months`, `batch_size`, `max_integrations_per_tick`, `max_parallel_integrations`, `notification_dedup_ttl_seconds`. Нотификации новых событий — `core.websocket.publisher.notify_user`, дедупликация по `calendar:notify:{company_id}:{user_id}:{provider}:{event_id}` в `shared_storage`.
 
+## Почтовый автосинк (idle worker через scheduler)
+
+Задача `mail_sync_tick` (`apps/idle_worker/tasks/mail_sync_tasks.py`). Тот же bootstrap cron в `apps/scheduler/main.py` (`company_id="system"`). Модуль обязан быть импортирован в `apps/idle_worker/worker.py` и `apps/scheduler/scheduler.py`. Параметры — `settings.mail_sync`. Курсоры в `mailbox_sync_cursors` (не тела писем). Notify — `MAIL_NEW_MESSAGE`, dedup `mail:notify:{company_id}:{user_id}:{mailbox_binding_id}:{uid}`. Детали → **`mail.mdc`**.
+
 ## Запуск воркеров
 
 Локально: `make taskiq` (обычный режим), `make taskiq-reload` (hot reload), `make taskiq-scheduler` (scheduler process). Дев/тест compose: `flows_worker`/`idle_worker`/... зависит от `redis` (healthy). Production — `kubectl get/logs/rollout` deployment в namespace `platform`; реплики и команды воркеров — `deploy/helm/agent-lab/values.yaml::workers.<name>.{replicas,command}`.

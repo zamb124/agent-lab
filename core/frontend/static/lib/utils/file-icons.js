@@ -140,7 +140,7 @@ export const UI_ICON_MAP = Object.freeze({
     cs: 'csharp',
     'more-vert': 'more-vert', 'more-vertical': 'more-vert', google: 'google',
     yandex: 'yandex', integration: 'integration', schedule: 'schedule',
-    'phone-call': 'phone-call', mail: 'mail',
+    'phone-call': 'phone-call', mail: 'mail', inbox: 'inbox',
     menu: 'hamburger', hamburger: 'hamburger', attach: 'paperclip', bot: 'ai',
     minus: 'minus', maximize: 'fullscreen', 'arrow-left': 'chevron-left',
     'arrow-right': 'chevron-right', 'arrow-up': 'chevron-up', 'arrow-down': 'chevron-down',

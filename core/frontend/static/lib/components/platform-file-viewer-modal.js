@@ -27,6 +27,8 @@ export class PlatformFileViewerModal extends PlatformModal {
         _error: { state: true },
         _closeSyncComplete: { state: true },
         _headerDragging: { state: true },
+        _viewMode: { state: true },
+        _viewModeFileId: { state: true },
     };
 
     static styles = [
@@ -160,11 +162,34 @@ export class PlatformFileViewerModal extends PlatformModal {
                 gap: 4px;
             }
 
+            .header-type-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                margin-right: 2px;
+                padding-right: 8px;
+                border-right: 1px solid rgba(255, 255, 255, 0.18);
+            }
+
             .header-btn {
                 width: 30px;
                 height: 30px;
                 color: rgba(255, 255, 255, 0.78);
                 background: rgba(255, 255, 255, 0.08);
+            }
+
+            .header-btn.header-btn-label {
+                width: auto;
+                min-width: 30px;
+                padding: 0 10px;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.01em;
+            }
+
+            .header-btn.header-btn-active {
+                color: #fff;
+                background: rgba(255, 255, 255, 0.22);
             }
 
             .header-btn:hover {
@@ -315,9 +340,18 @@ export class PlatformFileViewerModal extends PlatformModal {
                 box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
             }
 
+            :host-context([data-theme="light"]) .header-type-actions {
+                border-right-color: rgba(15, 23, 42, 0.14);
+            }
+
             :host-context([data-theme="light"]) .header-btn {
                 color: rgba(15, 23, 42, 0.68);
                 background: rgba(15, 23, 42, 0.06);
+            }
+
+            :host-context([data-theme="light"]) .header-btn.header-btn-active {
+                color: rgba(15, 23, 42, 0.95);
+                background: rgba(15, 23, 42, 0.14);
             }
 
             :host-context([data-theme="light"]) .header-btn:hover {
@@ -352,8 +386,65 @@ export class PlatformFileViewerModal extends PlatformModal {
         this._closeSyncComplete = false;
         this._headerDragging = false;
         this._headerDragState = null;
+        this._viewMode = '';
+        this._viewModeFileId = '';
         this._boundHeaderMouseMove = this._handleHeaderMouseMove.bind(this);
         this._boundHeaderMouseUp = this._handleHeaderMouseUp.bind(this);
+    }
+
+    willUpdate(changed) {
+        super.willUpdate?.(changed);
+        if (changed.has('config') || changed.has('fileId') || changed.has('file')) {
+            this._syncViewModeFromConfig();
+        }
+    }
+
+    _textPresentation() {
+        const config = this.config;
+        if (!config || config.handler !== 'text' || !config.text || typeof config.text !== 'object') {
+            return '';
+        }
+        const presentation = config.text.presentation;
+        if (presentation === 'html' || presentation === 'markdown') {
+            return presentation;
+        }
+        return '';
+    }
+
+    _defaultViewModeFromConfig() {
+        const config = this.config;
+        if (!config || !config.text || typeof config.text !== 'object') {
+            return 'source';
+        }
+        const mode = config.text.default_view_mode;
+        if (mode === 'preview' || mode === 'source') {
+            return mode;
+        }
+        return 'source';
+    }
+
+    _syncViewModeFromConfig() {
+        const fileId = this._resolvedFileId();
+        const presentation = this._textPresentation();
+        if (!presentation) {
+            this._viewMode = '';
+            this._viewModeFileId = fileId;
+            return;
+        }
+        if (fileId !== this._viewModeFileId || this._viewMode.length === 0) {
+            this._viewMode = this._defaultViewModeFromConfig();
+            this._viewModeFileId = fileId;
+        }
+    }
+
+    _setViewMode(mode) {
+        if (mode !== 'preview' && mode !== 'source') {
+            throw new Error(`platform-file-viewer-modal: invalid viewMode ${mode}`);
+        }
+        if (!this._textPresentation()) {
+            throw new Error('platform-file-viewer-modal: viewMode unavailable for this file');
+        }
+        this._viewMode = mode;
     }
 
     disconnectedCallback() {
@@ -621,10 +712,43 @@ export class PlatformFileViewerModal extends PlatformModal {
         window.open(downloadUrl, '_blank', 'noopener,noreferrer');
     }
 
+    _renderTypeHeaderActions() {
+        const presentation = this._textPresentation();
+        if (!presentation) {
+            return nothing;
+        }
+        const viewMode = this._viewMode.length > 0 ? this._viewMode : this._defaultViewModeFromConfig();
+        const previewLabel = this.t('file_viewer.view_preview');
+        const rawLabel = this.t('file_viewer.view_raw');
+        return html`
+            <div class="header-type-actions" role="group" aria-label=${this.t('file_viewer.view_mode_group')}>
+                <button
+                    type="button"
+                    class="header-btn header-btn-label ${viewMode === 'preview' ? 'header-btn-active' : ''}"
+                    title=${previewLabel}
+                    aria-label=${previewLabel}
+                    aria-pressed=${viewMode === 'preview' ? 'true' : 'false'}
+                    ?disabled=${this._syncing}
+                    @click=${() => this._setViewMode('preview')}
+                >${previewLabel}</button>
+                <button
+                    type="button"
+                    class="header-btn header-btn-label ${viewMode === 'source' ? 'header-btn-active' : ''}"
+                    title=${rawLabel}
+                    aria-label=${rawLabel}
+                    aria-pressed=${viewMode === 'source' ? 'true' : 'false'}
+                    ?disabled=${this._syncing}
+                    @click=${() => this._setViewMode('source')}
+                >${rawLabel}</button>
+            </div>
+        `;
+    }
+
     renderHeaderActions() {
         const title = this.minimized ? this.t('file_viewer.restore') : this.t('file_viewer.minimize');
         const downloadUrl = this._resolveDownloadUrl();
         return html`
+            ${this._renderTypeHeaderActions()}
             ${downloadUrl.length > 0 ? html`
                 <button
                     type="button"
@@ -652,6 +776,10 @@ export class PlatformFileViewerModal extends PlatformModal {
 
     renderBody() {
         const fileId = this._resolvedFileId();
+        const presentation = this._textPresentation();
+        const viewMode = presentation
+            ? (this._viewMode.length > 0 ? this._viewMode : this._defaultViewModeFromConfig())
+            : '';
         return html`
             <div class="viewer-shell">
                 ${this.config
@@ -659,6 +787,7 @@ export class PlatformFileViewerModal extends PlatformModal {
                         <platform-document-viewer-host
                             .fileId=${fileId}
                             .openConfig=${this.config}
+                            .viewMode=${viewMode}
                             .suspended=${this.minimized}
                             @editor-error=${this._onEditorError}
                             @document-state=${this._onDocumentState}

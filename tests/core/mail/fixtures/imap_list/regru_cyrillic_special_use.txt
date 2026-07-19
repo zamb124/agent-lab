@@ -1,0 +1,7 @@
+* LIST (\HasNoChildren) "/" INBOX
+* LIST (\HasNoChildren \Sent) "/" "Отправленные"
+* LIST (\HasNoChildren \Drafts) "/" "Черновики"
+* LIST (\HasNoChildren \Trash) "/" "Корзина"
+* LIST (\HasNoChildren) "/" "Архив"
+* NAMESPACE (("" "/")) NIL NIL
+OK LIST completed

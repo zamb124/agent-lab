@@ -265,6 +265,7 @@ class DocumentViewerService:
         editor_lang: str,
         file_category: str,
         onlyoffice_document_type: str | None,
+        namespace: str | None = None,
     ) -> DocumentOpenConfigResponse:
         integration_ok, detail = integration_configured()
         handler_id = self.resolve_handler_id(
@@ -283,7 +284,7 @@ class DocumentViewerService:
             title=file_record.original_name,
             file_category=file_category,
             onlyoffice_document_type=onlyoffice_document_type,
-            namespace=None,
+            namespace=namespace,
             company_id=company_id,
             user_id=user_id,
             user_name=user_name,

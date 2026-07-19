@@ -271,7 +271,10 @@
             "backAria": "Вернуться к списку документов",
             "saved": "Сохранено",
             "saving": "Сохранение…",
-            "untitled": "Без названия"
+            "untitled": "Без названия",
+            "view_preview": "Превью",
+            "view_raw": "Код",
+            "view_mode_group": "Режим просмотра"
         }
     },
     "namespace_modal": {

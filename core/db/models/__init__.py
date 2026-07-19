@@ -8,7 +8,9 @@ from core.db.models.base import Base
 from core.db.models.platform import (
     CalendarEventRecord,
     CalendarIntegrationRecord,
+    CompanyMailConnectionRecord,
     IntegrationCredentialRecord,
+    MailboxBindingRecord,
     Namespaces,
     PlatformShortLink,
     PushSubscription,
@@ -33,6 +35,8 @@ __all__ = [
     "PushSubscription",
     "CalendarEventRecord",
     "CalendarIntegrationRecord",
+    "CompanyMailConnectionRecord",
+    "MailboxBindingRecord",
     "IntegrationCredentialRecord",
     "SchedulerTaskRecord",
     "PlatformShortLink",

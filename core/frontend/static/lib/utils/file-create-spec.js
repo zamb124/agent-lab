@@ -15,6 +15,7 @@ const DEFAULT_RETENTION_BY_SOURCE = Object.freeze({
     rag_document: 'rag_document',
     office_document: 'office_document',
     calendar_event: 'calendar_event_attachment',
+    mail_message: 'mail_attachment',
     platform_auxiliary: 'platform_default',
     generated_ephemeral: 'generated_ephemeral',
 });
@@ -116,23 +117,31 @@ export function buildSyncChannelAssetFileCreateSpecJson({ channelId, purpose }) 
     });
 }
 
-export function buildWorkItemFileCreateSpecJson({ workItemId }) {
+export function buildWorkItemFileCreateSpecJson({ workItemId, workQueueId, boardId }) {
     if (typeof workItemId !== 'string' || workItemId.length === 0) {
         throw new Error('buildWorkItemFileCreateSpecJson: workItemId required');
     }
+    /** @type {Record<string, string>} */
+    const sourceRef = { work_item_id: workItemId };
+    if (typeof workQueueId === 'string' && workQueueId.length > 0) {
+        sourceRef.work_queue_id = workQueueId;
+    }
+    if (typeof boardId === 'string' && boardId.length > 0) {
+        sourceRef.board_id = boardId;
+    }
     return buildFileCreateSpecJson({
         sourceKind: 'work_item',
-        sourceRef: { work_item_id: workItemId },
+        sourceRef,
     });
 }
 
 export function buildCalendarEventFileCreateSpecJson({ eventId }) {
-    const sourceRef = typeof eventId === 'string' && eventId.length > 0
-        ? { event_id: eventId }
-        : {};
+    if (typeof eventId !== 'string' || eventId.length === 0) {
+        throw new Error('buildCalendarEventFileCreateSpecJson: eventId required');
+    }
     return buildFileCreateSpecJson({
         sourceKind: 'calendar_event',
-        sourceRef,
+        sourceRef: { event_id: eventId },
     });
 }
 

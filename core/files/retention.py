@@ -21,6 +21,7 @@ class FileRetentionKind(StrEnum):
     SYNC_CALL_RECORDING = "sync_call_recording"
     SYNC_SPEECH_SEGMENT = "sync_speech_segment"
     CALENDAR_EVENT_ATTACHMENT = "calendar_event_attachment"
+    MAIL_ATTACHMENT = "mail_attachment"
     BROWSER_ARTIFACT = "browser_artifact"
     GENERATED_EPHEMERAL = "generated_ephemeral"
     RAG_DOCUMENT = "rag_document"
@@ -66,6 +67,7 @@ def resolve_retention_ttl_seconds(spec: FileRetentionSpec) -> int:
         FileRetentionKind.SYNC_CHANNEL_ASSET,
         FileRetentionKind.SYNC_CALL_RECORDING,
         FileRetentionKind.CALENDAR_EVENT_ATTACHMENT,
+        FileRetentionKind.MAIL_ATTACHMENT,
         FileRetentionKind.OFFICE_DOCUMENT,
     }:
         return 0

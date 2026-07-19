@@ -85,6 +85,7 @@
     "err_edit_remote": "This event in {label} cannot be edited here",
     "err_title_required": "Title is required",
     "err_kind_required": "Event type is required",
+    "err_mailbox_required": "Select a mailbox in the left rail",
     "err_end_after_start": "End time must be after start time",
     "err_no_event_selected": "No event selected",
     "err_delete_remote": "This event in {label} cannot be deleted here",

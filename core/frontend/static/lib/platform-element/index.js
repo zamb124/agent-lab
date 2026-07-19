@@ -194,7 +194,7 @@ export class PlatformElement extends LitElement {
         });
     }
 
-    openModal(kindOrClass, props) {
+    openModal(kindOrClass, props, options) {
         let kind;
         if (typeof kindOrClass === 'string' && kindOrClass.length > 0) {
             kind = kindOrClass;
@@ -206,8 +206,27 @@ export class PlatformElement extends LitElement {
         } else {
             throw new Error('PlatformElement.openModal: kind (non-empty string) or modal class required');
         }
-        const modalProps = props === undefined ? null : props;
-        this.dispatch(CoreEvents.UI_MODAL_OPEN, { kind, props: modalProps });
+        const opts = options && typeof options === 'object' ? options : {};
+        const replaceKinds = Array.isArray(opts.replaceKinds) ? opts.replaceKinds : null;
+        if (replaceKinds !== null) {
+            for (const replaceKind of replaceKinds) {
+                if (typeof replaceKind !== 'string' || replaceKind.length === 0) {
+                    throw new Error('PlatformElement.openModal: replaceKinds entries must be non-empty strings');
+                }
+            }
+        }
+        let modalProps = props === undefined ? null : props;
+        if (opts.skipEnterMotion === true) {
+            modalProps = {
+                ...(modalProps && typeof modalProps === 'object' ? modalProps : {}),
+                skipEnterMotion: true,
+            };
+        }
+        const payload = { kind, props: modalProps };
+        if (replaceKinds !== null) {
+            payload.replaceKinds = replaceKinds;
+        }
+        this.dispatch(CoreEvents.UI_MODAL_OPEN, payload);
     }
 
     openFile(fileOrId, options) {

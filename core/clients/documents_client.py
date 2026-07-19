@@ -18,7 +18,7 @@ class DocumentsClient:
             "office",
             "/documents/api/v1/documents/bind",
             json=body,
-            timeout=60.0,
+            timeout=8.0,
         )
         payload = require_json_object(response, "DocumentsClient.bind_file")
         return DocsBindResult.model_validate(payload)

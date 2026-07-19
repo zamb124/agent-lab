@@ -157,6 +157,8 @@ alwaysApply: true
 | FileRef / state file | `FileRef`, `state.files[]` | `file_id`, `original_name`, `url`, `content_type`, `file_size`, `capabilities`; A2A wire — `Part.raw` / `Part.url` (`filename`/`mediaType`); browser `File.name/type/size` мапятся на границе. В runtime state/API/UI запрещены `name`, `path`, `mime_type`, `size`, `type` для файлов. |
 | RAG document | `document_id`, `VectorDocument`, `DocumentProcessingStatus` | `namespace_id`, `document_name`, `chunk_index`, `metadata`; не `file_id`, если запись уже в индексе. |
 | Calendar event | `event_id`, `CalendarEvent` | `source`, `source_id`, `namespace`, `start_at`, `end_at`, `external_refs`; `source` — происхождение, не provider. |
+| Company mail connection | `company_mail_connection_id`, `CompanyMailConnection` | `company_id`, `mail_domain`, `provider` (`ispmanager`/`generic_imap_smtp`), IMAP/SMTP endpoints, `supports_provision`; web `company.subdomain` ≠ `mail_domain`. Детали → **`mail.mdc`**. |
+| Mailbox binding | `mailbox_binding_id`, `MailboxBinding` | `company_id`, `user_id` (nullable для role), `kind` (`user`/`role`), `email_address`, `local_part`, `password_encrypted`; не голый `id`, не `mailbox_id` без binding. |
 | Integration credential | `credential_id`, `provider`, `service` | `provider` — внешний вендор, `service` — область использования; токены только в credential/secrets. |
 | Billing usage | `usage_id`, `UsageRecord` | `usage_type`, `resource_name`, `quantity`, `cost`, `metadata`; не `data`. |
 | Payment transaction | `transaction_id`, `Transaction` | `payment_provider`, `external_payment_id`, `payment_url`; не `payment_id`. |
@@ -367,6 +369,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | CRM | `crm.mdc` |
 | RAG | `rag.mdc` |
 | Sync (чат, каналы, Git) | `sync.mdc` |
+| Почта (company connection, mailbox bindings, ISPmanager) | `mail.mdc` |
 | WorkItem (ядро задач, канбан, HITL, очереди) | `worktracker.mdc` |
 | Agent Skills (llm_node procedure packs) | `agent_skills.mdc` |
 | AgentPlan (execution checklist) | `agent_plan.mdc` |

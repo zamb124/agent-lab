@@ -31,6 +31,8 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         _editorError: { state: true },
         _dirty: { state: true },
         _savePulse: { state: true },
+        _viewMode: { state: true },
+        _viewModeFileId: { state: true },
     };
 
     static styles = [
@@ -113,6 +115,40 @@ export class OfficeDocumentEditorPage extends PlatformPage {
             .stage-chip[data-pulse='true'] {
                 animation: chip-pulse 420ms ease;
             }
+            .stage-type-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                margin-right: 4px;
+                padding-right: 10px;
+                border-right: 1px solid var(--documents-stage-bar-border);
+                flex-shrink: 0;
+            }
+            .stage-view-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 2rem;
+                height: 1.75rem;
+                padding: 0 0.625rem;
+                border: none;
+                border-radius: 999px;
+                background: transparent;
+                color: var(--text-secondary);
+                cursor: pointer;
+                font: inherit;
+                font-size: var(--text-xs);
+                font-weight: 600;
+                transition: background 160ms ease, color 160ms ease;
+            }
+            .stage-view-btn:hover {
+                background: var(--documents-stage-chip-bg);
+                color: var(--text-primary);
+            }
+            .stage-view-btn[aria-pressed='true'] {
+                background: var(--documents-stage-chip-bg);
+                color: var(--text-primary);
+            }
             .editor-area {
                 flex: 1;
                 display: flex;
@@ -192,6 +228,8 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         this._dirty = false;
         this._savePulse = false;
         this._pulseTimer = null;
+        this._viewMode = '';
+        this._viewModeFileId = '';
         this._editor = this.useOp('office/document_editor_config');
     }
 
@@ -208,6 +246,8 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         if (changed.has('fileId')) {
             this._editorError = '';
             this._dirty = false;
+            this._viewMode = '';
+            this._viewModeFileId = '';
             const id = (this.fileId || '').trim();
             if (!_isPlausibleFileId(id)) {
                 this._editorError = this.t('editor.errInvalidFileId');
@@ -215,6 +255,55 @@ export class OfficeDocumentEditorPage extends PlatformPage {
             }
             this._editor.run({ fileId: id, namespace: this._namespaceFromLocation() });
         }
+        this._syncViewModeFromOpenConfig();
+    }
+
+    _textPresentation(openConfig) {
+        if (!openConfig || openConfig.handler !== 'text' || !openConfig.text || typeof openConfig.text !== 'object') {
+            return '';
+        }
+        const presentation = openConfig.text.presentation;
+        if (presentation === 'html' || presentation === 'markdown') {
+            return presentation;
+        }
+        return '';
+    }
+
+    _defaultViewMode(openConfig) {
+        if (!openConfig || !openConfig.text || typeof openConfig.text !== 'object') {
+            return 'source';
+        }
+        const mode = openConfig.text.default_view_mode;
+        if (mode === 'preview' || mode === 'source') {
+            return mode;
+        }
+        return 'source';
+    }
+
+    _syncViewModeFromOpenConfig() {
+        const openConfig = this._editor.lastResult;
+        const presentation = this._textPresentation(openConfig);
+        const fileId = (this.fileId || '').trim();
+        if (!presentation) {
+            if (this._viewMode.length > 0) {
+                this._viewMode = '';
+            }
+            return;
+        }
+        if (fileId !== this._viewModeFileId || this._viewMode.length === 0) {
+            this._viewMode = this._defaultViewMode(openConfig);
+            this._viewModeFileId = fileId;
+        }
+    }
+
+    _setViewMode(mode) {
+        if (mode !== 'preview' && mode !== 'source') {
+            throw new Error(`office-document-editor-page: invalid viewMode ${mode}`);
+        }
+        if (!this._textPresentation(this._editor.lastResult)) {
+            throw new Error('office-document-editor-page: viewMode unavailable for this file');
+        }
+        this._viewMode = mode;
     }
 
     _back() { this.navigate('documents_list'); }
@@ -261,7 +350,38 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         return openConfig.title;
     }
 
+    _renderStageTypeActions(openConfig) {
+        const presentation = this._textPresentation(openConfig);
+        if (!presentation) {
+            return nothing;
+        }
+        const viewMode = this._viewMode.length > 0 ? this._viewMode : this._defaultViewMode(openConfig);
+        const previewLabel = this.t('editor.stage.view_preview');
+        const rawLabel = this.t('editor.stage.view_raw');
+        return html`
+            <div class="stage-type-actions" role="group" aria-label=${this.t('editor.stage.view_mode_group')}>
+                <button
+                    type="button"
+                    class="stage-view-btn"
+                    title=${previewLabel}
+                    aria-label=${previewLabel}
+                    aria-pressed=${viewMode === 'preview' ? 'true' : 'false'}
+                    @click=${() => this._setViewMode('preview')}
+                >${previewLabel}</button>
+                <button
+                    type="button"
+                    class="stage-view-btn"
+                    title=${rawLabel}
+                    aria-label=${rawLabel}
+                    aria-pressed=${viewMode === 'source' ? 'true' : 'false'}
+                    @click=${() => this._setViewMode('source')}
+                >${rawLabel}</button>
+            </div>
+        `;
+    }
+
     _renderStageBar() {
+        const openConfig = this._editor.lastResult;
         return html`
             <div class="stage-bar">
                 <button
@@ -274,6 +394,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
                     <platform-icon name="chevron-left" size="18"></platform-icon>
                 </button>
                 <div class="stage-title">${this._docTitle()}</div>
+                ${this._renderStageTypeActions(openConfig)}
                 <span
                     class="stage-chip"
                     data-dirty=${this._dirty ? 'true' : 'false'}
@@ -306,6 +427,10 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         }
         const openConfig = this._editor.lastResult;
         const showLoading = this._editor.busy && !openConfig;
+        const presentation = this._textPresentation(openConfig);
+        const viewMode = presentation
+            ? (this._viewMode.length > 0 ? this._viewMode : this._defaultViewMode(openConfig))
+            : '';
         return html`
             ${this.embedded ? nothing : this._renderStageBar()}
             <div class="editor-area">
@@ -315,6 +440,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
                         ? html`<platform-document-viewer-host
                                 .fileId=${this.fileId}
                                 .openConfig=${openConfig}
+                                .viewMode=${viewMode}
                                 @editor-error=${this._onEditorError}
                                 @document-state=${this._onDocumentState}
                             ></platform-document-viewer-host>`
