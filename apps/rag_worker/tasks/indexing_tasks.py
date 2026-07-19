@@ -237,26 +237,21 @@ async def index_office_catalog_task(
     for raw_item in items:
         item = require_json_object(raw_item, "office catalog index item")
         file_id_value = item.get("file_id")
-        binding_id_value = item.get("binding_id")
         title_value = item.get("title")
         file_category_value = item.get("file_category")
         if not isinstance(file_id_value, str) or file_id_value.strip() == "":
             raise ValueError("items[].file_id обязателен")
-        if not isinstance(binding_id_value, str) or binding_id_value.strip() == "":
-            raise ValueError("items[].binding_id обязателен")
         if not isinstance(title_value, str) or title_value.strip() == "":
             raise ValueError("items[].title обязателен")
         if not isinstance(file_category_value, str) or file_category_value.strip() == "":
             raise ValueError("items[].file_category обязателен")
 
         file_id = file_id_value.strip()
-        binding_id = binding_id_value.strip()
         file_record = await container.file_repository.get(file_id)
         if file_record is None:
             logger.warning(
-                "Office catalog index skip: FileRecord не найден file_id=%s binding_id=%s catalog_id=%s",
+                "Office catalog index skip: FileRecord не найден file_id=%s catalog_id=%s",
                 file_id,
-                binding_id,
                 catalog_id,
             )
             continue
@@ -270,11 +265,10 @@ async def index_office_catalog_task(
         if not is_rag_indexable_file_category(resolved_category):
             logger.info(
                 (
-                    "Office catalog index skip: non-indexable file_id=%s binding_id=%s "
+                    "Office catalog index skip: non-indexable file_id=%s "
                     "catalog_id=%s file_category=%s document_name=%s"
                 ),
                 file_id,
-                binding_id,
                 catalog_id,
                 resolved_category,
                 file_record.original_name,
@@ -286,7 +280,6 @@ async def index_office_catalog_task(
             "company_id": company_id,
             "office_namespace": workspace_namespace.strip(),
             "catalog_id": catalog_id.strip(),
-            "binding_id": binding_id,
             "document_title": title_value.strip(),
             "file_category": file_category_value.strip(),
             "uploaded_by_user_id": user_id.strip(),

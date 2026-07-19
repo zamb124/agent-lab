@@ -974,6 +974,91 @@
           }
         }
       }
+    },
+    "/flows/api/v1/agent/llm/v1/images/generations": {
+      "post": {
+        "tags": [
+          "agent-llm-proxy",
+          "agent-llm-proxy",
+          "agent-llm-proxy",
+          "public"
+        ],
+        "summary": "Agent Llm Images Generations",
+        "operationId": "agent_llm_images_generations_flows_api_v1_agent_llm_v1_images_generations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentOpenAIImagesGenerationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/api/v1/agent/llm/v1/proxy": {
+      "post": {
+        "tags": [
+          "agent-llm-proxy",
+          "agent-llm-proxy",
+          "agent-llm-proxy",
+          "public"
+        ],
+        "summary": "Agent Llm Onlyoffice Proxy",
+        "description": "Unwrap OnlyOffice AI ``{target,method,headers,data}`` → OpenAI handlers.",
+        "operationId": "agent_llm_onlyoffice_proxy_flows_api_v1_agent_llm_v1_proxy_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnlyOfficeLlmProxyEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1170,6 +1255,50 @@
             ],
             "title": "Max Tokens"
           },
+          "top_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top P"
+          },
+          "frequency_penalty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Penalty"
+          },
+          "presence_penalty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presence Penalty"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
           "tools": {
             "anyOf": [
               {
@@ -1183,6 +1312,48 @@
               }
             ],
             "title": "Tools"
+          },
+          "tool_choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Choice"
+          },
+          "response_format": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Format"
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N"
           }
         },
         "type": "object",
@@ -1190,7 +1361,8 @@
           "model",
           "messages"
         ],
-        "title": "AgentOpenAIChatCompletionsRequest"
+        "title": "AgentOpenAIChatCompletionsRequest",
+        "description": "Подмножество OpenRouter/OpenAI ChatRequest; unknown OR fields игнорируются."
       },
       "AgentOpenAIChatMessage": {
         "properties": {
@@ -1239,6 +1411,17 @@
               }
             ],
             "title": "Tool Call Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           }
         },
         "type": "object",
@@ -1246,6 +1429,64 @@
           "role"
         ],
         "title": "AgentOpenAIChatMessage"
+      },
+      "AgentOpenAIImagesGenerationsRequest": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "default": "image-auto"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Prompt"
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N",
+            "default": 1
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "response_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "url",
+                  "b64_json"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Format",
+            "default": "b64_json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "title": "AgentOpenAIImagesGenerationsRequest"
       },
       "AgentOpenAIModelItem": {
         "properties": {
@@ -1299,6 +1540,85 @@
           "data"
         ],
         "title": "AgentOpenAIModelsResponse"
+      },
+      "AgentPlan": {
+        "properties": {
+          "agent_plan_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Plan Id",
+            "description": "Id плана"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Опциональный заголовок плана"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/AgentPlanStep"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Steps",
+            "description": "Плоский список шагов"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_plan_id",
+          "steps"
+        ],
+        "title": "AgentPlan",
+        "description": "Активный план выполнения агента (один на ExecutionState)."
+      },
+      "AgentPlanStep": {
+        "properties": {
+          "step_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Step Id",
+            "description": "Стабильный id шага"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title",
+            "description": "Краткий заголовок шага"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentPlanStepStatus",
+            "description": "Статус шага",
+            "default": "pending"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "step_id",
+          "title"
+        ],
+        "title": "AgentPlanStep",
+        "description": "Один шаг плана агента."
+      },
+      "AgentPlanStepStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "in_progress",
+          "completed",
+          "need_help",
+          "failed"
+        ],
+        "title": "AgentPlanStepStatus"
       },
       "AgentSkill": {
         "properties": {
@@ -1733,76 +2053,6 @@
           "tool_ids"
         ],
         "title": "AgentToolkitUpdateRequest"
-      },
-      "Artifact": {
-        "properties": {
-          "artifactId": {
-            "type": "string",
-            "title": "Artifactid"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "extensions": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Extensions"
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Metadata"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "parts": {
-            "items": {
-              "$ref": "#/components/schemas/Part"
-            },
-            "type": "array",
-            "title": "Parts"
-          }
-        },
-        "type": "object",
-        "required": [
-          "artifactId",
-          "parts"
-        ],
-        "title": "Artifact",
-        "description": "Represents a file, data structure, or other resource generated by an agent during a task."
       },
       "Body_auth_callback_post_flows_api_auth_callback__provider_name__post": {
         "properties": {
@@ -4555,39 +4805,6 @@
         ],
         "title": "CriticPolicy",
         "description": "Строгая политика: когда рефлексия одобряет или блокирует gate."
-      },
-      "DataPart": {
-        "properties": {
-          "data": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Data"
-          },
-          "kind": {
-            "type": "string",
-            "const": "data",
-            "title": "Kind",
-            "default": "data"
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Metadata"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "title": "DataPart",
-        "description": "Represents a structured data segment (e.g., JSON) within a message or artifact."
       },
       "DataflowCanvasChip": {
         "properties": {
@@ -10516,7 +10733,7 @@
         "title": "ExecutionExceptionRecord",
         "description": "Запись об исключении, обработанном как ответ (режим exception_as_response)."
       },
-      "ExecutionState-Input": {
+      "ExecutionState": {
         "properties": {
           "task_id": {
             "type": "string",
@@ -10655,7 +10872,10 @@
           },
           "messages": {
             "items": {
-              "$ref": "#/components/schemas/Message"
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
             },
             "type": "array",
             "title": "Messages",
@@ -10765,7 +10985,7 @@
           },
           "nested_states": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/NestedStateData-Input"
+              "$ref": "#/components/schemas/NestedStateData"
             },
             "type": "object",
             "title": "Nested States",
@@ -10853,459 +11073,16 @@
             "title": "Pending Reasoning",
             "description": "Текущее pending рассуждение"
           },
-          "breakpoints": {
-            "additionalProperties": {
-              "type": "boolean"
-            },
-            "type": "object",
-            "title": "Breakpoints",
-            "description": "Активные breakpoints для нод (node_id -> enabled)"
-          },
-          "breakpoint_hit": {
+          "agent_plan": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/AgentPlan"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Breakpoint Hit",
-            "description": "ID ноды, на которой сработал breakpoint"
-          },
-          "breakpoint_state": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Breakpoint State",
-            "description": "Projection snapshot на момент срабатывания breakpoint"
-          },
-          "scheduled_tasks": {
-            "items": {
-              "additionalProperties": {
-                "$ref": "#/components/schemas/JsonValue"
-              },
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Scheduled Tasks",
-            "description": "Scheduled tasks созданные в текущей сессии"
-          },
-          "join_arrived_preds": {
-            "additionalProperties": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "type": "object",
-            "title": "Join Arrived Preds",
-            "description": "AND-join (incoming_policy=all): target_node_id -> предки, уже пришедшие в текущем цикле ожидания"
-          },
-          "flow_deadline_monotonic": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Flow Deadline Monotonic",
-            "description": "Дедлайн одного вызова run flow: time.monotonic() <= flow_deadline_monotonic; None — wall-clock лимит не задан для этой сессии"
-          },
-          "flow_timeout_effective_seconds": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Flow Timeout Effective Seconds",
-            "description": "Секунд wall-clock, заданных на этот run (для ошибок и отладки)"
-          },
-          "prompt_history": {
-            "items": {
-              "$ref": "#/components/schemas/PromptHistoryItem"
-            },
-            "type": "array",
-            "title": "Prompt History",
-            "description": "История изменений системного промпта"
-          },
-          "ui_events_pending": {
-            "items": {
-              "$ref": "#/components/schemas/PendingUIEvent"
-            },
-            "type": "array",
-            "title": "Ui Events Pending",
-            "description": "UI events, ожидающие публикации в A2A stream"
-          },
-          "llm_context_memory_cursor": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "type": "object",
-            "title": "Llm Context Memory Cursor",
-            "description": "Закрытый offset сообщений для episodic memory context layer"
-          }
-        },
-        "additionalProperties": true,
-        "type": "object",
-        "required": [
-          "task_id",
-          "context_id",
-          "user_id",
-          "session_id"
-        ],
-        "title": "ExecutionState",
-        "description": "Типизированное состояние выполнения агента.\n\nЗамена dict state с магическими __полями__.\nВсе системные поля явно типизированы и доступны через свойства.\n\nZero-Guess принципы:\n- FlexibleBaseModel (extra='allow') - для runtime данных\n- Явные типы для системных полей\n- Нет магии, все через свойства\n\nПримеры:\n    >>> state = ExecutionState.create(\n    ...     task_id=\"task-123\",\n    ...     context_id=\"ctx-456\",\n    ...     user_id=\"user-789\",\n    ...     content=\"Hello\"\n    ... )\n    >>> state.task_id  # Типизированный доступ\n    'task-123'"
-      },
-      "ExecutionState-Output": {
-        "properties": {
-          "task_id": {
-            "type": "string",
-            "title": "Task Id",
-            "description": "ID задачи A2A"
-          },
-          "context_id": {
-            "type": "string",
-            "title": "Context Id",
-            "description": "ID контекста A2A"
-          },
-          "user_id": {
-            "type": "string",
-            "title": "User Id",
-            "description": "ID актора выполнения (сотрудник-агент или инициатор)"
-          },
-          "initiator_user_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Initiator User Id",
-            "description": "Кто инициировал запуск: человек/собеседник. Для flow-сотрудника отличается от user_id (актор). Используется для уведомлений, эскалаций и prompt-переменных собеседника."
-          },
-          "session_id": {
-            "type": "string",
-            "title": "Session Id",
-            "description": "ID сессии в формате flow_id:context_id"
-          },
-          "flow_config_version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Flow Config Version",
-            "description": "Версия FlowConfig в flows_versions; None = при выполнении брать последнюю из flows"
-          },
-          "terminal_task_state": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "completed",
-                  "input-required",
-                  "canceled",
-                  "failed",
-                  "rejected",
-                  "auth-required",
-                  "handback",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Terminal Task State",
-            "description": "Финальный A2A TaskState, сохранённый в БД только на terminal boundary."
-          },
-          "terminal_task_error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Terminal Task Error",
-            "description": "Текст ошибки для terminal_task_state='failed'/'rejected'/'unknown'."
-          },
-          "current_nodes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Current Nodes",
-            "description": "Текущие ноды для выполнения"
-          },
-          "branch_id": {
-            "type": "string",
-            "title": "Branch Id",
-            "description": "ID branch",
-            "default": "default"
-          },
-          "content": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Content",
-            "description": "Входное сообщение"
-          },
-          "response": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Response",
-            "description": "Ответ агента"
-          },
-          "result": {
-            "$ref": "#/components/schemas/JsonValue",
-            "description": "Произвольный результат ноды или tool (CodeNode, inline execute)"
-          },
-          "validation": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Validation",
-            "description": "Данные валидации ноды (условия рёбер вида validation.valid == true)"
-          },
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/Message"
-            },
-            "type": "array",
-            "title": "Messages",
-            "description": "История сообщений"
-          },
-          "user_groups": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "User Groups",
-            "description": "Группы пользователя"
-          },
-          "variables": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "type": "object",
-            "title": "Variables",
-            "description": "Резолвнутые переменные"
-          },
-          "triggers": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/TriggerRuntimeSnapshot"
-            },
-            "type": "object",
-            "title": "Triggers",
-            "description": "Снимок по trigger_id: { payload, context } — не смешивать с variables"
-          },
-          "files": {
-            "items": {
-              "$ref": "#/components/schemas/FileRef"
-            },
-            "type": "array",
-            "title": "Files",
-            "description": "Прикреплённые файлы"
-          },
-          "interrupt": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/InterruptData"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Данные прерывания"
-          },
-          "interrupt_path": {
-            "items": {
-              "$ref": "#/components/schemas/InterruptPathItem"
-            },
-            "type": "array",
-            "title": "Interrupt Path",
-            "description": "Путь к месту прерывания"
-          },
-          "hitl_handoff_correlation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hitl Handoff Correlation Id",
-            "description": "При resume после operator handoff: correlation_id задачи до сброса interrupt, чтобы hitl_node один раз завершилась и граф пошёл дальше по рёбрам"
-          },
-          "hitl_streamed_closing_text": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hitl Streamed Closing Text",
-            "description": "Текст closing operator reply, уже отправленный в Redis как operator_reply. Если final_response совпадает — emit_complete не дублирует его в UI completed."
-          },
-          "node_history": {
-            "additionalProperties": {
-              "additionalProperties": {
-                "$ref": "#/components/schemas/JsonValue"
-              },
-              "type": "object"
-            },
-            "type": "object",
-            "title": "Node History",
-            "description": "История вызовов нод за последний проход Flow.run: {node_id: {type, calls: [...]}}. Сбрасывается в начале каждого Flow.run; лимит повторных заходов в code-ноду считается только в этом проходе."
-          },
-          "tool_results": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "type": "object",
-            "title": "Tool Results",
-            "description": "Результаты выполнения tools {tool_id: result}"
-          },
-          "execution_exceptions": {
-            "items": {
-              "$ref": "#/components/schemas/ExecutionExceptionRecord"
-            },
-            "type": "array",
-            "title": "Execution Exceptions",
-            "description": "Реестр исключений, обработанных как ответ (exception_as_response на ноде)"
-          },
-          "nested_states": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/NestedStateData-Output"
-            },
-            "type": "object",
-            "title": "Nested States",
-            "description": "Состояния вложенных субагентов"
-          },
-          "child_workflows": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/ChildWorkflowLink"
-            },
-            "type": "object",
-            "title": "Child Workflows",
-            "description": "Durable child workflow links по node_id; хранит session_id child flow для resume без snapshot-копии child state в родителе."
-          },
-          "handoff_parent_session_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Handoff Parent Session Id",
-            "description": "ID родительской сессии у дочернего flow при handoff — чтобы знать куда handback'ить"
-          },
-          "handoff_depth": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Handoff Depth",
-            "description": "Глубина цепочки handoff (для отладки и лимитов)",
-            "default": 0
-          },
-          "handoff_trace_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Handoff Trace Id",
-            "description": "OTEL trace_id цепочки handoff parent↔child для observability"
-          },
-          "handback_return_variables": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "type": "object",
-            "title": "Handback Return Variables",
-            "description": "Переменные, явно возвращаемые родителю через handback_to_parent"
-          },
-          "reasoning_history": {
-            "items": {
-              "additionalProperties": {
-                "$ref": "#/components/schemas/JsonValue"
-              },
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Reasoning History",
-            "description": "История рассуждений агента"
-          },
-          "reflection_history": {
-            "items": {
-              "$ref": "#/components/schemas/ReflectionRecord"
-            },
-            "type": "array",
-            "title": "Reflection History",
-            "description": "Typed reflection/test-time compute gate history"
-          },
-          "pending_reasoning": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pending Reasoning",
-            "description": "Текущее pending рассуждение"
+            "description": "Активный AgentPlan (flat checklist); перетирается agent_plan_write"
           },
           "breakpoints": {
             "additionalProperties": {
@@ -11548,11 +11325,6 @@
             "title": "Kind",
             "default": "onlyoffice"
           },
-          "binding_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Binding Id"
-          },
           "file_id": {
             "type": "string",
             "minLength": 1,
@@ -11592,7 +11364,6 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "binding_id",
           "file_id",
           "catalog_id",
           "document_type",
@@ -11601,46 +11372,7 @@
           "editor_url"
         ],
         "title": "FileDocumentCapability",
-        "description": "OnlyOffice document binding attached to a FileRef."
-      },
-      "FilePart": {
-        "properties": {
-          "file": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/FileWithBytes"
-              },
-              {
-                "$ref": "#/components/schemas/FileWithUri"
-              }
-            ],
-            "title": "File"
-          },
-          "kind": {
-            "type": "string",
-            "const": "file",
-            "title": "Kind",
-            "default": "file"
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Metadata"
-          }
-        },
-        "type": "object",
-        "required": [
-          "file"
-        ],
-        "title": "FilePart",
-        "description": "Represents a file segment within a message or artifact. The file content can be\nprovided either directly as bytes or as a URI."
+        "description": "Documents library capability attached to a FileRef (keyed by file_id)."
       },
       "FileRef": {
         "properties": {
@@ -11720,78 +11452,6 @@
         "title": "FileRef",
         "description": "Канонический элемент `ExecutionState.files`."
       },
-      "FileWithBytes": {
-        "properties": {
-          "bytes": {
-            "type": "string",
-            "title": "Bytes"
-          },
-          "mimeType": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mimetype"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "bytes"
-        ],
-        "title": "FileWithBytes",
-        "description": "Represents a file with its content provided directly as a base64-encoded string."
-      },
-      "FileWithUri": {
-        "properties": {
-          "mimeType": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mimetype"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "uri": {
-            "type": "string",
-            "title": "Uri"
-          }
-        },
-        "type": "object",
-        "required": [
-          "uri"
-        ],
-        "title": "FileWithUri",
-        "description": "Represents a file with its content located at a specific URI."
-      },
       "FlowChatSettings": {
         "properties": {
           "show_reasoning": {
@@ -11860,7 +11520,7 @@
           "allow_cancel": {
             "type": "boolean",
             "title": "Allow Cancel",
-            "description": "Разрешить пользователю отменять выполнение (tasks/cancel)",
+            "description": "Разрешить пользователю отменять сообщение (CancelTask)",
             "default": true
           },
           "greeting_message": {
@@ -16175,6 +15835,10 @@
             "type": "boolean",
             "title": "Installed"
           },
+          "platform_curated": {
+            "type": "boolean",
+            "title": "Platform Curated"
+          },
           "icon_url": {
             "anyOf": [
               {
@@ -16198,35 +15862,11 @@
           "auth_policy",
           "verify_status",
           "tool_count_snapshot",
-          "installed"
+          "installed",
+          "platform_curated"
         ],
         "title": "MCPCatalogStoreItemResponse",
         "description": "Запись MCP Store (opt-in tier)."
-      },
-      "MCPServerBrandingListResponse": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/MCPServerBrandingResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "catalog_slugs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Catalog Slugs"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "catalog_slugs"
-        ],
-        "title": "MCPServerBrandingListResponse",
-        "description": "Список branding и slug из catalog для UI."
       },
       "MCPServerBrandingResponse": {
         "properties": {
@@ -16262,6 +15902,23 @@
         ],
         "title": "MCPServerBrandingResponse",
         "description": "Глобальная иконка MCP сервера по slug."
+      },
+      "MCPServerBrandingSlugSuggestResponse": {
+        "properties": {
+          "slugs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Slugs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slugs"
+        ],
+        "title": "MCPServerBrandingSlugSuggestResponse",
+        "description": "Подсказки slug для branding иконок MCP."
       },
       "MCPServerBrandingUpsertRequest": {
         "properties": {
@@ -16700,42 +16357,6 @@
         "title": "MCPTransportType",
         "description": "Тип транспорта MCP сервера."
       },
-      "ManualStatePatchRequest": {
-        "properties": {
-          "sequence": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Sequence"
-          },
-          "execution_branch_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Execution Branch Id"
-          },
-          "state": {
-            "$ref": "#/components/schemas/ExecutionState-Input"
-          },
-          "activate": {
-            "type": "boolean",
-            "title": "Activate",
-            "default": true
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "sequence",
-          "state"
-        ],
-        "title": "ManualStatePatchRequest"
-      },
       "MergeMode": {
         "type": "string",
         "enum": [
@@ -16744,100 +16365,6 @@
         ],
         "title": "MergeMode",
         "description": "Режимы применения skill к базовой конфигурации агента.\n\nZero-Guess: явно указываем как мержить - merge или replace."
-      },
-      "Message": {
-        "properties": {
-          "contextId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Contextid"
-          },
-          "extensions": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Extensions"
-          },
-          "kind": {
-            "type": "string",
-            "const": "message",
-            "title": "Kind",
-            "default": "message"
-          },
-          "messageId": {
-            "type": "string",
-            "title": "Messageid"
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Metadata"
-          },
-          "parts": {
-            "items": {
-              "$ref": "#/components/schemas/Part"
-            },
-            "type": "array",
-            "title": "Parts"
-          },
-          "referenceTaskIds": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Referencetaskids"
-          },
-          "role": {
-            "$ref": "#/components/schemas/Role"
-          },
-          "taskId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Taskid"
-          }
-        },
-        "type": "object",
-        "required": [
-          "messageId",
-          "parts",
-          "role"
-        ],
-        "title": "Message",
-        "description": "Represents a single message in the conversation between a user and an agent."
       },
       "ModuleMethod": {
         "properties": {
@@ -16863,11 +16390,14 @@
         "title": "ModuleMethod",
         "description": "Метод модуля."
       },
-      "NestedStateData-Input": {
+      "NestedStateData": {
         "properties": {
           "messages": {
             "items": {
-              "$ref": "#/components/schemas/Message"
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
             },
             "type": "array",
             "title": "Messages",
@@ -16883,39 +16413,7 @@
           },
           "nested_states": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/NestedStateData-Input"
-            },
-            "type": "object",
-            "title": "Nested States",
-            "description": "Вложенные состояния суб-субагентов"
-          }
-        },
-        "additionalProperties": true,
-        "type": "object",
-        "title": "NestedStateData",
-        "description": "Данные вложенного состояния для субагентов."
-      },
-      "NestedStateData-Output": {
-        "properties": {
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/Message"
-            },
-            "type": "array",
-            "title": "Messages",
-            "description": "История сообщений субагента"
-          },
-          "interrupt_path": {
-            "items": {
-              "$ref": "#/components/schemas/InterruptPathItem"
-            },
-            "type": "array",
-            "title": "Interrupt Path",
-            "description": "Путь прерывания внутри субагента"
-          },
-          "nested_states": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/NestedStateData-Output"
+              "$ref": "#/components/schemas/NestedStateData"
             },
             "type": "object",
             "title": "Nested States",
@@ -17715,6 +17213,37 @@
         ],
         "title": "OffsetPage[MCPCatalogStoreItemResponse]"
       },
+      "OffsetPage_MCPServerBrandingResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MCPServerBrandingResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[MCPServerBrandingResponse]"
+      },
       "OffsetPage_MCPServerResponse_": {
         "properties": {
           "items": {
@@ -17869,6 +17398,58 @@
           "offset"
         ],
         "title": "OffsetPage[ToolResponse]"
+      },
+      "OnlyOfficeLlmProxyEnvelope": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Target"
+          },
+          "method": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Method"
+          },
+          "headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headers"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target",
+          "method"
+        ],
+        "title": "OnlyOfficeLlmProxyEnvelope",
+        "description": "Тело OnlyOffice AI plugin proxy: unwrap → target OpenAI path."
       },
       "OperatorMessageRequest": {
         "properties": {
@@ -18143,20 +17724,6 @@
         ],
         "title": "ParseSignatureResponse",
         "description": "Результат парсинга сигнатуры"
-      },
-      "Part": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/TextPart"
-          },
-          {
-            "$ref": "#/components/schemas/FilePart"
-          },
-          {
-            "$ref": "#/components/schemas/DataPart"
-          }
-        ],
-        "title": "Part"
       },
       "PendingUIEvent": {
         "properties": {
@@ -19434,15 +19001,6 @@
         ],
         "title": "RetryScheduledPayload"
       },
-      "Role": {
-        "type": "string",
-        "enum": [
-          "agent",
-          "user"
-        ],
-        "title": "Role",
-        "description": "Identifies the sender of the message. `user` for the client, `agent` for the service."
-      },
       "RunStartedPayload": {
         "properties": {
           "flow_id": {
@@ -19830,20 +19388,6 @@
         "title": "StateField",
         "description": "Поле ExecutionState."
       },
-      "StateUpdateRequest": {
-        "properties": {
-          "state": {
-            "$ref": "#/components/schemas/ExecutionState-Input"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "state"
-        ],
-        "title": "StateUpdateRequest",
-        "description": "Запрос ручного patch state для существующей durable workflow session."
-      },
       "SubscribeRequest": {
         "properties": {
           "transport": {
@@ -20008,128 +19552,6 @@
         ],
         "title": "SyncMessageInbox",
         "description": "Входящее сообщение sync (mention или DM) сотруднику-агенту."
-      },
-      "Task": {
-        "properties": {
-          "artifacts": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/Artifact"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Artifacts"
-          },
-          "contextId": {
-            "type": "string",
-            "title": "Contextid"
-          },
-          "history": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/Message"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "History"
-          },
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "kind": {
-            "type": "string",
-            "const": "task",
-            "title": "Kind",
-            "default": "task"
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Metadata"
-          },
-          "status": {
-            "$ref": "#/components/schemas/TaskStatus"
-          }
-        },
-        "type": "object",
-        "required": [
-          "contextId",
-          "id",
-          "status"
-        ],
-        "title": "Task",
-        "description": "Represents a single, stateful operation or conversation between a client and an agent."
-      },
-      "TaskState": {
-        "type": "string",
-        "enum": [
-          "submitted",
-          "working",
-          "input-required",
-          "completed",
-          "canceled",
-          "failed",
-          "rejected",
-          "auth-required",
-          "unknown"
-        ],
-        "title": "TaskState",
-        "description": "Defines the lifecycle states of a Task."
-      },
-      "TaskStatus": {
-        "properties": {
-          "message": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Message"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "state": {
-            "$ref": "#/components/schemas/TaskState"
-          },
-          "timestamp": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Timestamp",
-            "examples": [
-              "2023-10-27T10:00:00Z"
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "state"
-        ],
-        "title": "TaskStatus",
-        "description": "Represents the status of a task at a specific point in time."
       },
       "TaskSubmitRequest": {
         "properties": {
@@ -20328,38 +19750,6 @@
           "expired_subscriptions"
         ],
         "title": "TestPushResponse"
-      },
-      "TextPart": {
-        "properties": {
-          "kind": {
-            "type": "string",
-            "const": "text",
-            "title": "Kind",
-            "default": "text"
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Metadata"
-          },
-          "text": {
-            "type": "string",
-            "title": "Text"
-          }
-        },
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "title": "TextPart",
-        "description": "Represents a text segment within a message or artifact."
       },
       "TimeTravelRequest": {
         "properties": {

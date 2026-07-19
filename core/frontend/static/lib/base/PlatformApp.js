@@ -28,9 +28,10 @@
  *   - static topBarHideOnRoutes = []  — список routeKeys, на которых top-bar скрыт.
  *   - static routeMotionEnabled = true — route changes используют View Transition API,
  *     если браузер поддерживает document.startViewTransition и не включён reduced motion.
- *   - static platformAssistant = { serviceId, branchId, showLauncher } — глобальный
- *     authenticated drawer Lara. Контекст точки входа возвращает
- *     getPlatformAssistantContextVariables(routeKey, params).
+ *   - static platformAssistant = { serviceId, branchId, showLauncher, launcherPosition? }
+ *     — глобальный authenticated drawer Lara. `launcherPosition`: `'bottom-right'`
+ *     (дефолт) | `'bottom-left'` (Sync: FAB не перекрывает composer Send).
+ *     Контекст точки входа — getPlatformAssistantContextVariables(routeKey, params).
  */
 
 import { html, css, nothing } from 'lit';
@@ -379,6 +380,15 @@ export class PlatformApp extends PlatformElement {
         if (typeof config.showLauncher !== 'boolean') {
             throw new Error('PlatformApp platformAssistant.showLauncher must be boolean');
         }
+        if (
+            config.launcherPosition !== undefined
+            && config.launcherPosition !== 'bottom-right'
+            && config.launcherPosition !== 'bottom-left'
+        ) {
+            throw new Error(
+                "PlatformApp platformAssistant.launcherPosition must be 'bottom-right' or 'bottom-left'",
+            );
+        }
         return config;
     }
 
@@ -397,6 +407,9 @@ export class PlatformApp extends PlatformElement {
         const voiceBaseUrl = resolveVoiceHttpOrigin();
         const voiceEnabled = voiceBaseUrl !== '';
         const activeDeviceName = this._activeAgentDeviceName();
+        const launcherPosition = config.launcherPosition === 'bottom-left'
+            ? 'bottom-left'
+            : 'bottom-right';
         return html`
             <platform-chat
                 display="drawer"
@@ -406,6 +419,7 @@ export class PlatformApp extends PlatformElement {
                 flow-id="lara"
                 branch-id=${config.branchId}
                 launcher-storage-scope=${config.serviceId}
+                data-embed-position=${launcherPosition}
                 .flowsBaseUrl=${'/flows'}
                 ?use-credentials=${true}
                 .showLauncher=${config.showLauncher}

@@ -10,11 +10,17 @@ from a2a.types import (
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
 )
-from pydantic import ValidationError
+from google.protobuf.json_format import ParseDict
+from google.protobuf.message import DecodeError
 
+from core.a2a import (
+    a2a_task_state_to_platform,
+    is_interrupted_a2a_task_state,
+    is_terminal_a2a_task_state,
+    mapping_from_struct,
+)
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
-from core.state import TERMINAL_TASK_STATES
 from core.types import JsonObject, parse_json_object, require_json_object
 
 from .base import BaseSubscriber, StreamEvent
@@ -46,53 +52,76 @@ def _is_operator_task_input_required(metadata: JsonObject) -> bool:
     return body.get("kind") == "operator_task"
 
 
+def _event_metadata(event: TaskStatusUpdateEvent) -> JsonObject:
+    if not event.HasField("metadata"):
+        return {}
+    return mapping_from_struct(event.metadata)
+
+
 def parse_event(data: str) -> StreamEvent:
-    """Парсит событие из JSON."""
+    """Парсит A2A 1.0 событие из JSON (StreamResponse или плоский status/artifact update)."""
     parsed = parse_json_object(data, "StreamEvent")
+
+    # StreamResponse shape: {statusUpdate:...} / {artifactUpdate:...}
+    status_update = parsed.get("statusUpdate")
+    if isinstance(status_update, dict):
+        event = TaskStatusUpdateEvent()
+        _ = ParseDict(status_update, event)
+        return event
+    artifact_update = parsed.get("artifactUpdate")
+    if isinstance(artifact_update, dict):
+        event = TaskArtifactUpdateEvent()
+        _ = ParseDict(artifact_update, event)
+        return event
+
+    # Плоский TaskStatusUpdateEvent / TaskArtifactUpdateEvent (MessageToDict)
+    if "status" in parsed and "taskId" in parsed:
+        event = TaskStatusUpdateEvent()
+        _ = ParseDict(dict(parsed), event)
+        return event
+    if "artifact" in parsed and "taskId" in parsed:
+        event = TaskArtifactUpdateEvent()
+        _ = ParseDict(dict(parsed), event)
+        return event
+
+    # A2A Protocol 0.3 stream kind — hard cut reject (not accepted on 1.0 wire)
     kind = parsed.get("kind")
+    if kind in ("status-update", "artifact-update"):
+        raise ValueError(f"A2A 0.3 event kind rejected: {kind!r}")
 
-    if kind == "status-update":
-        return TaskStatusUpdateEvent.model_validate(parsed)
-    elif kind == "artifact-update":
-        return TaskArtifactUpdateEvent.model_validate(parsed)
-
-    raise ValueError(f"Unknown event kind: {kind}")
+    raise ValueError(f"Unknown A2A stream event shape: keys={sorted(parsed.keys())}")
 
 
 def is_final_event(event: StreamEvent) -> bool:
     """
-    Проверяет является ли событие финальным.
+    Финальное событие — TaskStatusUpdateEvent с terminal/interrupted state.
 
-    Финальное событие - TaskStatusUpdateEvent с:
-    1. final=True
-    2. state в терминальном task state (completed, failed, canceled, input-required)
-
-    Промежуточные события с final=True (например tool_call) НЕ являются финальными!
+    `final=` удалён в A2A 1.0; критерий — protobuf TaskState + platform interrupt metadata.
     """
-    if isinstance(event, TaskStatusUpdateEvent):
-        state = event.status.state if event.status else None
-        if state is None:
-            return False
-        state_str = state.value
-        metadata_raw = event.metadata
-        metadata: JsonObject = (
-            require_json_object(metadata_raw, "TaskStatusUpdateEvent.metadata")
-            if metadata_raw is not None
-            else {}
-        )
-        if state_str == "input-required":
-            if _is_agent_handoff_input_required(metadata):
-                return True
-            # HITL: закрываем message/stream; user/operator идут на live tasks/resubscribe.
-            if _is_operator_task_input_required(metadata):
-                return True
-            if metadata.get("platform_handoff_continue") is True:
-                return False
-        if not event.final:
-            return False
-        if state_str in TERMINAL_TASK_STATES:
-            return True
+    if not isinstance(event, TaskStatusUpdateEvent):
         return False
+    if not event.HasField("status"):
+        return False
+    state = event.status.state
+    metadata = _event_metadata(event)
+    platform_state = a2a_task_state_to_platform(state)
+
+    if platform_state == "input-required":
+        if _is_agent_handoff_input_required(metadata):
+            return True
+        # HITL: закрываем SendStreamingMessage; user/operator идут на live SubscribeToTask.
+        if _is_operator_task_input_required(metadata):
+            return True
+        if metadata.get("platform_handoff_continue") is True:
+            return False
+        if metadata.get("platform_oauth_continue") is True:
+            return False
+        return True
+
+    if is_terminal_a2a_task_state(state):
+        return True
+    if is_interrupted_a2a_task_state(state):
+        return True
     return False
 
 
@@ -133,7 +162,7 @@ class EventSubscriber(BaseSubscriber):
         async for message in self.redis.subscribe(channel, timeout=timeout, ready_event=ready_event):
             try:
                 event = parse_event(message)
-            except (ValueError, ValidationError) as e:
+            except (ValueError, DecodeError, TypeError) as e:
                 logger.error(f"[Subscriber] Error parsing event on {channel}: {e}")
                 continue
             event_count += 1
@@ -171,14 +200,12 @@ class EventSubscriber(BaseSubscriber):
         return events
 
 
-# Алиас для обратной совместимости
 RedisSubscriber = EventSubscriber
 
 
 __all__ = [
     "EventSubscriber",
     "RedisSubscriber",
-    "TERMINAL_TASK_STATES",
     "parse_event",
     "is_final_event",
 ]

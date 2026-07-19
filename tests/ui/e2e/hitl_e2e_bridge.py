@@ -47,10 +47,13 @@ def hitl_worktracker_api_origin(origin: str) -> str:
 async def hitl_ensure_demo_queue_member(origin: str, auth_token: str, user_id: str) -> str:
     import httpx
 
+    from tests.ui.e2e_worker import ui_e2e_scope_headers
+
     api_origin = hitl_worktracker_api_origin(origin)
     async with httpx.AsyncClient(
         base_url=api_origin,
         cookies={"auth_token": auth_token},
+        headers=ui_e2e_scope_headers(),
         timeout=630.0,
     ) as client:
         queues_resp = await client.get(f"{WORKTRACKER_API_PREFIX}/work-queues")
@@ -164,9 +167,9 @@ async def hitl_api_wait_conversation_text(
 
 async def hitl_wait_chat_input_required(page: Page) -> str:
     banner = page.locator("chat-page .input-required-banner").first
-    await expect(banner).to_be_visible(timeout=120_000)
+    await expect(banner).to_be_visible(timeout=20_000)
     badge = page.locator("chat-page platform-work-item-badge[work-item-id]").first
-    await expect(badge).to_be_visible(timeout=30_000)
+    await expect(badge).to_be_visible(timeout=10_000)
     work_item_id = await badge.get_attribute("work-item-id")
     if not work_item_id:
         raise AssertionError("platform-work-item-badge must expose work-item-id")
@@ -330,32 +333,47 @@ async def hitl_operator_claim_and_complete(
 ) -> None:
     import httpx
 
+    from tests.ui.e2e_worker import ui_e2e_scope_headers
+
     api_origin = hitl_worktracker_api_origin(origin)
     async with httpx.AsyncClient(
         base_url=api_origin,
         cookies={"auth_token": auth_token},
+        headers=ui_e2e_scope_headers(),
         timeout=630.0,
     ) as client:
         claim_resp = await client.post(
             f"{WORKTRACKER_API_PREFIX}/work-items/{work_item_id}/claim",
             json={},
         )
-        if claim_resp.status_code >= 400:
+        if claim_resp.status_code >= 400 and claim_resp.status_code != 409:
             raise AssertionError(
                 f"claim failed: {claim_resp.status_code} {claim_resp.text}"
             )
-        complete_resp = await client.post(
-            f"{WORKTRACKER_API_PREFIX}/work-items/{work_item_id}/complete",
-            json={"resolution_text": resolution_text},
-        )
-        if complete_resp.status_code >= 400:
-            raise AssertionError(
-                f"complete failed: {complete_resp.status_code} {complete_resp.text}"
+        last_detail = ""
+        for attempt in range(5):
+            complete_resp = await client.post(
+                f"{WORKTRACKER_API_PREFIX}/work-items/{work_item_id}/complete",
+                json={"resolution_text": resolution_text},
             )
+            if complete_resp.status_code < 400:
+                return
+            last_detail = complete_resp.text
+            try:
+                last_detail = str(complete_resp.json())
+            except ValueError:
+                pass
+            # 409/500 сразу после claim — hooks/resume ещё не готовы.
+            if complete_resp.status_code not in {409, 500} or attempt == 4:
+                break
+            await asyncio.sleep(0.4 * (attempt + 1))
+        raise AssertionError(
+            f"complete failed: {complete_resp.status_code} {last_detail}"
+        )
 
 
 async def hitl_wait_chat_resume(page: Page, *, expect_operator_text: str | None = None) -> None:
-    await expect(page.locator("chat-page .input-required-banner")).to_be_hidden(timeout=120_000)
+    await expect(page.locator("chat-page .input-required-banner")).to_be_hidden(timeout=90_000)
     if expect_operator_text:
         chat = page.locator("chat-page").first
         if "Марина" in expect_operator_text:
@@ -363,7 +381,7 @@ async def hitl_wait_chat_resume(page: Page, *, expect_operator_text: str | None 
         else:
             snippet = expect_operator_text[:48].strip()
             reply = chat.get_by_text(re.compile(re.escape(snippet))).first
-        await expect(reply).to_be_visible(timeout=120_000)
+        await expect(reply).to_be_visible(timeout=45_000)
 
 
 async def hitl_find_latest_queue_task(

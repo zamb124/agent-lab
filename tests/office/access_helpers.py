@@ -65,7 +65,7 @@ async def create_nested_catalog(
     return response.json()["catalog_id"]
 
 
-async def upload_txt_binding(
+async def upload_txt_document(
     office_client: AsyncClient,
     headers: dict[str, str],
     *,
@@ -80,10 +80,10 @@ async def upload_txt_binding(
         data={"title": title, "catalog_id": catalog_id},
     )
     assert upload.status_code == 200, upload.text
-    return upload.json()["binding_id"]
+    return upload.json()["file_id"]
 
 
-async def upload_json_binding(
+async def upload_json_document(
     office_client: AsyncClient,
     headers: dict[str, str],
     *,
@@ -98,7 +98,7 @@ async def upload_json_binding(
         data={"title": title, "catalog_id": catalog_id},
     )
     assert upload.status_code == 200, upload.text
-    return upload.json()["binding_id"]
+    return upload.json()["file_id"]
 
 
 def extract_public_token(public_url: str) -> str:
@@ -108,15 +108,15 @@ def extract_public_token(public_url: str) -> str:
     return match.group(1)
 
 
-async def enable_binding_link(
+async def enable_document_link(
     office_client: AsyncClient,
     headers: dict[str, str],
-    binding_id: str,
+    file_id: str,
     *,
     link_permission: OfficeLinkPermission = "view",
 ) -> tuple[str, dict[str, object]]:
     patch = await office_client.patch(
-        f"/documents/api/v1/documents/{binding_id}/access",
+        f"/documents/api/v1/documents/{file_id}/access",
         headers=headers,
         json={"link_enabled": True, "link_permission": link_permission},
     )

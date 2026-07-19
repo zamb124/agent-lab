@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from core.logging import get_logger
-from tests.fixtures.e2e_scope import bind_static_e2e_scope
+from tests.ui.e2e_worker import bind_ui_e2e_worker_scope
 
 _AGENT_SETTINGS_EMPTY_STATE_TESTS = frozenset({
     "test_f3_settings_agent_devices_empty",
@@ -18,34 +18,50 @@ _AGENT_SETTINGS_MUTATING_TESTS = frozenset({
     "test_f12_settings_agent_audit_after_register",
 })
 _AGENT_SETTINGS_MODULE_SUFFIX = "test_frontend_settings_agent.py"
-_FLOWS_SCENARIO_TIMEOUT_SECONDS = 15
-_FLOWS_SCENARIO_MAX_TIMEOUT_SECONDS = 120
+# Жёсткий бюджет UI E2E: сломанный locator/ожидание не должны жечь минуты.
+# Дольше — opt-in `scenario(timeout_seconds=N)` и/или `@pytest.mark.timeout(N)` (15..360).
+_UI_E2E_TIMEOUT_SECONDS = 15
+_UI_E2E_MAX_TIMEOUT_SECONDS = 360
+
+
+def _is_ui_e2e_item(item: pytest.Item) -> bool:
+    path = str(getattr(item, "path", "") or getattr(item, "fspath", ""))
+    return "/tests/ui/e2e/" in path.replace("\\", "/")
+
+
+def _resolve_ui_e2e_timeout_seconds(item: pytest.Item) -> int:
+    """Берём max(scenario.timeout_seconds, @timeout), если оба в диапазоне 15..300."""
+    candidates: list[int] = []
+    scenario = item.get_closest_marker("scenario")
+    requested = None if scenario is None else scenario.kwargs.get("timeout_seconds")
+    if (
+        isinstance(requested, int)
+        and not isinstance(requested, bool)
+        and _UI_E2E_TIMEOUT_SECONDS <= requested <= _UI_E2E_MAX_TIMEOUT_SECONDS
+    ):
+        candidates.append(requested)
+    timeout_marker = item.get_closest_marker("timeout")
+    if timeout_marker is not None and timeout_marker.args:
+        mark_timeout = timeout_marker.args[0]
+        if (
+            isinstance(mark_timeout, int)
+            and not isinstance(mark_timeout, bool)
+            and _UI_E2E_TIMEOUT_SECONDS <= mark_timeout <= _UI_E2E_MAX_TIMEOUT_SECONDS
+        ):
+            candidates.append(mark_timeout)
+    if candidates:
+        return max(candidates)
+    return _UI_E2E_TIMEOUT_SECONDS
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Политика UI E2E: быстрый fail Flows docs и порядок frontend settings."""
+    """Политика UI E2E: дефолт 15s; scenario(timeout_seconds) или @timeout(N) для длинных."""
     _ = config
     for item in items:
-        scenario = item.get_closest_marker("scenario")
-        if scenario is None or scenario.kwargs.get("service") != "flows":
+        if not _is_ui_e2e_item(item):
             continue
-        # Старые сценарии несут локальные timeout 180–360 секунд. Для
-        # документационного маршрута это скрывает сломанный locator и делает
-        # полный аудит многочасовым. Маркер prepend переопределяет старый
-        # бюджет, не затрагивая обычные длительные integration E2E.
-        requested_timeout = scenario.kwargs.get(
-            "timeout_seconds",
-            _FLOWS_SCENARIO_TIMEOUT_SECONDS,
-        )
-        timeout_seconds = (
-            requested_timeout
-            if isinstance(requested_timeout, int)
-            and not isinstance(requested_timeout, bool)
-            and _FLOWS_SCENARIO_TIMEOUT_SECONDS <= requested_timeout <= _FLOWS_SCENARIO_MAX_TIMEOUT_SECONDS
-            else _FLOWS_SCENARIO_TIMEOUT_SECONDS
-        )
         item.add_marker(
-            pytest.mark.timeout(timeout_seconds, func_only=True),
+            pytest.mark.timeout(_resolve_ui_e2e_timeout_seconds(item), func_only=True),
             append=False,
         )
 
@@ -73,8 +89,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 @pytest.fixture(autouse=True)
 def platform_test_scope():
-    """Статический scope фазы UI E2E: запросы браузера не несут X-Test-Scope."""
-    with bind_static_e2e_scope() as scope:
+    """Per-worker MockLLM scope (`test_e2e_gwN`); браузер шлёт тот же X-Test-Scope."""
+    with bind_ui_e2e_worker_scope() as scope:
         yield scope
 
 

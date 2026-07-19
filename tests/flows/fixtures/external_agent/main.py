@@ -1,90 +1,104 @@
 """
-Тестовый A2A-совместимый агент.
+Тестовый A2A-совместимый агент (Protocol 1.0 JSON-RPC).
 
 Минимальная реализация для интеграционных тестов.
 """
 
 import uuid
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 external_agent_app = FastAPI(title="Test External Agent")
 
-AGENT_CARD = {
+AGENT_CARD: dict[str, Any] = {
     "name": "Test External Agent",
     "description": "A2A-совместимый агент для тестов",
-    "url": "http://localhost:8080",
     "version": "1.0.0",
+    "supportedInterfaces": [
+        {
+            "url": "http://localhost:8080",
+            "protocolBinding": "JSONRPC",
+            "protocolVersion": "1.0",
+        }
+    ],
     "capabilities": {
         "streaming": False,
         "pushNotifications": False,
+        "extendedAgentCard": False,
     },
-    "branches": [
+    "defaultInputModes": ["text/plain"],
+    "defaultOutputModes": ["text/plain"],
+    "skills": [
         {
             "id": "default",
             "name": "Default Skill",
-            "description": "Echo branch для тестов",
+            "description": "Echo skill для тестов",
             "tags": ["test"],
         }
     ],
 }
 
 
-class MessageSendParams(BaseModel):
-    """Параметры message/send."""
-    message: Dict[str, Any]
-    configuration: Dict[str, Any] = {}
+class SendMessageParams(BaseModel):
+    message: dict[str, Any]
+    configuration: dict[str, Any] = Field(default_factory=dict)
 
 
-class MessageSendRequest(BaseModel):
-    """JSON-RPC запрос message/send."""
+class JsonRpcRequest(BaseModel):
     jsonrpc: str = "2.0"
-    id: str
+    id: str | int
     method: str
-    params: MessageSendParams
+    params: SendMessageParams
 
 
 @external_agent_app.get("/.well-known/agent-card.json")
-async def get_agent_card() -> Dict[str, Any]:
-    """Возвращает agent-card."""
+async def get_agent_card() -> dict[str, Any]:
     return AGENT_CARD
 
 
 @external_agent_app.get("/health")
-async def health() -> Dict[str, str]:
-    """Health check."""
+async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @external_agent_app.post("/")
-async def send_task(request: MessageSendRequest) -> Dict[str, Any]:
-    """Обрабатывает задачу (echo)."""
+async def send_task(request: JsonRpcRequest) -> dict[str, Any]:
+    if request.method != "SendMessage":
+        return {
+            "jsonrpc": "2.0",
+            "id": request.id,
+            "error": {"code": -32601, "message": "Method not found"},
+        }
+
     text = ""
     for part in request.params.message.get("parts", []):
-        if part.get("type") == "text":
-            text += part.get("text", "")
+        if isinstance(part, dict) and isinstance(part.get("text"), str):
+            text += part["text"]
 
     response_text = f"Echo: {text}"
-
-    task_id = request.params.message.get("taskId", str(uuid.uuid4()))
+    task_id = request.params.message.get("taskId") or str(uuid.uuid4())
+    context_id = request.params.message.get("contextId") or str(uuid.uuid4())
     return {
         "jsonrpc": "2.0",
         "id": request.id,
         "result": {
             "id": task_id,
+            "contextId": context_id,
             "status": {
-                "state": "completed",
+                "state": "TASK_STATE_COMPLETED",
                 "message": {
-                    "role": "assistant",
-                    "parts": [{"type": "text", "text": response_text}],
+                    "messageId": str(uuid.uuid4()),
+                    "role": "ROLE_AGENT",
+                    "parts": [{"text": response_text}],
                 },
             },
             "artifacts": [
                 {
-                    "type": "message",
-                    "parts": [{"type": "text", "text": response_text}],
+                    "artifactId": str(uuid.uuid4()),
+                    "name": "response",
+                    "parts": [{"text": response_text}],
                 }
             ],
         },
@@ -102,4 +116,3 @@ if __name__ == "__main__":
         interface=Interfaces.ASGI,
         workers=1,
     ).serve()
-

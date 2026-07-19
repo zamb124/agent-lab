@@ -4,12 +4,12 @@
 
 ## Шаг 1. Упоминание в ленте
 
-![Упоминание в ленте](mention-profile-modal--01-upominanie-v-lente.png)
+![Упоминание в ленте](mention-profile-modal--01-mention-in-the-feed.png)
 
 ## Шаг 2. Модалка профиля: общий канал в сетке
 
-![Модалка профиля: общий канал в сетке](mention-profile-modal--02-modalka-profilya-obshchiy-kanal-v-setke.png)
+![Модалка профиля: общий канал в сетке](mention-profile-modal--02-profile-modal-shared-channel-in-the-grid.png)
 
 ## Шаг 3. Переход в канал из карточки профиля
 
-![Переход в канал из карточки профиля](mention-profile-modal--03-perekhod-v-kanal-iz-kartochki-profilya.png)
+![Переход в канал из карточки профиля](mention-profile-modal--03-navigate-to-channel-from-profile-card.png)

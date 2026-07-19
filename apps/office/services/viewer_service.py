@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from urllib.parse import urlparse
 
 from fastapi import HTTPException, Request
@@ -22,6 +21,7 @@ from core.documents.viewer.models import (
     DocumentOpenCapabilities,
     DocumentOpenConfigResponse,
     DocumentViewerHandlerId,
+    OfficeViewerScope,
 )
 from core.documents.viewer.resolver import resolve_viewer_handler_id
 from core.files.models import FileRecord
@@ -39,11 +39,6 @@ _OfficeViewerHandler = (
     | BinaryViewerHandler
     | VizViewerHandler
 )
-
-
-def file_viewer_binding_id(file_id: str) -> str:
-    digest = hashlib.sha256(file_id.encode("utf-8")).hexdigest()[:40]
-    return f"file_{digest}"
 
 
 def integration_configured() -> tuple[bool, str]:
@@ -136,8 +131,7 @@ class DocumentViewerService:
         *,
         request: Request,
         handler_id: DocumentViewerHandlerId,
-        binding_id: str,
-        binding_kind: str,
+        viewer_scope: OfficeViewerScope,
         file_record: FileRecord,
         title: str,
         file_category: str,
@@ -154,8 +148,7 @@ class DocumentViewerService:
         integ = settings.office
         return ViewerOpenContext(
             handler_id=handler_id,
-            binding_id=binding_id,
-            binding_kind=binding_kind,
+            viewer_scope=viewer_scope,
             file_record=file_record,
             title=title,
             file_category=file_category,
@@ -201,8 +194,7 @@ class DocumentViewerService:
         ctx = self.build_context(
             request=request,
             handler_id=handler_id,
-            binding_id=binding.binding_id,
-            binding_kind="document",
+            viewer_scope="catalog",
             file_record=file_record,
             title=binding.title,
             file_category=file_category,
@@ -244,8 +236,7 @@ class DocumentViewerService:
         ctx = self.build_context(
             request=request,
             handler_id=handler_id,
-            binding_id=binding.binding_id,
-            binding_kind="document",
+            viewer_scope="catalog",
             file_record=file_record,
             title=binding.title,
             file_category=file_category,
@@ -284,12 +275,10 @@ class DocumentViewerService:
         )
         if handler_id == "onlyoffice" and not integration_ok:
             raise HTTPException(status_code=503, detail=detail)
-        binding_id = file_viewer_binding_id(file_record.file_id)
         ctx = self.build_context(
             request=request,
             handler_id=handler_id,
-            binding_id=binding_id,
-            binding_kind="file",
+            viewer_scope="file",
             file_record=file_record,
             title=file_record.original_name,
             file_category=file_category,

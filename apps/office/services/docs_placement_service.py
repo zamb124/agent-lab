@@ -29,7 +29,7 @@ class DocsPlacementService:
         if record.company_id != company_id:
             raise ValueError("file does not belong to company")
 
-        existing = await self._document_binding_repository.get_by_file_for_company(
+        existing = await self._document_binding_repository.get(
             placement.file_id,
             company_id,
             placement.namespace,
@@ -41,7 +41,7 @@ class DocsPlacementService:
                 source_kind=FileSourceKind.OFFICE_DOCUMENT,
             )
             return DocsBindResult(
-                binding_id=existing.binding_id,
+                file_id=existing.file_id,
                 catalog_id=existing.catalog_id,
                 created=False,
                 catalog_path=[],
@@ -81,7 +81,7 @@ class DocsPlacementService:
             source_kind=FileSourceKind.OFFICE_DOCUMENT,
         )
         return DocsBindResult(
-            binding_id=row.binding_id,
+            file_id=row.file_id,
             catalog_id=row.catalog_id,
             created=True,
             catalog_path=segments,

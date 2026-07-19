@@ -8,7 +8,7 @@ import {
     applyChatRuntimeEvent,
     createInitialChatRuntimeState,
 } from '../../../../core/frontend/static/lib/chat/runtime/chat-state.js';
-import { buildA2aResubscribeBody } from '../../../../core/frontend/static/lib/chat/runtime/a2a-stream.js';
+import { buildA2aSubscribeToTaskBody } from '../../../../core/frontend/static/lib/chat/runtime/a2a-stream.js';
 
 function stateWithHitlPause({ workItemId = 'wi1', taskId = 'tsk1', contextId = 'ctx1', flowId = 'flow1' } = {}) {
     let state = createInitialChatRuntimeState();
@@ -30,7 +30,7 @@ function stateWithHitlPause({ workItemId = 'wi1', taskId = 'tsk1', contextId = '
     state = applyChatRuntimeEvent(state, 'input_required', {
         task_id: taskId,
         context_id: contextId,
-        message: { parts: [{ kind: 'text', text: 'ожидайте' }] },
+        message: { parts: [{ text: 'ожидайте' }] },
         result_metadata: {
             platform_interrupt: {
                 question: 'ожидайте',
@@ -65,15 +65,15 @@ describe('findActiveHitlPause', () => {
     });
 });
 
-describe('buildA2aResubscribeBody', () => {
-    it('builds tasks/resubscribe JSON-RPC', () => {
-        const body = buildA2aResubscribeBody('task-abc');
-        expect(body.method).toBe('tasks/resubscribe');
+describe('buildA2aSubscribeToTaskBody', () => {
+    it('builds SubscribeToTask JSON-RPC', () => {
+        const body = buildA2aSubscribeToTaskBody('task-abc');
+        expect(body.method).toBe('SubscribeToTask');
         expect(body.params).toEqual({ id: 'task-abc' });
     });
 
     it('rejects empty taskId', () => {
-        expect(() => buildA2aResubscribeBody('')).toThrow(/taskId/);
+        expect(() => buildA2aSubscribeToTaskBody('')).toThrow(/taskId/);
     });
 });
 

@@ -13,20 +13,22 @@ from typing import Any
 
 import pytest
 
+from tests.flows._a2a_v1 import A2A_HEADERS, a2a_headers
+
 pytestmark = [pytest.mark.e2e, pytest.mark.real_taskiq, pytest.mark.timeout(90, func_only=True)]
 
 
 def _message(text: str, context_id: str) -> dict[str, Any]:
     return {
         "messageId": str(uuid.uuid4()),
-        "role": "user",
-        "parts": [{"kind": "text", "text": text}],
+        "role": "ROLE_USER",
+        "parts": [{"text": text}],
         "contextId": context_id,
     }
 
 
-def _metadata(unique_id: str, *, execution_mode: str | None = None) -> dict[str, Any]:
-    metadata: dict[str, Any] = {
+def _metadata(unique_id: str) -> dict[str, Any]:
+    return {
         "branch": "default",
         "variables": {
             "salutation": "hello-from-request-var",
@@ -34,9 +36,6 @@ def _metadata(unique_id: str, *, execution_mode: str | None = None) -> dict[str,
             "extra": f"client-var-{unique_id}",
         },
     }
-    if execution_mode is not None:
-        metadata["execution_mode"] = execution_mode
-    return metadata
 
 
 def _rpc_body(
@@ -44,16 +43,19 @@ def _rpc_body(
     unique_id: str,
     *,
     context_id: str,
-    execution_mode: str | None = None,
+    return_immediately: bool = False,
 ) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "message": _message(f"run {method}", context_id),
+        "metadata": _metadata(unique_id),
+    }
+    if return_immediately:
+        params["configuration"] = {"returnImmediately": True}
     return {
         "jsonrpc": "2.0",
         "id": f"{method}-{unique_id}-{uuid.uuid4().hex}",
         "method": method,
-        "params": {
-            "message": _message(f"run {method}", context_id),
-            "metadata": _metadata(unique_id, execution_mode=execution_mode),
-        },
+        "params": params,
     }
 
 
@@ -114,19 +116,24 @@ def _stream_text(frames: list[dict[str, Any]]) -> str:
         result = frame.get("result")
         if not isinstance(result, dict):
             continue
-        kind = result.get("kind")
-        if kind == "artifact-update":
-            artifact = result.get("artifact")
-            if isinstance(artifact, dict):
-                chunks.append(_parts_text(artifact.get("parts")))
-        elif kind == "status-update":
-            status = result.get("status")
-            if isinstance(status, dict):
-                message = status.get("message")
-                if isinstance(message, dict):
-                    chunks.append(_parts_text(message.get("parts")))
-        elif kind == "message":
-            chunks.append(_parts_text(result.get("parts")))
+        if "artifactUpdate" in result:
+            body = result.get("artifactUpdate")
+            if isinstance(body, dict):
+                artifact = body.get("artifact")
+                if isinstance(artifact, dict):
+                    chunks.append(_parts_text(artifact.get("parts")))
+        elif "statusUpdate" in result:
+            body = result.get("statusUpdate")
+            if isinstance(body, dict):
+                status = body.get("status")
+                if isinstance(status, dict):
+                    message = status.get("message")
+                    if isinstance(message, dict):
+                        chunks.append(_parts_text(message.get("parts")))
+        elif "message" in result:
+            message = result.get("message")
+            if isinstance(message, dict):
+                chunks.append(_parts_text(message.get("parts")))
     return "".join(chunks)
 
 
@@ -136,9 +143,10 @@ def _stream_terminal_state(frames: list[dict[str, Any]]) -> str:
         result = frame.get("result")
         if not isinstance(result, dict):
             continue
-        if result.get("kind") != "status-update":
+        body = result.get("statusUpdate")
+        if not isinstance(body, dict):
             continue
-        status = result.get("status")
+        status = body.get("status")
         if isinstance(status, dict) and isinstance(status.get("state"), str):
             state = status["state"]
     return state
@@ -154,6 +162,7 @@ def _task_from_json_rpc(data: dict[str, Any]) -> dict[str, Any]:
 async def _create_modes_flow(client: Any, flow_id: str) -> None:
     response = await client.post(
         "/flows/api/v1/flows/",
+        headers=A2A_HEADERS,
         json={
             "flow_id": flow_id,
             "name": "A2A Modes E2E",
@@ -189,10 +198,11 @@ async def _poll_task(client: Any, flow_id: str, task_id: str) -> dict[str, Any]:
     for _ in range(40):
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": f"get-{uuid.uuid4().hex}",
-                "method": "tasks/get",
+                "method": "GetTask",
                 "params": {"id": task_id, "historyLength": 20},
             },
         )
@@ -203,9 +213,9 @@ async def _poll_task(client: Any, flow_id: str, task_id: str) -> dict[str, Any]:
         if isinstance(task, dict):
             status = task.get("status")
             if isinstance(status, dict) and status.get("state") in {
-                "completed",
-                "failed",
-                "input-required",
+                "TASK_STATE_COMPLETED",
+                "TASK_STATE_FAILED",
+                "TASK_STATE_INPUT_REQUIRED",
             }:
                 return task
         await asyncio.sleep(0.25)
@@ -221,9 +231,9 @@ async def test_a2a_standard_stream_sync_and_async_modes(client: Any, unique_id: 
         stream_context_id = f"ctx-stream-{unique_id}"
         stream_response = await client.post(
             f"/flows/api/v1/{flow_id}",
-            headers={"Accept": "text/event-stream"},
+            headers=a2a_headers({"Accept": "text/event-stream"}),
             json=_rpc_body(
-                "message/stream",
+                "SendStreamingMessage",
                 unique_id,
                 context_id=stream_context_id,
             ),
@@ -233,15 +243,15 @@ async def test_a2a_standard_stream_sync_and_async_modes(client: Any, unique_id: 
         assert "text/event-stream" in stream_response.headers.get("content-type", "")
         frames = _parse_sse(stream_response.text)
         assert frames
-        assert _stream_terminal_state(frames) == "completed", stream_response.text
+        assert _stream_terminal_state(frames) == "TASK_STATE_COMPLETED", stream_response.text
         assert expected in _stream_text(frames)
 
         sync_context_id = f"ctx-sync-{unique_id}"
         sync_response = await client.post(
             f"/flows/api/v1/{flow_id}",
-            headers={"Accept": "application/json"},
+            headers=a2a_headers({"Accept": "application/json"}),
             json=_rpc_body(
-                "message/send",
+                "SendMessage",
                 unique_id,
                 context_id=sync_context_id,
             ),
@@ -251,19 +261,19 @@ async def test_a2a_standard_stream_sync_and_async_modes(client: Any, unique_id: 
         sync_data = sync_response.json()
         assert isinstance(sync_data, dict)
         sync_task = _task_from_json_rpc(sync_data)
-        assert sync_task["status"]["state"] == "completed"
+        assert sync_task["status"]["state"] == "TASK_STATE_COMPLETED"
         assert sync_task["contextId"] == sync_context_id
         assert expected in _task_text(sync_task)
 
         async_context_id = f"ctx-async-{unique_id}"
         async_response = await client.post(
             f"/flows/api/v1/{flow_id}",
-            headers={"Accept": "application/json"},
+            headers=a2a_headers({"Accept": "application/json"}),
             json=_rpc_body(
-                "message/send",
+                "SendMessage",
                 unique_id,
                 context_id=async_context_id,
-                execution_mode="async",
+                return_immediately=True,
             ),
             timeout=15,
         )
@@ -271,14 +281,14 @@ async def test_a2a_standard_stream_sync_and_async_modes(client: Any, unique_id: 
         async_data = async_response.json()
         assert isinstance(async_data, dict)
         submitted_task = _task_from_json_rpc(async_data)
-        assert submitted_task["status"]["state"] == "submitted"
+        assert submitted_task["status"]["state"] == "TASK_STATE_SUBMITTED"
         assert submitted_task["contextId"] == async_context_id
         task_id = submitted_task["id"]
         assert isinstance(task_id, str)
         assert task_id
 
         final_task = await _poll_task(client, flow_id, task_id)
-        assert final_task["status"]["state"] == "completed"
+        assert final_task["status"]["state"] == "TASK_STATE_COMPLETED"
         assert final_task["contextId"] == async_context_id
         assert expected in _task_text(final_task)
     finally:

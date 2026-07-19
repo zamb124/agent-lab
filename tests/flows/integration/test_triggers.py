@@ -1779,8 +1779,8 @@ class TestWebhookChannelE2E:
         assert requests[0]["headers"].get("x-custom-header") == "custom-value"
 
     @pytest.mark.asyncio
-    async def test_webhook_send_notification_for_a2a(self, notification_server):
-        """WebhookChannelHandler send_notification для A2A уведомлений."""
+    async def test_webhook_send_notification_a2a_stream_response(self, notification_server):
+        """WebhookChannelHandler send_notification — A2A 1.0 StreamResponse statusUpdate."""
         from apps.flows.src.channels.webhook import WebhookChannelHandler
 
         (server, base_url) = notification_server
@@ -1797,10 +1797,17 @@ class TestWebhookChannelE2E:
         assert result["status"] == "ok"
         requests = server.get_requests("notify")
         assert len(requests) == 1
+        assert requests[0]["headers"].get("a2a-version") == "1.0"
         data = requests[0]["data"]
-        assert data["params"]["id"] == "task-123"
-        assert data["params"]["event"]["type"] == "complete"
-        assert data["params"]["event"]["data"]["response"] == "Agent finished successfully"
+        assert "statusUpdate" in data
+        status_update = data["statusUpdate"]
+        assert status_update["taskId"] == "task-123"
+        assert status_update["contextId"] == "agent:ctx-123"
+        assert status_update["status"]["state"] == "TASK_STATE_COMPLETED"
+        assert status_update.get("metadata", {}).get("final") is True
+        parts = status_update["status"]["message"]["parts"]
+        texts = [p["text"] for p in parts if isinstance(p, dict) and "text" in p]
+        assert "Agent finished successfully" in texts
 
 
 class TestTelegramChannelE2E:

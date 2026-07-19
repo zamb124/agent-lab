@@ -1,12 +1,12 @@
 """
-Статический test scope для E2E-фаз (-n0: Playwright browser, Electron desktop).
+Статический test scope для E2E-фаз без браузерного X-Test-Scope
+(Electron desktop / agent e2e на ``-n0``).
 
-Запросы из браузера/desktop-приложения не несут ``X-Test-Scope`` — сервисы
-стека берут scope из env ``TEST_SCOPE_DEFAULT`` (см. `scripts/test_stack.py`).
-Тестовый процесс этих фаз биндит тот же статический scope, чтобы очереди
-MockLLM (`mock_llm:responses:<scope>`) совпадали с service-side резолвом.
+UI E2E (`tests/ui/e2e`) использует per-worker scope через
+``tests/ui/e2e_worker.bind_ui_e2e_worker_scope`` + Playwright
+``extra_http_headers`` с ``X-Test-Scope``.
 
-conftest E2E-фазы переопределяет фикстуру ``platform_test_scope``:
+Desktop/agent conftest'ы переопределяют ``platform_test_scope``:
 
     @pytest.fixture(autouse=True)
     def platform_test_scope():

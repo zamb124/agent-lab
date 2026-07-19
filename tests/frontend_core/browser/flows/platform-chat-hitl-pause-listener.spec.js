@@ -1,6 +1,6 @@
 /**
  * User-surface HITL: после operator_task паузы ChatController поднимает live tail.
- * Доставка реплик — A2A tasks/resubscribe (не company WS).
+ * Доставка реплик — A2A SubscribeToTask (не company WS).
  */
 
 import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
@@ -89,7 +89,7 @@ describe('platform-chat HITL live resubscribe (user surface)', () => {
         el._controller.applyRuntimeVerb('input_required', {
             task_id: 'tsk1',
             context_id: 'ctx1',
-            message: { parts: [{ kind: 'text', text: 'Диалог на паузе' }] },
+            message: { parts: [{ text: 'Диалог на паузе' }] },
             result_metadata: {
                 platform_interrupt: {
                     question: 'Диалог на паузе',

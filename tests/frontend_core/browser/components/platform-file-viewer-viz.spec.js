@@ -55,7 +55,6 @@ if (!customElements.get('platform-file-viewer-open-fixture')) {
 function vizEditorConfig(fileId, title = `${fileId}.viz`) {
     return {
         handler: 'viz',
-        binding_id: `file:${fileId}`,
         file_id: fileId,
         title,
         original_name: title,

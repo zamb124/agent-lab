@@ -15,7 +15,6 @@ from a2a.types import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 
 # Self-contained: пакет собирается в минимальный образ без core (apps/test_a2a_sample/Dockerfile).
@@ -37,27 +36,23 @@ class SimpleTestAgent(AgentExecutor):
         """Выполняет агента и возвращает простой ответ."""
         content = context.get_user_input()
 
-        # Простая логика: вызываем первый tool если есть
         if self.tools:
             tool_args: JsonObject = {}
             response = f"Tool result: {await self.tools[0].execute(tool_args, state=None)}"
         else:
             response = f"Echo: {content}"
 
-        # Отправляем событие с ответом
         task_id = context.task_id
         context_id = context.context_id
         if task_id is None or context_id is None:
             raise ValueError("A2A RequestContext must contain task_id and context_id")
 
-        # Создаем артифакт с ответом
         artifact = Artifact(
             artifact_id="response",
-            parts=[Part(root=TextPart(text=response))],
+            parts=[Part(text=response)],
             name="response",
         )
 
-        # Отправляем артифакт
         await event_queue.enqueue_event(
             TaskArtifactUpdateEvent(
                 task_id=task_id,
@@ -67,13 +62,11 @@ class SimpleTestAgent(AgentExecutor):
             )
         )
 
-        # Отправляем статус completed
         await event_queue.enqueue_event(
             TaskStatusUpdateEvent(
                 task_id=task_id,
                 context_id=context_id,
-                status=TaskStatus(state=TaskState.completed),
-                final=True,
+                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
             )
         )
 
@@ -88,7 +81,6 @@ class SimpleTestAgent(AgentExecutor):
             TaskStatusUpdateEvent(
                 task_id=task_id,
                 context_id=context_id,
-                status=TaskStatus(state=TaskState.canceled),
-                final=True,
+                status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
             )
         )

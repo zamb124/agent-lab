@@ -4,12 +4,12 @@ In the «Direct» section the user finds a colleague by name and opens a convers
 
 ## Step 1. Sync opened, Direct section is available
 
-![Sync opened, Direct section is available](open-dm-from-members--01-sync-otkryt-razdel-lichnye-dostupen.png)
+![Sync opened, Direct section is available](open-dm-from-members--01-sync-opened-direct-section-is-available.png)
 
 ## Step 2. Search by member name
 
-![Search by member name](open-dm-from-members--02-poisk-po-imeni-uchastnika.png)
+![Search by member name](open-dm-from-members--02-search-by-member-name.png)
 
 ## Step 3. Chat opened with the selected member
 
-![Chat opened with the selected member](open-dm-from-members--03-otkryt-chat-s-vybrannym-uchastnikom.png)
+![Chat opened with the selected member](open-dm-from-members--03-chat-opened-with-the-selected-member.png)

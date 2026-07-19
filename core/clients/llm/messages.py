@@ -2,23 +2,27 @@
 
 from __future__ import annotations
 
+import base64
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Literal
 
 from a2a.types import (
-    FilePart,
-    FileWithBytes,
     Message,
     Part,
     Role,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 from pydantic import Field
 
+from core.a2a.codec import (
+    mapping_from_struct,
+    part_has_raw,
+    part_has_text,
+    struct_from_mapping,
+)
 from core.models import StrictBaseModel
 from core.types import JsonObject, JsonValue, require_json_object
 
@@ -45,6 +49,24 @@ class LLMToolCall(StrictBaseModel):
     function: LLMToolCallFunction | None = None
 
 
+def build_a2a_message(
+    *,
+    role: Role,
+    parts: Sequence[Part],
+    metadata: Mapping[str, JsonValue] | None = None,
+    message_id: str | None = None,
+) -> Message:
+    """Собирает protobuf A2A `Message` с optional Struct metadata."""
+    message = Message(
+        message_id=message_id or str(uuid.uuid4()),
+        role=role,
+        parts=list(parts),
+    )
+    if metadata:
+        message.metadata.CopyFrom(struct_from_mapping(metadata))
+    return message
+
+
 def extract_content_parts(parts: Sequence[Part | JsonObject]) -> tuple[list[JsonObject], bool]:
     """
     Извлекает content parts из списка A2A parts.
@@ -59,17 +81,13 @@ def extract_content_parts(parts: Sequence[Part | JsonObject]) -> tuple[list[Json
 
     for part in parts:
         if isinstance(part, Part):
-            root = part.root
-            if isinstance(root, TextPart):
-                content_parts.append({"type": "text", "text": root.text})
+            if part_has_text(part):
+                content_parts.append({"type": "text", "text": part.text})
                 continue
-            if isinstance(root, FilePart):
+            if part_has_raw(part):
                 has_files = True
-                file_obj = root.file
-                if not isinstance(file_obj, FileWithBytes):
-                    continue
-                mime_type = file_obj.mime_type or "image/png"
-                b64_data = file_obj.bytes
+                mime_type = part.media_type if part.media_type else "image/png"
+                b64_data = base64.b64encode(part.raw).decode("utf-8")
                 content_parts.append(
                     {
                         "type": "image_url",
@@ -79,28 +97,20 @@ def extract_content_parts(parts: Sequence[Part | JsonObject]) -> tuple[list[Json
                 continue
             continue
 
-        root_value = part.get("root", part)
-        if not isinstance(root_value, dict):
-            continue
-        root_object = require_json_object(root_value, "message.part.root")
-        text = root_object.get("text")
-        if isinstance(text, str):
+        text = part.get("text")
+        if isinstance(text, str) and part.get("raw") is None and part.get("url") is None:
             content_parts.append({"type": "text", "text": text})
             continue
 
-        file_value = root_object.get("file")
-        if isinstance(file_value, dict):
+        raw_value = part.get("raw")
+        if isinstance(raw_value, str):
             has_files = True
-            file_object = require_json_object(file_value, "message.part.file")
-            b64_data = file_object.get("bytes")
-            if not isinstance(b64_data, str):
-                continue
-            mime_value = file_object.get("mimeType") or file_object.get("mime_type")
+            mime_value = part.get("mediaType") or part.get("media_type")
             mime_type = mime_value if isinstance(mime_value, str) and mime_value else "image/png"
             content_parts.append(
                 {
                     "type": "image_url",
-                    "image_url": {"url": f"data:{mime_type};base64,{b64_data}"},
+                    "image_url": {"url": f"data:{mime_type};base64,{raw_value}"},
                 }
             )
 
@@ -115,13 +125,16 @@ def message_to_openai(message: Message | JsonObject | str) -> JsonObject:
     - Message объекты
     - dict (после десериализации из state)
     - строки
-    - Multimodal: TextPart + FilePart
+    - Multimodal: Part(text=...) + Part(raw=...)
     """
-    role_map = {
-        Role.user: "user",
-        Role.agent: "assistant",
+    role_map: dict[Role | str | int, str] = {
+        Role.ROLE_USER: "user",
+        Role.ROLE_AGENT: "assistant",
         "user": "user",
         "agent": "assistant",
+        "assistant": "assistant",
+        "ROLE_USER": "user",
+        "ROLE_AGENT": "assistant",
     }
 
     if isinstance(message, str):
@@ -134,7 +147,11 @@ def message_to_openai(message: Message | JsonObject | str) -> JsonObject:
                 content = text_match.group(1) if text_match else message
 
             role_str = "user"
-            if "role=<Role.agent:" in message or "role='agent'" in message:
+            if (
+                "ROLE_AGENT" in message
+                or "role=<Role.ROLE_AGENT:" in message
+                or "role='agent'" in message
+            ):
                 role_str = "assistant"
 
             return {"role": role_str, "content": content}
@@ -143,7 +160,7 @@ def message_to_openai(message: Message | JsonObject | str) -> JsonObject:
 
     if isinstance(message, dict):
         role_raw = message.get("role", "user")
-        role = role_raw if isinstance(role_raw, str) else "user"
+        role: Role | str | int = role_raw if isinstance(role_raw, (str, int)) else "user"
         metadata_raw = message.get("metadata")
         metadata = (
             require_json_object(metadata_raw, "message.metadata")
@@ -171,12 +188,8 @@ def message_to_openai(message: Message | JsonObject | str) -> JsonObject:
             }
     else:
         role = message.role
-        metadata = (
-            require_json_object(message.metadata, "message.metadata")
-            if message.metadata
-            else {}
-        )
-        parts = message.parts
+        metadata = mapping_from_struct(message.metadata) if message.metadata else {}
+        parts = list(message.parts)
 
     content_parts, has_files = extract_content_parts(parts)
     if has_files:
@@ -227,10 +240,9 @@ def normalize_messages(messages: MessageInput) -> list[Message]:
     """
     if isinstance(messages, str):
         return [
-            Message(
-                message_id=str(uuid.uuid4()),
-                role=Role.user,
-                parts=[Part(root=TextPart(text=messages))],
+            build_a2a_message(
+                role=Role.ROLE_USER,
+                parts=[Part(text=messages)],
             )
         ]
 
@@ -243,10 +255,9 @@ def normalize_messages(messages: MessageInput) -> list[Message]:
         if not isinstance(content, str):
             raise ValueError("message.content must be string")
         return [
-            Message(
-                message_id=str(uuid.uuid4()),
+            build_a2a_message(
                 role=role,
-                parts=[Part(root=TextPart(text=content))],
+                parts=[Part(text=content)],
                 metadata=metadata or None,
             )
         ]
@@ -261,12 +272,11 @@ def normalize_messages(messages: MessageInput) -> list[Message]:
         for message_index, text in enumerate(messages):
             if not isinstance(text, str):
                 raise ValueError("messages list must contain only strings")
-            role = Role.user if message_index % 2 == 0 else Role.agent
+            role = Role.ROLE_USER if message_index % 2 == 0 else Role.ROLE_AGENT
             string_messages.append(
-                Message(
-                    message_id=str(uuid.uuid4()),
+                build_a2a_message(
                     role=role,
-                    parts=[Part(root=TextPart(text=text))],
+                    parts=[Part(text=text)],
                 )
             )
         return string_messages
@@ -288,10 +298,9 @@ def normalize_messages(messages: MessageInput) -> list[Message]:
         if not isinstance(content, str):
             raise ValueError("message.content must be string")
         dict_messages.append(
-            Message(
-                message_id=str(uuid.uuid4()),
+            build_a2a_message(
                 role=role,
-                parts=[Part(root=TextPart(text=content))],
+                parts=[Part(text=content)],
                 metadata=metadata or None,
             )
         )
@@ -303,18 +312,18 @@ def _role_and_metadata_from_openai_dict(message: JsonObject) -> tuple[Role, Json
     metadata: JsonObject = {}
     if role_raw == "system":
         metadata["system"] = True
-        return Role.user, metadata
+        return Role.ROLE_USER, metadata
     if role_raw == "tool":
         tool_call_id = message.get("tool_call_id")
         if isinstance(tool_call_id, str) and tool_call_id:
             metadata["tool_call_id"] = tool_call_id
-        return Role.agent, metadata
+        return Role.ROLE_AGENT, metadata
     tool_calls = message.get("tool_calls")
     if tool_calls:
         metadata["tool_calls"] = tool_calls
-    if role_raw in ("assistant", "agent"):
-        return Role.agent, metadata
-    return Role.user, metadata
+    if role_raw in ("assistant", "agent", "ROLE_AGENT"):
+        return Role.ROLE_AGENT, metadata
+    return Role.ROLE_USER, metadata
 
 
 def messages_have_non_text_parts(openai_messages: list[JsonObject]) -> bool:
@@ -331,6 +340,9 @@ def messages_have_non_text_parts(openai_messages: list[JsonObject]) -> bool:
 __all__ = [
     "MessageInput",
     "StreamEvent",
+    "LLMToolCall",
+    "LLMToolCallFunction",
+    "build_a2a_message",
     "extract_content_parts",
     "message_to_openai",
     "messages_have_non_text_parts",

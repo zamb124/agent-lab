@@ -405,7 +405,7 @@ class PlatformTracer:
         method: str,
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
-        """Span для HTTP-запроса (message/send, message/stream)."""
+        """Span для HTTP-запроса (SendMessage, SendStreamingMessage)."""
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes["http.method"] = method

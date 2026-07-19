@@ -4,16 +4,16 @@ The user replies to a message in the main feed and opens the «Threads» panel: 
 
 ## Step 1. Space and channel created
 
-![Space and channel created](thread-reply-drawer--01-sozdany-prostranstvo-i-kanal.png)
+![Space and channel created](thread-reply-drawer--01-space-and-channel-created.png)
 
 ## Step 2. Root message sent
 
-![Root message sent](thread-reply-drawer--02-otpravleno-kornevoe-soobshchenie.png)
+![Root message sent](thread-reply-drawer--02-root-message-sent.png)
 
 ## Step 3. Thread opened and reply sent
 
-![Thread opened and reply sent](thread-reply-drawer--03-otkryt-tred-i-otpravlen-otvet.png)
+![Thread opened and reply sent](thread-reply-drawer--03-thread-opened-and-reply-sent.png)
 
 ## Step 4. Threads panel opened
 
-![Threads panel opened](thread-reply-drawer--04-otkryta-panel-tredov.png)
+![Threads panel opened](thread-reply-drawer--04-threads-panel-opened.png)

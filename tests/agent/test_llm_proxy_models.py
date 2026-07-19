@@ -11,13 +11,14 @@ from a2a.types import (
     Artifact,
     Message,
     Part,
-    Role,
     TaskArtifactUpdateEvent,
-    TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
+from a2a.types.a2a_pb2 import ROLE_AGENT, TASK_STATE_COMPLETED
+
+from core.a2a import struct_from_mapping
+
 from fastapi import HTTPException
 
 from apps.agent.llm_proxy import (
@@ -329,24 +330,25 @@ class _RecordingStreamLLM:
             task_id="task-test",
             artifact=Artifact(
                 artifact_id="artifact-test",
-                parts=[Part(root=TextPart(text="Hello from passthrough"))],
+                parts=[Part(text="Hello from passthrough")],
             ),
             append=True,
             last_chunk=True,
         )
+        done = Message(
+            message_id="msg-test",
+            role=ROLE_AGENT,
+            parts=[Part(text="Hello from passthrough")],
+        )
+        done.metadata.CopyFrom(
+            struct_from_mapping({"usage": {"input_tokens": 7, "output_tokens": 3}})
+        )
+        status = TaskStatus(state=TASK_STATE_COMPLETED)
+        status.message.CopyFrom(done)
         yield TaskStatusUpdateEvent(
             context_id="ctx-test",
             task_id="task-test",
-            status=TaskStatus(
-                state=TaskState.completed,
-                message=Message(
-                    message_id="msg-test",
-                    role=Role.agent,
-                    parts=[Part(root=TextPart(text="Hello from passthrough"))],
-                    metadata={"usage": {"input_tokens": 7, "output_tokens": 3}},
-                ),
-            ),
-            final=False,
+            status=status,
         )
 
 

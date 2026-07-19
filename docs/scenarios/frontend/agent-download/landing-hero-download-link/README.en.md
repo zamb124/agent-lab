@@ -8,4 +8,4 @@ The home page has a floating card with a link to /agent.
 
 ## Step 2. The floating download card is visible on the landing page.
 
-![The floating download card is visible on the landing page.](landing-hero-download-link--02-floating-kartochka-download-page-vidna-na-lendinge.png)
+![The floating download card is visible on the landing page.](landing-hero-download-link--02-the-floating-download-card-is-visible-on-the-landing-page.png)

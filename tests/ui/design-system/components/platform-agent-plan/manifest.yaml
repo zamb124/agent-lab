@@ -1,0 +1,13 @@
+component: platform-agent-plan
+doc_slug: platform-agent-plan
+tier: T0
+title_ru: Agent Plan
+title_en: Agent Plan
+import: "@platform/lib/components/platform-agent-plan.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

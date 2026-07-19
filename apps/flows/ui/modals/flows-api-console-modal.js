@@ -23,13 +23,13 @@ const LANG_KEYS = Object.freeze(['curl', 'python', 'javascript']);
 const MODE_KEYS = Object.freeze(['stream', 'sync', 'async']);
 const SYSTEM_VARIABLE_KEYS = Object.freeze(listSystemVariableKeys());
 const METHOD_ROWS = Object.freeze([
-    ['message/stream', 'api_console.method_stream'],
-    ['message/send', 'api_console.method_send'],
-    ['tasks/get', 'api_console.method_get'],
-    ['tasks/cancel', 'api_console.method_cancel'],
-    ['tasks/resubscribe', 'api_console.method_resubscribe'],
-    ['agent/getAuthenticatedExtendedCard', 'api_console.method_card'],
-    ['tasks/pushNotificationConfig/*', 'api_console.method_push'],
+    ['SendStreamingMessage', 'api_console.method_stream'],
+    ['SendMessage', 'api_console.method_send'],
+    ['GetTask', 'api_console.method_get'],
+    ['CancelTask', 'api_console.method_cancel'],
+    ['SubscribeToTask', 'api_console.method_subscribe_to_task'],
+    ['GetExtendedAgentCard', 'api_console.method_card'],
+    ['*TaskPushNotificationConfig', 'api_console.method_push'],
 ]);
 const JSON_RPC_FIELD_ROWS = Object.freeze([
     ['jsonrpc', 'api_console.field_jsonrpc'],
@@ -48,7 +48,7 @@ const JSON_RPC_FIELD_ROWS = Object.freeze([
     ['params.metadata.version', 'api_console.field_version'],
     ['params.metadata.breakpoints', 'api_console.field_breakpoints'],
     ['params.metadata.triggers', 'api_console.field_triggers'],
-    ['params.metadata.execution_mode', 'api_console.field_execution_mode'],
+    ['params.configuration.returnImmediately', 'api_console.field_return_immediately'],
 ]);
 const VARIABLE_FIELD_ROWS = Object.freeze([
     ['value', 'api_console.var_field_value'],
@@ -143,9 +143,9 @@ function _parseVariablesText(text) {
 
 function _methodForMode(mode) {
     if (mode === 'stream') {
-        return 'message/stream';
+        return 'SendStreamingMessage';
     }
-    return 'message/send';
+    return 'SendMessage';
 }
 
 function _acceptForMode(mode) {
@@ -156,7 +156,7 @@ function _acceptForMode(mode) {
 }
 
 function _terminalStatesText() {
-    return 'completed, failed, input-required';
+    return 'TASK_STATE_COMPLETED, TASK_STATE_FAILED, TASK_STATE_INPUT_REQUIRED';
 }
 
 function _requestHeadersForMode(mode) {
@@ -882,34 +882,34 @@ export class FlowsApiConsoleModal extends PlatformModal {
         });
     }
 
-    _metadataForMode(variables, mode) {
-        const metadata = {
+    _metadataForMode(variables) {
+        return {
             branch: _apiBranchId(this.branchId),
             variables,
         };
-        if (mode === 'async') {
-            metadata.execution_mode = 'async';
-        }
-        return metadata;
     }
 
     _requestBody() {
         const variables = _parseVariablesText(this._variablesText);
         const messageId = `msg_${_safeToken(this.flowId)}_${Date.now()}`;
         const mode = this._mode;
+        const params = {
+            message: {
+                messageId,
+                role: 'ROLE_USER',
+                parts: [{ text: this._messageText }],
+                contextId: this._contextId,
+            },
+            metadata: this._metadataForMode(variables),
+        };
+        if (mode === 'async') {
+            params.configuration = { returnImmediately: true };
+        }
         return {
             jsonrpc: '2.0',
             id: `req_${Date.now()}`,
             method: _methodForMode(mode),
-            params: {
-                message: {
-                    messageId,
-                    role: 'user',
-                    parts: [{ kind: 'text', text: this._messageText }],
-                    contextId: this._contextId,
-                },
-                metadata: this._metadataForMode(variables, mode),
-            },
+            params,
         };
     }
 
@@ -920,27 +920,31 @@ export class FlowsApiConsoleModal extends PlatformModal {
         } catch {
             variables = {};
         }
+        const params = {
+            message: {
+                messageId: 'msg_001',
+                role: 'ROLE_USER',
+                parts: [{ text: this._messageText }],
+                contextId: this._contextId,
+            },
+            metadata: this._metadataForMode(variables),
+        };
+        if (mode === 'async') {
+            params.configuration = { returnImmediately: true };
+        }
         return {
             jsonrpc: '2.0',
             id: 'req_001',
             method: _methodForMode(mode),
-            params: {
-                message: {
-                    messageId: 'msg_001',
-                    role: 'user',
-                    parts: [{ kind: 'text', text: this._messageText }],
-                    contextId: this._contextId,
-                },
-                metadata: this._metadataForMode(variables, mode),
-            },
+            params,
         };
     }
 
-    _tasksGetBody() {
+    _getTaskBody() {
         return {
             jsonrpc: '2.0',
             id: 'get_001',
-            method: 'tasks/get',
+            method: 'GetTask',
             params: {
                 id: this._contextId,
                 historyLength: 20,
@@ -956,22 +960,24 @@ export class FlowsApiConsoleModal extends PlatformModal {
         const flowId = typeof this.flowId === 'string' && this.flowId.length > 0 ? this.flowId : 'your_flow_id';
         const baseUrl = endpoint.replace(this._endpointPath(), '');
         const accept = _acceptForMode(mode);
-        const tasksGetBodyText = formatJsonPretty(this._tasksGetBody());
+        const getTaskBodyText = formatJsonPretty(this._getTaskBody());
         const asyncCurlSuffix = mode === 'async'
             ? `
 
-# Async returns status.state=submitted. Poll by contextId or task_id:
+# Async returns status.state=TASK_STATE_SUBMITTED. Poll by contextId or task_id:
 curl "$BASE_URL/flows/api/v1/${flowId}" \\
   -H "Authorization: Bearer $TOKEN" \\
+  -H "A2A-Version: 1.0" \\
   -H "Accept: application/json" \\
   -H "Content-Type: application/json" \\
-  --data-raw ${_shellSingleQuote(tasksGetBodyText)}`
+  --data-raw ${_shellSingleQuote(getTaskBodyText)}`
             : '';
         const syncPythonTail = mode === 'stream'
             ? `with requests.post(
     f"{base_url}/flows/api/v1/${flowId}",
     headers={
         "Authorization": f"Bearer {token}",
+        "A2A-Version": "1.0",
         "Accept": "text/event-stream",
         "Content-Type": "application/json",
     },
@@ -991,6 +997,7 @@ curl "$BASE_URL/flows/api/v1/${flowId}" \\
     f"{base_url}/flows/api/v1/${flowId}",
     headers={
         "Authorization": f"Bearer {token}",
+        "A2A-Version": "1.0",
         "Accept": "application/json",
         "Content-Type": "application/json",
     },
@@ -1005,12 +1012,13 @@ print(json.dumps(frame["result"], ensure_ascii=False, indent=2))`;
         const asyncPythonSuffix = mode === 'async'
             ? `
 
-poll_payload = ${tasksGetBodyText}
+poll_payload = ${getTaskBodyText}
 for _ in range(60):
     poll = requests.post(
         f"{base_url}/flows/api/v1/${flowId}",
         headers={
             "Authorization": f"Bearer {token}",
+            "A2A-Version": "1.0",
             "Accept": "application/json",
             "Content-Type": "application/json",
         },
@@ -1020,7 +1028,7 @@ for _ in range(60):
     poll.raise_for_status()
     task = poll.json()["result"]
     state = task["status"]["state"]
-    if state in {"completed", "failed", "input-required"}:
+    if state in {"TASK_STATE_COMPLETED", "TASK_STATE_FAILED", "TASK_STATE_INPUT_REQUIRED"}:
         print(json.dumps(task, ensure_ascii=False, indent=2))
         break`
             : '';
@@ -1029,6 +1037,7 @@ for _ in range(60):
   method: "POST",
   headers: {
     Authorization: \`Bearer \${token}\`,
+    "A2A-Version": "1.0",
     Accept: "text/event-stream",
     "Content-Type": "application/json",
   },
@@ -1058,6 +1067,7 @@ while (true) {
   method: "POST",
   headers: {
     Authorization: \`Bearer \${token}\`,
+    "A2A-Version": "1.0",
     Accept: "application/json",
     "Content-Type": "application/json",
   },
@@ -1074,12 +1084,13 @@ console.log(frame.result);`;
         const asyncJsSuffix = mode === 'async'
             ? `
 
-const pollPayload = ${tasksGetBodyText};
+const pollPayload = ${getTaskBodyText};
 for (let i = 0; i < 60; i += 1) {
   const poll = await globalThis["fetch"](\`\${baseUrl}/flows/api/v1/${flowId}\`, {
     method: "POST",
     headers: {
       Authorization: \`Bearer \${token}\`,
+      "A2A-Version": "1.0",
       Accept: "application/json",
       "Content-Type": "application/json",
     },
@@ -1087,7 +1098,7 @@ for (let i = 0; i < 60; i += 1) {
   });
   if (!poll.ok) throw new Error(await poll.text());
   const task = (await poll.json()).result;
-  if (["completed", "failed", "input-required"].includes(task.status.state)) {
+  if (["TASK_STATE_COMPLETED", "TASK_STATE_FAILED", "TASK_STATE_INPUT_REQUIRED"].includes(task.status.state)) {
     console.log(task);
     break;
   }
@@ -1101,6 +1112,7 @@ TOKEN="<your_api_token>"
 
 curl ${mode === 'stream' ? '-N ' : ''}"$BASE_URL/flows/api/v1/${flowId}" \\
   -H "Authorization: Bearer $TOKEN" \\
+  -H "A2A-Version: 1.0" \\
   -H "Accept: ${accept}" \\
   -H "Content-Type: application/json" \\
   --data-raw ${_shellSingleQuote(bodyText)}${asyncCurlSuffix}`,
@@ -1297,7 +1309,7 @@ ${jsRequest}${asyncJsSuffix}`,
             <div class="mode-docs">
                 ${MODE_KEYS.map((mode) => html`
                     <div class="mode-doc" ?hidden=${this._mode !== mode}>
-                        <code>${_methodForMode(mode)}${mode === 'async' ? ' + execution_mode=async' : ''}</code>
+                        <code>${_methodForMode(mode)}${mode === 'async' ? ' + returnImmediately' : ''}</code>
                         <p>${this.t(`api_console.mode_${mode}_text`)}</p>
                     </div>
                 `)}
@@ -1427,12 +1439,9 @@ ${jsRequest}${asyncJsSuffix}`,
                     class="api-code-editor short"
                     language="json"
                     .value=${formatJsonPretty({
-                    kind: 'file',
-                    file: {
-                        name: 'invoice.pdf',
-                        mimeType: 'application/pdf',
-                        uri: 'https://example.com/invoice.pdf',
-                    },
+                    url: 'https://example.com/invoice.pdf',
+                    filename: 'invoice.pdf',
+                    mediaType: 'application/pdf',
                 })}
                     .readonly=${true}
                     .showToolbar=${false}
@@ -1469,7 +1478,7 @@ ${jsRequest}${asyncJsSuffix}`,
                     [this.t('api_console.col_mode'), this.t('api_console.col_method'), this.t('api_console.col_meaning')],
                     MODE_KEYS.map((mode) => [
                         this.t(`api_console.mode_${mode}`),
-                        html`<code>${_methodForMode(mode)}${mode === 'async' ? ' + metadata.execution_mode' : ''}</code>`,
+                        html`<code>${_methodForMode(mode)}${mode === 'async' ? ' + configuration.returnImmediately' : ''}</code>`,
                         this.t(`api_console.mode_${mode}_text`),
                     ]),
                 )}

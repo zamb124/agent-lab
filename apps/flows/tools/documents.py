@@ -147,10 +147,10 @@ async def _apply_document_mutation(
     )
     if error or item is None or raw is None:
         return json.dumps({"success": False, "error": error or "Файл недоступен"}, ensure_ascii=False)
-    binding_id_value = raw["binding_id"]
-    if not isinstance(binding_id_value, str) or not binding_id_value.strip():
-        raise ValueError("documents.from_file.binding_id must be a non-empty string")
-    binding_id = binding_id_value
+    document_file_id_value = raw["file_id"]
+    if not isinstance(document_file_id_value, str) or not document_file_id_value.strip():
+        raise ValueError("documents.from_file.file_id must be a non-empty string")
+    document_file_id = document_file_id_value
     payload = {
         **mutation_payload,
         "tool_call_id": _tool_call_id(),
@@ -158,7 +158,7 @@ async def _apply_document_mutation(
     try:
         result = await ServiceClient().post(
             "office",
-            f"/documents/api/v1/documents/{binding_id}/{mutation_path}",
+            f"/documents/api/v1/documents/{document_file_id}/{mutation_path}",
             json=payload,
             headers={NAMESPACE_HEADER: namespace},
             timeout=60.0,
@@ -189,7 +189,7 @@ async def _apply_document_mutation(
         event_type="files.updated",
         payload={"files": [enriched.to_json_object()]},
         source="documents",
-        correlation_id=binding_id,
+        correlation_id=document_file_id,
     )
     document = enriched.capabilities.document
     if document is None:
@@ -267,15 +267,15 @@ async def documents_open_file(
 
     enriched = with_document_capability(item, office_document, namespace)
     upsert_state_file(state, enriched)
-    binding_id_value = office_document["binding_id"]
-    if not isinstance(binding_id_value, str) or not binding_id_value.strip():
-        raise ValueError("documents.open_file.binding_id must be a non-empty string")
+    document_file_id_value = office_document["file_id"]
+    if not isinstance(document_file_id_value, str) or not document_file_id_value.strip():
+        raise ValueError("documents.open_file.file_id must be a non-empty string")
     _ = push_ui_event(
         state,
         event_type="files.updated",
         payload={"files": [enriched.to_json_object()]},
         source="documents",
-        correlation_id=binding_id_value,
+        correlation_id=document_file_id_value,
     )
     document = enriched.capabilities.document
     if document is None:

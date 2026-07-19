@@ -13,3 +13,7 @@ Bottom nav, workspace and catalog pickers, editor without bottom navigation.
 ## Step 3. Mobile catalog picker
 
 ![Mobile catalog picker](mobile-documents-workflow--03-mobile-catalog-picker.png)
+
+## Step 4. Editor hides bottom nav
+
+![Editor hides bottom nav](mobile-documents-workflow--04-editor-hides-bottom-nav.png)

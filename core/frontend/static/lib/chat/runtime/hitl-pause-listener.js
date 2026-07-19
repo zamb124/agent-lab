@@ -2,7 +2,7 @@
  * Активная HITL-пауза в chat runtime state (operator_task + workItemId).
  *
  * Live-доставка реплик — `ChatController.syncHitlLiveTail` → A2A
- * `tasks/resubscribe` на `stream:{a2a_task_id}`, не company WS.
+ * `SubscribeToTask` на `stream:{a2a_task_id}`, не company WS.
  */
 
 /**

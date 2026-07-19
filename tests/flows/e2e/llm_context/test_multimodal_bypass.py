@@ -1,13 +1,13 @@
 """E2E: multimodal messages bypass text-first context compile."""
 from __future__ import annotations
 
-import base64
-
 import pytest
-from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
+from a2a.types import Message, Part
+from a2a.types.a2a_pb2 import ROLE_USER
 
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.runtime.a2a_messages import build_assistant_message, build_user_message
+from core.a2a import struct_from_mapping
 from tests.flows.e2e.llm_context.harness import (
     call_text,
     cleanup_flow_context,
@@ -25,28 +25,23 @@ def _multimodal_user_message(
     context_id: str,
     task_id: str,
 ) -> Message:
-    png_bytes = base64.b64encode(
-        b"\x89PNG\r\n\x1a\n" + b"fake-image-bytes-for-context-bypass"
-    ).decode("ascii")
-    return Message(
+    png_raw = b"\x89PNG\r\n\x1a\n" + b"fake-image-bytes-for-context-bypass"
+    message = Message(
         message_id=f"mm-{task_id}",
-        role=Role.user,
+        role=ROLE_USER,
         parts=[
-            Part(root=TextPart(text=text)),
+            Part(text=text),
             Part(
-                root=FilePart(
-                    file=FileWithBytes(
-                        name="context-bypass.png",
-                        mime_type="image/png",
-                        bytes=png_bytes,
-                    )
-                )
+                raw=png_raw,
+                filename="context-bypass.png",
+                media_type="image/png",
             ),
         ],
         context_id=context_id,
         task_id=task_id,
-        metadata={"node_id": "agent"},
     )
+    message.metadata.CopyFrom(struct_from_mapping({"node_id": "agent"}))
+    return message
 
 
 async def test_multimodal_history_is_not_trimmed_by_context_layer(
@@ -57,7 +52,7 @@ async def test_multimodal_history_is_not_trimmed_by_context_layer(
     mock_llm_with_queue,
     auth_headers_system: dict[str, str],
 ) -> None:
-    """FilePart в messages отключает compile: stale text остаётся в prompt."""
+    """Part.raw в messages отключает compile: stale text остаётся в prompt."""
     _ = app
     flow_id = f"ctx-multimodal-{unique_id}"
     context_id = f"context-multimodal-{unique_id}"

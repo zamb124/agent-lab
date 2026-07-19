@@ -212,8 +212,26 @@ def _render_memory_recall_content(summary: str) -> str:
     return "[Compacted conversation memory]\n" + summary.strip()
 
 
+def _normalize_render_role(role_raw: object) -> str:
+    """A2A wire ROLE_* / short aliases → OpenAI-style labels for episode text."""
+    if not isinstance(role_raw, str) or not role_raw:
+        return "user"
+    upper = role_raw.upper()
+    if upper in {"ROLE_USER", "USER"}:
+        return "user"
+    if upper in {"ROLE_AGENT", "AGENT", "ASSISTANT"}:
+        return "assistant"
+    if upper == "TOOL" or role_raw == "tool":
+        return "tool"
+    if upper == "SYSTEM" or role_raw == "system":
+        return "system"
+    if role_raw in {"user", "assistant", "tool", "system"}:
+        return role_raw
+    raise ValueError(f"memory_compaction: unknown message.role {role_raw!r}")
+
+
 def _render_message(message: JsonObject) -> str:
-    role = str(message.get("role") or "user")
+    role = _normalize_render_role(message.get("role"))
     content = _content_to_text(message.get("content")).strip()
     tool_calls = message.get("tool_calls")
     tool_call_id = message.get("tool_call_id")

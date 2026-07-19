@@ -519,7 +519,7 @@ class TestSubflowInterruptE2E:
         2. Ответ добавлен как tool result для ask_user
         3. LLM child получает ответ и формирует response с именем
         """
-        from a2a.utils.message import get_message_text
+        from a2a.helpers.proto_helpers import get_message_text
 
         mock_llm_with_queue(
             [
@@ -572,7 +572,7 @@ class TestSubflowInterruptE2E:
         2. После второго resume "Москва" тоже появляется в messages
         3. Оба ответа присутствуют в финальной истории child
         """
-        from a2a.utils.message import get_message_text
+        from a2a.helpers.proto_helpers import get_message_text
 
         mock_llm_with_queue(
             [

@@ -4,8 +4,8 @@
 
 ## Шаг 1. Приложение Sync открыто по URL SPA
 
-![Приложение Sync открыто по URL SPA](sync-chat-shell--01-prilozhenie-sync-otkryto-po-url-spa.png)
+![Приложение Sync открыто по URL SPA](sync-chat-shell--01-sync-application-opened-via-spa-url.png)
 
 ## Шаг 2. Оболочка sync-app отображается
 
-![Оболочка sync-app отображается](sync-chat-shell--02-obolochka-sync-app-otobrazhaetsya.png)
+![Оболочка sync-app отображается](sync-chat-shell--02-sync-app-shell-is-displayed.png)

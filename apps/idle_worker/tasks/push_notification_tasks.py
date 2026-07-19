@@ -4,11 +4,12 @@ TaskIQ tasks для push notifications.
 """
 
 from a2a.types import (
-    DeleteTaskPushNotificationConfigParams,
-    GetTaskPushNotificationConfigParams,
-    ListTaskPushNotificationConfigParams,
+    DeleteTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigsRequest,
     TaskPushNotificationConfig,
 )
+from google.protobuf.json_format import MessageToDict
 
 from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import (
@@ -32,37 +33,34 @@ from core.tasks.push_notifications import (
 from core.tasks.push_notifications import (
     send_webhook as core_send_webhook,
 )
-from core.types import JsonObject, parse_json_object
+from core.types import JsonObject, require_json_object
 
 
 @idle_broker.task(task_name=TASK_PUSH_CONFIG_SET, queue_name="idle")
 async def set_config(params: TaskPushNotificationConfig) -> JsonObject:
     """Сохраняет конфигурацию push notification."""
     config = await set_push_config(params)
-    return parse_json_object(config.model_dump_json(by_alias=True), "TaskPushNotificationConfig")
+    return require_json_object(MessageToDict(config), "TaskPushNotificationConfig")
 
 
 @idle_broker.task(task_name=TASK_PUSH_CONFIG_GET, queue_name="idle")
-async def get_config(params: GetTaskPushNotificationConfigParams) -> JsonObject | None:
+async def get_config(params: GetTaskPushNotificationConfigRequest) -> JsonObject | None:
     """Получает конфигурацию push notification."""
     config = await get_push_config(params)
     if config is None:
         return None
-    return parse_json_object(config.model_dump_json(by_alias=True), "TaskPushNotificationConfig")
+    return require_json_object(MessageToDict(config), "TaskPushNotificationConfig")
 
 
 @idle_broker.task(task_name=TASK_PUSH_CONFIG_LIST, queue_name="idle")
-async def list_configs(params: ListTaskPushNotificationConfigParams) -> list[JsonObject]:
+async def list_configs(params: ListTaskPushNotificationConfigsRequest) -> JsonObject:
     """Список конфигураций для задачи."""
-    configs = await list_push_configs(params)
-    return [
-        parse_json_object(config.model_dump_json(by_alias=True), "TaskPushNotificationConfig")
-        for config in configs
-    ]
+    response = await list_push_configs(params)
+    return require_json_object(MessageToDict(response), "ListTaskPushNotificationConfigsResponse")
 
 
 @idle_broker.task(task_name=TASK_PUSH_CONFIG_DELETE, queue_name="idle")
-async def delete_config(params: DeleteTaskPushNotificationConfigParams) -> None:
+async def delete_config(params: DeleteTaskPushNotificationConfigRequest) -> None:
     """Удаляет конфигурацию push notification."""
     await delete_push_config(params)
 
@@ -72,7 +70,7 @@ async def delete_config(params: DeleteTaskPushNotificationConfigParams) -> None:
     retry_on_error=True,
     max_retries=5,
     default_retry_delay=5.0,
-    queue_name="idle"
+    queue_name="idle",
 )
 async def send_webhook(
     url: str,
@@ -97,7 +95,7 @@ async def _enqueue_webhook(
     task_name=TASK_SEND_TASK_UPDATE,
     retry_on_error=True,
     max_retries=3,
-    queue_name="idle"
+    queue_name="idle",
 )
 async def send_task_update(
     task_id: str, context_id: str, state: str, message: str | None = None, is_final: bool = False

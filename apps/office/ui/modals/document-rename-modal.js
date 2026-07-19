@@ -1,7 +1,7 @@
 /**
  * OfficeDocumentRenameModal — переименование документа.
  *
- * props: { bindingId, currentTitle, catalogIds }.
+ * props: { fileId, currentTitle, catalogIds }.
  * `useForm('office/document_rename_form')` openForm с props в willUpdate.
  * Отправка диспатчит `documentRenameOp.events.REQUESTED`. После SUCCEEDED —
  * closeAfterSave; список документов перезагружается фабрикой
@@ -22,7 +22,7 @@ export class OfficeDocumentRenameModal extends PlatformFormModal {
 
     static properties = {
         ...PlatformFormModal.properties,
-        bindingId: { type: String },
+        fileId: { type: String },
         currentTitle: { type: String },
         catalogIds: { type: Array },
     };
@@ -43,7 +43,7 @@ export class OfficeDocumentRenameModal extends PlatformFormModal {
         super();
         this.size = 'sm';
         this.headerSavePrimary = true;
-        this.bindingId = '';
+        this.fileId = '';
         this.currentTitle = '';
         this.catalogIds = [];
         this._rename = this.useOp(RENAME_OP_NAME);
@@ -63,9 +63,9 @@ export class OfficeDocumentRenameModal extends PlatformFormModal {
 
     willUpdate(changed) {
         super.willUpdate(changed);
-        if (!this._seeded && typeof this.bindingId === 'string' && this.bindingId.length > 0) {
+        if (!this._seeded && typeof this.fileId === 'string' && this.fileId.length > 0) {
             this._form.openForm({
-                binding_id: this.bindingId,
+                file_id: this.fileId,
                 title: typeof this.currentTitle === 'string' ? this.currentTitle : '',
                 catalog_ids: Array.isArray(this.catalogIds) ? this.catalogIds : [],
             });

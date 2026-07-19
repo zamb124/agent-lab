@@ -76,12 +76,14 @@ Database-first (`apps/flows/src/models/agent_toolkit.py`). Bootstrap: `registry.
 |---|---|
 | `initialize` | для toolkit `lara` — `instructions` (Lara-first: call `flow_lara`) |
 | `tools/list` | membership toolkit (desktop: `flow_lara`) |
-| `tools/call` `flow_*` | A2A; для `lara` — branch `linnex_agent` + variables `device_id` / `linnex_agent_client` |
+| `tools/call` `flow_*` | A2A; для `lara` — branch `linnex_agent` + variables `device_id` / `linnex_agent_client`; result.`task_state` — platform kebab (`completed`, `input-required`, …), не ProtoJSON `TASK_STATE_*` |
 | `tools/call` `tool_*` | `tool_registry.materialize` |
 | `device/mcp` | proxy → tunnel → local MCP (timeout 120s) |
 
 Sticky keys: `agent_mcp_session:{mcp_session}:flow:{flow_id}` (приоритет); `agent_mcp_session:device:{device_id}:flow:{flow_id}` — только без MCP session. Новый `Mcp-Session-Id` не переиспользует device context.
 Locale: desktop Platform MCP headers включают `Accept-Language: ru|en` из Goose UI locale (`GOOSE_LOCALE`).
+
+Desktop E2E / LLM setup: device JWT читает `lara` только в namespace компании (без system fallback). Перед pairing + chat-ready фикстуры зовут `ensure_company_public_flows(company_id)` (`tests/agent/_helpers.py`); иначе `GET /llm/v1/models` → 503 «flow lara не найден».
 
 ## Tunnel WS
 

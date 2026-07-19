@@ -7,7 +7,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from a2a.types import Message, TextPart
+from a2a.helpers.proto_helpers import get_message_text
+from a2a.types import Message
 
 from apps.flows.src.durable_execution.hashing import hash_state_json
 from apps.flows.src.durable_execution.models import (
@@ -634,11 +635,7 @@ class DurableWorkflowRuntime:
 
     @staticmethod
     def _message_text(message: Message) -> str | None:
-        text_parts: list[str] = []
-        for part in message.parts:
-            if isinstance(part.root, TextPart):
-                text_parts.append(part.root.text)
-        combined = "".join(text_parts).strip()
+        combined = get_message_text(message).strip()
         return combined or None
 
     async def get_state_history(

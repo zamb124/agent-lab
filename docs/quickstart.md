@@ -58,17 +58,18 @@ Agent Card описывает flow, поддерживаемые capabilities, �
     ```bash
     curl -X POST "${PLATFORM_BASE_URL}" \
       -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
+      -H "A2A-Version: 1.0" \
       -H "Content-Type: application/json" \
       -d '{
         "jsonrpc": "2.0",
         "id": "1",
-        "method": "message/send",
+        "method": "SendMessage",
         "params": {
           "message": {
             "messageId": "msg-1",
-            "role": "user",
+            "role": "ROLE_USER",
             "parts": [
-              {"kind": "text", "text": "Помоги подготовить краткий статус по проекту"}
+              {"text": "Помоги подготовить краткий статус по проекту"}
             ]
           }
         }
@@ -81,13 +82,13 @@ Agent Card описывает flow, поддерживаемые capabilities, �
     {
       "jsonrpc": "2.0",
       "id": "1",
-      "method": "message/send",
+      "method": "SendMessage",
       "params": {
         "message": {
           "messageId": "msg-1",
-          "role": "user",
+          "role": "ROLE_USER",
           "parts": [
-            { "kind": "text", "text": "Помоги подготовить краткий статус по проекту" }
+            { "text": "Помоги подготовить краткий статус по проекту" }
           ]
         }
       }
@@ -96,22 +97,23 @@ Agent Card описывает flow, поддерживаемые capabilities, �
 
 ## 4. Включите streaming
 
-Для потоковых ответов замените метод на `message/stream`. Ответ приходит через Server-Sent Events.
+Для потоковых ответов замените метод на `SendStreamingMessage`. Ответ приходит через Server-Sent Events.
 
 ```bash
 curl -N -X POST "${PLATFORM_BASE_URL}" \
   -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
+  -H "A2A-Version: 1.0" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": "stream-1",
-    "method": "message/stream",
+    "method": "SendStreamingMessage",
     "params": {
       "message": {
         "messageId": "msg-stream-1",
-        "role": "user",
+        "role": "ROLE_USER",
         "parts": [
-          {"kind": "text", "text": "Расскажи, какие следующие шаги нужны для запуска агента"}
+          {"text": "Расскажи, какие следующие шаги нужны для запуска агента"}
         ]
       }
     }

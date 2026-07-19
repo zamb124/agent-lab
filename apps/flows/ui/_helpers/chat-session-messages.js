@@ -296,17 +296,30 @@ function _taskId(msg, def) {
 }
 
 /**
+ * Wire ProtoJSON Role → platform short role for hydrate.
+ * A2A 1.0: `ROLE_USER` / `ROLE_AGENT`. Short `user`/`agent`/`assistant` — legacy fixtures.
+ *
  * @param {object} msg
+ * @returns {'user'|'agent'|'assistant'}
  */
 function _parseRole(msg) {
-    const r = msg.role;
-    if (typeof r === 'string') {
-        return r.toLowerCase();
+    const raw =
+        typeof msg.role === 'string'
+            ? msg.role
+            : isPlainObject(msg.role) && typeof msg.role.value === 'string'
+              ? msg.role.value
+              : '';
+    if (raw.length === 0) {
+        throw new Error('a2aStateMessagesToChatMessages: message.role required');
     }
-    if (isPlainObject(r) && typeof r.value === 'string') {
-        return r.value.toLowerCase();
+    const upper = raw.toUpperCase();
+    if (upper === 'ROLE_USER' || upper === 'USER') {
+        return 'user';
     }
-    return 'agent';
+    if (upper === 'ROLE_AGENT' || upper === 'AGENT' || upper === 'ASSISTANT') {
+        return upper === 'ASSISTANT' ? 'assistant' : 'agent';
+    }
+    throw new Error(`a2aStateMessagesToChatMessages: unknown message.role ${raw}`);
 }
 
 /**
@@ -324,7 +337,8 @@ function _partsText(msg) {
         if (!isPlainObject(p)) {
             continue;
         }
-        if (p.kind === 'text' && typeof p.text === 'string') {
+        // A2A 1.0 Part: oneof text|raw|url|data — без kind
+        if (typeof p.text === 'string' && p.text.length > 0) {
             chunks.push(p.text);
         }
     }
@@ -332,6 +346,8 @@ function _partsText(msg) {
 }
 
 /**
+ * A2A 1.0 Part.url — presence `url` (+ `filename` / `mediaType`), без kind / nested file.
+ *
  * @param {object} msg
  */
 function _partsFiles(msg) {
@@ -340,16 +356,17 @@ function _partsFiles(msg) {
     }
     const files = [];
     for (const p of msg.parts) {
-        if (!isPlainObject(p) || p.kind !== 'file' || !isPlainObject(p.file)) {
+        if (!isPlainObject(p) || typeof p.url !== 'string' || p.url.length === 0) {
             continue;
         }
-        const f = p.file;
-        const url = typeof f.uri === 'string' ? f.uri : '';
+        const url = p.url;
         const match = url.match(/\/files\/download\/([^/?#]+)/);
         const fileId = match ? match[1] : '';
-        const contentType = typeof f.mimeType === 'string' && f.mimeType.length > 0 ? f.mimeType : '';
-        const originalName = typeof f.name === 'string' ? f.name : '';
-        if (url.length === 0 || contentType.length === 0 || originalName.length === 0) {
+        const contentType =
+            typeof p.mediaType === 'string' && p.mediaType.length > 0 ? p.mediaType : '';
+        const originalName =
+            typeof p.filename === 'string' && p.filename.length > 0 ? p.filename : '';
+        if (contentType.length === 0 || originalName.length === 0) {
             continue;
         }
         files.push({
@@ -357,7 +374,7 @@ function _partsFiles(msg) {
             original_name: originalName,
             url,
             content_type: contentType,
-            file_size: typeof f.size === 'number' ? f.size : 0,
+            file_size: 0,
         });
     }
     return files;

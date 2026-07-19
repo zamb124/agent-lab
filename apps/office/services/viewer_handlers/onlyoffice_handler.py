@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import ClassVar, Literal
+from typing import ClassVar
 from urllib.parse import quote
 
 from apps.office.services.callback_token import encode_callback_context_token
@@ -29,11 +29,11 @@ from core.office.platform_ai_claims import OFFICE_AI_JWT_CLAIM_KEY, OfficePlatfo
 from core.types import JsonObject
 
 
-def onlyoffice_document_key(binding_id: str, checksum: str | None) -> str:
+def onlyoffice_document_key(file_id: str, checksum: str | None) -> str:
     safe_checksum = re.sub(r"[^a-zA-Z0-9_-]", "", checksum or "")[:24]
     if not safe_checksum:
-        return binding_id
-    return f"{binding_id}_{safe_checksum}"
+        return file_id
+    return f"{file_id}_{safe_checksum}"
 
 
 class OnlyOfficeViewerHandler:
@@ -58,27 +58,24 @@ class OnlyOfficeViewerHandler:
             original_name=ctx.file_record.original_name,
         )
         base = ctx.callback_public_base_url.rstrip("/")
-        binding_kind = "file" if ctx.binding_kind == "file" else "document"
         dl = encode_download_token(
             file_id=ctx.file_record.file_id,
             company_id=ctx.company_id,
-            binding_id=ctx.binding_id,
-            binding_kind=binding_kind,
+            viewer_scope=ctx.viewer_scope,
             secret=ctx.jwt_secret,
             ttl_seconds=ctx.download_token_ttl_seconds,
         )
         download_url = f"{base}/documents/api/v1/office-download?token={quote(dl, safe='')}"
         cb_ctx = encode_callback_context_token(
-            binding_id=ctx.binding_id,
+            file_id=ctx.file_record.file_id,
             company_id=ctx.company_id,
+            viewer_scope=ctx.viewer_scope,
             namespace=ctx.namespace,
-            file_id=ctx.file_record.file_id if binding_kind == "file" else None,
-            binding_kind=binding_kind,
             secret=ctx.jwt_secret,
             ttl_seconds=3600,
         )
         callback_url = f"{base}/documents/api/v1/onlyoffice/callback?token={quote(cb_ctx, safe='')}"
-        doc_key = onlyoffice_document_key(ctx.binding_id, ctx.file_record.checksum)
+        doc_key = onlyoffice_document_key(ctx.file_record.file_id, ctx.file_record.checksum)
         editor_document_type = resolve_onlyoffice_document_type_for_editor(
             stored_onlyoffice_type,
             ctx.file_record.original_name,
@@ -127,16 +124,12 @@ class OnlyOfficeViewerHandler:
         if enable_platform_ai:
             if ctx.namespace is None or not ctx.namespace.strip():
                 raise ValueError("namespace обязателен для OnlyOffice platform AI claims")
-            binding_kind_claim: Literal["document", "file"] = (
-                "file" if binding_kind == "file" else "document"
-            )
             config[OFFICE_AI_JWT_CLAIM_KEY] = OfficePlatformAiClaims(
                 company_id=ctx.company_id,
                 user_id=ctx.user_id,
                 namespace=ctx.namespace,
-                binding_id=ctx.binding_id,
                 file_id=ctx.file_record.file_id,
-                binding_kind=binding_kind_claim,
+                viewer_scope=ctx.viewer_scope,
             ).model_dump(mode="json")
         token = encode_editor_config(config, ctx.jwt_secret)
         content_type = ctx.file_record.content_type or "application/octet-stream"
@@ -154,7 +147,6 @@ class OnlyOfficeViewerHandler:
             )
         return DocumentOpenConfigResponse(
             handler="onlyoffice",
-            binding_id=ctx.binding_id,
             file_id=ctx.file_record.file_id,
             title=ctx.title,
             original_name=ctx.file_record.original_name,

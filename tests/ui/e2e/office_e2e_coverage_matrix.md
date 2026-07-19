@@ -8,7 +8,7 @@
 |----------|------|----------------------|
 | `documents_list` | `/documents/` | `documents-complete-guide`, `workspace-and-catalogs`, `create-and-upload-documents`, `explorer-search-and-organize`, `document-actions-move-rename-delete`, `views-and-trash`, `catalog-rag-and-semantic-search` |
 | `documents_recent` | `/documents/recent` | `views-and-trash` (`test_office_views_trash.py`) |
-| `document_editor` | `/documents/edit/:bindingId` | `documents-complete-guide`, `edit-in-onlyoffice`, `view-other-file-types`, `mobile-documents-workflow` |
+| `document_editor` | `/documents/edit/:fileId` | `documents-complete-guide`, `edit-in-onlyoffice`, `view-other-file-types`, `mobile-documents-workflow` |
 | `documents_public_preview` | `/documents/p/:token` | `public-link-preview` |
 | `documents_catalogs` | legacy redirect | smoke в `documents-complete-guide` |
 | `platform_services` | `/documents/services` | вне scope (platform launcher) |

@@ -156,7 +156,8 @@ export const channelsResource = createResourceCollection({
                 return { ...state, items: Object.freeze(items) };
             }
             case 'sync/channel_update/succeeded':
-            case 'sync/channel_notifications_update/succeeded': {
+            case 'sync/channel_notifications_update/succeeded':
+            case 'sync/messages_pin/succeeded': {
                 const r = event.payload && event.payload.result;
                 return _mergeChannelReadIntoItems(state, r);
             }

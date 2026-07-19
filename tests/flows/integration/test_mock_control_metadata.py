@@ -24,8 +24,8 @@ _MOCK_GROUPS = ["admin", "developers"]
 def make_message(text: str) -> dict[str, object]:
     return {
         "messageId": str(uuid.uuid4()),
-        "role": "user",
-        "parts": [{"kind": "text", "text": text}],
+        "role": "ROLE_USER",
+        "parts": [{"text": text}],
     }
 
 
@@ -68,7 +68,7 @@ async def send_sync(
         json={
             "jsonrpc": "2.0",
             "id": f"test-{unique_id}",
-            "method": "message/send",
+            "method": "SendMessage",
             "params": {
                 "message": {**make_message(text), "contextId": f"ctx-{unique_id}"},
                 "metadata": metadata,
@@ -182,7 +182,7 @@ class TestEntityResponseList:
 
 
 class TestStreaming:
-    """metadata.__mock__ работает и со streaming (message/stream)."""
+    """metadata.__mock__ работает и со streaming (SendStreamingMessage)."""
 
     @pytest.mark.asyncio
     async def test_node_mock_streaming(self, client: AsyncClient, unique_id: str):
@@ -193,7 +193,7 @@ class TestStreaming:
             json={
                 "jsonrpc": "2.0",
                 "id": f"test-{unique_id}",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {
                     "message": {
                         **make_message("заказ 3: статус"),
@@ -250,16 +250,16 @@ class TestRealTaskiqWorkerPath:
             json={
                 "jsonrpc": "2.0",
                 "id": f"test-{unique_id}",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         **make_message("заказ 7: где"),
                         "contextId": context_id,
                         "taskId": task_id,
                     },
+                    "configuration": {"returnImmediately": True},
                     "metadata": {
                         "branch": "fast_track",
-                        "execution_mode": "async",
                         "__mock__": {
                             "enabled": True,
                             "permission_groups": _MOCK_GROUPS,
@@ -281,7 +281,7 @@ class TestRealTaskiqWorkerPath:
                 json={
                     "jsonrpc": "2.0",
                     "id": f"poll-{unique_id}",
-                    "method": "tasks/get",
+                    "method": "GetTask",
                     "params": {"id": submitted_id},
                 },
             )
@@ -291,9 +291,15 @@ class TestRealTaskiqWorkerPath:
                 await asyncio.sleep(0.5)
                 continue
             state = poll_result["status"]["state"]
-            if state in ("completed", "input-required", "failed", "canceled", "rejected"):
+            if state in {
+                "TASK_STATE_COMPLETED",
+                "TASK_STATE_INPUT_REQUIRED",
+                "TASK_STATE_FAILED",
+                "TASK_STATE_CANCELED",
+                "TASK_STATE_REJECTED",
+            }:
                 final_state = state
                 assert answer in result_text(poll_result)
                 break
             await asyncio.sleep(0.5)
-        assert final_state == "completed"
+        assert final_state == "TASK_STATE_COMPLETED"

@@ -33,6 +33,7 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
         "crm-notes",
         "crm-entities",
         "work-tracking",
+        "agent-planning",
         "flows-editor",
         "flows-node-edit",
         "code-node",
@@ -60,8 +61,8 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
             container.files_service,
             company_id,
         )
-        assert first == 23
-        assert second == 23
+        assert first == 24
+        assert second == 24
         for skill_id in LARA_PLATFORM_SKILL_ROOTS:
             skill = await container.agent_skill_service.get(skill_id)
             assert skill.agent_skill_id == skill_id
@@ -97,6 +98,12 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
         work_tool_ids = [ref.tool_id for ref in work.tool_refs]
         assert "schedule_cron_task" in work_tool_ids
         assert "schedule_interval_task" in work_tool_ids
+        planning = await container.agent_skill_service.get("agent-planning")
+        planning_tool_ids = {ref.tool_id for ref in planning.tool_refs}
+        assert planning_tool_ids == {"agent_plan_write", "agent_plan_get"}
+        assert planning.references
+        workspace = await container.agent_skill_service.get("platform-workspace")
+        assert "agent-planning" in workspace.depends_on
         web = await container.agent_skill_service.get("web-research")
         web_tool_ids = [ref.tool_id for ref in web.tool_refs]
         assert "browser_duckduckgo_links_batch" in web_tool_ids

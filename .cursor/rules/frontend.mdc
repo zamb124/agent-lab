@@ -367,7 +367,7 @@ WS-эффект форвардит фрейм, фронт диспатчит к�
 
 ### Lara в PlatformApp
 
-- Каждый authenticated сервисный SPA задаёт `static platformAssistant = { serviceId, branchId, showLauncher }`. `PlatformApp.render()` монтирует ровно один `<platform-chat display="drawer" profile="spa" flow-id="lara">`.
+- Каждый authenticated сервисный SPA задаёт `static platformAssistant = { serviceId, branchId, showLauncher, launcherPosition? }`. `launcherPosition`: `'bottom-right'` (дефолт) | `'bottom-left'` (Sync: FAB не перекрывает composer Send). `PlatformApp.render()` монтирует ровно один `<platform-chat display="drawer" profile="spa" flow-id="lara">` и прокидывает `data-embed-position`.
 - Branch задаёт только фокус точки входа; полный Agent Skill catalog одинаков во всех сервисах. Service context передаётся через `getPlatformAssistantContextVariables(routeKey, params)` как компактные canonical IDs без секретов и полных коллекций. Flows editor — только IDs (`flow_id`/`node_id`/…); тела graph Lara достаёт tools (`flows_get_node` / `flows_list_nodes`), не standing `*_payload_json`.
 - Открытие из UI — только `openPlatformLaraAssistant()`; единое событие `platform-lara-open`. Сервисные toggle event names запрещены.
 - Круглый launcher использует знак Linnex, двигается pointer/touch и сохраняет позицию отдельно для service branch. Открытая drawer-панель сохраняет собственный desktop drag.
@@ -386,7 +386,7 @@ WS-эффект форвардит фрейм, фронт диспатчит к�
 
 ## Публичный каталог лендинга (BFF frontend)
 
-Анонимные HTTP-эндпоинты `GET /frontend/api/public/landing-agents` и `POST /frontend/api/public/landing-agents/session` (`apps/frontend/api/public_landing_agents.py`). В выдачу — только виджеты компании **`system`** с `landing_visible` и непустым `landing_card_image_url`. UI: маршрут `digital-workers` (`/demo/digital-workers`), страница `apps/frontend/ui/pages/landing-digital-workers-page.js`, фабрики `frontend/landing_agents_load` и `frontend/landing_demo_session` в `landing-demo.resource.js`; пробный чат через `<platform-chat display="drawer" profile="embed_public">` + гостевой JWT из POST session. Лимит сообщений гостя — `EmbedConfig.guest_max_user_messages` (применяется в flows для A2A `message/send`/`message/stream` при непустом `contextId`).
+Анонимные HTTP-эндпоинты `GET /frontend/api/public/landing-agents` и `POST /frontend/api/public/landing-agents/session` (`apps/frontend/api/public_landing_agents.py`). В выдачу — только виджеты компании **`system`** с `landing_visible` и непустым `landing_card_image_url`. UI: маршрут `digital-workers` (`/demo/digital-workers`), страница `apps/frontend/ui/pages/landing-digital-workers-page.js`, фабрики `frontend/landing_agents_load` и `frontend/landing_demo_session` в `landing-demo.resource.js`; пробный чат через `<platform-chat display="drawer" profile="embed_public">` + гостевой JWT из POST session. Лимит сообщений гостя — `EmbedConfig.guest_max_user_messages` (применяется в flows для A2A `SendMessage`/`SendStreamingMessage` при непустом `contextId`).
 
 ## Тесты
 

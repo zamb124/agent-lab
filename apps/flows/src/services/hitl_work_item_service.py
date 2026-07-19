@@ -4,7 +4,7 @@ HITL через платформенное ядро задач WorkItem.
 Операторский handoff создаёт `WorkItem(kind=operator_handoff, blocking=True)` в
 platform_worktracker с хуком `completed`. Диалог — durable `ExecutionState.messages`
 через `HitlConversationService` + Redis `stream:{a2a_task_id}` (Emitter); user/operator
-слушают live `tasks/resubscribe`. На complete — closing append, затем
+слушают live `SubscribeToTask`. На complete — closing append, затем
 `process_flow_task(is_resume=True)`.
 """
 

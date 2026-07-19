@@ -11,6 +11,7 @@ from playwright.async_api import Page, expect
 from tests.ui.e2e.flows_e2e_helpers import (
     GREEN_GARDEN_AGENT_NAME,
     GREEN_GARDEN_BRANCH,
+    flows_api_create_branch,
     flows_api_create_flow,
     flows_api_get_flow,
     flows_chat_send_message,
@@ -74,7 +75,7 @@ def _branch_id(unique_id: str) -> str:
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(180)
+@pytest.mark.timeout(60)
 async def test_flows_experiment_with_branches(
     scenario: ScenarioRecorder,
     flows_ui: AppUI,
@@ -95,7 +96,7 @@ async def test_flows_experiment_with_branches(
     )
 
     page = ui_page_system
-    await flows_open_editor(page, flows_ui, flow_id)
+    await flows_open_editor(page, flows_ui, flow_id, layout="agent")
     await scenario.step(
         "Откройте агента в редакторе",
         page,
@@ -111,9 +112,24 @@ async def test_flows_experiment_with_branches(
         ),
     )
 
-    await flows_create_branch(page, branch_id, GREEN_GARDEN_BRANCH)
-    await flows_select_branch_tab(page, re.escape(GREEN_GARDEN_BRANCH))
-    await expect(page).to_have_url(re.compile(rf"/editor/{re.escape(branch_id)}(?:/|$)"), timeout=30_000)
+    await flows_api_create_branch(
+        flows_ui.origin,
+        auth_token_system,
+        flow_id,
+        branch_id=branch_id,
+        name=GREEN_GARDEN_BRANCH,
+    )
+    await flows_open_editor(
+        page,
+        flows_ui,
+        flow_id,
+        branch_id=branch_id,
+        layout="agent",
+    )
+    await expect(page).to_have_url(
+        re.compile(rf"/editor/{re.escape(branch_id)}(?:/|$)"),
+        timeout=5_000,
+    )
     await scenario.step(
         "Создайте и откройте ветку «Летние скидки»",
         page,
@@ -149,9 +165,15 @@ async def test_flows_experiment_with_branches(
     )
 
     await flows_publish_editor(page)
-    await flows_open_editor(page, flows_ui, flow_id, branch_id=branch_id)
+    await flows_open_editor(
+        page,
+        flows_ui,
+        flow_id,
+        branch_id=branch_id,
+        layout="agent",
+    )
     branch_editor = await flows_open_node_editor(page, "agent")
-    await expect(branch_editor).to_contain_text("скид", timeout=15_000)
+    await expect(branch_editor).to_contain_text("скид", timeout=5_000)
     base_flow = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
     base_prompt = base_flow["nodes"]["agent"]["prompt"]
     assert "скид" not in base_prompt.lower()
@@ -219,7 +241,7 @@ async def test_flows_publish_and_operate(
     )
 
     page = ui_page_system
-    await flows_open_editor(page, flows_ui, flow_id)
+    await flows_open_editor(page, flows_ui, flow_id, layout="agent")
     await flows_publish_editor(page)
     await scenario.step(
         "Опубликуйте агента",
@@ -489,6 +511,7 @@ async def test_flows_voice_and_limits(
         "**Result:** the Skill activation visibility setting is toggled and verified in "
         "chat."
     ),
+    timeout_seconds=120,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e

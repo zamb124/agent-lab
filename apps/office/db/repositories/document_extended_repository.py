@@ -25,7 +25,7 @@ class DocumentShareRepository:
     async def create(
         self,
         *,
-        binding_id: str,
+        file_id: str,
         company_id: str,
         created_by_user_id: str,
         permission: str,
@@ -35,7 +35,7 @@ class DocumentShareRepository:
         share_id = uuid.uuid4().hex
         row = OfficeDocumentShare(
             share_id=share_id,
-            binding_id=binding_id,
+            file_id=file_id,
             company_id=company_id,
             created_by_user_id=created_by_user_id,
             permission=permission,
@@ -56,21 +56,21 @@ class DocumentShareRepository:
             )
             return result.scalar_one_or_none()
 
-    async def list_for_binding(self, binding_id: str) -> list[OfficeDocumentShare]:
+    async def list_for_file(self, file_id: str) -> list[OfficeDocumentShare]:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentShare)
-                .where(OfficeDocumentShare.binding_id == binding_id)
+                .where(OfficeDocumentShare.file_id == file_id)
                 .order_by(OfficeDocumentShare.created_at.desc())
             )
             return list(result.scalars().all())
 
-    async def delete(self, share_id: str, binding_id: str) -> bool:
+    async def delete(self, share_id: str, file_id: str) -> bool:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentShare).where(
                     OfficeDocumentShare.share_id == share_id,
-                    OfficeDocumentShare.binding_id == binding_id,
+                    OfficeDocumentShare.file_id == file_id,
                 )
             )
             row = result.scalar_one_or_none()
@@ -88,21 +88,21 @@ class DocumentRevisionRepository:
     async def create(
         self,
         *,
-        binding_id: str,
         file_id: str,
+        revision_file_id: str,
         created_by_user_id: str,
     ) -> OfficeDocumentRevision:
         async with self._db.session() as session:
             result = await session.execute(
                 select(func.coalesce(func.max(OfficeDocumentRevision.revision_number), 0))
-                .where(OfficeDocumentRevision.binding_id == binding_id)
+                .where(OfficeDocumentRevision.file_id == file_id)
             )
             max_number = int(result.scalar_one())
             revision_number = max_number + 1
             row = OfficeDocumentRevision(
                 revision_id=uuid.uuid4().hex,
-                binding_id=binding_id,
                 file_id=file_id,
+                revision_file_id=revision_file_id,
                 revision_number=revision_number,
                 created_by_user_id=created_by_user_id,
                 created_at=datetime.now(timezone.utc),
@@ -112,25 +112,25 @@ class DocumentRevisionRepository:
             await session.refresh(row)
             return row
 
-    async def list_for_binding(
-        self, binding_id: str, limit: int = 10
+    async def list_for_file(
+        self, file_id: str, limit: int = 10
     ) -> list[OfficeDocumentRevision]:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentRevision)
-                .where(OfficeDocumentRevision.binding_id == binding_id)
+                .where(OfficeDocumentRevision.file_id == file_id)
                 .order_by(OfficeDocumentRevision.revision_number.desc())
                 .limit(limit)
             )
             return list(result.scalars().all())
 
     async def get(
-        self, binding_id: str, revision_id: str
+        self, file_id: str, revision_id: str
     ) -> OfficeDocumentRevision | None:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentRevision).where(
-                    OfficeDocumentRevision.binding_id == binding_id,
+                    OfficeDocumentRevision.file_id == file_id,
                     OfficeDocumentRevision.revision_id == revision_id,
                 )
             )
@@ -144,7 +144,7 @@ class DocumentEventRepository:
     async def append(
         self,
         *,
-        binding_id: str,
+        file_id: str,
         company_id: str,
         event_type: str,
         user_id: str,
@@ -152,7 +152,7 @@ class DocumentEventRepository:
     ) -> OfficeDocumentEvent:
         row = OfficeDocumentEvent(
             event_id=uuid.uuid4().hex,
-            binding_id=binding_id,
+            file_id=file_id,
             company_id=company_id,
             event_type=event_type,
             user_id=user_id,
@@ -165,13 +165,13 @@ class DocumentEventRepository:
             await session.refresh(row)
         return row
 
-    async def list_for_binding(
-        self, binding_id: str, limit: int = 50
+    async def list_for_file(
+        self, file_id: str, limit: int = 50
     ) -> list[OfficeDocumentEvent]:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentEvent)
-                .where(OfficeDocumentEvent.binding_id == binding_id)
+                .where(OfficeDocumentEvent.file_id == file_id)
                 .order_by(OfficeDocumentEvent.created_at.desc())
                 .limit(limit)
             )

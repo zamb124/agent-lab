@@ -16,7 +16,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal, cast
 
-from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
+from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
+from google.protobuf.json_format import MessageToDict
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from pydantic import Field
@@ -142,6 +143,7 @@ from apps.flows.src.models.node_config import NodeConfig
 from apps.flows.src.registry.nodes import NodeRegistry
 from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_EVALUATION_RUN
+from core.a2a import coerce_usage_token_count, get_part_text, part_has_text
 from core.ai.providers import AICapability
 from core.ai.resolver import COST_ORIGIN_COMPANY, resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
@@ -310,10 +312,10 @@ def _llm_usage_tokens(metadata: JsonObject) -> tuple[int | None, int | None]:
 def _llm_usage_token_count(usage: JsonObject, field_name: str) -> int | None:
     if field_name not in usage:
         return None
-    raw_tokens = usage[field_name]
-    if not isinstance(raw_tokens, int) or isinstance(raw_tokens, bool):
-        raise EvaluationLabValidationError(f"llm usage {field_name} must be an int")
-    return raw_tokens
+    try:
+        return coerce_usage_token_count(usage[field_name], f"llm usage {field_name}")
+    except ValueError as exc:
+        raise EvaluationLabValidationError(str(exc)) from exc
 
 
 class EvaluationLabService:
@@ -3926,10 +3928,13 @@ class EvaluationLabService:
             ):
                 if not isinstance(event, TaskStatusUpdateEvent):
                     continue
-                if event.status.message is None or event.status.message.metadata is None:
+                if not event.status.HasField("message"):
+                    continue
+                status_message = event.status.message
+                if not status_message.HasField("metadata"):
                     continue
                 metadata = require_json_object(
-                    event.status.message.metadata,
+                    MessageToDict(status_message.metadata),
                     "evaluation_lab.llm_tool_event.metadata",
                 )
                 parsed_input_tokens, parsed_output_tokens = _llm_usage_tokens(metadata)
@@ -4120,12 +4125,15 @@ class EvaluationLabService:
                 if isinstance(event, TaskArtifactUpdateEvent):
                     if event.artifact.parts:
                         for part in event.artifact.parts:
-                            if isinstance(part.root, TextPart) and event.artifact.name != "reasoning":
-                                content_parts.append(part.root.text)
+                            if part_has_text(part) and event.artifact.name != "reasoning":
+                                content_parts.append(get_part_text(part))
                     continue
-                if event.status.message and event.status.message.metadata:
+                if (
+                    event.status.HasField("message")
+                    and event.status.message.HasField("metadata")
+                ):
                     metadata = require_json_object(
-                        event.status.message.metadata,
+                        MessageToDict(event.status.message.metadata),
                         "evaluation_lab.llm_event.metadata",
                     )
                     parsed_input_tokens, parsed_output_tokens = _llm_usage_tokens(metadata)

@@ -95,13 +95,8 @@ def _artifact_data_part(artifact: dict[str, Any]) -> dict[str, Any]:
     part = parts[0]
     assert isinstance(part, dict)
     data = part.get("data")
-    if isinstance(data, dict):
-        return data
-    root = part.get("root")
-    assert isinstance(root, dict)
-    root_data = root.get("data")
-    assert isinstance(root_data, dict)
-    return root_data
+    assert isinstance(data, dict)
+    return data
 
 
 def _captured_tool_names(calls: list[dict[str, Any]]) -> set[str]:
@@ -125,12 +120,21 @@ def _captured_tool_names(calls: list[dict[str, Any]]) -> set[str]:
     return names
 
 
+def _stream_artifact_update(event: dict[str, Any]) -> dict[str, Any] | None:
+    """A2A 1.0 StreamResponse: result.artifactUpdate (не kind)."""
+    artifact_update = event.get("artifactUpdate")
+    if isinstance(artifact_update, dict):
+        return artifact_update
+    return None
+
+
 def _collect_ui_events(stream_text: str) -> list[tuple[str, dict[str, Any]]]:
     events: list[tuple[str, dict[str, Any]]] = []
     for event in _parse_sse_results(stream_text):
-        if event.get("kind") != "artifact-update":
+        artifact_update = _stream_artifact_update(event)
+        if artifact_update is None:
             continue
-        artifact = event.get("artifact")
+        artifact = artifact_update.get("artifact")
         if not isinstance(artifact, dict) or artifact.get("name") != "ui_event":
             continue
         data = _artifact_data_part(artifact)
@@ -156,12 +160,12 @@ async def _post_research_stream(
         json={
             "jsonrpc": "2.0",
             "id": f"public-search-research-stream-{unique_id}",
-            "method": "message/stream",
+            "method": "SendStreamingMessage",
             "params": {
                 "message": {
                     "messageId": f"public-search-research-stream-message-{unique_id}",
-                    "role": "user",
-                    "parts": [{"kind": "text", "text": content}],
+                    "role": "ROLE_USER",
+                    "parts": [{"text": content}],
                 },
                 "metadata": metadata,
             },
@@ -232,7 +236,7 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["status"]["state"] == "completed", payload
+    assert payload["status"]["state"] == "TASK_STATE_COMPLETED", payload
     search_artifact = json.loads(_task_response_text(payload))
     assert search_artifact["kind"] == "public_search_serp"
     assert search_artifact["version"] == 1
@@ -287,13 +291,13 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
         json={
             "jsonrpc": "2.0",
             "id": f"public-search-stream-{unique_id}",
-            "method": "message/stream",
+            "method": "SendStreamingMessage",
             "params": {
                 "message": {
                     "messageId": f"public-search-stream-message-{unique_id}",
-                    "role": "user",
+                    "role": "ROLE_USER",
                     "parts": [
-                        {"kind": "text", "text": query}
+                        {"text": query}
                     ],
                 },
                 "metadata": {"branch": "quick"},
@@ -305,9 +309,10 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     events = _parse_sse_results(stream_response.text)
     ui_payloads: dict[str, dict[str, Any]] = {}
     for event in events:
-        if event.get("kind") != "artifact-update":
+        artifact_update = _stream_artifact_update(event)
+        if artifact_update is None:
             continue
-        artifact = event.get("artifact")
+        artifact = artifact_update.get("artifact")
         if not isinstance(artifact, dict):
             continue
         if artifact.get("name") != "ui_event":
@@ -361,12 +366,12 @@ async def test_public_search_quick_streams_staged_preview_then_refined(
         json={
             "jsonrpc": "2.0",
             "id": f"public-search-staged-{unique_id}",
-            "method": "message/stream",
+            "method": "SendStreamingMessage",
             "params": {
                 "message": {
                     "messageId": f"public-search-staged-message-{unique_id}",
-                    "role": "user",
-                    "parts": [{"kind": "text", "text": query}],
+                    "role": "ROLE_USER",
+                    "parts": [{"text": query}],
                 },
                 "metadata": {"branch": "quick"},
             },
@@ -465,21 +470,18 @@ async def test_public_search_with_file_reads_file_before_search(
         json={
             "jsonrpc": "2.0",
             "id": f"public-search-file-{unique_id}",
-            "method": "message/stream",
+            "method": "SendStreamingMessage",
             "params": {
                 "message": {
                     "messageId": f"public-search-file-message-{unique_id}",
                     "contextId": f"ctx-{unique_id}",
-                    "role": "user",
+                    "role": "ROLE_USER",
                     "parts": [
-                        {"kind": "text", "text": query},
+                        {"text": query},
                         {
-                            "kind": "file",
-                            "file": {
-                                "bytes": base64.b64encode(file_text.encode("utf-8")).decode("utf-8"),
-                                "name": file_name,
-                                "mimeType": "text/plain",
-                            },
+                            "raw": base64.b64encode(file_text.encode("utf-8")).decode("utf-8"),
+                            "filename": file_name,
+                            "mediaType": "text/plain",
                         },
                     ],
                 },
@@ -492,9 +494,10 @@ async def test_public_search_with_file_reads_file_before_search(
     events = _parse_sse_results(stream_response.text)
     completed_payload: dict[str, Any] | None = None
     for event in events:
-        if event.get("kind") != "artifact-update":
+        artifact_update = _stream_artifact_update(event)
+        if artifact_update is None:
             continue
-        artifact = event.get("artifact")
+        artifact = artifact_update.get("artifact")
         if not isinstance(artifact, dict) or artifact.get("name") != "ui_event":
             continue
         data = _artifact_data_part(artifact)
@@ -561,7 +564,7 @@ async def test_public_search_source_branch_calls_browser_tool_without_builtin_by
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["status"]["state"] == "completed", payload
+    assert payload["status"]["state"] == "TASK_STATE_COMPLETED", payload
     response_text = _task_response_text(payload)
     assert "SOURCE_AI_OK" in response_text
     assert "Capability is not declared in manifest" not in response_text
@@ -639,7 +642,7 @@ async def test_public_search_runet_empty_index_honest(
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["status"]["state"] == "completed", payload
+    assert payload["status"]["state"] == "TASK_STATE_COMPLETED", payload
     search_artifact = json.loads(_task_response_text(payload))
     assert search_artifact["results"] == []
     assert search_artifact["providers"]["index"]["ok"] is False
@@ -725,7 +728,7 @@ async def test_public_search_research_branch_runs_agentic_loop(
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["status"]["state"] == "completed", payload
+    assert payload["status"]["state"] == "TASK_STATE_COMPLETED", payload
     artifact = json.loads(_task_response_text(payload))
     assert artifact["kind"] == "public_search_research_report"
     assert artifact["version"] == 1

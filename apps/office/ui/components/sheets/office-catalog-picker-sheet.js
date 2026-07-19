@@ -95,7 +95,7 @@ export class OfficeCatalogPickerSheet extends PlatformBottomSheet {
                         @click=${() => this._select(catalog.catalog_id)}
                     >
                         <span>${catalog.title}</span>
-                        <span class="count">${catalog.file_count}</span>
+                        <span class="count">${typeof catalog.file_count === 'number' ? catalog.file_count : 0}</span>
                     </button>
                 `)}
             </div>

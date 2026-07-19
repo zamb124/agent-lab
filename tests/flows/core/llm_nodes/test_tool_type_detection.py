@@ -23,6 +23,7 @@ from apps.flows.src.tools.base import BaseTool
 from apps.flows.tools.agent_session_tools import final_answer, reason
 from apps.flows.tools.finish_tool import finish
 from apps.flows.tools.math_tools import calculator
+from core.a2a import get_part_text, part_has_text
 from core.clients.llm import LLMClient, MockLLM
 from core.state import ExecutionState
 
@@ -486,15 +487,15 @@ class TestReminderWithToolNames:
         messages = state.messages
         [
             m for m in messages
-            if hasattr(m, "role") and str(m.role) == "Role.agent"
+            if hasattr(m, "role") and str(m.role) == "ROLE_AGENT"
         ]
 
         reminder_found = False
         for msg in messages:
             if hasattr(msg, "parts"):
                 for part in msg.parts:
-                    if hasattr(part.root, "text"):
-                        text = part.root.text
+                    if part_has_text(part):
+                        text = get_part_text(part)
                         if "finish" in text and "завершения" in text:
                             reminder_found = True
                             assert "finish" in text
@@ -532,8 +533,8 @@ class TestReminderWithToolNames:
         for msg in messages:
             if hasattr(msg, "parts"):
                 for part in msg.parts:
-                    if hasattr(part.root, "text"):
-                        text = part.root.text
+                    if part_has_text(part):
+                        text = get_part_text(part)
                         if "reason" in text and "рассуждения" in text:
                             reminder_with_reason = True
 
@@ -584,8 +585,8 @@ class TestReminderWithToolNames:
         for msg in messages:
             if hasattr(msg, "parts"):
                 for part in msg.parts:
-                    if hasattr(part.root, "text"):
-                        text = part.root.text
+                    if part_has_text(part):
+                        text = get_part_text(part)
                         if "complete" in text and "завершения" in text:
                             found_complete_in_reminder = True
 
@@ -636,8 +637,8 @@ class TestReminderWithToolNames:
         for msg in messages:
             if hasattr(msg, "parts"):
                 for part in msg.parts:
-                    if hasattr(part.root, "text"):
-                        text = part.root.text
+                    if part_has_text(part):
+                        text = get_part_text(part)
                         if "my_think" in text and "рассуждения" in text:
                             found_my_think_in_reminder = True
 

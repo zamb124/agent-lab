@@ -91,7 +91,7 @@ async def test_office_catalog_access_and_members(
     edit_modal = ui_page_system.locator("office-catalog-edit-modal")
     public_switch = edit_modal.locator("platform-switch").first
     await public_switch.click()
-    await sync_e2e_click_platform_button(edit_modal, "Сохранить", "Save")
+    await office_e2e_click_modal_button(edit_modal, "Сохранить", "Save")
     await expect(edit_modal).to_be_hidden(timeout=45_000)
     await scenario.step(
         "Каталог сделан общим для компании",

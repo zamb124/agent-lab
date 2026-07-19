@@ -221,7 +221,7 @@ export class OfficeDocumentUploadModal extends PlatformFormModal {
                 suppressSuccessToast: pending.length > 1,
                 suppressErrorToast: pending.length > 1,
             });
-            if (result && typeof result.binding_id === 'string') {
+            if (result && typeof result.file_id === 'string') {
                 this._updateEntry(entry.localId, { status: 'done' });
                 doneCount += 1;
                 if (openAfterUpload) openedEditor = true;

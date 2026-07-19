@@ -43,12 +43,12 @@ async def test_embed_session_token_streams_via_a2a(
     rpc_body = {
         "jsonrpc": "2.0",
         "id": f"test-stream-{unique_id}",
-        "method": "message/stream",
+        "method": "SendStreamingMessage",
         "params": {
             "message": {
                 "messageId": f"m1-{unique_id}",
-                "role": "user",
-                "parts": [{"kind": "text", "text": f"Привет-{unique_id}"}],
+                "role": "ROLE_USER",
+                "parts": [{"text": f"Привет-{unique_id}"}],
             }
         },
     }
@@ -100,12 +100,12 @@ async def test_embed_session_token_streams_via_a2a_with_hum_api_key(
     rpc_body = {
         "jsonrpc": "2.0",
         "id": f"test-stream-hum-{unique_id}",
-        "method": "message/stream",
+        "method": "SendStreamingMessage",
         "params": {
             "message": {
                 "messageId": f"m-hum-{unique_id}",
-                "role": "user",
-                "parts": [{"kind": "text", "text": f"Привет-hum-{unique_id}"}],
+                "role": "ROLE_USER",
+                "parts": [{"text": f"Привет-hum-{unique_id}"}],
             }
         },
     }
@@ -146,12 +146,12 @@ async def test_embed_session_token_rejects_wrong_origin(
     rpc_body = {
         "jsonrpc": "2.0",
         "id": f"test-origin-{unique_id}",
-        "method": "message/send",
+        "method": "SendMessage",
         "params": {
             "message": {
                 "messageId": f"m2-{unique_id}",
-                "role": "user",
-                "parts": [{"kind": "text", "text": "Привет"}],
+                "role": "ROLE_USER",
+                "parts": [{"text": "Привет"}],
             }
         },
     }
@@ -189,12 +189,12 @@ async def test_embed_session_token_rejects_wrong_embed_id(
     rpc_body = {
         "jsonrpc": "2.0",
         "id": f"test-embed-mismatch-{unique_id}",
-        "method": "message/send",
+        "method": "SendMessage",
         "params": {
             "message": {
                 "messageId": f"m-embed-mismatch-{unique_id}",
-                "role": "user",
-                "parts": [{"kind": "text", "text": "Привет"}],
+                "role": "ROLE_USER",
+                "parts": [{"text": "Привет"}],
             }
         },
     }
@@ -235,12 +235,12 @@ async def test_embed_session_token_rejects_wrong_branch(
     rpc_body = {
         "jsonrpc": "2.0",
         "id": f"test-skill-{unique_id}",
-        "method": "message/send",
+        "method": "SendMessage",
         "params": {
             "message": {
                 "messageId": f"m-skill-{unique_id}",
-                "role": "user",
-                "parts": [{"kind": "text", "text": "Привет"}],
+                "role": "ROLE_USER",
+                "parts": [{"text": "Привет"}],
             },
             "metadata": {"branch": "non_embed_allowed_branch"},
         },
@@ -280,7 +280,7 @@ async def test_embed_session_token_rejects_forbidden_method(
     rpc_body = {
         "jsonrpc": "2.0",
         "id": "test-forbidden-method",
-        "method": "tasks/get",
+        "method": "GetTask",
         "params": {"id": "t1"},
     }
     deny_response = await flows_client.post(
@@ -294,7 +294,7 @@ async def test_embed_session_token_rejects_forbidden_method(
     assert deny_response.status_code == 200
     deny_payload = deny_response.json()
     assert deny_payload["error"]["code"] == -32000
-    assert "supports only message/send, message/stream and tasks/cancel" in deny_payload["error"]["message"]
+    assert "supports only SendMessage, SendStreamingMessage and CancelTask" in deny_payload["error"]["message"]
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 
@@ -328,14 +328,14 @@ async def test_embed_session_token_allows_tasks_cancel(
             json={
                 "jsonrpc": "2.0",
                 "id": f"test-cancel-{unique_id}",
-                "method": "tasks/cancel",
+                "method": "CancelTask",
                 "params": {"id": task_id},
             },
         )
         assert cancel_response.status_code == 200
         cancel_payload = cancel_response.json()
-        assert cancel_payload["error"]["code"] == -32000
-        assert cancel_payload["error"]["message"] == "Task not found"
+        assert cancel_payload["error"]["code"] == -32001
+        assert cancel_payload["error"]["message"] == "TaskNotFoundError"
     finally:
         await container.redis_client.delete(f"cancel:{task_id}")
 
@@ -384,12 +384,12 @@ async def test_embed_session_token_rejects_company_mismatch(
             json={
                 "jsonrpc": "2.0",
                 "id": f"test-company-mismatch-{unique_id}",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"m-company-mismatch-{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Привет"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Привет"}],
                     }
                 },
             },
@@ -436,12 +436,12 @@ async def test_embed_session_token_rejects_missing_branch_claim(
             json={
                 "jsonrpc": "2.0",
                 "id": f"test-missing-branch-{unique_id}",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"m-missing-branch-{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Привет"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Привет"}],
                     }
                 },
             },
@@ -515,13 +515,18 @@ async def test_embed_route_preflight_allows_configured_origin(
         headers={
             "Origin": "https://larashved.ru",
             "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "authorization,content-type,x-platform-namespace",
+            "Access-Control-Request-Headers": (
+                "authorization,content-type,x-platform-namespace,a2a-version,accept"
+            ),
         },
     )
     assert response.status_code == 204
     assert response.headers.get("Access-Control-Allow-Origin") == "https://larashved.ru"
     assert response.headers.get("Access-Control-Allow-Credentials") == "true"
-    assert "X-Platform-Namespace" in response.headers.get("Access-Control-Allow-Headers", "")
+    allow_headers = response.headers.get("Access-Control-Allow-Headers", "")
+    assert "X-Platform-Namespace" in allow_headers
+    assert "A2A-Version" in allow_headers
+    assert "Accept" in allow_headers
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 

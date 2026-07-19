@@ -55,14 +55,14 @@ def _policy(
 async def test_closes_prefix_outside_active_window_and_advances_cursor() -> None:
     store = RecordingStore()
     messages = [
-        {"role": "user", "content": "old account preference alpha beta"},
+        {"role": "ROLE_USER", "content": "old account preference alpha beta"},
         {
             "role": "assistant",
             "content": "",
             "tool_calls": [{"id": "call-1", "name": "lookup", "arguments": {"q": "alpha"}}],
         },
         {"role": "tool", "tool_call_id": "call-1", "content": "tool result gamma"},
-        {"role": "user", "content": "current question"},
+        {"role": "ROLE_USER", "content": "current question"},
     ]
 
     cursor = await close_llm_context_memory_window(
@@ -111,7 +111,7 @@ async def test_compaction_respects_disabled_policy_and_empty_content() -> None:
     store = RecordingStore()
     messages = [
         {"role": "assistant", "content": ""},
-        {"role": "user", "content": "current"},
+        {"role": "ROLE_USER", "content": "current"},
     ]
 
     assert await close_llm_context_memory_window(
@@ -150,9 +150,9 @@ async def test_compaction_respects_disabled_policy_and_empty_content() -> None:
 
 def test_build_memory_episode_returns_none_when_compaction_or_memory_is_off() -> None:
     messages = [
-        {"role": "user", "content": "old message one two three"},
+        {"role": "ROLE_USER", "content": "old message one two three"},
         {"role": "assistant", "content": "old response four five"},
-        {"role": "user", "content": "current"},
+        {"role": "ROLE_USER", "content": "current"},
     ]
 
     memory_off_episode, memory_off_cursor = build_llm_context_memory_episode(
@@ -182,9 +182,9 @@ async def test_force_compaction_writes_all_but_last_message() -> None:
     cursor = await close_llm_context_memory_window(
         store,
         messages=[
-            {"role": "user", "content": "first"},
+            {"role": "ROLE_USER", "content": "first"},
             {"role": "assistant", "content": "second"},
-            {"role": "user", "content": "last"},
+            {"role": "ROLE_USER", "content": "last"},
         ],
         policy=_policy(compaction="force"),
         cursor=0,
@@ -205,7 +205,7 @@ async def test_compaction_does_not_write_when_messages_fit_active_window() -> No
     cursor = await close_llm_context_memory_window(
         store,
         messages=[
-            {"role": "user", "content": "first"},
+            {"role": "ROLE_USER", "content": "first"},
             {"role": "assistant", "content": "second"},
         ],
         policy=_policy(active_window_tokens=100),
@@ -215,7 +215,7 @@ async def test_compaction_does_not_write_when_messages_fit_active_window() -> No
     )
     single_cursor = await close_llm_context_memory_window(
         store,
-        messages=[{"role": "user", "content": "only"}],
+        messages=[{"role": "ROLE_USER", "content": "only"}],
         policy=_policy(compaction="force"),
         cursor=0,
         session_id="flow:ctx",
@@ -234,7 +234,7 @@ async def test_compaction_renders_non_string_message_content() -> None:
         store,
         messages=[
             {
-                "role": "user",
+                "role": "ROLE_USER",
                 "content": [
                     {"type": "text", "text": "list text"},
                     {"type": "image_url", "image_url": {"url": "ignored"}},
@@ -242,7 +242,7 @@ async def test_compaction_renders_non_string_message_content() -> None:
             },
             {"role": "assistant", "content": {"json": 1}},
             {"role": "tool", "content": None, "tool_call_id": "call-1"},
-            {"role": "user", "content": "last"},
+            {"role": "ROLE_USER", "content": "last"},
         ],
         policy=_policy(compaction="force"),
         cursor=0,

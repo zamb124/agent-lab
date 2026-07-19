@@ -76,8 +76,7 @@ async def test_text_handler_urls_use_browser_base_not_docker_internal() -> None:
     file_record = _sample_file_record()
     ctx = ViewerOpenContext(
         handler_id="text",
-        binding_id="b1",
-        binding_kind="document",
+        viewer_scope="catalog",
         file_record=file_record,
         title="package-lock",
         file_category=FileCategory.TEXT.value,

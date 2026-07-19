@@ -6,28 +6,22 @@
 
 **Result:** a reflection review node is wired after the main agent.
 
-## Step 1. Add an answer review node
+## Step 1. Open the graph with an answer review node
 
-Drag a Review (reflection) node and open it. Here you set quality criteria and a confidence threshold before sending the reply.
+On the canvas a Review (reflection) node sits after the agent, connected by an edge. The reply is checked before it reaches the customer.
 
-![Add an answer review node](add-answer-review--01-reflection-node-opened.png)
+![Open the graph with an answer review node](add-answer-review--01-reflection-node-on-canvas.png)
 
 ## Step 2. Configure review criteria
 
-Review the critic policy block: set minimum confidence and criteria that block the reply when quality is too low.
+Open the review node properties: the critic policy block sets minimum confidence and criteria that block the reply when quality is too low.
 
 ![Configure review criteria](add-answer-review--02-reflection-policy-visible.png)
 
-## Step 3. Verify the node wiring on the canvas
-
-The canvas shows both the agent and review node connected by an edge. The reply passes through reflection before reaching the customer.
-
-![Verify the node wiring on the canvas](add-answer-review--03-reflection-wired-on-canvas.png)
-
-## Step 4. Publish the graph with review
+## Step 3. Publish the graph with review
 
 **Result demonstration.** The self-review node is saved in the graph — weak answers can be rejected before reaching the customer.
 
-**Summary.** You can add a reflection node and configure answer quality control.
+**Summary.** You can wire a reflection node and configure answer quality control.
 
-![Publish the graph with review](add-answer-review--04-reflection-published.png)
+![Publish the graph with review](add-answer-review--03-reflection-published.png)

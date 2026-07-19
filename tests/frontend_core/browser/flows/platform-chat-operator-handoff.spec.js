@@ -1,5 +1,5 @@
 /**
- * Operator handoff surface: REST conversation snapshot + live tasks/resubscribe.
+ * Operator handoff surface: REST conversation snapshot + live SubscribeToTask.
  * Company WS turn_appended не канал пузырей чата.
  */
 
@@ -79,7 +79,7 @@ describe('platform-chat operator_handoff', function () {
             }
             if (method === 'POST' && /\/flows\/api\/v1\/flow1$/.test(url.pathname)) {
                 const body = typeof init.body === 'string' ? JSON.parse(init.body) : {};
-                if (body.method === 'tasks/resubscribe') {
+                if (body.method === 'SubscribeToTask') {
                     resubscribeCalls += 1;
                     return hangingSseResponse();
                 }

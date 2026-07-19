@@ -20,24 +20,31 @@ class TestA2AClient:
         public = {"base": "http://127.0.0.1:0"}
 
         async def handle_agent_card(request):
+            skills = [{"id": "default", "name": "Default Skill"}]
             return web.json_response({
                 "name": "Test Agent",
                 "url": public["base"],
                 "version": "1.0.0",
-                "branches": [{"id": "default", "name": "Default Skill"}],
+                "skills": skills,
+                "branches": skills,
             })
 
         async def handle_send_task(request):
+            assert request.headers.get("A2A-Version") == "1.0"
             data = await request.json()
+            assert data["method"] == "SendMessage"
+            assert data["params"]["message"]["role"] == "ROLE_USER"
             content = data["params"]["message"]["parts"][0]["text"]
+            context_id = data["params"]["message"].get("contextId")
+            assert isinstance(context_id, str) and context_id.strip()
 
             return web.json_response({
                 "jsonrpc": "2.0",
                 "id": data["id"],
                 "result": {
-                    "status": {"state": "completed"},
+                    "status": {"state": "TASK_STATE_COMPLETED"},
                     "artifacts": [
-                        {"parts": [{"type": "text", "text": f"Echo: {content}"}]}
+                        {"parts": [{"text": f"Echo: {content}"}]}
                     ],
                 },
             })
@@ -77,9 +84,10 @@ class TestA2AClient:
         result = await client.get_agent_card(mock_agent_server)
 
         assert result["name"] == "Test Agent"
-        branches = result["branches"]
-        assert isinstance(branches, list)
-        assert len(branches) == 1
+        skills = result["skills"]
+        assert isinstance(skills, list)
+        assert len(skills) == 1
+        assert result["branches"] == skills
 
     @pytest.mark.asyncio
     async def test_get_agent_card_not_found(self, error_server):
@@ -146,13 +154,13 @@ class TestA2AClient:
 
         assert result["name"] == "Test Agent"
 
-    def test_extract_task_status_message_nested_parts(self):
-        """Текст ошибки из вложенного A2A message (parts/root), как в JSON-RPC result."""
+    def test_extract_task_status_message_text_parts(self):
+        """Текст ошибки из A2A 1.0 status.message.parts (Part.text)."""
         status = {
-            "state": "failed",
+            "state": "TASK_STATE_FAILED",
             "message": {
                 "parts": [
-                    {"root": {"text": "httpx.ReadTimeout"}},
+                    {"text": "httpx.ReadTimeout"},
                 ],
             },
         }
@@ -163,10 +171,10 @@ class TestA2AClient:
         raw = {
             "result": {
                 "status": {
-                    "state": "failed",
+                    "state": "TASK_STATE_FAILED",
                     "message": {
                         "parts": [
-                            {"root": {"text": "stream stalled"}},
+                            {"text": "stream stalled"},
                         ],
                     },
                 },

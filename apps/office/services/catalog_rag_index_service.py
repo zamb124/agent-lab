@@ -102,7 +102,7 @@ class OfficeCatalogRagIndexService:
             "company_id": company_id,
             "office_namespace": workspace_namespace,
             "catalog_id": catalog.catalog_id,
-            "binding_id": binding.binding_id,
+            "file_id": binding.file_id,
             "document_title": binding.title,
             "file_category": binding.file_category,
             "uploaded_by_user_id": user_id,
@@ -209,10 +209,9 @@ class OfficeCatalogRagIndexService:
         if not is_rag_indexable_file_category(resolved_category):
             logger.info(
                 (
-                    "Office catalog RAG index skip non-indexable binding_id=%s file_id=%s "
+                    "Office catalog RAG index skip non-indexable file_id=%s "
                     "catalog_id=%s file_category=%s document_name=%s"
                 ),
-                binding.binding_id,
                 binding.file_id,
                 catalog.catalog_id,
                 resolved_category,
@@ -234,8 +233,7 @@ class OfficeCatalogRagIndexService:
             document_name=file_record.original_name,
         )
         logger.info(
-            "Office catalog RAG index enqueued binding_id=%s file_id=%s catalog_id=%s",
-            binding.binding_id,
+            "Office catalog RAG index enqueued file_id=%s catalog_id=%s",
             binding.file_id,
             catalog.catalog_id,
         )
@@ -285,7 +283,6 @@ class OfficeCatalogRagIndexService:
         items = [
             OfficeCatalogRagIndexBindingItem(
                 file_id=binding.file_id,
-                binding_id=binding.binding_id,
                 title=binding.title,
                 file_category=binding.file_category,
             )
@@ -442,12 +439,11 @@ class OfficeCatalogRagIndexService:
             bucket = buckets[file_id]
             if bucket == "ready":
                 totals.ready += 1
-            elif bucket == "pending":
-                totals.pending += 1
             elif bucket == "failed":
                 totals.failed += 1
             else:
-                totals.absent += 1
+                # pending / processing / no status row yet (queued after enable)
+                totals.pending += 1
 
         return OfficeCatalogRagIndexStatusResponse(
             enabled=catalog.rag_index_enabled,
@@ -643,7 +639,6 @@ class OfficeCatalogRagIndexService:
                 continue
             items.append(
                 OfficeCatalogSemanticSearchHit(
-                    binding_id=binding.binding_id,
                     file_id=hit.document_id,
                     catalog_id=hit_catalog_id,
                     catalog_title=catalog_title,

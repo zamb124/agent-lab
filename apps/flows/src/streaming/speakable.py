@@ -19,7 +19,7 @@ whitelist (:data:`SPEAKABLE_ARTIFACT_NAMES`: ответ пользователю
 ``operator_reply``). Артефакт ``reasoning`` в whitelist **не** входит: цепочка
 мыслей показывается в чате, но не синтезируется в речь (озвучивается итоговый
 ``response``). Если поле ``artifact.name`` пустое или отсутствует, но в артефакте
-есть хотя бы один непустой ``TextPart``, событие трактуется как ``response`` (потоковый
+есть хотя бы один непустой text Part, событие трактуется как ``response`` (потоковый
 вывод ноды без явного имени в событии). Вне whitelist —
 например ``tool_call_*``, ``tool_result_*``, ``node_*``, ``edge_*``,
 ``ui_event`` и прочие служебные имена из :mod:`apps.flows.src.streaming.base`
@@ -66,7 +66,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from a2a.types import Artifact, TaskArtifactUpdateEvent, TextPart
+from a2a.types import Artifact, TaskArtifactUpdateEvent
+
+from core.a2a import get_part_text, mapping_from_struct, part_has_text
 
 SPEAKABLE_ARTIFACT_NAMES: frozenset[str] = frozenset(
     {
@@ -83,8 +85,7 @@ SPEAK_FLAG_KEY: str = "speak"
 
 def _artifact_has_any_text_part(artifact: Artifact) -> bool:
     for part in artifact.parts:
-        root = part.root
-        if isinstance(root, TextPart) and root.text:
+        if part_has_text(part) and get_part_text(part):
             return True
     return False
 
@@ -93,7 +94,7 @@ def is_speakable_artifact(artifact: Artifact) -> bool:
     """True, если артефакт должен быть озвучен TTS.
 
     * имя в :data:`SPEAKABLE_ARTIFACT_NAMES`, либо имя пустое и есть хотя бы
-      один непустой ``TextPart`` (стрим ``response`` без явного ``name``);
+      один непустой text Part (стрим ``response`` без явного ``name``);
     * ``metadata.get(SPEAK_FLAG_KEY)`` не равен ``False`` (если ключ
       отсутствует — считаем разрешённым).
     """
@@ -104,7 +105,7 @@ def is_speakable_artifact(artifact: Artifact) -> bool:
         name = "response"
     if name not in SPEAKABLE_ARTIFACT_NAMES:
         return False
-    metadata = artifact.metadata or {}
+    metadata = mapping_from_struct(artifact.metadata) if artifact.HasField("metadata") else {}
     flag = metadata.get(SPEAK_FLAG_KEY)
     if flag is False:
         return False
@@ -114,15 +115,14 @@ def is_speakable_artifact(artifact: Artifact) -> bool:
 def iter_speakable_text_parts(artifact: Artifact) -> Iterable[str]:
     """Выдать только текстовые части speakable-артефакта.
 
-    ``DataPart`` / ``FilePart`` — пропускаются: их нельзя синтезировать в
+    ``data`` / ``raw`` / ``url`` Part — пропускаются: их нельзя синтезировать в
     речь без потери смысла.
     """
     if not is_speakable_artifact(artifact):
         return
     for part in artifact.parts:
-        root = part.root
-        if isinstance(root, TextPart):
-            text = root.text
+        if part_has_text(part):
+            text = get_part_text(part)
             if text:
                 yield text
 
@@ -134,8 +134,10 @@ def extract_speakable_text(event: TaskArtifactUpdateEvent) -> str | None:
 
     * ``None`` — если событие не speakable (имя вне whitelist,
       negative-override, или нет текста).
-    * строку — конкатенацию всех ``TextPart.text`` артефакта.
+    * строку — конкатенацию всех text Part артефакта.
     """
+    if not event.HasField("artifact"):
+        return None
     artifact = event.artifact
     if not is_speakable_artifact(artifact):
         return None

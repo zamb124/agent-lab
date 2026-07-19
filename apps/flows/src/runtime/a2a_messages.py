@@ -9,10 +9,33 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 
-from a2a.types import Message, Part, Role, TextPart
+from a2a.types import Message, Part
+from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER, Role
 
-from core.clients.llm import LLMToolCall
+from core.a2a.codec import struct_from_mapping
+from core.clients.llm.messages import LLMToolCall
 from core.types import JsonObject
+
+
+def _build_message(
+    *,
+    role: Role,
+    content: str,
+    metadata: JsonObject,
+    message_id: str | None = None,
+    context_id: str | None = None,
+    task_id: str | None = None,
+) -> Message:
+    message = Message(
+        message_id=message_id or str(uuid.uuid4()),
+        role=role,
+        parts=[Part(text=content)],
+        context_id=context_id,
+        task_id=task_id,
+    )
+    if metadata:
+        message.metadata.CopyFrom(struct_from_mapping(metadata))
+    return message
 
 
 def build_user_message(
@@ -22,13 +45,12 @@ def build_user_message(
     task_id: str | None = None,
 ) -> Message:
     """Сообщение пользователя с metadata.node_id для фильтрации и nested resume."""
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.user,
-        parts=[Part(root=TextPart(text=content))],
+    return _build_message(
+        role=ROLE_USER,
+        content=content,
+        metadata={"node_id": source_node_id},
         context_id=context_id,
         task_id=task_id,
-        metadata={"node_id": source_node_id},
     )
 
 
@@ -49,13 +71,12 @@ def build_assistant_message(
         ]
     if interrupted:
         meta["interrupted"] = True
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.agent,
-        parts=[Part(root=TextPart(text=content))],
+    return _build_message(
+        role=ROLE_AGENT,
+        content=content,
+        metadata=meta,
         context_id=context_id,
         task_id=task_id,
-        metadata=meta,
     )
 
 
@@ -82,13 +103,13 @@ def build_operator_message(
     }
     if resolved_file_ids:
         metadata["hitl_file_ids"] = resolved_file_ids
-    return Message(
+    return _build_message(
+        role=ROLE_AGENT,
+        content=content,
+        metadata=metadata,
         message_id=message_id,
-        role=Role.agent,
-        parts=[Part(root=TextPart(text=content))],
         context_id=context_id,
         task_id=task_id,
-        metadata=metadata,
     )
 
 
@@ -99,13 +120,12 @@ def build_tool_result_message(
     context_id: str | None = None,
     task_id: str | None = None,
 ) -> Message:
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.agent,
-        parts=[Part(root=TextPart(text=content))],
+    return _build_message(
+        role=ROLE_AGENT,
+        content=content,
+        metadata={"tool_call_id": tool_call_id, "node_id": source_node_id},
         context_id=context_id,
         task_id=task_id,
-        metadata={"tool_call_id": tool_call_id, "node_id": source_node_id},
     )
 
 
@@ -118,11 +138,10 @@ def build_system_message(
     meta: JsonObject = {"system": True}
     if source_node_id is not None:
         meta["node_id"] = source_node_id
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.agent,
-        parts=[Part(root=TextPart(text=content))],
+    return _build_message(
+        role=ROLE_AGENT,
+        content=content,
+        metadata=meta,
         context_id=context_id,
         task_id=task_id,
-        metadata=meta,
     )

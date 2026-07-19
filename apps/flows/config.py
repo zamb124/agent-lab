@@ -119,7 +119,7 @@ class FlowSettings(BaseSettings):
         default=15,
         ge=1,
         le=300,
-        description="Интервал heartbeat status-update working для A2A SSE-стримов flows",
+        description="Интервал heartbeat statusUpdate TASK_STATE_WORKING для A2A SSE-стримов flows",
     )
     handoff_max_depth: int = Field(
         default=5,

@@ -20,8 +20,8 @@ from apps.flows.config import get_settings
 def _msg(text: str, context_id: str | None = None) -> dict[str, Any]:
     message = {
         "messageId": str(uuid.uuid4()),
-        "role": "user",
-        "parts": [{"kind": "text", "text": text}],
+        "role": "ROLE_USER",
+        "parts": [{"text": text}],
     }
     if context_id:
         message["contextId"] = context_id
@@ -49,7 +49,7 @@ class TestPermissionsDisabled:
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json=_rpc_request(
-                "message/send",
+                "SendMessage",
                 {
                     "message": _msg("Hello"),
                     "metadata": {"__user_groups__": []},

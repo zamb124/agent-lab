@@ -391,7 +391,7 @@ Skills остаются в тегах `nodes` и `execution` (отдельный
 - Результат: выполнены синхронный и асинхронный запросы, проверен статус задачи.
 - Шаги: 1) выполнить синхронный запрос; 2) отправить асинхронную задачу; 3) опросить её статус; 4) открыть инспектор ответа (JSON/кадры/заголовки); 5) сравнить режимы.
 - Демонстрация: инспектор с результатом опроса асинхронной задачи.
-- Фичи: sync (message/send), async (submit + tasks/get polling), response inspector.
+- Фичи: sync (SendMessage), async (submit + GetTask polling), response inspector.
 
 #### 7.3 `api/share-demo-link`
 - Title: «Делимся демо агента по ссылке» / "Share an agent demo link"

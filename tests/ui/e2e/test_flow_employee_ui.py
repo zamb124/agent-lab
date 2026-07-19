@@ -81,7 +81,7 @@ async def test_flows_enable_flow_employee(
     )
     page = ui_page_system
     try:
-        await flows_open_editor(page, flows_ui, flow_id)
+        await flows_open_editor(page, flows_ui, flow_id, layout="agent")
         await scenario.step(
             "Откройте опубликованного агента-сотрудника",
             page,

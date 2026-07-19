@@ -2,6 +2,14 @@ function _nonEmptyString(value) {
     return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function _lookupDocumentType(items, fileId) {
+    if (!Array.isArray(items) || fileId === null) {
+        return null;
+    }
+    const item = items.find((candidate) => candidate && candidate.file_id === fileId);
+    return item ? _nonEmptyString(item.onlyoffice_document_type) : null;
+}
+
 export function buildOfficeAssistantContext(routeKey, params, documentsState) {
     if (typeof routeKey !== 'string' || routeKey.length === 0) {
         throw new Error('buildOfficeAssistantContext: routeKey required');
@@ -17,16 +25,19 @@ export function buildOfficeAssistantContext(routeKey, params, documentsState) {
         route_key: routeKey,
         screen: routeKey,
     };
-    const routeBindingId = _nonEmptyString(params.bindingId);
-    const selectedBindingId = _nonEmptyString(documentsState.selectedBindingId);
-    if (routeBindingId !== null) {
-        context.binding_id = routeBindingId;
-    } else if (selectedBindingId !== null) {
-        context.binding_id = selectedBindingId;
+    const routeFileId = _nonEmptyString(params.fileId);
+    const selectedFileId = _nonEmptyString(documentsState.selectedFileId);
+    const fileId = routeFileId !== null ? routeFileId : selectedFileId;
+    if (fileId !== null) {
+        context.file_id = fileId;
     }
     const catalogId = _nonEmptyString(documentsState.activeCatalogId);
     if (catalogId !== null) {
         context.catalog_id = catalogId;
+    }
+    const documentType = _lookupDocumentType(documentsState.items, fileId);
+    if (documentType !== null) {
+        context.document_type = documentType;
     }
     return context;
 }

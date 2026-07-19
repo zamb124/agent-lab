@@ -91,7 +91,7 @@ async def test_office_complete_service_guide(
         label_en="Empty Word document created",
     )
 
-    back = ui_page_system.locator("office-document-editor-page button.back").first
+    back = ui_page_system.locator("office-document-editor-page button.stage-back").first
     await back.click()
     await office_e2e_expect_explorer(ui_page_system)
 

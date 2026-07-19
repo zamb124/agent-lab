@@ -9,6 +9,9 @@ import httpx
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator, Page, expect
 
+from tests.ui.e2e.ui_e2e_pwa import ui_e2e_dismiss_pwa_install_banner
+from tests.ui.e2e_worker import ui_e2e_company_id
+
 
 def _namespace_name(unique_id: str, suffix: str) -> str:
     safe_suffix = suffix.strip("_")
@@ -19,23 +22,25 @@ async def sync_e2e_seed_namespace(
     unique_id: str,
     *,
     suffix: str = "ui",
-    company_id: str = "system",
+    company_id: str | None = None,
 ) -> str:
     """Создаёт платформенный namespace для текущего UI-сценария."""
     from tests.sync.api._helpers import seed_namespace_via_repo
 
+    resolved_company_id = company_id if company_id is not None else ui_e2e_company_id()
     namespace = _namespace_name(unique_id, suffix)
-    return await seed_namespace_via_repo(company_id, namespace)
+    return await seed_namespace_via_repo(resolved_company_id, namespace)
 
 
 async def sync_e2e_activate_namespace_for_next_load(
     page: Page,
     namespace: str,
     *,
-    company_id: str = "system",
+    company_id: str | None = None,
 ) -> None:
     """Запоминает namespace в localStorage до открытия SPA, как делает CRM/Sync sidebar."""
-    company_json = json.dumps(company_id)
+    resolved_company_id = company_id if company_id is not None else ui_e2e_company_id()
+    company_json = json.dumps(resolved_company_id)
     namespace_json = json.dumps(namespace)
     await page.add_init_script(
         f"""
@@ -56,7 +61,7 @@ async def sync_e2e_activate_namespace_for_next_load(
     )
 
 
-async def sync_e2e_expect_namespace(page: Page, namespace: str, *, timeout: float = 30_000) -> None:
+async def sync_e2e_expect_namespace(page: Page, namespace: str, *, timeout: float = 10_000) -> None:
     field = page.locator("platform-sidebar-namespace-select").first
     await expect(field.locator("platform-field-enum input.field-pill-enum-input")).to_have_value(
         namespace,
@@ -76,26 +81,81 @@ async def sync_e2e_expect_ws_open(page: Page) -> None:
     )
 
 
+async def sync_e2e_expect_namespace_in_list(page: Page, namespace: str, *, timeout: float = 10_000) -> None:
+    """Ждёт namespace в slice syncNamespaces или officeNamespaces (до UI-выбора)."""
+    already = await page.evaluate(
+        """(namespaceName) => {
+            const bus = window.__PLATFORM_BUS__;
+            if (!bus || typeof bus.getState !== 'function') return false;
+            const state = bus.getState();
+            for (const key of ['syncNamespaces', 'officeNamespaces']) {
+                const slice = state[key];
+                if (!slice || !Array.isArray(slice.items)) continue;
+                if (slice.items.some((item) => item && item.name === namespaceName)) {
+                    return true;
+                }
+            }
+            return false;
+        }""",
+        namespace,
+    )
+    if not already:
+        await page.evaluate(
+            """() => {
+                const bus = window.__PLATFORM_BUS__;
+                if (!bus || typeof bus.dispatch !== 'function') {
+                    throw new Error('__PLATFORM_BUS__ недоступен для reload namespaces');
+                }
+                bus.dispatch('sync/namespaces/list_requested', null);
+                bus.dispatch('office/namespaces/list_requested', null);
+            }"""
+        )
+    await page.wait_for_function(
+        """(namespaceName) => {
+            const bus = window.__PLATFORM_BUS__;
+            if (!bus || typeof bus.getState !== 'function') return false;
+            const state = bus.getState();
+            for (const key of ['syncNamespaces', 'officeNamespaces']) {
+                const slice = state[key];
+                if (!slice || !Array.isArray(slice.items)) continue;
+                if (slice.items.some((item) => item && item.name === namespaceName)) {
+                    return true;
+                }
+            }
+            return false;
+        }""",
+        arg=namespace,
+        timeout=timeout,
+    )
+
+
 async def sync_e2e_select_namespace(page: Page, namespace: str) -> None:
+    await sync_e2e_expect_namespace_in_list(page, namespace, timeout=30_000)
     for attempt in range(3):
         try:
             field = page.locator("platform-sidebar-namespace-select").first
             input_box = field.locator("platform-field-enum input.field-pill-enum-input")
-            await expect(input_box).to_be_visible(timeout=10_000)
+            await expect(input_box).to_be_visible(timeout=5_000)
             if await input_box.input_value(timeout=2_000) == namespace:
                 return
-            await input_box.click(timeout=10_000)
-            await input_box.fill(namespace, timeout=10_000)
-            option = field.get_by_role("option", name=namespace)
-            await expect(option).to_be_visible(timeout=10_000)
-            await option.click(timeout=10_000)
-            await sync_e2e_expect_namespace(page, namespace)
+            await input_box.click(timeout=5_000)
+            await input_box.fill(namespace, timeout=5_000)
+            option = field.locator(f'li[role="option"][data-enum-value="{namespace}"]')
+            await expect(option).to_be_visible(timeout=5_000)
+            # Enter надёжнее click: избегает гонки blur/willUpdate при обновлении config.
+            await input_box.press("Enter")
+            await sync_e2e_expect_namespace(page, namespace, timeout=5_000)
             return
-        except PlaywrightError:
+        except (PlaywrightError, AssertionError):
             if attempt == 2:
                 raise
             await page.wait_for_load_state("domcontentloaded")
-            await page.wait_for_timeout(500)
+            await page.wait_for_timeout(300)
+
+
+async def sync_e2e_dismiss_pwa_install_banner(page: Page) -> None:
+    """Убирает pwa-install-banner (в т.ч. в shadow DOM PlatformApp)."""
+    await ui_e2e_dismiss_pwa_install_banner(page)
 
 
 async def sync_e2e_open_with_namespace(
@@ -104,12 +164,18 @@ async def sync_e2e_open_with_namespace(
     unique_id: str,
     *,
     suffix: str = "ui",
-    company_id: str = "system",
+    company_id: str | None = None,
 ) -> str:
-    namespace = await sync_e2e_seed_namespace(unique_id, suffix=suffix, company_id=company_id)
-    await sync_e2e_activate_namespace_for_next_load(page, namespace, company_id=company_id)
+    resolved_company_id = company_id if company_id is not None else ui_e2e_company_id()
+    namespace = await sync_e2e_seed_namespace(
+        unique_id, suffix=suffix, company_id=resolved_company_id
+    )
+    await sync_e2e_activate_namespace_for_next_load(
+        page, namespace, company_id=resolved_company_id
+    )
     await sync_ui.open(page)
     await sync_ui.expect_shell(page)
+    await sync_e2e_dismiss_pwa_install_banner(page)
     await sync_e2e_expect_ws_open(page)
     try:
         await sync_e2e_expect_namespace(page, namespace, timeout=5_000)
@@ -165,19 +231,82 @@ async def sync_e2e_click_create_channel(page: Page) -> None:
     await target.click()
 
 
+async def _sync_page_auth_token(page: Page) -> str:
+    cookies = await page.context.cookies()
+    for cookie in cookies:
+        if cookie.get("name") == "auth_token":
+            value = cookie.get("value")
+            if isinstance(value, str) and value.strip() != "":
+                return value
+    raise AssertionError("auth_token cookie обязателен для sync API seed канала")
+
+
+async def _sync_page_origin(page: Page) -> str:
+    origin = await page.evaluate("() => window.location.origin")
+    if not isinstance(origin, str) or origin.strip() == "":
+        raise AssertionError("window.location.origin обязателен для sync API seed")
+    return origin
+
+
+async def _sync_active_namespace(page: Page) -> str:
+    namespace = await page.locator(
+        "platform-sidebar-namespace-select platform-field-enum input.field-pill-enum-input"
+    ).first.input_value()
+    if namespace.strip() == "":
+        raise AssertionError("Активный namespace обязателен для создания канала")
+    return namespace
+
+
+async def sync_api_create_group_channel(
+    origin: str,
+    auth_token: str,
+    namespace: str,
+    channel_name: str,
+) -> str:
+    async with _sync_client(origin, auth_token) as client:
+        response = await client.post(
+            "/sync/api/v1/channels/",
+            json={
+                "namespace": namespace,
+                "type": "group",
+                "name": channel_name,
+                "is_private": False,
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+    channel_id = payload.get("channel_id")
+    if not isinstance(channel_id, str) or channel_id.strip() == "":
+        raise AssertionError("POST /channels/ должен вернуть channel_id")
+    return channel_id
+
+
+async def _sync_e2e_reload_channels(page: Page) -> None:
+    await page.evaluate(
+        """() => {
+            const bus = window.__PLATFORM_BUS__;
+            if (!bus || typeof bus.dispatch !== 'function') {
+                throw new Error('__PLATFORM_BUS__ недоступен для reload sync/channels');
+            }
+            bus.dispatch('sync/channels/list_requested', null);
+        }"""
+    )
+
+
 async def sync_e2e_create_topic_channel_and_open(
     page: Page,
     unique_id: str,
     *,
     channel_prefix: str = "Канал",
 ) -> str:
-    """Создаёт групповой канал и открывает чат. Shell уже должен быть загружен."""
+    """Создаёт групповой канал (API seed в активный namespace) и открывает чат."""
+    await sync_e2e_dismiss_pwa_install_banner(page)
     channel_name = f"{channel_prefix} {unique_id}"
-    await sync_e2e_click_create_channel(page)
-    ch_modal = page.locator("sync-channel-create-modal")
-    await expect(ch_modal).to_be_visible()
-    await ch_modal.locator("input.field-pill-input").first.fill(channel_name)
-    await sync_e2e_click_platform_button(ch_modal, "Создать", "Create")
+    namespace = await _sync_active_namespace(page)
+    origin = await _sync_page_origin(page)
+    auth_token = await _sync_page_auth_token(page)
+    await sync_api_create_group_channel(origin, auth_token, namespace, channel_name)
+    await _sync_e2e_reload_channels(page)
     await expect(sync_sidebar_channel_nav(page, channel_name)).to_be_visible(timeout=30_000)
     await sync_sidebar_channel_nav(page, channel_name).click()
     await expect(page.locator("sync-channel-page")).to_be_visible()
@@ -185,21 +314,25 @@ async def sync_e2e_create_topic_channel_and_open(
 
 
 async def sync_e2e_create_topic_channel_in_current_space(page: Page, unique_id: str, *, channel_prefix: str) -> str:
-    """Второй и следующие каналы в том же UI (кнопка «+» в секции чатов)."""
+    """Второй и следующие каналы в том же UI (API seed в активный namespace)."""
+    await sync_e2e_dismiss_pwa_install_banner(page)
     channel_name = f"{channel_prefix} {unique_id}"
-    await sync_e2e_click_create_channel(page)
-    ch_modal = page.locator("sync-channel-create-modal")
-    await expect(ch_modal).to_be_visible()
-    await ch_modal.locator("input.field-pill-input").first.fill(channel_name)
-    await sync_e2e_click_platform_button(ch_modal, "Создать", "Create")
+    namespace = await _sync_active_namespace(page)
+    origin = await _sync_page_origin(page)
+    auth_token = await _sync_page_auth_token(page)
+    await sync_api_create_group_channel(origin, auth_token, namespace, channel_name)
+    await _sync_e2e_reload_channels(page)
     await expect(sync_sidebar_channel_nav(page, channel_name)).to_be_visible(timeout=30_000)
     return channel_name
 
 
 def _sync_client(origin: str, auth_token: str) -> httpx.AsyncClient:
+    from tests.ui.e2e_worker import ui_e2e_scope_headers
+
     return httpx.AsyncClient(
         base_url=origin,
         cookies={"auth_token": auth_token},
+        headers=ui_e2e_scope_headers(),
         timeout=60.0,
     )
 
@@ -312,5 +445,29 @@ async def sync_e2e_expect_team_member_loaded(page: Page, user_id: str, *, timeou
             if (!team || !Array.isArray(team.members)) return false;
             return team.members.some((m) => m && m.user_id === {user_id_json});
         }}""",
+        timeout=timeout,
+    )
+
+
+async def sync_e2e_expect_company_member_loaded(page: Page, user_id: str, *, timeout: float = 15_000) -> None:
+    """Ждёт участника только в state.syncCompanyMembers.items (listFetchAllPages)."""
+    await page.evaluate(
+        """() => {
+            const bus = window.__PLATFORM_BUS__;
+            if (!bus || typeof bus.dispatch !== 'function') {
+                throw new Error('__PLATFORM_BUS__ недоступен для reload company_members');
+            }
+            bus.dispatch('sync/company_members/list_requested', null);
+        }"""
+    )
+    await page.wait_for_function(
+        """(userId) => {
+            const bus = window.__PLATFORM_BUS__;
+            if (!bus || typeof bus.getState !== 'function') return false;
+            const slice = bus.getState().syncCompanyMembers;
+            return !!(slice && Array.isArray(slice.items)
+                && slice.items.some((m) => m && m.user_id === userId));
+        }""",
+        arg=user_id,
         timeout=timeout,
     )

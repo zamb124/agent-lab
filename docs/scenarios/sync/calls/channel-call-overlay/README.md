@@ -4,8 +4,8 @@
 
 ## Шаг 1. Открыт topic-канал
 
-![Открыт topic-канал](channel-call-overlay--01-otkryt-topic-kanal.png)
+![Открыт topic-канал](channel-call-overlay--01-topic-channel-opened.png)
 
 ## Шаг 2. Отображается оверлей звонка
 
-![Отображается оверлей звонка](channel-call-overlay--02-otobrazhaetsya-overley-zvonka.png)
+![Отображается оверлей звонка](channel-call-overlay--02-call-overlay-is-displayed.png)

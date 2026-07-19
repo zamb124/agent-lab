@@ -1,8 +1,21 @@
 """WebhookChannelHandler — отправка сообщений через HTTP callback/webhook."""
 
+import uuid
 from typing import override
 
+from a2a.types import Message, Part, Role, StreamResponse, TaskState, TaskStatusUpdateEvent
+from google.protobuf.json_format import MessageToDict
+
 from apps.flows.src.models.enums import ChannelType
+from core.a2a import (
+    a2a_task_state_to_platform,
+    is_interrupted_a2a_task_state,
+    is_terminal_a2a_task_state,
+    make_task_status,
+    platform_task_state_to_a2a,
+    struct_from_mapping,
+    value_from_json,
+)
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
@@ -10,6 +23,50 @@ from core.types import JsonObject, JsonValue, parse_json_object, require_json_ob
 from .base import BaseChannelHandler
 
 logger = get_logger(__name__)
+
+A2A_VERSION_HEADER = "A2A-Version"
+A2A_PROTOCOL_VERSION = "1.0"
+
+# Tool/channel event_type aliases → platform kebab TaskState.
+_NOTIFICATION_EVENT_TO_PLATFORM: dict[str, str] = {
+    "complete": "completed",
+    "completed": "completed",
+    "error": "failed",
+    "failed": "failed",
+    "working": "working",
+    "submitted": "submitted",
+    "canceled": "canceled",
+    "cancelled": "canceled",
+    "input-required": "input-required",
+    "input_required": "input-required",
+    "rejected": "rejected",
+    "auth-required": "auth-required",
+    "auth_required": "auth-required",
+}
+
+
+def _notification_event_to_platform_state(event_type: str) -> str:
+    """event_type (alias / kebab / TASK_STATE_*) → platform kebab для A2A wire."""
+    if not event_type:
+        raise ValueError("webhook send_notification: event_type is required")
+    if event_type in _NOTIFICATION_EVENT_TO_PLATFORM:
+        return _NOTIFICATION_EVENT_TO_PLATFORM[event_type]
+    if event_type.startswith("TASK_STATE_"):
+        try:
+            a2a_state = TaskState.Value(event_type)
+        except ValueError as exc:
+            raise ValueError(
+                f"webhook send_notification: unknown A2A TaskState {event_type!r}"
+            ) from exc
+        return a2a_task_state_to_platform(a2a_state)
+    allowed = sorted(_NOTIFICATION_EVENT_TO_PLATFORM)
+    message = (
+        "webhook send_notification: unknown event_type "
+        + repr(event_type)
+        + "; use platform kebab, TASK_STATE_*, or aliases "
+        + repr(allowed)
+    )
+    raise ValueError(message)
 
 
 class WebhookChannelHandler(BaseChannelHandler):
@@ -19,7 +76,7 @@ class WebhookChannelHandler(BaseChannelHandler):
     Поддерживаемые действия:
     - send_message: POST с текстовым сообщением
     - send_payload: POST с произвольным JSON payload
-    - send_notification: POST в формате A2A нотификации
+    - send_notification: POST A2A Protocol 1.0 StreamResponse ProtoJSON (statusUpdate)
 
     Конфигурация:
     {
@@ -185,31 +242,56 @@ class WebhookChannelHandler(BaseChannelHandler):
         **kwargs: JsonValue,
     ) -> JsonObject:
         """
-        Отправляет нотификацию в A2A формате.
+        Отправляет A2A Protocol 1.0 push body: ProtoJSON ``StreamResponse``
+        с ``statusUpdate`` (тот же канон, что Task Push Notification webhook).
 
         Аргументы:
             recipient: URL callback
-            event_type: Тип события (complete, error, artifact, etc)
-            data: Данные события
-            task_id: ID задачи
-            session_id: ID сессии
+            event_type: platform kebab / ``TASK_STATE_*`` / alias (complete→completed, error→failed)
+            data: payload в ``status.message`` (text из ``response`` + Part.data)
+            task_id: A2A ``taskId`` (обязателен)
+            session_id: A2A ``contextId`` (обязателен; имя параметра channel tool)
         """
         _ = kwargs
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise ValueError("webhook send_notification: task_id is required")
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise ValueError(
+                "webhook send_notification: session_id is required (A2A contextId)"
+            )
+
+        platform_state = _notification_event_to_platform_state(event_type)
+        a2a_state = platform_task_state_to_a2a(platform_state)
+
+        parts: list[Part] = []
+        response_value = data.get("response")
+        if isinstance(response_value, str) and response_value.strip():
+            parts.append(Part(text=response_value.strip()))
+        parts.append(Part(data=value_from_json(data)))
+
+        status = make_task_status(
+            a2a_state,
+            message=Message(
+                message_id=str(uuid.uuid4()),
+                role=Role.ROLE_AGENT,
+                parts=parts,
+            ),
+        )
+        event = TaskStatusUpdateEvent(
+            task_id=task_id.strip(),
+            context_id=session_id.strip(),
+            status=status,
+        )
+        if is_terminal_a2a_task_state(a2a_state) or is_interrupted_a2a_task_state(a2a_state):
+            # Platform extension (a2a.mdc): не поле wire proto TaskStatusUpdateEvent.
+            event.metadata.CopyFrom(struct_from_mapping({"final": True}))
+
+        stream = StreamResponse(status_update=event)
+        payload = require_json_object(MessageToDict(stream), "StreamResponse")
+
         url = self._get_url(recipient, config, variables)
         headers = self._build_headers(config, variables)
-
-        payload: JsonObject = {
-            "jsonrpc": "2.0",
-            "method": "tasks/pushNotification",
-            "params": {
-                "id": task_id,
-                "session_id": session_id,
-                "event": {
-                    "type": event_type,
-                    "data": data,
-                },
-            },
-        }
+        headers[A2A_VERSION_HEADER] = A2A_PROTOCOL_VERSION
 
         return await self._send_request(url, payload, headers, config)
 

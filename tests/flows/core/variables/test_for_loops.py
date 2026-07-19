@@ -26,12 +26,12 @@ class TestForLoops:
             local_vars={
                 "users": [
                     {"name": "Иван", "role": "admin"},
-                    {"name": "Петр", "role": "user"}
+                    {"name": "Петр", "role": "ROLE_USER"}
                 ]
             },
             include_system=False
         )
-        assert result == "- Иван: admin\n- Петр: user\n"
+        assert result == "- Иван: admin\n- Петр: ROLE_USER\n"
 
     def test_for_loop_empty_list(self):
         """Цикл по пустому списку"""
@@ -154,7 +154,7 @@ Role: {user.role}
             local_vars={
                 "users": [
                     {"name": "Alice", "role": "admin"},
-                    {"name": "Bob", "role": "user"}
+                    {"name": "Bob", "role": "ROLE_USER"}
                 ]
             },
             include_system=False
@@ -162,7 +162,7 @@ Role: {user.role}
         assert "Name: Alice" in result
         assert "Role: admin" in result
         assert "Name: Bob" in result
-        assert "Role: user" in result
+        assert "Role: ROLE_USER" in result
 
 
 class TestForLoopsEdgeCases:

@@ -23,6 +23,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
     service="office",
     tag="catalogs",
     doc_slug="workspace-and-catalogs",
+    timeout_seconds=120,
     title="Office: пространство и каталоги",
     title_en="Office: workspace and catalogs",
     description="Выбор пространства, создание корневого и вложенного каталога, редактирование и навигация по дереву.",

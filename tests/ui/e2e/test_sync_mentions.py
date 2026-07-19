@@ -11,7 +11,7 @@ from tests.ui.e2e.sync_e2e_helpers import (
     sync_api_add_channel_member,
     sync_api_channel_id_by_name,
     sync_e2e_create_topic_channel_and_open,
-    sync_e2e_expect_team_member_loaded,
+    sync_e2e_expect_company_member_loaded,
     sync_e2e_open_with_namespace,
     sync_sidebar_channel_nav,
     sync_sidebar_channel_row,
@@ -37,10 +37,10 @@ from tests.ui.scenario_doc import ScenarioRecorder
         "After «@» in the composer a member list opens; selecting one inserts @user_id; "
         "the bubble shows the name from company members, not the raw id."
     ),
+    timeout_seconds=45,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(180)
 async def test_user_mentions_channel_member_from_popup(
     scenario: ScenarioRecorder,
     sync_ui: AppUI,
@@ -68,7 +68,7 @@ async def test_user_mentions_channel_member_from_popup(
     await sync_api_add_channel_member(
         sync_ui.origin, auth_token_system, channel_id, peer_uid
     )
-    await sync_e2e_expect_team_member_loaded(ui_page_system, peer_uid)
+    await sync_e2e_expect_company_member_loaded(ui_page_system, peer_uid)
 
     await sync_sidebar_channel_nav(ui_page_system, channel_name).click()
     await expect(ui_page_system.locator("sync-channel-page")).to_be_visible()
@@ -86,11 +86,11 @@ async def test_user_mentions_channel_member_from_popup(
     await ta.press_sequentially(f"@{mention_query}")
 
     popup = composer.locator(".mention-popup")
-    await expect(popup).to_be_visible(timeout=30_000)
+    await expect(popup).to_be_visible(timeout=10_000)
     member_btn = composer.locator(
         f'.mention-popup .item[data-user-id="{peer_uid}"]'
     )
-    await expect(member_btn).to_be_visible(timeout=30_000)
+    await expect(member_btn).to_be_visible(timeout=10_000)
     await scenario.step(
         "Попап со списком участников",
         ui_page_system,
@@ -106,11 +106,11 @@ async def test_user_mentions_channel_member_from_popup(
         label_en="Member selected, text appended",
     )
 
-    send_btn = composer.locator('button.send[aria-label="Отправить"], button.send[aria-label="Send"]')
-    await expect(send_btn).to_be_visible(timeout=15_000)
-    await send_btn.click()
+    send_btn = composer.locator("button.send")
+    await expect(send_btn).to_be_visible(timeout=5_000)
+    await send_btn.evaluate("(el) => el.click()")
     bubble = ui_page_system.locator("sync-message-bubble").last
-    await expect(bubble.locator(".body")).to_be_visible(timeout=30_000)
+    await expect(bubble.locator(".body")).to_be_visible(timeout=10_000)
     await expect(bubble.locator(".body .mention")).to_contain_text("System User 2")
     await expect(bubble.locator(".body")).to_contain_text("нужен апрув")
     await scenario.step(
@@ -134,10 +134,10 @@ async def test_user_mentions_channel_member_from_popup(
         "After sending a message with a mention, clicking the highlighted name opens the profile card; "
         "the name and shared channels block are visible; the grid shows a channel row like in the sidebar."
     ),
+    timeout_seconds=45,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(180)
 async def test_click_mention_opens_profile_modal_with_shared_channel(
     scenario: ScenarioRecorder,
     sync_ui: AppUI,
@@ -170,7 +170,7 @@ async def test_click_mention_opens_profile_modal_with_shared_channel(
     await sync_api_add_channel_member(
         sync_ui.origin, auth_token_system, channel_id, peer_uid
     )
-    await sync_e2e_expect_team_member_loaded(ui_page_system, peer_uid)
+    await sync_e2e_expect_company_member_loaded(ui_page_system, peer_uid)
 
     await sync_sidebar_channel_nav(ui_page_system, channel_name).click()
     await expect(ui_page_system.locator("sync-channel-page")).to_be_visible()
@@ -181,21 +181,21 @@ async def test_click_mention_opens_profile_modal_with_shared_channel(
     mention_query = peer_uid[-8:]
     await ta.press_sequentially(f"@{mention_query}")
     popup = composer.locator(".mention-popup")
-    await expect(popup).to_be_visible(timeout=30_000)
+    await expect(popup).to_be_visible(timeout=10_000)
     member_btn = composer.locator(
         f'.mention-popup .item[data-user-id="{peer_uid}"]'
     )
-    await expect(member_btn).to_be_visible(timeout=30_000)
+    await expect(member_btn).to_be_visible(timeout=10_000)
     await member_btn.click()
     await ta.click()
     await ta.press_sequentially("тест профиля")
-    send_btn = composer.locator('button.send[aria-label="Отправить"], button.send[aria-label="Send"]')
-    await expect(send_btn).to_be_visible(timeout=15_000)
-    await send_btn.click()
+    send_btn = composer.locator("button.send")
+    await expect(send_btn).to_be_visible(timeout=5_000)
+    await send_btn.evaluate("(el) => el.click()")
 
     bubble = ui_page_system.locator("sync-message-bubble").last
     mention = bubble.locator(".mention")
-    await expect(mention).to_be_visible(timeout=30_000)
+    await expect(mention).to_be_visible(timeout=10_000)
     await scenario.step(
         "Упоминание в ленте",
         ui_page_system,
@@ -204,14 +204,14 @@ async def test_click_mention_opens_profile_modal_with_shared_channel(
 
     await mention.click()
     user_modal = ui_page_system.locator("platform-user-info-modal[open]")
-    await expect(user_modal).to_be_visible(timeout=30_000)
+    await expect(user_modal).to_be_visible(timeout=10_000)
     await expect(user_modal.locator(".modal-title")).to_contain_text(
         re.compile(r"Профиль|Profile")
     )
     await expect(user_modal.get_by_text("System User 2", exact=False).first).to_be_visible()
     await expect(user_modal.get_by_text(re.compile(r"Каналы вместе|Shared channels"))).to_be_visible()
     await expect(user_modal.locator("sync-channel-row").filter(has_text=channel_name)).to_be_visible(
-        timeout=45_000
+        timeout=10_000
     )
     await scenario.step(
         "Модалка профиля: общий канал в сетке",

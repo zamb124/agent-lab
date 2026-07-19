@@ -24,7 +24,7 @@ async def test_llm_context_compiled_emitted(
 ) -> None:
     messages = [
         {"role": "system", "content": "You are helpful."},
-        {"role": "user", "content": "Hello"},
+        {"role": "ROLE_USER", "content": "Hello"},
     ]
     _ = await prepare_messages_for_context_layer(
         messages,

@@ -4,7 +4,7 @@
 
 **Problems it solves:** it is unclear when Sync is better than Streaming and how to wait for a long-running task result.
 
-**Result:** you will verify both message/send modes in the same API Console modal.
+**Result:** you will verify both SendMessage modes in the same API Console modal.
 
 ## Step 1. Open the Run tab
 

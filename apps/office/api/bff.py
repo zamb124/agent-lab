@@ -110,7 +110,7 @@ from apps.office.services.onlyoffice_jwt import (
     decode_callback_authorization,
     decode_download_token,
 )
-from apps.office.services.viewer_service import file_viewer_binding_id, integration_configured
+from apps.office.services.viewer_service import integration_configured
 from core.clients.onlyoffice import OnlyOfficeJwtError, sign_onlyoffice_jwt_hs256
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
@@ -227,9 +227,9 @@ async def _index_binding_if_catalog_enabled_with_job_context(
     trace_id = (
         trace_raw.strip()
         if isinstance(trace_raw, str) and trace_raw.strip() != ""
-        else f"office-callback:{binding.binding_id}"
+        else f"office-callback:{binding.file_id}"
     )
-    session_id = f"office-callback:{binding.binding_id}"
+    session_id = f"office-callback:{binding.file_id}"
     previous_context = get_context()
     job_context = build_job_context(
         company=company,
@@ -314,7 +314,7 @@ async def _require_binding_catalog_access(
     row: OfficeDocumentBinding,
     user_id: str,
 ) -> None:
-    allowed = await c.office_access_service.user_can_view_binding(
+    allowed = await c.office_access_service.user_can_view_document(
         row,
         company_id=row.company_id,
         namespace=row.namespace,
@@ -363,22 +363,22 @@ def _office_inline_content_disposition(original_name: str) -> str:
     return f"inline; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
 
 
-def _editor_embed_url(binding_id: str, namespace: str) -> str:
+def _editor_embed_url(file_id: str, namespace: str) -> str:
     return (
-        f"/documents/embed/edit/{quote(binding_id, safe='')}?namespace={quote(namespace, safe='')}"
+        f"/documents/embed/edit/{quote(file_id, safe='')}?namespace={quote(namespace, safe='')}"
     )
 
 
-def _onlyoffice_document_key(binding_id: str, checksum: str | None) -> str:
+def _onlyoffice_document_key(file_id: str, checksum: str | None) -> str:
     """
     ONLYOFFICE `document.key` is a cache/version key, not our document identity.
-    Keep identity in `binding_id`, and derive the editor key from current file bytes
+    Keep identity in `file_id`, and derive the editor key from current file bytes
     so Document Server reloads the real S3 object after every saved change.
     """
     safe_checksum = re.sub(r"[^a-zA-Z0-9_-]", "", checksum or "")[:24]
     if not safe_checksum:
-        return binding_id
-    return f"{binding_id}_{safe_checksum}"
+        return file_id
+    return f"{file_id}_{safe_checksum}"
 
 
 def _onlyoffice_request_payload(token_payload: JsonObject, body: JsonObject) -> JsonObject:
@@ -396,33 +396,33 @@ def _onlyoffice_request_payload(token_payload: JsonObject, body: JsonObject) -> 
     return token_payload
 
 
-def _document_mutation_lock_key(binding_id: str) -> str:
-    return f"office:document:{binding_id}:mutation"
+def _document_mutation_lock_key(file_id: str) -> str:
+    return f"office:document:{file_id}:mutation"
 
 
-def _document_mutation_lock_release_channel(binding_id: str) -> str:
-    return f"office:document:{binding_id}:mutation:released"
+def _document_mutation_lock_release_channel(file_id: str) -> str:
+    return f"office:document:{file_id}:mutation:released"
 
 
 @asynccontextmanager
 async def _document_mutation_lock(
     container: OfficeContainer,
-    binding_id: str,
+    file_id: str,
     *,
     wait_timeout_seconds: float = 45.0,
 ):
     """
-    Distributed mutation lock на binding через Redis SET NX EX.
+    Distributed mutation lock на документ через Redis SET NX EX.
 
     Ожидание освобождения — pub/sub: при release lock публикуется в канал
-    ``office:document:<binding_id>:mutation:released``. Это убирает busy-loop
+    ``office:document:<file_id>:mutation:released``. Это убирает busy-loop
     с ``asyncio.sleep(0.25)`` (по 4 TCP-roundtrip в секунду на каждый запрос
     в очереди). Fallback poll каждые ``_LOCK_FALLBACK_POLL_SECONDS`` сохранён
     на случай, если release произошёл до подписки или сообщение было потеряно.
     """
     client = container.redis_client
-    lock_key = _document_mutation_lock_key(binding_id)
-    release_channel = _document_mutation_lock_release_channel(binding_id)
+    lock_key = _document_mutation_lock_key(file_id)
+    release_channel = _document_mutation_lock_release_channel(file_id)
     token = uuid.uuid4().hex
     deadline = asyncio.get_running_loop().time() + wait_timeout_seconds
 
@@ -478,7 +478,7 @@ def _document_server_command_base_url(settings: OfficeSettings) -> str:
 async def _post_onlyoffice_command(
     *,
     payload: JsonObject,
-    binding_id: str,
+    file_id: str,
     command_name: str,
     timeout: float = 10.0,
 ) -> int | None:
@@ -500,8 +500,8 @@ async def _post_onlyoffice_command(
         status_code = exc.response.status_code
         response_preview = exc.response.text[:500]
         logger.exception(
-            "OnlyOffice command failed before mutation binding_id=%s command=%s http_status=%s response=%s",
-            binding_id,
+            "OnlyOffice command failed before mutation file_id=%s command=%s http_status=%s response=%s",
+            file_id,
             command_name,
             status_code,
             response_preview,
@@ -512,8 +512,8 @@ async def _post_onlyoffice_command(
         ) from exc
     except HTTPError as exc:
         logger.exception(
-            "OnlyOffice command failed before mutation binding_id=%s command=%s http_status=%s response=%s",
-            binding_id,
+            "OnlyOffice command failed before mutation file_id=%s command=%s http_status=%s response=%s",
+            file_id,
             command_name,
             None,
             "",
@@ -540,16 +540,16 @@ async def _post_onlyoffice_command(
         ) from None
     if code != 0:
         logger.warning(
-            "OnlyOffice command returned error binding_id=%s command=%s code=%s detail=%s",
-            binding_id,
+            "OnlyOffice command returned error file_id=%s command=%s code=%s detail=%s",
+            file_id,
             command_name,
             code,
             _ONLYOFFICE_COMMAND_ERROR_DETAILS.get(code, "unknown error"),
         )
     else:
         logger.info(
-            "OnlyOffice command accepted binding_id=%s command=%s key=%s",
-            binding_id,
+            "OnlyOffice command accepted file_id=%s command=%s key=%s",
+            file_id,
             command_name,
             key,
         )
@@ -558,16 +558,16 @@ async def _post_onlyoffice_command(
 
 async def _force_save_open_editor_if_needed(
     *,
-    binding_id: str,
+    file_id: str,
     document_key: str,
 ) -> int | None:
     code = await _post_onlyoffice_command(
         payload={
             "c": "forcesave",
             "key": document_key,
-            "userdata": f"sync:{binding_id}:{uuid.uuid4().hex}",
+            "userdata": f"sync:{file_id}:{uuid.uuid4().hex}",
         },
-        binding_id=binding_id,
+        file_id=file_id,
         command_name="forcesave",
     )
     if code is None or code in (0, 1, 4):
@@ -580,12 +580,12 @@ async def _force_save_open_editor_if_needed(
 
 async def _drop_open_editor_sessions(
     *,
-    binding_id: str,
+    file_id: str,
     document_key: str,
 ) -> None:
     code = await _post_onlyoffice_command(
         payload={"c": "drop", "key": document_key},
-        binding_id=binding_id,
+        file_id=file_id,
         command_name="drop",
     )
     if code is None or code in (0, 1):
@@ -597,7 +597,6 @@ async def _drop_open_editor_sessions(
 async def _wait_for_file_change_after_forcesave(
     *,
     container: OfficeContainer,
-    binding_id: str,
     file_id: str,
     previous_checksum: str | None,
     previous_file_size: int | None,
@@ -611,16 +610,14 @@ async def _wait_for_file_change_after_forcesave(
             raise HTTPException(status_code=404, detail="Файл не найден")
         if meta.checksum != previous_checksum or meta.file_size != previous_file_size:
             logger.info(
-                "OnlyOffice forcesave materialized binding_id=%s file_id=%s old_size=%s new_size=%s",
-                binding_id,
+                "OnlyOffice forcesave materialized file_id=%s old_size=%s new_size=%s",
                 file_id,
                 previous_file_size,
                 meta.file_size,
             )
             return True
     logger.warning(
-        "OnlyOffice forcesave callback did not update file binding_id=%s file_id=%s old_size=%s old_checksum=%s",
-        binding_id,
+        "OnlyOffice forcesave callback did not update file file_id=%s old_size=%s old_checksum=%s",
         file_id,
         previous_file_size,
         previous_checksum,
@@ -715,8 +712,7 @@ async def sync_file_editor_state(
 ) -> OfficeFileEditorSyncResponse:
     ctx = _require_office_context()
     sync_options = body or OfficeDocumentSyncRequest()
-    binding_id = file_viewer_binding_id(file_id)
-    async with _document_mutation_lock(container, binding_id):
+    async with _document_mutation_lock(container, file_id):
         meta = await container.files_service.get_optional(file_id)
         if meta is None:
             raise HTTPException(status_code=404, detail="Файл не найден")
@@ -731,23 +727,22 @@ async def sync_file_editor_state(
                 checksum=meta.checksum,
                 file_size=meta.file_size,
             )
-        document_key = _onlyoffice_document_key(binding_id, meta.checksum)
+        document_key = _onlyoffice_document_key(file_id, meta.checksum)
         if sync_options.settle_ms > 0:
             await asyncio.sleep(sync_options.settle_ms / 1000)
         force_code = await _force_save_open_editor_if_needed(
-            binding_id=binding_id,
+            file_id=file_id,
             document_key=document_key,
         )
         if sync_options.close and force_code == 4:
             await asyncio.sleep(1.5)
             force_code = await _force_save_open_editor_if_needed(
-                binding_id=binding_id,
+                file_id=file_id,
                 document_key=document_key,
             )
         logger.info(
-            "OnlyOffice file sync command result binding_id=%s file_id=%s close=%s dirty=%s force_code=%s",
-            binding_id,
-            meta.file_id,
+            "OnlyOffice file sync command result file_id=%s close=%s dirty=%s force_code=%s",
+            file_id,
             sync_options.close,
             sync_options.dirty,
             force_code,
@@ -761,8 +756,7 @@ async def sync_file_editor_state(
         if force_code == 0:
             _ = await _wait_for_file_change_after_forcesave(
                 container=container,
-                binding_id=binding_id,
-                file_id=meta.file_id,
+                file_id=file_id,
                 previous_checksum=meta.checksum,
                 previous_file_size=meta.file_size,
             )
@@ -771,7 +765,7 @@ async def sync_file_editor_state(
                 raise HTTPException(status_code=404, detail="Файл не найден")
         if sync_options.close and force_code in (0, 4):
             await _drop_open_editor_sessions(
-                binding_id=binding_id,
+                file_id=file_id,
                 document_key=document_key,
             )
     return OfficeFileEditorSyncResponse(
@@ -1476,16 +1470,16 @@ async def rotate_catalog_access_link(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.get("/documents/{binding_id}/access", response_model=OfficeResourceAccessResponse)
+@router.get("/documents/{file_id}/access", response_model=OfficeResourceAccessResponse)
 async def get_document_access(
-    binding_id: str,
+    file_id: str,
     container: ContainerDep,
     request: Request,
 ) -> OfficeResourceAccessResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -1495,17 +1489,17 @@ async def get_document_access(
     return await container.office_access_service.get_binding_access(row, request)
 
 
-@router.patch("/documents/{binding_id}/access", response_model=OfficeResourceAccessResponse)
+@router.patch("/documents/{file_id}/access", response_model=OfficeResourceAccessResponse)
 async def patch_document_access(
-    binding_id: str,
+    file_id: str,
     body: OfficeResourceAccessPatchRequest,
     container: ContainerDep,
     request: Request,
 ) -> OfficeResourceAccessResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -1524,18 +1518,18 @@ async def patch_document_access(
 
 
 @router.post(
-    "/documents/{binding_id}/access/link/rotate",
+    "/documents/{file_id}/access/link/rotate",
     response_model=OfficeResourceAccessRotateLinkResponse,
 )
 async def rotate_document_access_link(
-    binding_id: str,
+    file_id: str,
     container: ContainerDep,
     request: Request,
 ) -> OfficeResourceAccessRotateLinkResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -1680,13 +1674,12 @@ async def upload_document(
     except ValueError as exc:
         raise _http_exception_from_catalog_rag_value_error(exc) from exc
     return OfficeDocumentCreateResponse(
-        binding_id=row.binding_id,
         file_id=row.file_id,
         catalog_id=row.catalog_id,
         file_category=row.file_category,
         onlyoffice_document_type=row.onlyoffice_document_type,
         title=row.title,
-        editor_url=_editor_embed_url(row.binding_id, namespace),
+        editor_url=_editor_embed_url(row.file_id, namespace),
     )
 
 
@@ -1749,21 +1742,19 @@ async def open_existing_file_as_document(
         (meta.content_type or "application/octet-stream").split(";")[0].strip(),
     )
 
-    existing = await container.document_binding_repository.get_by_file_for_company(
+    existing = await container.document_binding_repository.get_by_file_and_company(
         file_id,
         ctx.active_company.company_id,
-        namespace,
     )
     if existing is not None:
         await _require_binding_catalog_access(container, existing, ctx.user.user_id)
         return OfficeDocumentCreateResponse(
-            binding_id=existing.binding_id,
             file_id=existing.file_id,
             catalog_id=existing.catalog_id,
             file_category=existing.file_category,
             onlyoffice_document_type=existing.onlyoffice_document_type,
             title=existing.title,
-            editor_url=_editor_embed_url(existing.binding_id, namespace),
+            editor_url=_editor_embed_url(existing.file_id, namespace),
         )
 
     resolved_catalog_id = await _resolve_catalog_for_create(
@@ -1786,22 +1777,20 @@ async def open_existing_file_as_document(
             created_by_user_id=ctx.user.user_id,
         )
     except IntegrityError:
-        existing = await container.document_binding_repository.get_by_file_for_company(
+        existing = await container.document_binding_repository.get_by_file_and_company(
             file_id,
             ctx.active_company.company_id,
-            namespace,
         )
         if existing is None:
             raise
         await _require_binding_catalog_access(container, existing, ctx.user.user_id)
         return OfficeDocumentCreateResponse(
-            binding_id=existing.binding_id,
             file_id=existing.file_id,
             catalog_id=existing.catalog_id,
             file_category=existing.file_category,
             onlyoffice_document_type=existing.onlyoffice_document_type,
             title=existing.title,
-            editor_url=_editor_embed_url(existing.binding_id, namespace),
+            editor_url=_editor_embed_url(existing.file_id, namespace),
         )
     try:
         await _index_binding_if_catalog_enabled(container, row)
@@ -1810,13 +1799,12 @@ async def open_existing_file_as_document(
     except ValueError as exc:
         raise _http_exception_from_catalog_rag_value_error(exc) from exc
     return OfficeDocumentCreateResponse(
-        binding_id=row.binding_id,
         file_id=row.file_id,
         catalog_id=row.catalog_id,
         file_category=row.file_category,
         onlyoffice_document_type=row.onlyoffice_document_type,
         title=row.title,
-        editor_url=_editor_embed_url(row.binding_id, namespace),
+        editor_url=_editor_embed_url(row.file_id, namespace),
     )
 
 
@@ -1897,28 +1885,27 @@ async def create_empty_document(
     except ValueError as exc:
         raise _http_exception_from_catalog_rag_value_error(exc) from exc
     return OfficeDocumentCreateResponse(
-        binding_id=row.binding_id,
         file_id=row.file_id,
         catalog_id=row.catalog_id,
         file_category=row.file_category,
         onlyoffice_document_type=row.onlyoffice_document_type,
         title=row.title,
-        editor_url=_editor_embed_url(row.binding_id, namespace),
+        editor_url=_editor_embed_url(row.file_id, namespace),
     )
 
 
 @router.post(
-    "/documents/{binding_id}/editor-session",
+    "/documents/{file_id}/editor-session",
     response_model=OfficeDocumentEditorSessionResponse,
 )
 async def document_editor_session(
-    binding_id: str,
+    file_id: str,
     container: ContainerDep,
 ) -> OfficeDocumentEditorSessionResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -1926,32 +1913,31 @@ async def document_editor_session(
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
     return OfficeDocumentEditorSessionResponse(
-        binding_id=row.binding_id,
         file_id=row.file_id,
         catalog_id=row.catalog_id,
         title=row.title,
         file_category=row.file_category,
         onlyoffice_document_type=row.onlyoffice_document_type,
         namespace=namespace,
-        editor_url=_editor_embed_url(row.binding_id, namespace),
+        editor_url=_editor_embed_url(row.file_id, namespace),
     )
 
 
 @router.post(
-    "/documents/{binding_id}/sync",
+    "/documents/{file_id}/sync",
     response_model=OfficeDocumentEditorSessionResponse,
 )
 async def sync_document_editor_state(
-    binding_id: str,
+    file_id: str,
     container: ContainerDep,
     body: OfficeDocumentSyncRequest | None = None,
 ) -> OfficeDocumentEditorSessionResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
     sync_options = body or OfficeDocumentSyncRequest()
-    async with _document_mutation_lock(container, binding_id):
-        row = await container.document_binding_repository.get_for_company(
-            binding_id,
+    async with _document_mutation_lock(container, file_id):
+        row = await container.document_binding_repository.get(
+            file_id,
             ctx.active_company.company_id,
             namespace,
         )
@@ -1967,32 +1953,30 @@ async def sync_document_editor_state(
             (meta.content_type or "application/octet-stream").split(";")[0].strip(),
         ):
             return OfficeDocumentEditorSessionResponse(
-                binding_id=row.binding_id,
                 file_id=row.file_id,
                 catalog_id=row.catalog_id,
                 title=row.title,
                 file_category=row.file_category,
                 onlyoffice_document_type=row.onlyoffice_document_type,
                 namespace=namespace,
-                editor_url=_editor_embed_url(row.binding_id, namespace),
+                editor_url=_editor_embed_url(row.file_id, namespace),
             )
 
-        document_key = _onlyoffice_document_key(row.binding_id, meta.checksum)
+        document_key = _onlyoffice_document_key(row.file_id, meta.checksum)
         if sync_options.settle_ms > 0:
             await asyncio.sleep(sync_options.settle_ms / 1000)
         force_code = await _force_save_open_editor_if_needed(
-            binding_id=row.binding_id,
+            file_id=row.file_id,
             document_key=document_key,
         )
         if sync_options.close and force_code == 4:
             await asyncio.sleep(1.5)
             force_code = await _force_save_open_editor_if_needed(
-                binding_id=row.binding_id,
+                file_id=row.file_id,
                 document_key=document_key,
             )
         logger.info(
-            "OnlyOffice sync command result binding_id=%s file_id=%s close=%s dirty=%s force_code=%s",
-            row.binding_id,
+            "OnlyOffice sync command result file_id=%s close=%s dirty=%s force_code=%s",
             row.file_id,
             sync_options.close,
             sync_options.dirty,
@@ -2007,41 +1991,39 @@ async def sync_document_editor_state(
         if force_code == 0:
             _ = await _wait_for_file_change_after_forcesave(
                 container=container,
-                binding_id=row.binding_id,
                 file_id=row.file_id,
                 previous_checksum=meta.checksum,
                 previous_file_size=meta.file_size,
             )
         if sync_options.close and force_code in (0, 4):
             await _drop_open_editor_sessions(
-                binding_id=row.binding_id,
+                file_id=row.file_id,
                 document_key=document_key,
             )
 
     return OfficeDocumentEditorSessionResponse(
-        binding_id=row.binding_id,
         file_id=row.file_id,
         catalog_id=row.catalog_id,
         title=row.title,
         file_category=row.file_category,
         onlyoffice_document_type=row.onlyoffice_document_type,
         namespace=namespace,
-        editor_url=_editor_embed_url(row.binding_id, namespace),
+        editor_url=_editor_embed_url(row.file_id, namespace),
     )
 
 
 async def _apply_document_bytes_mutation(
     *,
-    binding_id: str,
+    file_id: str,
     container: OfficeContainer,
     mutate: _DocumentBytesMutation,
     changed_count: int | None = None,
 ) -> OfficeDocumentMutationResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    async with _document_mutation_lock(container, binding_id):
-        row = await container.document_binding_repository.get_for_company(
-            binding_id,
+    async with _document_mutation_lock(container, file_id):
+        row = await container.document_binding_repository.get(
+            file_id,
             ctx.active_company.company_id,
             namespace,
         )
@@ -2059,15 +2041,14 @@ async def _apply_document_bytes_mutation(
             raise HTTPException(
                 status_code=422, detail="Серверные мутации недоступны для этого типа файла"
             )
-        document_key = _onlyoffice_document_key(row.binding_id, meta.checksum)
+        document_key = _onlyoffice_document_key(row.file_id, meta.checksum)
         force_code = await _force_save_open_editor_if_needed(
-            binding_id=row.binding_id,
+            file_id=row.file_id,
             document_key=document_key,
         )
         if force_code == 0:
             materialized = await _wait_for_file_change_after_forcesave(
                 container=container,
-                binding_id=row.binding_id,
                 file_id=row.file_id,
                 previous_checksum=meta.checksum,
                 previous_file_size=meta.file_size,
@@ -2076,8 +2057,7 @@ async def _apply_document_bytes_mutation(
             )
             if not materialized:
                 logger.info(
-                    "OnlyOffice forcesave did not change file before server mutation; continuing binding_id=%s file_id=%s",
-                    row.binding_id,
+                    "OnlyOffice forcesave did not change file before server mutation; continuing file_id=%s",
                     row.file_id,
                 )
             meta = await container.files_service.get_optional(row.file_id)
@@ -2085,7 +2065,7 @@ async def _apply_document_bytes_mutation(
                 raise HTTPException(status_code=404, detail="Файл не найден")
         if force_code in (0, 4):
             await _drop_open_editor_sessions(
-                binding_id=row.binding_id,
+                file_id=row.file_id,
                 document_key=document_key,
             )
 
@@ -2104,11 +2084,10 @@ async def _apply_document_bytes_mutation(
             new_bytes, changed = mutation_result, changed_count
         if changed == 0:
             return OfficeDocumentMutationResponse(
-                binding_id=row.binding_id,
                 file_id=row.file_id,
                 checksum=meta.checksum,
                 file_size=meta.file_size,
-                editor_url=_editor_embed_url(row.binding_id, namespace),
+                editor_url=_editor_embed_url(row.file_id, namespace),
                 changed_count=0,
             )
 
@@ -2128,26 +2107,25 @@ async def _apply_document_bytes_mutation(
         )
         _ = await container.files_service.save(updated_meta)
         return OfficeDocumentMutationResponse(
-            binding_id=row.binding_id,
             file_id=row.file_id,
             checksum=digest,
             file_size=len(new_bytes),
-            editor_url=_editor_embed_url(row.binding_id, namespace),
+            editor_url=_editor_embed_url(row.file_id, namespace),
             changed_count=changed,
         )
 
 
 @router.post(
-    "/documents/{binding_id}/mutations/replace-text",
+    "/documents/{file_id}/mutations/replace-text",
     response_model=OfficeDocumentMutationResponse,
 )
 async def replace_document_text(
-    binding_id: str,
+    file_id: str,
     body: OfficeDocumentReplaceTextRequest,
     container: ContainerDep,
 ) -> OfficeDocumentMutationResponse:
     return await _apply_document_bytes_mutation(
-        binding_id=binding_id,
+        file_id=file_id,
         container=container,
         mutate=lambda data, original_name: replace_text_in_document(
             data=data,
@@ -2160,16 +2138,16 @@ async def replace_document_text(
 
 
 @router.post(
-    "/documents/{binding_id}/mutations/append-text",
+    "/documents/{file_id}/mutations/append-text",
     response_model=OfficeDocumentMutationResponse,
 )
 async def append_document_text(
-    binding_id: str,
+    file_id: str,
     body: OfficeDocumentAppendTextRequest,
     container: ContainerDep,
 ) -> OfficeDocumentMutationResponse:
     return await _apply_document_bytes_mutation(
-        binding_id=binding_id,
+        file_id=file_id,
         container=container,
         mutate=lambda data, original_name: append_text_to_document(
             data=data,
@@ -2181,16 +2159,16 @@ async def append_document_text(
 
 
 @router.post(
-    "/documents/{binding_id}/mutations/update-cells",
+    "/documents/{file_id}/mutations/update-cells",
     response_model=OfficeDocumentMutationResponse,
 )
 async def update_document_cells(
-    binding_id: str,
+    file_id: str,
     body: OfficeSpreadsheetUpdateCellsRequest,
     container: ContainerDep,
 ) -> OfficeDocumentMutationResponse:
     return await _apply_document_bytes_mutation(
-        binding_id=binding_id,
+        file_id=file_id,
         container=container,
         mutate=lambda data, original_name: update_spreadsheet_cells(
             data=data,
@@ -2203,18 +2181,18 @@ async def update_document_cells(
 
 
 @router.patch(
-    "/documents/{binding_id}",
+    "/documents/{file_id}",
     response_model=OfficeDocumentRenameResponse,
 )
 async def rename_document(
-    binding_id: str,
+    file_id: str,
     body: OfficeDocumentRenameRequest,
     container: ContainerDep,
 ) -> OfficeDocumentRenameResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2222,7 +2200,7 @@ async def rename_document(
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
     updated = await container.document_binding_repository.update_title(
-        binding_id,
+        file_id,
         ctx.active_company.company_id,
         namespace,
         body.title.strip(),
@@ -2230,17 +2208,17 @@ async def rename_document(
     if updated is None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     return OfficeDocumentRenameResponse(
-        binding_id=updated.binding_id,
+        file_id=updated.file_id,
         title=updated.title,
     )
 
 
-@router.delete("/documents/{binding_id}", status_code=204)
-async def delete_document(binding_id: str, container: ContainerDep) -> Response:
+@router.delete("/documents/{file_id}", status_code=204)
+async def delete_document(file_id: str, container: ContainerDep) -> Response:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2256,7 +2234,7 @@ async def delete_document(binding_id: str, container: ContainerDep) -> Response:
     except ValueError as exc:
         raise _http_exception_from_catalog_rag_value_error(exc) from exc
     ok = await container.document_binding_repository.soft_delete(
-        binding_id,
+        file_id,
         ctx.active_company.company_id,
         namespace,
         ctx.user.user_id,
@@ -2265,7 +2243,7 @@ async def delete_document(binding_id: str, container: ContainerDep) -> Response:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await record_document_event(
         container,
-        binding_id=binding_id,
+        file_id=file_id,
         company_id=ctx.active_company.company_id,
         event_type="deleted",
         user_id=ctx.user.user_id,
@@ -2285,12 +2263,12 @@ async def list_deleted_documents(container: ContainerDep) -> OfficeDocumentListR
     return OfficeDocumentListResponse(items=items)
 
 
-@router.post("/documents/{binding_id}/restore", response_model=OfficeDocumentItem)
-async def restore_document(binding_id: str, container: ContainerDep) -> OfficeDocumentItem:
+@router.post("/documents/{file_id}/restore", response_model=OfficeDocumentItem)
+async def restore_document(file_id: str, container: ContainerDep) -> OfficeDocumentItem:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
     row = await container.document_binding_repository.restore(
-        binding_id,
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2299,7 +2277,7 @@ async def restore_document(binding_id: str, container: ContainerDep) -> OfficeDo
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
     await record_document_event(
         container,
-        binding_id=binding_id,
+        file_id=file_id,
         company_id=ctx.active_company.company_id,
         event_type="restored",
         user_id=ctx.user.user_id,
@@ -2313,12 +2291,12 @@ async def restore_document(binding_id: str, container: ContainerDep) -> OfficeDo
     return await binding_to_item(container, row)
 
 
-@router.delete("/documents/{binding_id}/permanent", status_code=204)
-async def permanent_delete_document(binding_id: str, container: ContainerDep) -> Response:
+@router.delete("/documents/{file_id}/permanent", status_code=204)
+async def permanent_delete_document(file_id: str, container: ContainerDep) -> Response:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2332,7 +2310,7 @@ async def permanent_delete_document(binding_id: str, container: ContainerDep) ->
     except ValueError as exc:
         raise _http_exception_from_catalog_rag_value_error(exc) from exc
     ok = await container.document_binding_repository.delete_binding(
-        binding_id,
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2341,16 +2319,16 @@ async def permanent_delete_document(binding_id: str, container: ContainerDep) ->
     return Response(status_code=204)
 
 
-@router.post("/documents/{binding_id}/move", response_model=OfficeDocumentItem)
+@router.post("/documents/{file_id}/move", response_model=OfficeDocumentItem)
 async def move_document(
-    binding_id: str,
+    file_id: str,
     body: OfficeDocumentMoveRequest,
     container: ContainerDep,
 ) -> OfficeDocumentItem:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2367,7 +2345,7 @@ async def move_document(
         raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
     source_catalog_id = row.catalog_id
     moved = await container.document_binding_repository.move_to_catalog(
-        binding_id,
+        file_id,
         ctx.active_company.company_id,
         namespace,
         body.catalog_id,
@@ -2376,7 +2354,7 @@ async def move_document(
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await record_document_event(
         container,
-        binding_id=binding_id,
+        file_id=file_id,
         company_id=ctx.active_company.company_id,
         event_type="moved",
         user_id=ctx.user.user_id,
@@ -2392,16 +2370,16 @@ async def move_document(
     return await binding_to_item(container, moved)
 
 
-@router.post("/documents/{binding_id}/copy", response_model=OfficeDocumentCreateResponse)
+@router.post("/documents/{file_id}/copy", response_model=OfficeDocumentCreateResponse)
 async def copy_document(
-    binding_id: str,
+    file_id: str,
     body: OfficeDocumentCopyRequest,
     container: ContainerDep,
 ) -> OfficeDocumentCreateResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2450,11 +2428,11 @@ async def copy_document(
     )
     await record_document_event(
         container,
-        binding_id=created.binding_id,
+        file_id=created.file_id,
         company_id=ctx.active_company.company_id,
         event_type="copied",
         user_id=ctx.user.user_id,
-        payload={"source_binding_id": binding_id},
+        payload={"source_file_id": file_id},
     )
     try:
         await _index_binding_if_catalog_enabled(container, created)
@@ -2463,7 +2441,6 @@ async def copy_document(
     except ValueError as exc:
         raise _http_exception_from_catalog_rag_value_error(exc) from exc
     return OfficeDocumentCreateResponse(
-        binding_id=created.binding_id,
         file_id=created.file_id,
         catalog_id=created.catalog_id,
         file_category=created.file_category,
@@ -2488,14 +2465,14 @@ async def search_documents(
     return OfficeDocumentSearchResponse(items=items)
 
 
-@router.get("/documents/{binding_id}/preview", response_model=OfficeDocumentPreviewResponse)
+@router.get("/documents/{file_id}/preview", response_model=OfficeDocumentPreviewResponse)
 async def document_preview(
-    binding_id: str, container: ContainerDep
+    file_id: str, container: ContainerDep
 ) -> OfficeDocumentPreviewResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2506,20 +2483,20 @@ async def document_preview(
     if meta is None:
         raise HTTPException(status_code=404, detail="Файл не найден")
     preview_url = await container.viewer_service.preview_for_binding(binding=row, file_record=meta)
-    return OfficeDocumentPreviewResponse(binding_id=row.binding_id, preview_url=preview_url)
+    return OfficeDocumentPreviewResponse(file_id=row.file_id, preview_url=preview_url)
 
 
-@router.post("/documents/{binding_id}/shares", response_model=OfficeDocumentShareItem)
+@router.post("/documents/{file_id}/shares", response_model=OfficeDocumentShareItem)
 async def create_document_share(
-    binding_id: str,
+    file_id: str,
     body: OfficeDocumentShareCreateRequest,
     container: ContainerDep,
     request: Request,
 ) -> OfficeDocumentShareItem:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2551,15 +2528,15 @@ async def create_document_share(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await record_document_event(
         container,
-        binding_id=binding_id,
+        file_id=file_id,
         company_id=ctx.active_company.company_id,
         event_type="shared",
         user_id=ctx.user.user_id,
-        payload={"binding_id": binding_id},
+        payload={"file_id": file_id},
     )
     return OfficeDocumentShareItem(
-        share_id=binding_id,
-        binding_id=binding_id,
+        share_id=file_id,
+        file_id=file_id,
         permission=permission,
         share_url=public_url,
         expires_at=None,
@@ -2567,28 +2544,28 @@ async def create_document_share(
     )
 
 
-@router.get("/documents/{binding_id}/shares", response_model=OfficeDocumentShareListResponse)
+@router.get("/documents/{file_id}/shares", response_model=OfficeDocumentShareListResponse)
 async def list_document_shares(
-    binding_id: str,
+    file_id: str,
     container: ContainerDep,
     request: Request,
 ) -> OfficeDocumentShareListResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
     if row is None or row.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
-    shares = await container.document_share_repository.list_for_binding(binding_id)
+    shares = await container.document_share_repository.list_for_file(file_id)
     base = str(request.base_url).rstrip("/")
     items = [
         OfficeDocumentShareItem(
             share_id=share.share_id,
-            binding_id=share.binding_id,
+            file_id=share.file_id,
             permission=share.permission,
             share_url=f"{base}/documents/api/v1/shares/<token>",
             expires_at=share.expires_at,
@@ -2609,14 +2586,14 @@ async def resolve_document_share(
         raise HTTPException(status_code=404, detail="Ссылка не найдена")
     if share.expires_at is not None and share.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=410, detail="Ссылка истекла")
-    row = await container.document_binding_repository.get_by_binding_and_company(
-        share.binding_id,
+    row = await container.document_binding_repository.get_by_file_and_company(
+        share.file_id,
         share.company_id,
     )
     if row is None or row.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Документ не найден")
     return OfficeDocumentShareResolveResponse(
-        binding_id=row.binding_id,
+        file_id=row.file_id,
         title=row.title,
         permission=share.permission,
         file_category=row.file_category,
@@ -2624,22 +2601,22 @@ async def resolve_document_share(
     )
 
 
-@router.get("/documents/{binding_id}/revisions", response_model=OfficeDocumentRevisionListResponse)
+@router.get("/documents/{file_id}/revisions", response_model=OfficeDocumentRevisionListResponse)
 async def list_document_revisions(
-    binding_id: str,
+    file_id: str,
     container: ContainerDep,
 ) -> OfficeDocumentRevisionListResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
     if row is None or row.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
-    revisions = await container.document_revision_repository.list_for_binding(binding_id)
+    revisions = await container.document_revision_repository.list_for_file(file_id)
     items = [
         OfficeDocumentRevisionItem(
             revision_id=revision.revision_id,
@@ -2653,15 +2630,15 @@ async def list_document_revisions(
     return OfficeDocumentRevisionListResponse(items=items)
 
 
-@router.post("/documents/{binding_id}/revisions", response_model=OfficeDocumentRevisionItem)
+@router.post("/documents/{file_id}/revisions", response_model=OfficeDocumentRevisionItem)
 async def create_document_revision(
-    binding_id: str,
+    file_id: str,
     container: ContainerDep,
 ) -> OfficeDocumentRevisionItem:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2669,13 +2646,13 @@ async def create_document_revision(
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
     revision = await container.document_revision_repository.create(
-        binding_id=binding_id,
-        file_id=row.file_id,
+        file_id=file_id,
+        revision_file_id=row.file_id,
         created_by_user_id=ctx.user.user_id,
     )
     await record_document_event(
         container,
-        binding_id=binding_id,
+        file_id=file_id,
         company_id=ctx.active_company.company_id,
         event_type="revision_created",
         user_id=ctx.user.user_id,
@@ -2690,22 +2667,22 @@ async def create_document_revision(
     )
 
 
-@router.get("/documents/{binding_id}/events", response_model=OfficeDocumentEventListResponse)
+@router.get("/documents/{file_id}/events", response_model=OfficeDocumentEventListResponse)
 async def list_document_events(
-    binding_id: str,
+    file_id: str,
     container: ContainerDep,
 ) -> OfficeDocumentEventListResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
-    events = await container.document_event_repository.list_for_binding(binding_id)
+    events = await container.document_event_repository.list_for_file(file_id)
     items = [
         OfficeDocumentEventItem(
             event_id=event.event_id,
@@ -2718,31 +2695,31 @@ async def list_document_events(
     return OfficeDocumentEventListResponse(items=items)
 
 
-@router.get("/documents/{binding_id}/metadata", response_model=OfficeDocumentMetadataResponse)
+@router.get("/documents/{file_id}/metadata", response_model=OfficeDocumentMetadataResponse)
 async def document_metadata(
-    binding_id: str, container: ContainerDep
+    file_id: str, container: ContainerDep
 ) -> OfficeDocumentMetadataResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
     if row is None or row.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
-    return OfficeDocumentMetadataResponse(binding_id=row.binding_id)
+    return OfficeDocumentMetadataResponse(file_id=row.file_id)
 
 
-@router.get("/documents/{binding_id}/ai-summary", response_model=OfficeDocumentAiSummaryResponse)
+@router.get("/documents/{file_id}/ai-summary", response_model=OfficeDocumentAiSummaryResponse)
 async def document_ai_summary(
-    binding_id: str, container: ContainerDep
+    file_id: str, container: ContainerDep
 ) -> OfficeDocumentAiSummaryResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2750,25 +2727,25 @@ async def document_ai_summary(
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
     return OfficeDocumentAiSummaryResponse(
-        binding_id=row.binding_id,
+        file_id=row.file_id,
         summary="",
         enabled=False,
     )
 
 
 @router.get(
-    "/documents/{binding_id}/editor-config",
+    "/documents/{file_id}/editor-config",
     response_model=OfficeEditorConfigResponse,
 )
 async def editor_config(
-    binding_id: str,
+    file_id: str,
     container: ContainerDep,
     request: Request,
 ) -> OfficeEditorConfigResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    row = await container.document_binding_repository.get_for_company(
-        binding_id,
+    row = await container.document_binding_repository.get(
+        file_id,
         ctx.active_company.company_id,
         namespace,
     )
@@ -2840,12 +2817,12 @@ async def public_catalog_items(
 
 
 @router.get(
-    "/public/catalog/{token}/bindings/{binding_id}/open",
+    "/public/catalog/{token}/files/{file_id}/open",
     response_model=OfficeEditorConfigResponse,
 )
 async def public_catalog_binding_open(
     token: str,
-    binding_id: str,
+    file_id: str,
     container: ContainerDep,
     request: Request,
 ) -> OfficeEditorConfigResponse:
@@ -2853,7 +2830,7 @@ async def public_catalog_binding_open(
         catalog_target = await container.office_access_service.resolve_public_token(token)
         binding = await container.office_access_service.resolve_public_catalog_binding_open(
             catalog_target,
-            binding_id,
+            file_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -2889,19 +2866,15 @@ async def office_download(
         raise HTTPException(status_code=401, detail="Недействительный токен скачивания") from e
     file_id = claims.file_id
     company_id = claims.company_id
-    binding_id = claims.binding_id
-    binding_kind = claims.binding_kind
-    if binding_kind == "document":
-        binding_row = await container.document_binding_repository.get_by_binding_and_company(
-            binding_id,
+    viewer_scope = claims.viewer_scope
+    if viewer_scope == "catalog":
+        binding_row = await container.document_binding_repository.get_by_file_and_company(
+            file_id,
             company_id,
         )
-        if binding_row is None or binding_row.file_id != file_id:
+        if binding_row is None:
             raise HTTPException(status_code=403, detail="Доступ запрещён")
-    elif binding_kind == "file":
-        if binding_id != file_viewer_binding_id(file_id):
-            raise HTTPException(status_code=403, detail="Доступ запрещён")
-    else:
+    elif viewer_scope != "file":
         raise HTTPException(status_code=403, detail="Доступ запрещён")
     meta = await container.files_service.get_optional(file_id)
     if meta is None:
@@ -2951,9 +2924,9 @@ async def onlyoffice_callback(
         ctx_cb = decode_callback_context_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as e:
         raise HTTPException(status_code=401, detail="Недействительный токен callback") from e
-    binding_id = ctx_cb.binding_id
+    file_id = ctx_cb.file_id
     company_id = ctx_cb.company_id
-    binding_kind = ctx_cb.binding_kind
+    viewer_scope = ctx_cb.viewer_scope
 
     try:
         raw_body = await request.body()
@@ -2991,8 +2964,8 @@ async def onlyoffice_callback(
     except ValueError:
         raise HTTPException(status_code=400, detail="Callback status must be an integer") from None
     logger.info(
-        "OnlyOffice callback received binding_id=%s company_id=%s namespace=%s status=%s key=%s",
-        binding_id,
+        "OnlyOffice callback received file_id=%s company_id=%s namespace=%s status=%s key=%s",
+        file_id,
         company_id,
         namespace,
         status_int,
@@ -3006,14 +2979,14 @@ async def onlyoffice_callback(
         redis_url = get_settings().database.redis_url
         claimed = await try_claim_onlyoffice_callback(
             redis_url,
-            binding_id,
+            file_id,
             status_int,
             url,
         )
         if not claimed:
             logger.info(
-                "OnlyOffice callback: дубликат, пропуск записи binding_id=%s status=%s",
-                binding_id,
+                "OnlyOffice callback: дубликат, пропуск записи file_id=%s status=%s",
+                file_id,
                 status_int,
             )
             return OnlyOfficeCallbackResponse(error=0)
@@ -3023,42 +2996,26 @@ async def onlyoffice_callback(
         notification_message = ""
         notification_action_url: str | None = None
         notification_data: JsonObject = {}
-        file_id: str
         document_binding: OfficeDocumentBinding | None = None
 
-        if binding_kind == "document":
-            document_binding = await container.document_binding_repository.get_for_company(
-                binding_id,
+        if viewer_scope == "catalog":
+            document_binding = await container.document_binding_repository.get_by_file_and_company(
+                file_id,
                 company_id,
-                namespace,
             )
             if document_binding is None:
                 logger.error(
-                    "OnlyOffice callback: привязка %s не найдена (company=%s ns=%s)",
-                    binding_id,
+                    "OnlyOffice callback: привязка %s не найдена (company=%s)",
+                    file_id,
                     company_id,
-                    namespace,
                 )
                 raise HTTPException(status_code=404, detail="Привязка не найдена")
-            file_id = document_binding.file_id
             notification_user_id = document_binding.created_by_user_id
             notification_message = document_binding.title
-            notification_action_url = f"/documents/edit/{binding_id}"
-            notification_data = {"binding_id": binding_id, "company_id": company_id}
-        elif binding_kind == "file":
-            raw_file_id = ctx_cb.file_id
-            if raw_file_id is None or raw_file_id == "":
-                raise HTTPException(status_code=400, detail="В callback-токене нет file_id")
-            file_id = raw_file_id
-            if binding_id != file_viewer_binding_id(file_id):
-                logger.error(
-                    "OnlyOffice callback: некорректный binding_id для file viewer binding_id=%s file_id=%s",
-                    binding_id,
-                    file_id,
-                )
-                raise HTTPException(status_code=403, detail="Доступ запрещён")
-        else:
-            raise HTTPException(status_code=400, detail="Неверный тип привязки OnlyOffice")
+            notification_action_url = f"/documents/edit/{file_id}"
+            notification_data = {"file_id": file_id, "company_id": company_id}
+        elif viewer_scope != "file":
+            raise HTTPException(status_code=400, detail="Неверный viewer_scope OnlyOffice")
 
         meta = await container.files_service.get_optional(file_id)
         if meta is None:
@@ -3101,9 +3058,8 @@ async def onlyoffice_callback(
             except ValueError as exc:
                 raise _http_exception_from_catalog_rag_value_error(exc) from exc
         logger.info(
-            "OnlyOffice callback saved binding_kind=%s binding_id=%s file_id=%s status=%s bytes=%s old_size=%s old_checksum=%s new_checksum=%s",
-            binding_kind,
-            binding_id,
+            "OnlyOffice callback saved viewer_scope=%s file_id=%s status=%s bytes=%s old_size=%s old_checksum=%s new_checksum=%s",
+            viewer_scope,
             file_id,
             status_int,
             len(new_bytes),

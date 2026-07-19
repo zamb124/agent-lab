@@ -42,6 +42,7 @@ os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
         "install one from the catalog.\n\n"
         "**Result:** the MCP server is installed, synced, and ready for agents."
     ),
+    timeout_seconds=120,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -111,14 +112,45 @@ async def test_flows_manage_mcp_servers(
         """,
         unique_id,
     )
-    await flows_click_platform_button(modal, "Install", "Установить")
+    catalog_card = modal.locator(".mcp-card").filter(has_text=server_id).first
+    await expect(catalog_card).to_be_visible(timeout=30_000)
+    await flows_click_platform_button(catalog_card, "Install", "Установить")
     await expect(
-        modal.locator(".mcp-chip").filter(
+        catalog_card.locator(".mcp-chip").filter(
             has_text=re.compile(r"Installed|Установлен")
         ).first
-    ).to_be_visible(
-        timeout=5_000,
+    ).to_be_visible(timeout=30_000)
+    # Общий search filter модалки иначе оставляет Installed-вкладку пустой.
+    await search.evaluate(
+        """
+        (el) => {
+            el.value = '';
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+            el.dispatchEvent(new CustomEvent('change', {
+                detail: { value: '' },
+                bubbles: true,
+                composed: true,
+            }));
+        }
+        """
     )
+    await flows_click_platform_button(modal, "Installed", "Подключённые")
+    # Поиск по server_id: empty_init_pending скрывает карточки без platform defaults.
+    await search.evaluate(
+        """
+        (el, value) => {
+            el.value = value;
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+            el.dispatchEvent(new CustomEvent('change', {
+                detail: { value },
+                bubbles: true,
+                composed: true,
+            }));
+        }
+        """,
+        server_id,
+    )
+    await expect(modal.get_by_text(server_id, exact=True)).to_be_visible(timeout=30_000)
     await flows_api_sync_mcp_server(flows_ui.origin, auth_token_system, server_id)
     await scenario.step(
         "Установите сервер из каталога",
@@ -135,10 +167,7 @@ async def test_flows_manage_mcp_servers(
         ),
     )
 
-    await flows_click_platform_button(modal, "Installed", "Подключ")
-    await expect(modal.locator(".mcp-card, .mcp-row, platform-picker-card").first).to_be_visible(
-        timeout=60_000
-    )
+    await expect(modal.get_by_text(server_id, exact=True)).to_be_visible(timeout=30_000)
     await scenario.step(
         "Проверьте подключённый сервер",
         page,

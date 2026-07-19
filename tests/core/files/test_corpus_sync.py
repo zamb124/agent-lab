@@ -90,7 +90,11 @@ def test_example_docs_github_tree_reachable() -> None:
     remote_count = sum(
         1 for item in tree if item["type"] == "blob" and item["path"].startswith("example-docs/")
     )
-    local_count = sum(1 for path in CORPUS_DIR.rglob("*") if path.is_file())
+    local_count = sum(
+        1
+        for path in CORPUS_DIR.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+    )
     assert remote_count == local_count, (
         f"Локальный корпус ({local_count}) != remote tree ({remote_count}); "
         "запустите make sync-example-docs"

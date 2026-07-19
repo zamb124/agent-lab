@@ -191,13 +191,13 @@ class TestA2AClientWithRealAgent:
         payload = {
             "jsonrpc": "2.0",
             "id": task_id,
-            "method": "tasks/send",
+            "method": "SendMessage",
             "params": {
                 "id": task_id,
                 "sessionId": "test-session",
                 "message": {
-                    "role": "user",
-                    "parts": [{"type": "text", "text": "Hello, agent!"}],
+                    "role": "ROLE_USER",
+                    "parts": [{"text": "Hello, agent!"}],
                 },
                 "skillId": "default",
             },
@@ -208,12 +208,13 @@ class TestA2AClientWithRealAgent:
 
         result = response.json()
         assert "result" in result
-        assert result["result"]["status"]["state"] == "completed"
+        assert result["result"]["status"]["state"] == "TASK_STATE_COMPLETED"
 
         response_text = ""
         for part in result["result"]["status"]["message"]["parts"]:
-            if part["type"] == "text":
-                response_text += part["text"]
+            text = part.get("text")
+            if isinstance(text, str):
+                response_text += text
 
         assert "Echo: Hello, agent!" in response_text
 

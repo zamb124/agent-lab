@@ -289,9 +289,8 @@ describe('flows-chat-message shared surface', () => {
                     name: 'Offer.docx',
                     mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                     document: {
-                        binding_id: 'binding-docx-2',
                         file_id: 'file-docx-2',
-                        editor_url: '/documents/embed/edit/binding-docx-2?namespace=system',
+                        editor_url: '/documents/embed/edit/file-docx-2?namespace=system',
                     },
                 }],
             },

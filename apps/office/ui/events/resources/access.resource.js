@@ -65,14 +65,14 @@ export const catalogAccessRotateLinkOp = createAsyncOp({
 export const documentAccessGetOp = createAsyncOp({
     name: 'office/document_access_get',
     silent: true,
-    restMirror: { method: 'GET', path: '/documents/api/v1/documents/:binding_id/access' },
+    restMirror: { method: 'GET', path: '/documents/api/v1/documents/:file_id/access' },
     request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.bindingId !== 'string' || payload.bindingId.length === 0) {
-            throw new Error('office/document_access_get: payload.bindingId required');
+        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
+            throw new Error('office/document_access_get: payload.fileId required');
         }
         return httpRequest({
             method: 'GET',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.bindingId)}/access`,
+            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/access`,
             headers: nsHeader(ctx),
         });
     },
@@ -82,14 +82,14 @@ export const documentAccessPatchOp = createAsyncOp({
     name: 'office/document_access_update',
     successToastKey: 'documents:toast.access_updated',
     errorToastKey: 'documents:toast.access_update_failed',
-    restMirror: { method: 'PATCH', path: '/documents/api/v1/documents/:binding_id/access' },
+    restMirror: { method: 'PATCH', path: '/documents/api/v1/documents/:file_id/access' },
     request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.bindingId !== 'string' || payload.bindingId.length === 0) {
-            throw new Error('office/document_access_update: payload.bindingId required');
+        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
+            throw new Error('office/document_access_update: payload.fileId required');
         }
         return httpRequest({
             method: 'PATCH',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.bindingId)}/access`,
+            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/access`,
             headers: nsHeader(ctx),
             body: {
                 link_enabled: payload.linkEnabled,
@@ -104,14 +104,14 @@ export const documentAccessRotateLinkOp = createAsyncOp({
     name: 'office/document_access_rotate_link',
     successToastKey: 'documents:toast.access_link_rotated',
     errorToastKey: 'documents:toast.access_link_rotate_failed',
-    restMirror: { method: 'POST', path: '/documents/api/v1/documents/:binding_id/access/link/rotate' },
+    restMirror: { method: 'POST', path: '/documents/api/v1/documents/:file_id/access/link/rotate' },
     request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.bindingId !== 'string' || payload.bindingId.length === 0) {
-            throw new Error('office/document_access_rotate_link: payload.bindingId required');
+        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
+            throw new Error('office/document_access_rotate_link: payload.fileId required');
         }
         return httpRequest({
             method: 'POST',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.bindingId)}/access/link/rotate`,
+            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/access/link/rotate`,
             headers: nsHeader(ctx),
         });
     },
@@ -152,18 +152,18 @@ export const publicCatalogBindingOpenOp = createAsyncOp({
     silent: true,
     restMirror: {
         method: 'GET',
-        path: '/documents/api/v1/public/catalog/:token/bindings/:binding_id/open',
+        path: '/documents/api/v1/public/catalog/:token/files/:file_id/open',
     },
     request: ({ payload }) => {
         if (!payload || typeof payload.token !== 'string' || payload.token.length === 0) {
             throw new Error('office/public_catalog_binding_open: payload.token required');
         }
-        if (typeof payload.bindingId !== 'string' || payload.bindingId.length === 0) {
-            throw new Error('office/public_catalog_binding_open: payload.bindingId required');
+        if (typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
+            throw new Error('office/public_catalog_binding_open: payload.fileId required');
         }
         return httpRequest({
             method: 'GET',
-            url: `/documents/api/v1/public/catalog/${encodeURIComponent(payload.token)}/bindings/${encodeURIComponent(payload.bindingId)}/open`,
+            url: `/documents/api/v1/public/catalog/${encodeURIComponent(payload.token)}/files/${encodeURIComponent(payload.fileId)}/open`,
         });
     },
 });

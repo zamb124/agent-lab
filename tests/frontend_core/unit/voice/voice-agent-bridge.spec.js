@@ -3,12 +3,12 @@
  *
  * Проверяется:
  *  - на финальный `transcript{final:true}` от VoiceMediaSession bridge
- *    отправляет `message/stream` в A2A через consumeA2aStream (chat/runtime/a2a-stream.js);
+ *    отправляет `SendStreamingMessage` в A2A через consumeA2aStream (chat/runtime/a2a-stream.js);
  *  - speakable `TaskArtifactUpdateEvent` → `feedStreamTtsFromA2aResult` + registry → `mediaSession.speak`;
- *  - финальный `status-update`: текст в `status.message` при `input-required` / `metadata.platform_interrupt`
+ *  - финальный `statusUpdate`: текст в `status.message` при `TASK_STATE_INPUT_REQUIRED` / `metadata.platform_interrupt`
  *    → `speak` (interrupt ask_user и т.п.), затем `endUtterance`; иначе только `endUtterance`;
  *  - `vad{state:"started"}` с ≥ ~300 мс непрерывной речи (до `ended`) во время
- *    активного A2A fetch и/или TTS → `mediaSession.stopPlayback()`, `abort`, `tasks/cancel`;
+ *    активного A2A fetch и/или TTS → `mediaSession.stopPlayback()`, `abort`, `CancelTask`;
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -97,11 +97,11 @@ describe('VoiceAgentBridge: construction', () => {
 });
 
 describe('VoiceAgentBridge: userStopActiveTurn', () => {
-    it('вызывает stopPlayback и прерывает A2A fetch, шлёт tasks/cancel', async () => {
+    it('вызывает stopPlayback и прерывает A2A fetch, шлёт CancelTask', async () => {
         let signal = null;
         streamMock.mockImplementation(async (opts, onEvent) => {
             signal = opts.signal;
-            onEvent({ result: { kind: 'task', id: 'tid-user-stop' } });
+            onEvent({ result: { task: { id: 'tid-user-stop' } } });
             await new Promise((_res, rej) => {
                 opts.signal.addEventListener('abort', () =>
                     rej(new DOMException('aborted', 'AbortError'))
@@ -149,8 +149,9 @@ describe('VoiceAgentBridge: voice → flows', () => {
         expect(streamMock).toHaveBeenCalledTimes(1);
         const [opts] = streamMock.mock.calls[0];
         expect(opts.url).toBe('https://h/flows/api/v1/flow-1');
-        expect(opts.body.method).toBe('message/stream');
-        expect(opts.body.params.message.parts[0]).toEqual({ kind: 'text', text: 'Привет агент.' });
+        expect(opts.body.method).toBe('SendStreamingMessage');
+        expect(opts.body.params.message.parts[0]).toEqual({ text: 'Привет агент.' });
+        expect(opts.body.params.message.role).toBe('ROLE_USER');
         expect(opts.signal).toBeInstanceOf(AbortSignal);
     });
 
@@ -192,14 +193,13 @@ describe('VoiceAgentBridge: voice → flows', () => {
         expect(streamMock).toHaveBeenCalledTimes(1);
         const [opts] = streamMock.mock.calls[0];
         expect(opts.body.params.message.parts[0]).toEqual({
-            kind: 'text',
             text: 'сказано до выключения микрофона',
         });
     });
 });
 
 describe('VoiceAgentBridge: flows → voice', () => {
-    it('speakable artifact-update → mediaSession.speak', async () => {
+    it('speakable artifactUpdate → mediaSession.speak', async () => {
         /** @type {(ev:any)=>void} */
         let capturedOnEvent = () => {};
         streamMock.mockImplementation(async (_opts, onEvent) => {
@@ -219,20 +219,22 @@ describe('VoiceAgentBridge: flows → voice', () => {
 
         relayVoiceStreamFrame(capturedOnEvent, {
             result: {
-                kind: 'task',
-                id: 'task-1',
-                contextId: 'ctx-1',
+                task: {
+                    id: 'task-1',
+                    contextId: 'ctx-1',
+                },
             },
         });
         relayVoiceStreamFrame(capturedOnEvent, {
             result: {
-                kind: 'artifact-update',
-                taskId: 'task-1',
-                artifact: {
-                    name: 'response',
-                    parts: [{ root: { kind: 'text', text: 'Ответ агента.' } }],
+                artifactUpdate: {
+                    taskId: 'task-1',
+                    artifact: {
+                        name: 'response',
+                        parts: [{ text: 'Ответ агента.' }],
+                    },
+                    lastChunk: false,
                 },
-                lastChunk: false,
             },
         });
 
@@ -241,7 +243,7 @@ describe('VoiceAgentBridge: flows → voice', () => {
         ]);
     });
 
-    it('artifact-update reasoning — не вызывает speak', async () => {
+    it('artifactUpdate reasoning — не вызывает speak', async () => {
         /** @type {(ev:any)=>void} */
         let capturedOnEvent = () => {};
         streamMock.mockImplementation(async (_opts, onEvent) => {
@@ -261,13 +263,14 @@ describe('VoiceAgentBridge: flows → voice', () => {
 
         relayVoiceStreamFrame(capturedOnEvent, {
             result: {
-                kind: 'artifact-update',
-                taskId: 'task-1',
-                artifact: {
-                    name: 'reasoning',
-                    parts: [{ root: { kind: 'text', text: 'Шаг размышления.' } }],
+                artifactUpdate: {
+                    taskId: 'task-1',
+                    artifact: {
+                        name: 'reasoning',
+                        parts: [{ text: 'Шаг размышления.' }],
+                    },
+                    lastChunk: false,
                 },
-                lastChunk: false,
             },
         });
 
@@ -293,20 +296,21 @@ describe('VoiceAgentBridge: flows → voice', () => {
 
         relayVoiceStreamFrame(capturedOnEvent, {
             result: {
-                kind: 'artifact-update',
-                taskId: 'task-1',
-                artifact: {
-                    name: 'response',
-                    parts: [{ root: { kind: 'text', text: 'Ответ агента.' } }],
+                artifactUpdate: {
+                    taskId: 'task-1',
+                    artifact: {
+                        name: 'response',
+                        parts: [{ text: 'Ответ агента.' }],
+                    },
+                    lastChunk: false,
                 },
-                lastChunk: false,
             },
         });
 
         expect(media.spoken).toEqual([]);
     });
 
-    it('status-update final:true → mediaSession.endUtterance', async () => {
+    it('statusUpdate completed → mediaSession.endUtterance', async () => {
         let capturedOnEvent = () => {};
         streamMock.mockImplementation(async (_opts, onEvent) => {
             capturedOnEvent = onEvent;
@@ -324,13 +328,18 @@ describe('VoiceAgentBridge: flows → voice', () => {
         await Promise.resolve();
 
         relayVoiceStreamFrame(capturedOnEvent, {
-            result: { kind: 'status-update', taskId: 'task-1', final: true },
+            result: {
+                statusUpdate: {
+                    taskId: 'task-1',
+                    status: { state: 'TASK_STATE_COMPLETED' },
+                },
+            },
         });
 
         expect(media.endUtteranceCount).toBe(1);
     });
 
-    it('status-update final:input-required с текстом в status.message → speak + endUtterance', async () => {
+    it('statusUpdate INPUT_REQUIRED с текстом в status.message → speak + endUtterance', async () => {
         let capturedOnEvent = () => {};
         streamMock.mockImplementation(async (_opts, onEvent) => {
             capturedOnEvent = onEvent;
@@ -349,20 +358,20 @@ describe('VoiceAgentBridge: flows → voice', () => {
 
         relayVoiceStreamFrame(capturedOnEvent, {
             result: {
-                kind: 'status-update',
-                taskId: 'task-1',
-                final: true,
-                metadata: {
-                    platform_interrupt: {
-                        body: { kind: 'user_message', question: 'Я вижу…' },
-                        system: {},
+                statusUpdate: {
+                    taskId: 'task-1',
+                    metadata: {
+                        platform_interrupt: {
+                            body: { kind: 'user_message', question: 'Я вижу…' },
+                            system: {},
+                        },
                     },
-                },
-                status: {
-                    state: 'input-required',
-                    message: {
-                        role: 'agent',
-                        parts: [{ kind: 'text', text: 'Я вижу, ваше сообщение обрезалось. Чем помочь?' }],
+                    status: {
+                        state: 'TASK_STATE_INPUT_REQUIRED',
+                        message: {
+                            role: 'ROLE_AGENT',
+                            parts: [{ text: 'Я вижу, ваше сообщение обрезалось. Чем помочь?' }],
+                        },
                     },
                 },
             },
@@ -374,7 +383,7 @@ describe('VoiceAgentBridge: flows → voice', () => {
         expect(media.endUtteranceCount).toBe(1);
     });
 
-    it('interrupt status-update при getTtsOutputEnabled:false — без speak, только endUtterance', async () => {
+    it('interrupt statusUpdate при getTtsOutputEnabled:false — без speak, только endUtterance', async () => {
         let capturedOnEvent = () => {};
         streamMock.mockImplementation(async (_opts, onEvent) => {
             capturedOnEvent = onEvent;
@@ -393,13 +402,13 @@ describe('VoiceAgentBridge: flows → voice', () => {
 
         relayVoiceStreamFrame(capturedOnEvent, {
             result: {
-                kind: 'status-update',
-                taskId: 'task-1',
-                final: true,
-                status: {
-                    state: 'input-required',
-                    message: {
-                        parts: [{ kind: 'text', text: 'Вопрос пользователю.' }],
+                statusUpdate: {
+                    taskId: 'task-1',
+                    status: {
+                        state: 'TASK_STATE_INPUT_REQUIRED',
+                        message: {
+                            parts: [{ text: 'Вопрос пользователю.' }],
+                        },
                     },
                 },
             },
@@ -428,11 +437,12 @@ describe('VoiceAgentBridge: flows → voice', () => {
 
         relayVoiceStreamFrame(capturedOnEvent, {
             result: {
-                kind: 'artifact-update',
-                taskId: 'task-1',
-                artifact: {
-                    name: 'thinking',
-                    parts: [{ root: { kind: 'text', text: 'скрытый ход мысли' } }],
+                artifactUpdate: {
+                    taskId: 'task-1',
+                    artifact: {
+                        name: 'thinking',
+                        parts: [{ text: 'скрытый ход мысли' }],
+                    },
                 },
             },
         });
@@ -449,7 +459,7 @@ describe('VoiceAgentBridge: barge-in', () => {
         vi.useRealTimers();
     });
 
-    it('vad started во время TTS после порога речи → stopPlayback + abort + tasks/cancel', async () => {
+    it('vad started во время TTS после порога речи → stopPlayback + abort + CancelTask', async () => {
         let abortedSignal = null;
         streamMock.mockImplementation(async (opts) => {
             abortedSignal = opts.signal;
@@ -486,7 +496,7 @@ describe('VoiceAgentBridge: barge-in', () => {
         expect(url).toBe('https://h/flows/api/v1/flow-1');
         expect(init.method).toBe('POST');
         const body = JSON.parse(init.body);
-        expect(body.method).toBe('tasks/cancel');
+        expect(body.method).toBe('CancelTask');
         expect(body.params).toEqual({ id: 'task-active-1' });
     });
 

@@ -59,7 +59,7 @@ const CASES = [
     branch: "default",
     text: "привет, проверь графовый маршрут",
     mock: {},
-    expectedStates: ["completed"],
+    expectedStates: ["TASK_STATE_COMPLETED"],
   },
   {
     flowId: "example_graph",
@@ -70,7 +70,7 @@ const CASES = [
         order_processor: [{ type: "text", content: "Заказ 1042 принят в обработку" }],
       },
     },
-    expectedStates: ["completed"],
+    expectedStates: ["TASK_STATE_COMPLETED"],
   },
   {
     flowId: "example_graph",
@@ -81,7 +81,7 @@ const CASES = [
         complaint_processor: [{ type: "text", content: "Жалоба зарегистрирована" }],
       },
     },
-    expectedStates: ["completed"],
+    expectedStates: ["TASK_STATE_COMPLETED"],
   },
   {
     flowId: "example_react",
@@ -92,7 +92,7 @@ const CASES = [
         main: [{ type: "text", content: "Привет! Stress response ready." }],
       },
     },
-    expectedStates: ["completed"],
+    expectedStates: ["TASK_STATE_COMPLETED"],
   },
   {
     flowId: "example_react",
@@ -103,7 +103,7 @@ const CASES = [
         direct_subflow: [{ type: "text", content: "Subflow stress response ready." }],
       },
     },
-    expectedStates: ["completed"],
+    expectedStates: ["TASK_STATE_COMPLETED"],
   },
 ];
 
@@ -111,6 +111,7 @@ function headers() {
   const result = {
     "Content-Type": "application/json",
     Accept: "application/json",
+    "A2A-Version": "1.0",
     "X-Company-Id": __ENV.STRESS_COMPANY_ID || "system",
   };
   if (TOKEN) result.Authorization = `Bearer ${TOKEN}`;
@@ -127,7 +128,6 @@ function caseForIteration() {
 
 function metadata(testCase) {
   const data = {
-    execution_mode: "async",
     branch: testCase.branch,
     variables: {
       company_name: "Stress Lab",
@@ -165,28 +165,30 @@ function rpc(flowId, method, params, tags) {
 function submitTask(testCase, taskId, contextId) {
   const res = rpc(
     testCase.flowId,
-    "message/send",
+    "SendMessage",
     {
       message: {
         messageId: uuid("msg"),
         taskId,
         contextId,
-        role: "user",
-        parts: [{ kind: "text", text: testCase.text }],
+        role: "ROLE_USER",
+        parts: [{ text: testCase.text }],
       },
+      configuration: { returnImmediately: true },
       metadata: metadata(testCase),
     },
     {
-      endpoint: "a2a.message_send",
+      endpoint: "a2a.SendMessage",
       flow_id: testCase.flowId,
       branch: testCase.branch,
     },
   );
   submitMs.add(res.timings.duration, { flow_id: testCase.flowId, branch: testCase.branch });
   const ok = check(res, {
-    "message/send HTTP 200": (r) => r.status === 200,
-    "message/send JSON-RPC result": (r) => Boolean(r.json("result.id")),
-    "message/send async state": (r) => ["submitted", "working"].includes(r.json("result.status.state")),
+    "SendMessage HTTP 200": (r) => r.status === 200,
+    "SendMessage JSON-RPC result": (r) => Boolean(r.json("result.id")),
+    "SendMessage async state": (r) =>
+      ["TASK_STATE_SUBMITTED", "TASK_STATE_WORKING"].includes(r.json("result.status.state")),
   });
   if (!ok) submitFailed.add(1, { flow_id: testCase.flowId, branch: testCase.branch });
   return res;
@@ -196,10 +198,10 @@ function getTask(testCase, taskId, started) {
   for (let i = 0; i < MAX_POLLS; i += 1) {
     const res = rpc(
       testCase.flowId,
-      "tasks/get",
+      "GetTask",
       { id: taskId },
       {
-        endpoint: "a2a.tasks_get",
+        endpoint: "a2a.GetTask",
         flow_id: testCase.flowId,
         branch: testCase.branch,
       },
@@ -207,7 +209,15 @@ function getTask(testCase, taskId, started) {
     pollMs.add(res.timings.duration, { flow_id: testCase.flowId, branch: testCase.branch });
     if (res.status === 200 && res.json("result.status.state")) {
       const state = res.json("result.status.state");
-      if (["completed", "input-required", "failed", "canceled", "rejected"].includes(state)) {
+      if (
+        [
+          "TASK_STATE_COMPLETED",
+          "TASK_STATE_INPUT_REQUIRED",
+          "TASK_STATE_FAILED",
+          "TASK_STATE_CANCELED",
+          "TASK_STATE_REJECTED",
+        ].includes(state)
+      ) {
         taskTotalMs.add(Date.now() - started, { flow_id: testCase.flowId, branch: testCase.branch, final_state: state });
         return { state, res };
       }

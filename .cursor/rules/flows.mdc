@@ -14,25 +14,25 @@ alwaysApply: false
 
 Транспорт чата — JSON-RPC поверх Server-Sent Events. **Единственный** транспорт чата для всех клиентов (UI, CLI, SDK, embed).
 
-- Запрос: `POST /flows/api/v1/{flow_id}` body `{jsonrpc:"2.0", id, method:"message/stream", params:{message, metadata?}}`, `Accept: text/event-stream`. Источник — `_handle_streaming` в `apps/flows/src/api/a2a.py`.
-- Cancel: `POST /flows/api/v1/{flow_id}` body `{method:"tasks/cancel", params:{id: task_id}}`.
-- Ответ: `text/event-stream`, кадры `data: {jsonrpc, id, result: <a2a_event>}\n\n`. Терминальные `state`: `completed`/`failed`/`input-required`.
+- Запрос: `POST /flows/api/v1/{flow_id}` body `{jsonrpc:"2.0", id, method:"SendStreamingMessage", params:{message, metadata?}}`, header `A2A-Version: 1.0`, `Accept: text/event-stream`. Источник — `_handle_streaming` в `apps/flows/src/api/a2a.py`. Канон wire → **`a2a.mdc`**.
+- Cancel: `POST /flows/api/v1/{flow_id}` body `{method:"CancelTask", params:{id: task_id}}`.
+- Ответ: `text/event-stream`, кадры `data: {jsonrpc, id, result: {statusUpdate|artifactUpdate|task|message}}\n\n`. Terminal/interrupted wire states: `TASK_STATE_COMPLETED` / `FAILED` / `CANCELED` / `REJECTED` / `INPUT_REQUIRED` / `AUTH_REQUIRED` (поля `final` нет).
 
 Клиент — единый `<platform-chat>` (`core/lib/chat`, → **`flows_chat.mdc`**): `ChatController` читает SSE-стрим через `consumeA2aStream` и маппит каждый A2A-фрейм в verb pure reducer'а `applyChatRuntimeEvent` (`chat-state.js`, `messagesByContextId[ctx]`):
 
 | Verb reducer'а | Источник в A2A-стриме |
 |---|---|
-| `task_started` | первый `Task` |
-| `content_chunk` | `TaskArtifactUpdateEvent` text-part |
-| `reasoning_chunk` | `TaskArtifactUpdateEvent` artifact `name='reasoning'` |
+| `task_started` | первый `task` |
+| `content_chunk` | `artifactUpdate` text-part |
+| `reasoning_chunk` | `artifactUpdate` artifact `name='reasoning'` |
 | `operator_reply` | artifact `name='operator_reply'` |
 | `operator_files` | artifact `name='operator_files'` |
 | `tool_calls` | `Message.metadata.tool_calls` |
 | `tool_result` | `Message.metadata.tool_result` |
-| `breakpoint` | `TaskStatusUpdateEvent state=input-required` + `metadata.breakpoint` |
-| `input_required` | `TaskStatusUpdateEvent state=input-required` без breakpoint |
-| `completed` | `TaskStatusUpdateEvent state=completed/finished, final=true` |
-| `failed` | `TaskStatusUpdateEvent state=failed/error` или ошибка стрима |
+| `breakpoint` | `statusUpdate` `TASK_STATE_INPUT_REQUIRED` + `metadata.breakpoint` |
+| `input_required` | `statusUpdate` `TASK_STATE_INPUT_REQUIRED` без breakpoint |
+| `completed` | `statusUpdate` `TASK_STATE_COMPLETED` или конец SSE |
+| `failed` | `statusUpdate` `TASK_STATE_FAILED` или ошибка стрима |
 
 ## HITL и задачи оператора
 

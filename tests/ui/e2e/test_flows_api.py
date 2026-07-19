@@ -180,7 +180,7 @@ async def test_flows_api_first_request(
         "или в фоновом режиме.\n\n"
         "**Какие проблемы решает:** неочевидно, когда нужен Sync вместо Streaming и как "
         "дождаться результата длинной задачи.\n\n"
-        "**Результат:** вы проверите оба режима message/send в одной модалке API Console."
+        "**Результат:** вы проверите оба режима SendMessage в одной модалке API Console."
     ),
     title_en="Sync and async calls through API Console",
     description_en=(
@@ -188,7 +188,7 @@ async def test_flows_api_first_request(
         "the background.\n\n"
         "**Problems it solves:** it is unclear when Sync is better than Streaming and how to "
         "wait for a long-running task result.\n\n"
-        "**Result:** you will verify both message/send modes in the same API Console modal."
+        "**Result:** you will verify both SendMessage modes in the same API Console modal."
     ),
 )
 @pytest.mark.asyncio
@@ -254,6 +254,7 @@ async def test_flows_api_sync_async(
         details_en=SYNC_DETAILS_EN,
     )
 
+    await expect(modal).to_be_visible(timeout=15_000)
     await flows_api_console_click_mode(modal, r"Async")
     await expect(modal.get_by_text(re.compile(r"Async|Асинх", re.I)).first).to_be_visible(
         timeout=15_000
@@ -272,6 +273,10 @@ async def test_flows_api_sync_async(
             "reply with a separate status poll."
         ),
     )
+    if not await modal.is_visible():
+        modal = await flows_open_api_console_modal(page, flows_ui, flow_id)
+        await flows_api_console_click_nav(modal, r"Запуск|Run")
+        await flows_api_console_click_mode(modal, r"Async")
     await flows_api_console_run_and_wait(modal)
     polls_tab = modal.locator(".response-tabs button").filter(
         has_text=re.compile(r"Async опросы|Async polls")

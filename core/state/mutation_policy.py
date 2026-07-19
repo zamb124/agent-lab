@@ -37,6 +37,7 @@ FROZEN_STATE_FIELDS: frozenset[str] = frozenset(
         "llm_context_memory_cursor",
         "reasoning_history",
         "pending_reasoning",
+        "agent_plan",
         "breakpoints",
         "breakpoint_hit",
         "breakpoint_state",
@@ -60,6 +61,7 @@ FIELDS_COPY_FROM_USER_RETURNED_STATE: frozenset[str] = frozenset(
 USER_CODE_OVERRIDABLE_FROZEN_FIELDS: frozenset[str] = FIELDS_COPY_FROM_USER_RETURNED_STATE | {
     "reasoning_history",
     "pending_reasoning",
+    "agent_plan",
 }
 
 FIELDS_COPY_FROM_RUNTIME_NODE_STATE: frozenset[str] = USER_CODE_OVERRIDABLE_FROZEN_FIELDS | {

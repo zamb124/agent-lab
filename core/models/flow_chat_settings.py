@@ -65,7 +65,7 @@ class FlowChatSettings(StrictBaseModel):
     )
     allow_cancel: bool = Field(
         default=True,
-        description="Разрешить пользователю отменять выполнение (tasks/cancel)",
+        description="Разрешить пользователю отменять сообщение (CancelTask)",
     )
     greeting_message: str | None = Field(
         default=None,

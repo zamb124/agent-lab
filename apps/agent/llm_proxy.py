@@ -18,7 +18,7 @@ from typing import ClassVar, Literal
 from urllib.parse import urlparse
 
 import httpx
-from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
+from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -32,6 +32,12 @@ from apps.agent.llm_lara import (
     run_lara_chat_completion,
 )
 from apps.flows.src.dependencies import ContainerDep
+from core.a2a import (
+    coerce_usage_token_count,
+    get_part_text,
+    mapping_from_struct,
+    part_has_text,
+)
 from core.ai.models import ResolvedAIModel
 from core.ai.providers import (
     HUMANITEC_LLM_AUTO_MODEL,
@@ -500,14 +506,14 @@ def _apply_status_metadata(state: _AgentLlmCallState, metadata: JsonObject) -> N
     usage_raw = metadata.get("usage")
     if isinstance(usage_raw, dict):
         usage = require_json_object(usage_raw, "agent.llm_proxy.status.metadata.usage")
-        raw_input_tokens = usage.get("input_tokens", 0)
-        raw_output_tokens = usage.get("output_tokens", 0)
-        if isinstance(raw_input_tokens, bool) or not isinstance(raw_input_tokens, int):
-            raise ValueError("usage.input_tokens must be an integer")
-        if isinstance(raw_output_tokens, bool) or not isinstance(raw_output_tokens, int):
-            raise ValueError("usage.output_tokens must be an integer")
-        state.input_tokens = raw_input_tokens
-        state.output_tokens = raw_output_tokens
+        state.input_tokens = coerce_usage_token_count(
+            usage.get("input_tokens", 0),
+            "usage.input_tokens",
+        )
+        state.output_tokens = coerce_usage_token_count(
+            usage.get("output_tokens", 0),
+            "usage.output_tokens",
+        )
 
 
 async def _iter_agent_llm_content_deltas(
@@ -564,23 +570,22 @@ async def _iter_agent_llm_content_deltas(
                 llm_context=None,
             ):
                 if isinstance(event, TaskArtifactUpdateEvent):
-                    if event.artifact and event.artifact.parts:
+                    if event.HasField("artifact") and event.artifact.parts:
                         artifact_name = event.artifact.name
                         for part in event.artifact.parts:
-                            root = part.root
-                            if not isinstance(root, TextPart):
+                            if not part_has_text(part):
                                 continue
                             if artifact_name == "reasoning":
                                 continue
-                            if root.text:
-                                state.content_parts.append(root.text)
-                                yield root.text
-                if isinstance(event, TaskStatusUpdateEvent) and event.status:
-                    if event.status.message and event.status.message.metadata:
-                        metadata = require_json_object(
-                            event.status.message.metadata,
-                            "agent.llm_proxy.status.metadata",
-                        )
+                            text = get_part_text(part)
+                            if text:
+                                state.content_parts.append(text)
+                                yield text
+                if isinstance(event, TaskStatusUpdateEvent) and event.HasField("status"):
+                    if event.status.HasField("message") and event.status.message.HasField(
+                        "metadata"
+                    ):
+                        metadata = mapping_from_struct(event.status.message.metadata)
                         _apply_status_metadata(state, metadata)
         except Exception as exc:
             state.stream_error = exc

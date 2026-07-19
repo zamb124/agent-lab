@@ -4,12 +4,12 @@ After sending a message with a mention, clicking the highlighted name opens the 
 
 ## Step 1. Mention in the feed
 
-![Mention in the feed](mention-profile-modal--01-upominanie-v-lente.png)
+![Mention in the feed](mention-profile-modal--01-mention-in-the-feed.png)
 
 ## Step 2. Profile modal: shared channel in the grid
 
-![Profile modal: shared channel in the grid](mention-profile-modal--02-modalka-profilya-obshchiy-kanal-v-setke.png)
+![Profile modal: shared channel in the grid](mention-profile-modal--02-profile-modal-shared-channel-in-the-grid.png)
 
 ## Step 3. Navigate to channel from profile card
 
-![Navigate to channel from profile card](mention-profile-modal--03-perekhod-v-kanal-iz-kartochki-profilya.png)
+![Navigate to channel from profile card](mention-profile-modal--03-navigate-to-channel-from-profile-card.png)

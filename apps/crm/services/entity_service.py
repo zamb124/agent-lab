@@ -74,6 +74,7 @@ from apps.crm_worker.task_names import (
     CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
     CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
 )
+from core.a2a import iter_json_parts, part_json_has_data, part_json_has_text
 from core.clients.a2a_client import A2AClient, A2ATaskResponse
 from core.context import get_context, resolve_namespace_or_raise
 from core.llm_context import (
@@ -3929,21 +3930,14 @@ class EntityService:
                     message = _as_json_object(raw_message)
                     if message is None:
                         continue
-                    parts = message.get("parts")
-                    if not isinstance(parts, list):
-                        continue
-                    for raw_part in cast(list[object], parts):
-                        part = _as_json_object(raw_part)
-                        if part is None:
-                            continue
-                        part_kind = part.get("kind") or part.get("type")
-                        if part_kind == "text":
+                    for part in iter_json_parts(message.get("parts")):
+                        if part_json_has_text(part):
                             text = part.get("text")
                             if isinstance(text, str) and text.strip():
                                 extracted = self._extract_json_from_text(text)
                                 if extracted:
                                     return extracted
-                        elif part_kind == "data":
+                        elif part_json_has_data(part):
                             data = _as_json_object(part.get("data"))
                             if data is not None and self._looks_like_structured_a2a_payload(data):
                                 return data
@@ -3953,18 +3947,9 @@ class EntityService:
             artifact = _as_json_object(raw_artifact)
             if artifact is None:
                 continue
-            parts = artifact.get("parts")
-            if not isinstance(parts, list):
-                continue
-
-            for raw_part in cast(list[object], parts):
-                part = _as_json_object(raw_part)
-                if part is None:
-                    continue
-                part_kind = part.get("kind") or part.get("type")
-
-                if part_kind == "data" and "data" in part:
-                    data = _as_json_object(part["data"])
+            for part in iter_json_parts(artifact.get("parts")):
+                if part_json_has_data(part):
+                    data = _as_json_object(part.get("data"))
                     if data is None:
                         continue
                     if "res" in data:
@@ -3990,8 +3975,8 @@ class EntityService:
                             return extracted
                     continue
 
-                if part_kind == "text" and "text" in part:
-                    text = part["text"]
+                if part_json_has_text(part):
+                    text = part.get("text")
                     if isinstance(text, str):
                         extracted = self._extract_json_from_text(text)
                         if extracted:

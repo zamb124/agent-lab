@@ -6,9 +6,9 @@ import pytest
 
 from tests.office.access_helpers import (
     create_private_catalog,
-    enable_binding_link,
+    enable_document_link,
     extract_public_token,
-    upload_txt_binding,
+    upload_txt_document,
 )
 
 pytestmark = [pytest.mark.timeout(120)]
@@ -21,14 +21,14 @@ async def test_legacy_share_create_returns_documents_p_url(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"legacy-share-{unique_id}",
     )
     response = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/shares",
+        f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system,
         json={"permission": "view"},
     )
@@ -45,14 +45,14 @@ async def test_legacy_share_second_create_rotates_token(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"legacy-rotate-{unique_id}",
     )
     first = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/shares",
+        f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system,
         json={"permission": "view"},
     )
@@ -60,7 +60,7 @@ async def test_legacy_share_second_create_rotates_token(
     old_token = extract_public_token(first.json()["share_url"])
 
     second = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/shares",
+        f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system,
         json={"permission": "view"},
     )
@@ -79,14 +79,14 @@ async def test_legacy_share_edit_permission_reflected_in_resolve(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"legacy-edit-{unique_id}",
     )
     response = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/shares",
+        f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system,
         json={"permission": "edit"},
     )
@@ -106,14 +106,14 @@ async def test_legacy_share_create_without_access_forbidden(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"legacy-denied-{unique_id}",
     )
     response = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/shares",
+        f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system_user2,
         json={"permission": "view"},
     )
@@ -127,16 +127,16 @@ async def test_legacy_share_after_access_enable_still_works(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"legacy-enabled-{unique_id}",
     )
-    await enable_binding_link(office_client, auth_headers_system, binding_id)
+    await enable_document_link(office_client, auth_headers_system, file_id)
 
     response = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/shares",
+        f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system,
         json={"permission": "view"},
     )

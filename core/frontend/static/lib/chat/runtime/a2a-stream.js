@@ -1,5 +1,5 @@
 /**
- * Единый SSE-клиент A2A чата платформы.
+ * Единый SSE-клиент A2A Protocol 1.0 чата платформы.
  *
  * Один транспорт для всех поверхностей: фабрика `flows/chat` (SPA/editor),
  * standalone `<platform-chat>` (embed на внешнем сайте), API-console.
@@ -8,6 +8,9 @@
  */
 
 import { HttpError } from '../../events/http.js';
+
+/** Wire value для заголовка `A2A-Version`. */
+export const A2A_PROTOCOL_VERSION = '1.0';
 
 /**
  * URL A2A endpoint. `embedId` приоритетен (внешний embed-route).
@@ -31,26 +34,45 @@ export function a2aEndpointUrl(target) {
 }
 
 /**
- * A2A file parts из host-файлов: либо `{ name, mimeType|type, data: base64 }`,
- * либо уже A2A `{ file: { bytes, name, mimeType } }`.
+ * A2A 1.0 file parts из host-файлов: либо `{ name, mimeType|type, data: base64 }`,
+ * либо уже A2A `{ raw|url, filename, mediaType }`.
  */
 export function buildA2aFileParts(files) {
     return (Array.isArray(files) ? files : []).map((f) => {
-        if (f && typeof f === 'object' && f.file && typeof f.file === 'object' && f.file.bytes != null) {
-            const fw = f.file;
-            return {
-                kind: 'file',
-                file: {
-                    bytes: String(fw.bytes),
-                    name: fw.name != null ? String(fw.name) : 'file',
-                    mimeType:
+        if (f && typeof f === 'object') {
+            if (typeof f.raw === 'string' && f.raw.length > 0) {
+                return {
+                    raw: f.raw,
+                    filename: f.filename != null ? String(f.filename) : 'file',
+                    mediaType:
+                        f.mediaType != null && String(f.mediaType) !== ''
+                            ? String(f.mediaType)
+                            : 'application/octet-stream',
+                };
+            }
+            if (typeof f.url === 'string' && f.url.length > 0) {
+                return {
+                    url: f.url,
+                    filename: f.filename != null ? String(f.filename) : 'file',
+                    mediaType:
+                        f.mediaType != null && String(f.mediaType) !== ''
+                            ? String(f.mediaType)
+                            : 'application/octet-stream',
+                };
+            }
+            if (f.file && typeof f.file === 'object' && f.file.bytes != null) {
+                const fw = f.file;
+                return {
+                    raw: String(fw.bytes),
+                    filename: fw.name != null ? String(fw.name) : 'file',
+                    mediaType:
                         fw.mimeType != null && String(fw.mimeType) !== ''
                             ? String(fw.mimeType)
                             : fw.mime_type != null && String(fw.mime_type) !== ''
                               ? String(fw.mime_type)
                               : 'application/octet-stream',
-                },
-            };
+                };
+            }
         }
         const bytes = f && f.data != null ? String(f.data) : '';
         const name = f && f.name != null ? String(f.name) : 'file';
@@ -61,24 +83,25 @@ export function buildA2aFileParts(files) {
                   ? String(f.type)
                   : 'application/octet-stream';
         return {
-            kind: 'file',
-            file: { bytes, name, mimeType },
+            raw: bytes,
+            filename: name,
+            mediaType: mimeType,
         };
     });
 }
 
 /**
- * JSON-RPC body `message/stream` из простого пользовательского сообщения.
+ * JSON-RPC body `SendStreamingMessage` из простого пользовательского сообщения.
  *
  * @param {{ message?: string, contextId?: string|null, branchId?: string|null,
  *   files?: Array<object>, metadata?: object|null }} input
  */
-export function buildA2aMessageStreamBody(input) {
+export function buildA2aSendStreamingMessageBody(input) {
     const a2aMessage = {
         messageId: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
-        role: 'user',
+        role: 'ROLE_USER',
         parts: [
-            { kind: 'text', text: typeof input.message === 'string' ? input.message : '' },
+            { text: typeof input.message === 'string' ? input.message : '' },
             ...buildA2aFileParts(input.files),
         ],
     };
@@ -88,7 +111,7 @@ export function buildA2aMessageStreamBody(input) {
     const body = {
         jsonrpc: '2.0',
         id: String(Date.now()),
-        method: 'message/stream',
+        method: 'SendStreamingMessage',
         params: { message: a2aMessage },
     };
     const metadata =
@@ -106,7 +129,7 @@ export function buildA2aMessageStreamBody(input) {
     return body;
 }
 
-/** JSON-RPC body `tasks/cancel`. */
+/** JSON-RPC body `CancelTask`. */
 export function buildA2aCancelBody(taskId) {
     if (typeof taskId !== 'string' || taskId.trim() === '') {
         throw new Error('a2a-stream: taskId required for cancel');
@@ -114,20 +137,20 @@ export function buildA2aCancelBody(taskId) {
     return {
         jsonrpc: '2.0',
         id: String(Date.now()),
-        method: 'tasks/cancel',
+        method: 'CancelTask',
         params: { id: taskId },
     };
 }
 
-/** JSON-RPC body `tasks/resubscribe` (snapshot + live Redis tail). */
-export function buildA2aResubscribeBody(taskId) {
+/** JSON-RPC body `SubscribeToTask` (snapshot + live Redis tail). */
+export function buildA2aSubscribeToTaskBody(taskId) {
     if (typeof taskId !== 'string' || taskId.trim() === '') {
-        throw new Error('a2a-stream: taskId required for resubscribe');
+        throw new Error('a2a-stream: taskId required for SubscribeToTask');
     }
     return {
         jsonrpc: '2.0',
         id: String(Date.now()),
-        method: 'tasks/resubscribe',
+        method: 'SubscribeToTask',
         params: { id: taskId.trim() },
     };
 }
@@ -202,6 +225,7 @@ export async function consumeA2aStream(options, onFrame) {
         headers: {
             'Content-Type': 'application/json',
             Accept: 'text/event-stream',
+            'A2A-Version': A2A_PROTOCOL_VERSION,
             ...(options.headers || {}),
         },
         credentials: options.credentials || 'include',

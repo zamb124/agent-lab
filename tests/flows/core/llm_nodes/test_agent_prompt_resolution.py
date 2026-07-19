@@ -874,7 +874,7 @@ API Key: {config.api.key}
             variables={
                 "user": {
                     "name": "FlowUser",
-                    "role": "user",
+                    "role": "ROLE_USER",
                 }
             }
         )

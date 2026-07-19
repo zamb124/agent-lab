@@ -5,6 +5,7 @@ JWT для OnlyOffice Document Server (конфиг редактора и слу
 from __future__ import annotations
 
 import time
+from typing import Literal
 
 from apps.office.models.api import OnlyOfficeDownloadTokenClaims
 from core.clients.onlyoffice import (
@@ -24,25 +25,17 @@ def encode_download_token(
     *,
     file_id: str,
     company_id: str,
-    binding_id: str,
-    binding_kind: str = "document",
+    viewer_scope: Literal["catalog", "file"] = "catalog",
     secret: str,
     ttl_seconds: int,
 ) -> str:
-    if binding_kind not in {"document", "file"}:
-        raise ValueError("binding_kind должен быть document или file")
-    if binding_kind == "document":
-        binding_kind_value = "document"
-    else:
-        binding_kind_value = "file"
     now = int(time.time())
     payload = require_json_object(
         OnlyOfficeDownloadTokenClaims(
             typ="office_dl",
-            binding_kind=binding_kind_value,
+            viewer_scope=viewer_scope,
             file_id=file_id,
             company_id=company_id,
-            binding_id=binding_id,
             iat=now,
             exp=now + ttl_seconds,
         ).model_dump(mode="json"),

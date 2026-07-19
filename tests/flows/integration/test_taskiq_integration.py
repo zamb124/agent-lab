@@ -405,7 +405,7 @@ class TestTaskIQAPIIntegration:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["status"]["state"] == "completed"
+        assert data["status"]["state"] == "TASK_STATE_COMPLETED"
         response_text = data["status"]["message"]["parts"][0]["text"]
         assert "Hello TaskIQ" in response_text
 
@@ -424,12 +424,12 @@ class TestTaskIQAPIIntegration:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": str(uuid.uuid4()),
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Hello A2A TaskIQ"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Hello A2A TaskIQ"}],
                         "contextId": context_id,
                         "taskId": task_id,
                     }
@@ -439,4 +439,4 @@ class TestTaskIQAPIIntegration:
         assert response.status_code == 200
         data = response.json()
         assert "result" in data
-        assert data["result"]["status"]["state"] == "completed"
+        assert data["result"]["status"]["state"] == "TASK_STATE_COMPLETED"

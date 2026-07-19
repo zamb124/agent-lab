@@ -262,11 +262,17 @@
         "back": "Back to list",
         "loading": "Opening editor…",
         "errNoId": "Document is not specified",
-        "errInvalidBindingId": "Invalid document link. Open the file from the document list.",
+        "errInvalidFileId": "Invalid document link. Open the file from the document list.",
         "errBadConfig": "Empty editor configuration",
         "errDocsApi": "Failed to load document editor API",
         "errOpenTimeout": "The editor did not respond within 2 minutes. Check Document Server, OFFICE__CALLBACK_PUBLIC_BASE_URL, and that the document URL is reachable from DS.",
-        "eventError": "Editor error"
+        "eventError": "Editor error",
+        "stage": {
+            "backAria": "Back to document list",
+            "saved": "Saved",
+            "saving": "Saving…",
+            "untitled": "Untitled"
+        }
     },
     "namespace_modal": {
         "header": "New workspace",

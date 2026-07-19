@@ -334,6 +334,18 @@
         ],
         "summary": "List Agent Devices",
         "operationId": "list_agent_devices_frontend_api_agent_devices_get",
+        "parameters": [
+          {
+            "name": "mine",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Mine"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -341,6 +353,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentDeviceListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }

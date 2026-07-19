@@ -1,31 +1,45 @@
 """
-Ядро логики Push Notifications.
+Ядро логики Push Notifications (A2A Protocol 1.0).
 Ранее находилось в idle_worker (с зависимостью от flows). Теперь изолировано в core.
 """
+
+from __future__ import annotations
 
 import json
 import uuid
 from collections.abc import Awaitable, Callable
 
 from a2a.types import (
-    DeleteTaskPushNotificationConfigParams,
-    GetTaskPushNotificationConfigParams,
-    ListTaskPushNotificationConfigParams,
-    PushNotificationConfig,
+    DeleteTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
+    Message,
+    Part,
+    Role,
+    StreamResponse,
     TaskPushNotificationConfig,
+    TaskStatusUpdateEvent,
 )
+from google.protobuf.json_format import MessageToDict, ParseDict
 
+from core.a2a import make_task_status, platform_task_state_to_a2a, struct_from_mapping
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.http import get_httpx_client
 from core.logging import get_logger
-from core.types import JsonArray, JsonObject, parse_json_array, parse_json_object
+from core.types import (
+    JsonArray,
+    JsonObject,
+    parse_json_array,
+    parse_json_object,
+    require_json_object,
+)
 
 REDIS_PREFIX = "push_notification:"
 REDIS_TTL = 86400 * 7  # 7 суток
 
 logger = get_logger(__name__)
-# Singleton-экземпляр redis_client для core-задач
 _redis_client: RedisClient | None = None
 
 
@@ -39,13 +53,14 @@ def _get_redis() -> RedisClient:
 
 
 def _config_to_json(config: TaskPushNotificationConfig) -> str:
-    return config.model_dump_json(by_alias=True)
+    return json.dumps(MessageToDict(config), ensure_ascii=False)
 
 
 def _config_from_json(data: str) -> TaskPushNotificationConfig:
-    return TaskPushNotificationConfig.model_validate(
-        parse_json_object(data, "TaskPushNotificationConfig")
-    )
+    payload = parse_json_object(data, "TaskPushNotificationConfig")
+    config = TaskPushNotificationConfig()
+    _ = ParseDict(dict(payload), config)
+    return config
 
 
 def _config_id_list_from_json(data: str) -> list[str]:
@@ -70,21 +85,27 @@ async def _load_config_ids(redis: RedisClient, task_id: str) -> list[str]:
 
 
 async def set_push_config(params: TaskPushNotificationConfig) -> TaskPushNotificationConfig:
-    """Сохраняет конфигурацию push notification."""
+    """Сохраняет конфигурацию push notification (CreateTaskPushNotificationConfig)."""
     redis = _get_redis()
 
-    task_id = params.task_id
-    push_config = params.push_notification_config
-    config_id = push_config.id if push_config.id is not None else str(uuid.uuid4())
+    task_id = params.task_id.strip()
+    if not task_id:
+        raise ValueError("TaskPushNotificationConfig.task_id is required")
+    url = params.url.strip()
+    if not url:
+        raise ValueError("TaskPushNotificationConfig.url is required")
+
+    config_id = params.id.strip() if params.id else str(uuid.uuid4())
     stored_config = TaskPushNotificationConfig(
         task_id=task_id,
-        push_notification_config=PushNotificationConfig(
-            authentication=push_config.authentication,
-            id=config_id,
-            token=push_config.token,
-            url=push_config.url,
-        ),
+        id=config_id,
+        url=url,
+        token=params.token,
     )
+    if params.HasField("authentication"):
+        stored_config.authentication.CopyFrom(params.authentication)
+    if params.tenant:
+        stored_config.tenant = params.tenant
 
     key = f"{REDIS_PREFIX}{task_id}:{config_id}"
     _ = await redis.set(key, _config_to_json(stored_config), ttl=REDIS_TTL)
@@ -100,12 +121,14 @@ async def set_push_config(params: TaskPushNotificationConfig) -> TaskPushNotific
 
 
 async def get_push_config(
-    params: GetTaskPushNotificationConfigParams,
+    params: GetTaskPushNotificationConfigRequest,
 ) -> TaskPushNotificationConfig | None:
     """Получает конфигурацию push notification."""
     redis = _get_redis()
-    task_id = params.id
-    config_id = params.push_notification_config_id
+    task_id = params.task_id.strip()
+    if not task_id:
+        raise ValueError("GetTaskPushNotificationConfigRequest.task_id is required")
+    config_id = params.id.strip() if params.id else ""
 
     if config_id:
         key = f"{REDIS_PREFIX}{task_id}:{config_id}"
@@ -121,31 +144,55 @@ async def get_push_config(
     return _config_from_json(data) if data is not None else None
 
 
-async def list_push_configs(params: ListTaskPushNotificationConfigParams) -> list[TaskPushNotificationConfig]:
-    """Список конфигураций для задачи."""
+async def list_push_configs(
+    params: ListTaskPushNotificationConfigsRequest,
+) -> ListTaskPushNotificationConfigsResponse:
+    """Список конфигураций для задачи (cursor pageToken)."""
     redis = _get_redis()
-    task_id = params.id
+    task_id = params.task_id.strip()
+    if not task_id:
+        raise ValueError("ListTaskPushNotificationConfigsRequest.task_id is required")
 
     config_ids = await _load_config_ids(redis, task_id)
     if not config_ids:
-        return []
+        return ListTaskPushNotificationConfigsResponse()
 
-    result: list[TaskPushNotificationConfig] = []
+    offset = 0
+    if params.page_token.strip():
+        try:
+            offset = int(params.page_token.strip())
+        except ValueError as exc:
+            raise ValueError("Invalid page_token for ListTaskPushNotificationConfigs") from exc
+        if offset < 0:
+            raise ValueError("page_token must be >= 0")
 
-    for cid in config_ids:
+    page_size = params.page_size if params.page_size > 0 else 50
+    if page_size > 200:
+        page_size = 200
+
+    slice_ids = config_ids[offset : offset + page_size]
+    result = ListTaskPushNotificationConfigsResponse()
+    for cid in slice_ids:
         key = f"{REDIS_PREFIX}{task_id}:{cid}"
         data = await redis.get(key)
         if data is not None:
-            result.append(_config_from_json(data))
+            result.configs.append(_config_from_json(data))
 
+    next_offset = offset + page_size
+    if next_offset < len(config_ids):
+        result.next_page_token = str(next_offset)
     return result
 
 
-async def delete_push_config(params: DeleteTaskPushNotificationConfigParams) -> None:
+async def delete_push_config(params: DeleteTaskPushNotificationConfigRequest) -> None:
     """Удаляет конфигурацию push notification."""
     redis = _get_redis()
-    task_id = params.id
-    config_id = params.push_notification_config_id
+    task_id = params.task_id.strip()
+    config_id = params.id.strip()
+    if not task_id:
+        raise ValueError("DeleteTaskPushNotificationConfigRequest.task_id is required")
+    if not config_id:
+        raise ValueError("DeleteTaskPushNotificationConfigRequest.id is required")
 
     key = f"{REDIS_PREFIX}{task_id}:{config_id}"
     _ = await redis.delete(key)
@@ -196,38 +243,37 @@ async def process_send_task_update(
         Awaitable[None],
     ],
 ) -> None:
-    """Отправляет уведомление всем подписчикам задачи.
-    `webhook_trigger_func` - это kiq-вызов, чтобы мы могли ретраить webhooks средствами брокера через worker."""
-    params = ListTaskPushNotificationConfigParams(id=task_id)
-    configs = await list_push_configs(params)
+    """Отправляет уведомление всем подписчикам задачи (A2A 1.0 StreamResponse body)."""
+    list_req = ListTaskPushNotificationConfigsRequest(task_id=task_id)
+    listed = await list_push_configs(list_req)
+    configs = list(listed.configs)
 
     if not configs:
         return
 
-    status: JsonObject = {
-        "state": state,
-        "message": None,
-    }
+    a2a_state = platform_task_state_to_a2a(state)
+    status = make_task_status(a2a_state)
     if message is not None:
-        status["message"] = {
-            "role": "agent",
-            "parts": [{"kind": "text", "text": message}],
-        }
-
-    payload: JsonObject = {
-        "jsonrpc": "2.0",
-        "method": "tasks/pushNotification",
-        "params": {
-            "taskId": task_id,
-            "contextId": context_id,
-            "status": status,
-            "final": is_final,
-        },
-    }
+        status.message.CopyFrom(
+            Message(
+                message_id=str(uuid.uuid4()),
+                role=Role.ROLE_AGENT,
+                parts=[Part(text=message)],
+            )
+        )
+    event = TaskStatusUpdateEvent(
+        task_id=task_id,
+        context_id=context_id,
+        status=status,
+    )
+    event.metadata.CopyFrom(struct_from_mapping({"final": is_final}))
+    stream = StreamResponse(status_update=event)
+    # Webhook body = StreamResponse ProtoJSON (statusUpdate/...), без 0.3 method name.
+    payload = require_json_object(MessageToDict(stream), "StreamResponse")
 
     for config in configs:
-        push_config = config.push_notification_config
-        auth = push_config.authentication
-        credentials = auth.credentials if auth is not None else None
-
-        await webhook_trigger_func(push_config.url, payload, push_config.token, credentials)
+        credentials: str | None = None
+        if config.HasField("authentication") and config.authentication.credentials:
+            credentials = config.authentication.credentials
+        token = config.token if config.token else None
+        await webhook_trigger_func(config.url, payload, token, credentials)

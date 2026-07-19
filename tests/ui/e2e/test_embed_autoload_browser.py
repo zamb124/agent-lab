@@ -1,8 +1,8 @@
 """Браузерный E2E: страница «внешнего сайта» + humanitec-embed-autoload.js при реальных HTTP-сервисах.
 
 Поднимает flows (9001) и frontend (9004) через фикстуры session-серверов pytest
-(``tests/fixtures/services.py``). Первый холодный прогон часто упирается в
-``flows_service`` (``startup_wait`` до 120 с) и ``frontend_service`` (~20 с) до первой строки теста.
+(``tests/fixtures/services.py``). Тело теста — бюджет 15 с (см. ``tests/ui/e2e/conftest.py``);
+холодный startup сервисов в setup не входит в ``timeout_func_only``.
 
 Диагностика: ``pytest ... --setup-show -v``, логи uvicorn при падении —
 ``/tmp/flows_server_test_err.log``, ``/tmp/frontend_server_test_err.log``.
@@ -19,6 +19,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Iterator
+from urllib.parse import urlparse
 
 import httpx
 import pytest
@@ -68,6 +69,10 @@ def _make_embed_host_handler(state: _EmbedHostState) -> type[BaseHTTPRequestHand
     class EmbedHostHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             raw = self.path.split("?", 1)[0].rstrip("/") or "/"
+            if raw in {"/favicon.ico", "/favicon.png"}:
+                self.send_response(204)
+                self.end_headers()
+                return
             if raw != "/":
                 self.send_error(404)
                 return
@@ -223,19 +228,41 @@ async def _delete_embed_config(
         assert del_r.status_code == 200
 
 
+_EMBED_HOST_BENIGN_404_PATHS = frozenset({
+    "/favicon.ico",
+    "/favicon.png",
+    "/apple-touch-icon.png",
+    "/apple-touch-icon-precomposed.png",
+    "/robots.txt",
+    "/manifest.json",
+})
+
+
+def _is_benign_embed_host_404(url: str) -> bool:
+    path = urlparse(url).path.rstrip("/") or "/"
+    return path in _EMBED_HOST_BENIGN_404_PATHS
+
+
 async def _attach_embed_page_diagnostics(page: Page) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     network_events: list[str] = []
 
     def _on_console(msg) -> None:
-        if msg.type == "error":
-            errors.append(f"console.{msg.type}: {msg.text}")
+        if msg.type != "error":
+            return
+        text = msg.text
+        # Chromium не кладёт URL в текст; реальные 404 ловим в response ниже.
+        if "Failed to load resource: the server responded with a status of 404" in text:
+            return
+        errors.append(f"console.{msg.type}: {text}")
 
     def _record_embed_request(req) -> None:
         if "/api/v1/embed/" in req.url or req.url.endswith("/api/chat-token"):
             network_events.append(f"request {req.method} {req.url}")
 
     def _record_embed_response(resp) -> None:
+        if resp.status == 404 and not _is_benign_embed_host_404(resp.url):
+            errors.append(f"http.404: {resp.url}")
         if "/api/v1/embed/" in resp.url or resp.url.endswith("/api/chat-token"):
             network_events.append(f"response {resp.status} {resp.url}")
 
@@ -269,7 +296,7 @@ async def _wait_humanitec_embed(page: Page, errors: list[str], network_events: l
     try:
         await page.wait_for_function(
             "typeof window.humanitecEmbed !== 'undefined' && window.humanitecEmbed && window.humanitecEmbed.element",
-            timeout=60_000,
+            timeout=8_000,
         )
     except Exception as exc:
         raise AssertionError(
@@ -282,15 +309,15 @@ async def _wait_humanitec_embed(page: Page, errors: list[str], network_events: l
 async def _send_embed_message(page: Page, user_line: str, network_events: list[str], errors: list[str]) -> None:
     root = page.locator("platform-chat")
     textarea = root.locator("flows-chat-input textarea")
-    await expect(textarea).to_be_visible(timeout=30_000)
+    await expect(textarea).to_be_visible(timeout=5_000)
     await textarea.fill(user_line)
     send_btn = root.locator("flows-chat-input button.send-btn:not(.muted)").first
-    await expect(send_btn).to_be_enabled(timeout=10_000)
+    await expect(send_btn).to_be_enabled(timeout=5_000)
     await send_btn.click()
     try:
-        await expect(page.get_by_text(f"embed-ok:{user_line}", exact=True)).to_be_visible(timeout=120_000)
+        await expect(page.get_by_text(f"embed-ok:{user_line}", exact=True)).to_be_visible(timeout=8_000)
     except AssertionError as exc:
-        root_text = await root.inner_text(timeout=5_000)
+        root_text = await root.inner_text(timeout=2_000)
         raise AssertionError(
             "embed браузер: не получен ожидаемый A2A ответ\n"
             f"root_text:\n{root_text}\n\n"
@@ -299,7 +326,7 @@ async def _send_embed_message(page: Page, user_line: str, network_events: list[s
         ) from exc
 
 
-@pytest.mark.timeout(300)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_embed_autoload_script_mounts_chat_and_streams_reply(
@@ -311,7 +338,7 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
     embed_test_auth,
     unique_id: str,
 ) -> None:
-    page.set_default_timeout(45_000)
+    page.set_default_timeout(8_000)
     auth_headers, flow_id, company_id, _user_part = embed_test_auth
     user_line = f"browser-embed-msg-{unique_id}"
 
@@ -354,11 +381,11 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
 
     try:
         with _external_embed_origin(html_page_utf8=page_html, token_payload=token_payload_for_host) as host_origin:
-            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=60_000)
+            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
             await _wait_humanitec_embed(page, errors, network_events)
-            await expect(page.locator("platform-chat")).to_be_attached(timeout=30_000)
+            await expect(page.locator("platform-chat")).to_be_attached(timeout=5_000)
             fab = page.locator("platform-chat").locator("button.fab").first
-            await expect(fab).to_be_visible(timeout=30_000)
+            await expect(fab).to_be_visible(timeout=5_000)
             await fab.click()
             await _send_embed_message(page, user_line, network_events, errors)
             if errors:
@@ -389,7 +416,7 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
         "**Result:** the site page shows the chat widget and receives an agent reply."
     ),
 )
-@pytest.mark.timeout(300)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_flows_embed_agent_on_site(
@@ -403,7 +430,7 @@ async def test_flows_embed_agent_on_site(
     unique_id: str,
 ) -> None:
     _ = embed_browser_http_stack_ready, taskiq_worker
-    page.set_default_timeout(45_000)
+    page.set_default_timeout(8_000)
     auth_headers, flow_id, company_id, _user_part = embed_test_auth
     user_line = f"embed-site-{unique_id}"
 
@@ -479,11 +506,11 @@ async def test_flows_embed_agent_on_site(
             html_page_utf8=page_html,
             token_payload=token_payload_for_host,
         ) as host_origin:
-            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=60_000)
+            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
             await _wait_humanitec_embed(page, errors, network_events)
-            await expect(page.locator("platform-chat")).to_be_attached(timeout=30_000)
+            await expect(page.locator("platform-chat")).to_be_attached(timeout=5_000)
             fab = page.locator("platform-chat").locator("button.fab").first
-            await expect(fab).to_be_visible(timeout=30_000)
+            await expect(fab).to_be_visible(timeout=5_000)
             await scenario.step(
                 "Откройте виджет чата на сайте",
                 page,
@@ -506,7 +533,7 @@ async def test_flows_embed_agent_on_site(
             reply = page.locator("platform-chat").get_by_text(
                 re.compile(rf"embed-ok:{re.escape(user_line)}", re.I)
             ).first
-            await expect(reply).to_be_visible(timeout=120_000)
+            await expect(reply).to_be_visible(timeout=8_000)
             await scenario.step(
                 "Получите ответ агента во встроенном чате",
                 page,
@@ -532,7 +559,7 @@ async def test_flows_embed_agent_on_site(
             await _delete_embed_config(frontend_origin, auth_headers, embed_id)
 
 
-@pytest.mark.timeout(300)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_embed_autoload_toggle_opens_chat_without_launcher(
@@ -544,7 +571,7 @@ async def test_embed_autoload_toggle_opens_chat_without_launcher(
     embed_test_auth,
     unique_id: str,
 ) -> None:
-    page.set_default_timeout(45_000)
+    page.set_default_timeout(8_000)
     auth_headers, flow_id, company_id, _user_part = embed_test_auth
     user_line = f"browser-embed-toggle-{unique_id}"
 
@@ -587,10 +614,10 @@ async def test_embed_autoload_toggle_opens_chat_without_launcher(
 
     try:
         with _external_embed_origin(html_page_utf8=page_html, token_payload=token_payload_for_host) as host_origin:
-            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=60_000)
+            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
             await _wait_humanitec_embed(page, errors, network_events)
             fab = page.locator("platform-chat").locator("button.fab")
-            await expect(fab).to_have_count(0, timeout=10_000)
+            await expect(fab).to_have_count(0, timeout=5_000)
             await page.evaluate(
                 """() => {
                     window.dispatchEvent(
@@ -606,7 +633,7 @@ async def test_embed_autoload_toggle_opens_chat_without_launcher(
             await _delete_embed_config(frontend_origin, auth_headers, embed_id)
 
 
-@pytest.mark.timeout(300)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_embed_autoload_host_proxy_mints_session_token_s2s(
@@ -618,7 +645,7 @@ async def test_embed_autoload_host_proxy_mints_session_token_s2s(
     embed_test_auth,
     unique_id: str,
 ) -> None:
-    page.set_default_timeout(45_000)
+    page.set_default_timeout(8_000)
     auth_headers, flow_id, company_id, _user_part = embed_test_auth
     user_line = f"browser-embed-proxy-{unique_id}"
 
@@ -655,10 +682,10 @@ async def test_embed_autoload_host_proxy_mints_session_token_s2s(
             html_page_utf8=page_html,
             session_token_proxy=session_proxy,
         ) as host_origin:
-            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=60_000)
+            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
             await _wait_humanitec_embed(page, errors, network_events)
             fab = page.locator("platform-chat").locator("button.fab").first
-            await expect(fab).to_be_visible(timeout=30_000)
+            await expect(fab).to_be_visible(timeout=5_000)
             await fab.click()
             await _send_embed_message(page, user_line, network_events, errors)
             chat_token_requests = [line for line in network_events if "/api/chat-token" in line]

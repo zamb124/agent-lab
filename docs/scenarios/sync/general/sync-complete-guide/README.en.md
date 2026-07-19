@@ -12,7 +12,7 @@ On the first screen, check three interface areas:
 
 A Sync space is a platform namespace. It is shared across platform services, and Sync stores only its own settings there: auto-transcription of voice messages and the «speech from calls into the feed» mode.
 
-![Sync opened in the selected space](sync-complete-guide--01-otkryt-sync-v-vybrannom-prostranstve.png)
+![Sync opened in the selected space](sync-complete-guide--01-sync-opened-in-the-selected-space.png)
 
 ## Step 2. Sync space settings opened
 
@@ -23,7 +23,7 @@ The pencil next to the space does not create or rename the namespace. It opens S
 
 These values act as space defaults; a specific channel can override them in channel settings.
 
-![Sync space settings opened](sync-complete-guide--02-otkryty-sync-nastroyki-prostranstva.png)
+![Sync space settings opened](sync-complete-guide--02-sync-space-settings-opened.png)
 
 ## Step 3. Channel creation form opened
 
@@ -37,13 +37,13 @@ A channel is the main working unit in Sync. The form includes:
 
 If flags are enabled on both the space and the channel, the final channel behavior is visible to the user without calling the API.
 
-![Channel creation form opened](sync-complete-guide--03-otkryta-forma-sozdaniya-kanala.png)
+![Channel creation form opened](sync-complete-guide--03-channel-creation-form-opened.png)
 
 ## Step 4. Channel name and options filled in
 
 Before creating a channel it helps to enable the needed flags right away. That way the team will not hunt for these settings after the first call or after the first voice message.
 
-![Channel name and options filled in](sync-complete-guide--04-zapolneny-nazvanie-i-parametry-kanala.png)
+![Channel name and options filled in](sync-complete-guide--04-channel-name-and-options-filled.png)
 
 ## Step 5. Channel created and opened
 
@@ -53,13 +53,13 @@ An open channel consists of a header, feed, and composer.
 - The feed shows messages, dates, delivery status, reactions, and pins.
 - The composer at the bottom sends text, files, voice messages, mentions, and thread replies.
 
-![Channel created and opened](sync-complete-guide--05-kanal-sozdan-i-otkryt.png)
+![Channel created and opened](sync-complete-guide--05-channel-created-and-opened.png)
 
 ## Step 6. First message sent
 
 A text message goes through a Sync realtime command and appears in the feed right away. For the user it is a normal chat, but technically the event also updates the channel preview, last message date, and unread state for other members.
 
-![First message sent](sync-complete-guide--06-otpravleno-pervoe-soobshchenie.png)
+![First message sent](sync-complete-guide--06-first-message-sent.png)
 
 ## Step 7. Mention popup opened
 
@@ -67,19 +67,19 @@ A mention starts with `@`. The popup searches company members, and after selecti
 
 Mentions matter beyond visuals: the backend validates the channel member and sends a separate mention notification.
 
-![Mention popup opened](sync-complete-guide--07-otkryt-popup-upominaniy.png)
+![Mention popup opened](sync-complete-guide--07-mention-popup-opened.png)
 
 ## Step 8. Message with mention appeared in the feed
 
 After sending, the mention looks like a person's name, not `@user_id`. Clicking that name opens the profile card and shared channels.
 
-![Message with mention appeared in the feed](sync-complete-guide--08-soobshchenie-s-upominaniem-poyavilos-v-lente.png)
+![Message with mention appeared in the feed](sync-complete-guide--08-message-with-mention-appeared-in-the-feed.png)
 
 ## Step 9. Message with image sent
 
 The attachment button uploads the file to the file backend and adds it to the message as a content block. Sync shows a preview for images and a file row with download for documents. The message caption remains a normal text block.
 
-![Message with image sent](sync-complete-guide--09-otpravleno-soobshchenie-s-izobrazheniem.png)
+![Message with image sent](sync-complete-guide--09-message-with-image-sent.png)
 
 ## Step 10. Message menu opened
 
@@ -93,19 +93,19 @@ The context menu opens with a right click on a message. It includes quick reacti
 - «Pin» — adds the message to the top pin strip;
 - «Delete» — available for your own messages.
 
-![Message menu opened](sync-complete-guide--10-otkryto-menyu-soobshcheniya.png)
+![Message menu opened](sync-complete-guide--10-message-menu-opened.png)
 
 ## Step 11. Message pinned
 
 Pins are stored on the channel. The strip at the top shows a preview of the current pinned message and a counter. Clicking the strip scrolls the feed to the pin; if there are several pins, navigation cycles through them.
 
-![Message pinned](sync-complete-guide--11-soobshchenie-zakrepleno.png)
+![Message pinned](sync-complete-guide--11-message-pinned.png)
 
 ## Step 12. Thread opened and reply sent
 
 A thread is a side panel to the right of the main feed. Use it when a discussion should not clutter the shared channel. Replies inside the thread are tied to the root message, but the main chat stays available.
 
-![Thread opened and reply sent](sync-complete-guide--12-otkryt-tred-i-otpravlen-otvet.png)
+![Thread opened and reply sent](sync-complete-guide--12-thread-opened-and-reply-sent.png)
 
 ## Step 13. Channel settings opened
 
@@ -119,4 +119,10 @@ Channel settings differ from space settings. Here you change local parameters fo
 
 If a user does not see the channel in the sidebar, first check whether they are added as a channel member.
 
-![Channel settings opened](sync-complete-guide--13-otkryty-nastroyki-kanala.png)
+![Channel settings opened](sync-complete-guide--13-channel-settings-opened.png)
+
+## Step 14. Member profile card opened
+
+The profile opens from the sender avatar or from `@mention`. The card shows the member name and shared channels. It is a quick way to see where else you overlap with someone and jump to the right channel without manual search.
+
+![Member profile card opened](sync-complete-guide--14-member-profile-card-opened.png)

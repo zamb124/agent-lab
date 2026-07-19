@@ -15,13 +15,13 @@ from collections.abc import AsyncGenerator, Sequence
 from datetime import datetime, timezone
 from typing import ClassVar, cast, override
 
+from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
     Message,
-    Role,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
-    TextPart,
 )
+from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.durable_execution import (
@@ -77,6 +77,14 @@ from apps.flows.src.streaming import BaseEmitter, Emitter
 from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from apps.flows.src.tools.base import BaseTool, OpenAIToolSchema, ToolArguments, sanitize_tool_name
 from apps.flows.src.variables import VariableResolver
+from core.a2a import (
+    coerce_usage_token_count,
+    get_part_text,
+    mapping_from_struct,
+    message_from_json_dict,
+    message_to_json_dict,
+    part_has_text,
+)
 from core.ai.resolver import COST_ORIGIN_COMPANY
 from core.ai.runtime import (
     create_llm_client_from_call_config,
@@ -148,7 +156,7 @@ logger = get_logger(__name__)
 def _runtime_message(value: Message | JsonObject) -> Message:
     if isinstance(value, Message):
         return value
-    return Message.model_validate(value)
+    return message_from_json_dict(value)
 
 
 def _get_trace_ctx_from_state() -> TraceContext | None:
@@ -161,19 +169,14 @@ def _get_trace_ctx_from_state() -> TraceContext | None:
 
 def _get_message_metadata(msg: Message | JsonObject) -> JsonObject:
     """Получает metadata из Message."""
-    raw_metadata = _runtime_message(msg).metadata
-    if raw_metadata is None:
+    message = _runtime_message(msg)
+    if not message.HasField("metadata"):
         return {}
-    return require_json_object(raw_metadata, "message.metadata")
+    return mapping_from_struct(message.metadata)
 
 
 def _message_plain_text(msg: Message) -> str:
-    parts: list[str] = []
-    for part in msg.parts:
-        root = part.root
-        if isinstance(root, TextPart):
-            parts.append(root.text)
-    return "".join(parts)
+    return get_message_text(msg)
 
 
 def _user_message_already_in_task(
@@ -186,7 +189,7 @@ def _user_message_already_in_task(
         return False
     for raw in reversed(messages):
         message = _runtime_message(raw)
-        if message.role != Role.user:
+        if message.role != ROLE_USER:
             continue
         if message.task_id != task_id:
             continue
@@ -205,7 +208,7 @@ def _assistant_message_already_in_task(
         return False
     for raw in reversed(messages):
         message = _runtime_message(raw)
-        if message.role != Role.agent:
+        if message.role != ROLE_AGENT:
             continue
         if message.task_id != task_id:
             continue
@@ -242,6 +245,13 @@ def _copy_state_projection(target: ExecutionState, source: ExecutionState) -> No
     for key, value in extras.items():
         if key not in FROZEN_STATE_FIELDS:
             target[key] = value
+
+
+def _format_tool_result_content(result: object) -> str:
+    """Строка tool_result для LLM history и SSE: JSON для объектов, не Python repr."""
+    if isinstance(result, str):
+        return result
+    return json.dumps(result, ensure_ascii=False)
 
 
 class LlmNodeRunner(BaseLlmNodeRunner):
@@ -618,7 +628,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             if isinstance(msg, dict):
                 result.append(require_json_object(msg, "llm.message"))
                 continue
-            result.append(require_json_object(msg.model_dump(mode="json"), "llm.message"))
+            result.append(require_json_object(message_to_json_dict(msg), "llm.message"))
         return result
 
     async def _active_execution_branch_id(self, state: ExecutionState) -> str:
@@ -970,8 +980,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             had_reasoning_event = True
                                         if artifact_name != "reasoning":
                                             for part in event.artifact.parts:
-                                                if isinstance(part.root, TextPart):
-                                                    content += part.root.text
+                                                if part_has_text(part):
+                                                    content += get_part_text(part)
                                             if loop_mode == ReactLoopMode.EXPLICIT:
                                                 should_yield = False
 
@@ -980,11 +990,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         yield event
 
                                     if isinstance(event, TaskStatusUpdateEvent):
-                                        if event.status.message and event.status.message.metadata:
-                                            md = require_json_object(
-                                                event.status.message.metadata,
-                                                "llm.event.metadata",
-                                            )
+                                        if (
+                                            event.status.message
+                                            and event.status.message.HasField("metadata")
+                                        ):
+                                            md = _get_message_metadata(event.status.message)
                                             tc = _get_tool_calls_metadata(md, "llm.event.metadata")
                                             if tc:
                                                 tool_calls = tc
@@ -1015,14 +1025,14 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             usage_raw = md.get("usage")
                                             if isinstance(usage_raw, dict):
                                                 usage = require_json_object(usage_raw, "llm.event.metadata.usage")
-                                                raw_input_tokens = usage.get("input_tokens", 0)
-                                                raw_output_tokens = usage.get("output_tokens", 0)
-                                                if isinstance(raw_input_tokens, bool) or not isinstance(raw_input_tokens, int):
-                                                    raise ValueError("usage.input_tokens must be an integer")
-                                                if isinstance(raw_output_tokens, bool) or not isinstance(raw_output_tokens, int):
-                                                    raise ValueError("usage.output_tokens must be an integer")
-                                                input_tokens = raw_input_tokens
-                                                output_tokens = raw_output_tokens
+                                                input_tokens = coerce_usage_token_count(
+                                                    usage.get("input_tokens", 0),
+                                                    "usage.input_tokens",
+                                                )
+                                                output_tokens = coerce_usage_token_count(
+                                                    usage.get("output_tokens", 0),
+                                                    "usage.output_tokens",
+                                                )
                                                 prc = usage.get("provider_reported_cost")
                                                 if isinstance(prc, (int, float)):
                                                     provider_reported_cost = float(prc)
@@ -1833,10 +1843,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 tracer.record_tool_result(tool_span, result, tool_duration)
                 tracer.record_state_snapshot(tool_span, state)
                 state_delta = build_state_delta(before_tool_state, state)
+                tool_result_content = _format_tool_result_content(result)
                 completed = await runtime.record_activity_completed(
                     activity_id=activity_id,
                     result_json={
-                        "result": str(result),
+                        "result": tool_result_content,
                         "state_delta": state_delta.model_dump(
                             mode="json",
                             exclude_none=False,
@@ -1849,7 +1860,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 return [
                     {
                         "tool_call_id": tool_call_id,
-                        "content": str(result),
+                        "content": tool_result_content,
                     }
                 ]
             except FlowInterrupt:

@@ -347,12 +347,12 @@ class TestMCPNodeInGraph:
             json={
                 "jsonrpc": "2.0",
                 "id": f"test-{unique_id}",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": str(uuid.uuid4()),
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "test mcp"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "test mcp"}],
                     }
                 },
             },
@@ -436,12 +436,12 @@ class TestMCPToolInLlmNode:
             json={
                 "jsonrpc": "2.0",
                 "id": f"test-{unique_id}",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": str(uuid.uuid4()),
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Найди информацию о Django"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Найди информацию о Django"}],
                     }
                 },
             },

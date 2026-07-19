@@ -36,8 +36,7 @@ def _docx_record() -> FileRecord:
 def _ctx(*, public_link_token_hash: str | None = None) -> ViewerOpenContext:
     return ViewerOpenContext(
         handler_id="onlyoffice",
-        binding_id="binding_ai",
-        binding_kind="document",
+        viewer_scope="catalog",
         file_record=_docx_record(),
         title="note",
         file_category=FileCategory.OFFICE_DOC.value,
@@ -76,8 +75,8 @@ async def test_onlyoffice_editor_jwt_includes_platform_ai_and_autostart(
     assert claims.company_id == "company_ai"
     assert claims.user_id == "user_ai"
     assert claims.namespace == "docs"
-    assert claims.binding_id == "binding_ai"
     assert claims.file_id == "file_ai_test"
+    assert claims.viewer_scope == "catalog"
     editor_config = payload.get("editorConfig")
     assert isinstance(editor_config, dict)
     plugins = editor_config.get("plugins")

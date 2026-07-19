@@ -145,7 +145,7 @@ class CatalogRepository:
                 .order_by(OfficeDocumentCatalog.created_at.asc())
             )
             catalogs = list(result.scalars().all())
-        return [(catalog, await self.count_bindings(catalog.catalog_id)) for catalog in catalogs]
+        return [(catalog, await self.count_documents(catalog.catalog_id)) for catalog in catalogs]
 
     async def create(
         self,
@@ -393,10 +393,10 @@ class CatalogRepository:
             await session.refresh(row)
             return row
 
-    async def count_bindings(self, catalog_id: str) -> int:
+    async def count_documents(self, catalog_id: str) -> int:
         async with self._db.session() as session:
             result = await session.execute(
-                select(func.count(OfficeDocumentBinding.binding_id)).where(
+                select(func.count(OfficeDocumentBinding.file_id)).where(
                     OfficeDocumentBinding.catalog_id == catalog_id,
                     OfficeDocumentBinding.deleted_at.is_(None),
                 )
@@ -418,7 +418,7 @@ class CatalogRepository:
         company_id: str,
         namespace: str,
     ) -> bool:
-        if await self.count_bindings(catalog_id) > 0:
+        if await self.count_documents(catalog_id) > 0:
             raise ValueError("В каталоге есть документы")
         if await self.count_child_catalogs(catalog_id) > 0:
             raise ValueError("В каталоге есть подкаталоги")

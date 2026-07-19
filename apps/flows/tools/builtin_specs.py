@@ -61,6 +61,8 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.lara_crm", "push_embed_blocks"),
     ("apps.flows.tools.files", "read_file"),
     ("apps.flows.tools.agent_session_tools", "reason"),
+    ("apps.flows.tools.agent_plan_tools", "agent_plan_write"),
+    ("apps.flows.tools.agent_plan_tools", "agent_plan_get"),
     ("apps.flows.tools.agent_session_tools", "ask_user"),
     ("apps.flows.tools.device_tools", "device_tools_list"),
     ("apps.flows.tools.device_tools", "device_tools_call"),

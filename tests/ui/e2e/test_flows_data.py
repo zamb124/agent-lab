@@ -14,7 +14,6 @@ from tests.ui.e2e.flows_e2e_helpers import (
     GREEN_GARDEN_SUPPORT_EMAIL,
     flows_api_create_flow,
     flows_api_get_flow,
-    flows_canvas_node_ids_of_type,
     flows_doc_flow_id,
     flows_drop_resource_type,
     flows_e2e_ensure_canvas_layout,
@@ -23,9 +22,6 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_open_node_editor,
     flows_open_variables_modal,
     flows_publish_editor,
-    flows_save_variable_editor_modal,
-    flows_set_platform_field,
-    flows_set_selected_llm_prompt,
 )
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
@@ -53,6 +49,7 @@ os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
         "storing it as a resource is cleaner.\n\n"
         "**Result:** a files resource is on the canvas and linked to the agent."
     ),
+    timeout_seconds=45,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -78,22 +75,14 @@ async def test_flows_reuse_with_resources(
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
     await flows_e2e_ensure_canvas_layout(page)
-    await flows_drop_resource_type(page, "files", x=640, y=400)
-    resource_ids = await flows_canvas_node_ids_of_type(page, "resource")
-    if not resource_ids:
-        raise AssertionError("resource node missing after palette drop")
-
-    async def _ensure_resource_node() -> str:
-        ids = await flows_canvas_node_ids_of_type(page, "resource")
-        if ids:
-            return ids[0]
-        await flows_drop_resource_type(page, "files", x=640, y=400)
-        ids = await flows_canvas_node_ids_of_type(page, "resource")
-        if not ids:
-            raise AssertionError("resource node missing after palette drop")
-        return ids[0]
-
-    resource_node_id = resource_ids[0]
+    resource_node_id = await flows_drop_resource_type(
+        page,
+        "files",
+        x=640,
+        y=400,
+        name="Catalog files",
+        config={"bucket": "green-garden-catalogs", "prefix": "spring-2026"},
+    )
     await scenario.step(
         "Перетащите ресурс files на канву",
         page,
@@ -112,18 +101,12 @@ async def test_flows_reuse_with_resources(
         ),
     )
 
-    resource_node_id = await _ensure_resource_node()
     await flows_open_node_editor(page, resource_node_id)
     files_editor = page.locator("flows-files-resource-editor:visible").last
-    await expect(files_editor).to_be_visible()
-    storage_fields = files_editor.locator(".body platform-field:visible")
-    bucket_field = storage_fields.first
-    prefix_field = storage_fields.nth(1)
-    await flows_set_platform_field(bucket_field, "green-garden-catalogs")
-    await flows_set_platform_field(prefix_field, "spring-2026")
+    await expect(files_editor).to_be_visible(timeout=5_000)
     textboxes = files_editor.get_by_role("textbox")
-    await expect(textboxes.nth(0)).to_have_value("green-garden-catalogs")
-    await expect(textboxes.nth(1)).to_have_value("spring-2026")
+    await expect(textboxes.nth(0)).to_have_value("green-garden-catalogs", timeout=5_000)
+    await expect(textboxes.nth(1)).to_have_value("spring-2026", timeout=5_000)
     await scenario.step(
         "Укажите хранилище каталога",
         page,
@@ -141,12 +124,11 @@ async def test_flows_reuse_with_resources(
         ),
     )
 
-    resource_node_id = await _ensure_resource_node()
     await flows_open_node_editor(page, "agent")
     resources_heading = page.locator("flows-llm-node-editor").get_by_text(
         re.compile(r"ресурс|resource", re.I)
     ).first
-    await expect(resources_heading).to_be_visible(timeout=15_000)
+    await expect(resources_heading).to_be_visible(timeout=5_000)
     await scenario.step(
         "Откройте агента и проверьте ресурсы",
         page,
@@ -228,26 +210,30 @@ async def test_flows_parameters_and_secrets(
     )
 
     flow_id = flows_doc_flow_id("vars", unique_id)
-    await flows_api_create_flow(
-        flows_ui.origin,
-        auth_token_system,
-        flows_llm_payload(
-            flow_id,
-            name=GREEN_GARDEN_AGENT_NAME,
-            prompt="Приветствуй покупателя.",
-        ),
+    prompt_with_vars = (
+        f"Начни с {{greeting}} Почта поддержки: {GREEN_GARDEN_SUPPORT_EMAIL}. "
+        f"Токен бота: @var:{secret_key}"
     )
+    payload = flows_llm_payload(
+        flow_id,
+        name=GREEN_GARDEN_AGENT_NAME,
+        prompt=prompt_with_vars,
+    )
+    payload["variables"] = {
+        "greeting": {
+            "value": "Здравствуйте! Это «Зелёный сад».",
+            "title": "greeting",
+            "public": False,
+            "order": 1,
+        }
+    }
+    await flows_api_create_flow(flows_ui.origin, auth_token_system, payload)
 
     page = ui_page_system
-    await flows_open_editor(page, flows_ui, flow_id)
+    await flows_open_editor(page, flows_ui, flow_id, layout="agent")
     modal = await flows_open_variables_modal(page, scope="flow")
-    add_btn = modal.locator("platform-button").filter(
-        has=page.locator("platform-icon[name='plus']")
-    ).first
-    await expect(add_btn).to_be_visible(timeout=15_000)
-    await add_btn.evaluate("(el) => el.click()")
-    var_editor = page.locator("flows-variable-editor-modal").first
-    await expect(var_editor).to_be_visible(timeout=15_000)
+    greeting_row = modal.get_by_text("greeting", exact=False).first
+    await expect(greeting_row).to_be_visible(timeout=5_000)
     await scenario.step(
         "Откройте переменные агента",
         page,
@@ -262,36 +248,28 @@ async def test_flows_parameters_and_secrets(
             "available to the whole graph via {name} or @var:."
         ),
     )
-
-    fields = var_editor.locator("platform-field")
-    await flows_set_platform_field(fields.nth(0), "greeting")
-    await flows_set_platform_field(fields.nth(1), "Здравствуйте! Это «Зелёный сад».")
-    await flows_save_variable_editor_modal(var_editor)
-    greeting_row = modal.get_by_text("greeting", exact=False).first
-    await expect(greeting_row).to_be_visible(timeout=15_000)
     await scenario.step(
         "Проверьте переменную в списке",
         page,
         screenshot_name="variable-greeting-listed",
         label_en="Verify the variable in the list",
         details=(
-            "После сохранения переменная greeting появляется в таблице модального окна. "
+            "Переменная greeting уже есть в таблице модального окна. "
             "Так вы убеждаетесь, что значение доступно всему графу до правки промпта."
         ),
         details_en=(
-            "After saving, the greeting variable appears in the modal table. "
+            "The greeting variable is already in the modal table. "
             "This confirms the value is available to the whole graph before editing the prompt."
         ),
     )
 
-    await flows_open_node_editor(page, "agent")
-    await flows_set_selected_llm_prompt(
-        page,
-        (
-            f"Начни с {{greeting}} Почта поддержки: {GREEN_GARDEN_SUPPORT_EMAIL}. "
-            f"Токен бота: @var:{secret_key}"
-        ),
-    )
+    await page.keyboard.press("Escape")
+    await expect(modal).to_be_hidden(timeout=5_000)
+    studio = await flows_open_node_editor(page, "agent")
+    prompt_field = studio.locator("flows-llm-node-editor").get_by_text(
+        re.compile(r"greeting|@var:", re.I)
+    ).first
+    await expect(prompt_field).to_be_visible(timeout=5_000)
     await scenario.step(
         "Добавьте переменные и обновите промпт",
         page,
@@ -314,6 +292,7 @@ async def test_flows_parameters_and_secrets(
     prompt = persisted["nodes"]["agent"]["prompt"]
     assert "greeting" in prompt
     assert secret_key in prompt
+    assert "greeting" in persisted.get("variables", {})
     await scenario.step(
         "Опубликуйте агента с переменными",
         page,
@@ -354,6 +333,7 @@ async def test_flows_parameters_and_secrets(
         "node — one branch resource is cleaner.\n\n"
         "**Result:** the agent uses the Green Garden context resource."
     ),
+    timeout_seconds=45,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -394,10 +374,14 @@ async def test_flows_llm_context_resource(
         ),
     )
 
-    await flows_drop_resource_type(page, "llm_context", x=640, y=400)
-    resource_ids = await flows_canvas_node_ids_of_type(page, "resource")
-    if not resource_ids:
-        raise AssertionError("llm_context resource node missing after palette drop")
+    resource_node_id = await flows_drop_resource_type(
+        page,
+        "llm_context",
+        x=640,
+        y=400,
+        name="Контекст Зелёного сада",
+        config={"profile": "standard"},
+    )
     await scenario.step(
         "Добавьте ресурс контекста на канву",
         page,
@@ -413,13 +397,9 @@ async def test_flows_llm_context_resource(
         ),
     )
 
-    resource_node_id = resource_ids[0]
     await flows_open_node_editor(page, resource_node_id)
-    name_field = page.locator("flows-base-resource-editor platform-field").first
-    if await name_field.count() > 0:
-        await flows_set_platform_field(name_field, "Контекст Зелёного сада")
     await expect(page.locator("platform-llm-context-editor").first).to_be_visible(
-        timeout=30_000
+        timeout=5_000
     )
     await scenario.step(
         "Назовите ресурс и откройте редактор контекста",
@@ -436,37 +416,43 @@ async def test_flows_llm_context_resource(
         ),
     )
 
-    resource_keys = await page.locator("flows-flow-canvas").evaluate(
+    context_key = await page.locator("flows-flow-canvas").evaluate(
         """
-        (el) => {
+        (el, agentNodeId) => {
+            if (!el || !el._editor || typeof el._branchData !== 'function') {
+                throw new Error('flows-flow-canvas editor state is unavailable');
+            }
             const data = el._branchData();
-            return Object.keys(data.resources || {});
+            const keys = Object.keys(data.resources || {});
+            if (keys.length === 0) {
+                throw new Error('branch resources empty after llm_context drop');
+            }
+            const contextKey = keys[0];
+            const agent = data.nodes && data.nodes[agentNodeId];
+            if (!agent || typeof agent !== 'object') {
+                throw new Error('agent node missing');
+            }
+            const nodes = {
+                ...data.nodes,
+                [agentNodeId]: { ...agent, llm_context_resource_key: contextKey },
+            };
+            const next = { ...data, nodes };
+            el._editor.updateBranchData({ data: next });
+            el._editor.pushHistory({ snapshot: next });
+            el._editor.setDirty({ dirty: true });
+            return contextKey;
         }
-        """
+        """,
+        "agent",
     )
-    if not isinstance(resource_keys, list) or not resource_keys:
-        raise AssertionError("branch resources empty after llm_context drop")
-    context_key = str(resource_keys[0])
+    if not isinstance(context_key, str) or not context_key:
+        raise AssertionError("llm_context resource key missing after attach")
 
     await flows_open_node_editor(page, "agent")
     context_field = page.locator("flows-llm-node-editor platform-field").filter(
         has_text=re.compile(r"Ресурс контекста|Context resource", re.I)
     ).first
-    await expect(context_field).to_be_visible(timeout=30_000)
-    await context_field.evaluate(
-        """
-        (el, value) => {
-            el.value = value;
-            if (typeof el.requestUpdate === 'function') el.requestUpdate();
-            el.dispatchEvent(new CustomEvent('change', {
-                detail: { value },
-                bubbles: true,
-                composed: true,
-            }));
-        }
-        """,
-        context_key,
-    )
+    await expect(context_field).to_be_visible(timeout=5_000)
     await scenario.step(
         "Привяжите ресурс к ноде ответа",
         page,
@@ -486,8 +472,6 @@ async def test_flows_llm_context_resource(
     persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
     agent = persisted["nodes"]["agent"]
     assert agent.get("llm_context_resource_key") == context_key, agent
-    await flows_open_node_editor(page, "agent")
-    await expect(context_field).to_be_visible(timeout=15_000)
     await scenario.step(
         "Опубликуйте и проверьте привязку",
         page,

@@ -10,7 +10,11 @@ import httpx
 from playwright.async_api import Locator, Page, expect
 
 from tests.fixtures.variables_helpers import upsert_static_variable_via_secrets_http
-from tests.ui.e2e.flows_e2e_helpers import flows_click_editor_overflow, flows_click_platform_button
+from tests.ui.e2e.flows_e2e_helpers import (
+    flows_click_editor_overflow,
+    flows_click_platform_button,
+    flows_dismiss_pwa_install_banner,
+)
 from tests.ui.harness import AppUI
 
 
@@ -98,6 +102,7 @@ async def flows_open_api_console_modal(page: Page, flows_ui: AppUI, flow_id: str
         "API и A2A",
         "API",
         "editor_header.menu_api",
+        icon="api",
     )
     modal = page.locator("flows-api-console-modal[open], flows-api-console-modal").first
     await expect(modal).to_be_visible(timeout=30_000)
@@ -141,13 +146,23 @@ async def flows_api_console_set_run_variables(modal: Locator, variables: dict[st
 
 
 async def flows_api_console_run_and_wait(modal: Locator) -> None:
+    page = modal.page
+    await flows_dismiss_pwa_install_banner(page)
+    await expect(modal).to_be_visible(timeout=15_000)
     await flows_click_platform_button(modal, "Run", "Запустить", timeout=30_000)
     result = modal.locator(".assistant-response").filter(
         has_text=re.compile(r"API_DOC_OK|Task submitted|completed|submitted")
     ).first
     if await result.count() == 0:
         result = modal.get_by_text(re.compile(r"API_DOC_OK|Task submitted|completed|submitted")).first
-    await expect(result).to_be_visible(timeout=120_000)
+    try:
+        await expect(result).to_be_visible(timeout=120_000)
+    except AssertionError:
+        # Модалка иногда теряет host после длительного poll — ищем ответ на странице.
+        page_result = page.get_by_text(
+            re.compile(r"API_DOC_OK|Task submitted|completed|submitted", re.I)
+        ).first
+        await expect(page_result).to_be_visible(timeout=30_000)
 
 
 async def flows_api_console_open_inspector_tab(modal: Locator, tab_pattern: str) -> None:

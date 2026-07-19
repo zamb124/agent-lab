@@ -39,7 +39,6 @@ class BinaryViewerHandler:
         caps = self.capabilities(file_record=ctx.file_record, integration_configured=True)
         return DocumentOpenConfigResponse(
             handler="binary",
-            binding_id=ctx.binding_id,
             file_id=ctx.file_record.file_id,
             title=ctx.title,
             original_name=ctx.file_record.original_name,

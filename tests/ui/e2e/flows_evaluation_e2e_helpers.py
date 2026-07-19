@@ -27,28 +27,28 @@ async def flows_eval_create_suite(page: Page) -> None:
         'flows-evaluation-suite-sidebar platform-button[aria-label*="suite" i], '
         'flows-evaluation-suite-sidebar platform-button[aria-label*="набор" i]'
     ).first
-    await expect(create_btn).to_be_visible(timeout=30_000)
+    await expect(create_btn).to_be_visible(timeout=10_000)
     await create_btn.locator("button").first.click()
     suite_row = page_el.locator("flows-evaluation-suite-sidebar .suite-list .row").first
-    await expect(suite_row).to_be_visible(timeout=30_000)
+    await expect(suite_row).to_be_visible(timeout=10_000)
 
 
 async def flows_eval_open_templates_menu(page: Page) -> None:
     toolbar = page.locator("flows-evaluation-run-toolbar").first
-    await expect(toolbar).to_be_visible(timeout=30_000)
+    await expect(toolbar).to_be_visible(timeout=10_000)
     await flows_click_platform_button(toolbar, "Templates", "Шаблоны")
     menu = toolbar.locator(".template-menu").first
-    await expect(menu).to_be_visible(timeout=30_000)
+    await expect(menu).to_be_visible(timeout=10_000)
 
 
 async def flows_eval_add_case_from_template(page: Page, template_pattern: str) -> None:
     await flows_eval_open_templates_menu(page)
     toolbar = page.locator("flows-evaluation-run-toolbar").first
     template = toolbar.locator(".template-item").filter(has_text=re.compile(template_pattern)).first
-    await expect(template).to_be_visible(timeout=30_000)
+    await expect(template).to_be_visible(timeout=10_000)
     await template.click()
     editor = page.locator("flows-evaluation-case-editor").first
-    await expect(editor).to_be_visible(timeout=30_000)
+    await expect(editor).to_be_visible(timeout=10_000)
 
 
 async def flows_eval_select_panel(page: Page, panel_pattern: str) -> None:

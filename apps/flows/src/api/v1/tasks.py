@@ -12,10 +12,9 @@ from a2a.types import (
     Task,
     TaskState,
     TaskStatus,
-    TextPart,
 )
-from a2a.utils.message import new_agent_text_message
 from fastapi import APIRouter, HTTPException, Query
+from google.protobuf.json_format import MessageToDict
 from pydantic import Field
 
 from apps.flows.src.channels.types import FlowTaskResult
@@ -27,15 +26,24 @@ from apps.flows.src.durable_execution.models import (
 )
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
 from apps.flows.src.tasks.flow_tasks import process_flow_task
+from core.a2a import platform_task_state_to_a2a, set_task_status_state, struct_from_mapping
 from core.context import get_context
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.state import ExecutionState
-from core.types import JsonObject
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["tasks"])
+
+
+def _agent_text_message(text: str) -> Message:
+    return Message(
+        message_id=str(uuid.uuid4()),
+        role=Role.ROLE_AGENT,
+        parts=[Part(text=text)],
+    )
 
 
 class TaskSubmitRequest(StrictBaseModel):
@@ -47,9 +55,9 @@ class TaskSubmitRequest(StrictBaseModel):
     metadata: JsonObject = Field(default_factory=dict)
 
 
-@router.post("/submit", response_model=Task)
-async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Task:
-    """Отправляет задачу на выполнение. Возвращает A2A Task."""
+@router.post("/submit")
+async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> JsonObject:
+    """Отправляет задачу на выполнение. Возвращает A2A Task (ProtoJSON)."""
     task_id = str(uuid.uuid4())
     context = get_context()
     if context is None:
@@ -113,42 +121,46 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Ta
         raise HTTPException(status_code=500, detail=error_msg)
 
     task_result = FlowTaskResult.model_validate(result.return_value)
-    task_state = TaskState(task_result.task_state)
+    task_state = platform_task_state_to_a2a(task_result.task_state)
     response_text = task_result.response
 
     # Breakpoint или interrupt — оба используют input_required
     if task_result.breakpoint_hit is not None:
         response_text = f"Breakpoint at node '{task_result.breakpoint_hit}'"
-        task_state = TaskState.input_required
+        task_state = TaskState.TASK_STATE_INPUT_REQUIRED
     elif task_result.interrupt is not None:
         response_text = task_result.interrupt.question
-        task_state = TaskState.input_required
+        task_state = TaskState.TASK_STATE_INPUT_REQUIRED
 
+    task_status = TaskStatus(message=_agent_text_message(response_text))
+    set_task_status_state(task_status, task_state)
     a2a_task = Task(
         id=task_id,
         context_id=session_id,
-        status=TaskStatus(state=task_state, message=new_agent_text_message(response_text)),
-        history=[
+        status=task_status,
+    )
+    a2a_task.history.extend(
+        [
             Message(
                 message_id=str(uuid.uuid4()),
-                role=Role.user,
-                parts=[Part(root=TextPart(text=request.content))],
+                role=Role.ROLE_USER,
+                parts=[Part(text=request.content)],
                 task_id=task_id,
                 context_id=session_id,
-                metadata={"node_id": MESSAGE_SOURCE_TASK},
+                metadata=struct_from_mapping({"node_id": MESSAGE_SOURCE_TASK}),
             ),
             Message(
                 message_id=str(uuid.uuid4()),
-                role=Role.agent,
-                parts=[Part(root=TextPart(text=response_text))],
+                role=Role.ROLE_AGENT,
+                parts=[Part(text=response_text)],
                 task_id=task_id,
                 context_id=session_id,
-                metadata={"node_id": MESSAGE_SOURCE_TASK},
+                metadata=struct_from_mapping({"node_id": MESSAGE_SOURCE_TASK}),
             ),
-        ],
+        ]
     )
 
-    return a2a_task
+    return require_json_object(MessageToDict(a2a_task), "Task")
 
 
 class StateUpdateRequest(StrictBaseModel):

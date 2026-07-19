@@ -197,20 +197,23 @@ export class PlatformFileViewerModal extends PlatformModal {
                 display: flex;
                 min-width: 0;
                 min-height: 0;
-                background: var(--bg-primary);
+                background: var(--documents-stage-ambient, var(--bg-primary));
                 overflow: hidden;
                 z-index: 1;
+                padding: 0.5rem;
+                box-sizing: border-box;
             }
 
-            :host-context([data-theme='light']) .viewer-shell {
-                background: #e8eaed;
-            }
-
-            platform-onlyoffice-host {
+            platform-onlyoffice-host,
+            platform-document-viewer-host {
                 flex: 1 1 auto;
                 width: 100%;
                 min-width: 0;
                 min-height: 0;
+                border-radius: var(--documents-stage-host-radius, 12px);
+                overflow: hidden;
+                box-shadow: var(--documents-stage-host-shadow, none);
+                background: var(--documents-stage-host-bg, #f0f4f9);
             }
 
             .viewer-status,
@@ -654,7 +657,7 @@ export class PlatformFileViewerModal extends PlatformModal {
                 ${this.config
                     ? html`
                         <platform-document-viewer-host
-                            .bindingId=${fileId}
+                            .fileId=${fileId}
                             .openConfig=${this.config}
                             .suspended=${this.minimized}
                             @editor-error=${this._onEditorError}

@@ -133,6 +133,17 @@ export const messagesSendOp = createAsyncOp({
     silent: true,
     commandType: 'sync/messages/send_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/messages' },
+    onSuccess: (ctx, result, event) => {
+        const body = event.payload && event.payload.body;
+        const localId = body && typeof body.local_id === 'string' && body.local_id !== ''
+            ? body.local_id
+            : null;
+        ctx.dispatch(
+            'sync/messages_store/send_confirmed',
+            { message: result, localId },
+            { causation_id: event.id, source: 'local' },
+        );
+    },
 });
 
 export const messagesEditOp = createAsyncOp({
@@ -244,6 +255,7 @@ export const messagesStoreSlice = createSlice({
         OPTIMISTIC_ADDED: 'optimistic_added',
         OPTIMISTIC_FAILED: 'optimistic_failed',
         OPTIMISTIC_RESEND_REQUESTED: 'optimistic_resend_requested',
+        SEND_CONFIRMED: 'send_confirmed',
         FLASH_REQUESTED: 'flash_requested',
         FLASH_CLEARED: 'flash_cleared',
         INITIAL_LOAD_STARTED: 'initial_load_started',
@@ -418,15 +430,32 @@ export const messagesStoreSlice = createSlice({
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 return updateChannel(p.channelId, (cur) => ({ ...cur, loadingNewer: true }));
             }
-            case 'sync/message/created': {
-                const m = _normalizeMessage(event.payload);
+            case 'sync/message/created':
+            case 'sync/messages_store/send_confirmed': {
+                const raw = event.type === 'sync/messages_store/send_confirmed'
+                    ? (event.payload && event.payload.message)
+                    : event.payload;
+                const m = _normalizeMessage(raw);
                 if (!m || typeof m.channel_id !== 'string' || typeof m.message_id !== 'string') return state;
+                const localIdFromConfirm = event.type === 'sync/messages_store/send_confirmed'
+                    && event.payload
+                    && typeof event.payload.localId === 'string'
+                    && event.payload.localId !== ''
+                    ? event.payload.localId
+                    : null;
+                const localId = localIdFromConfirm
+                    || (typeof m.local_id === 'string' && m.local_id !== '' ? m.local_id : null);
                 return updateChannel(m.channel_id, (cur) => {
-                    if (cur.items.some((x) => x.message_id === m.message_id)) return cur;
                     let pending = cur.pendingByLocalId;
-                    if (typeof m.local_id === 'string' && pending[m.local_id]) {
+                    if (localId !== null && pending[localId]) {
                         pending = { ...pending };
-                        delete pending[m.local_id];
+                        delete pending[localId];
+                    }
+                    if (cur.items.some((x) => x.message_id === m.message_id)) {
+                        return {
+                            ...cur,
+                            pendingByLocalId: Object.freeze(pending),
+                        };
                     }
                     return {
                         ...cur,

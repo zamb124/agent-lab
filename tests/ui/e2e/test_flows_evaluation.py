@@ -127,7 +127,7 @@ async def test_flows_eval_first_case(
     case_row = page.locator("flows-evaluation-suite-sidebar .row").filter(
         has_text=re.compile(r"содержит|contains", re.I)
     ).first
-    await expect(case_row).to_be_visible(timeout=30_000)
+    await expect(case_row).to_be_visible(timeout=10_000)
     await scenario.step(
         "Проверьте сохранённый кейс",
         page,
@@ -166,6 +166,7 @@ async def test_flows_eval_first_case(
         "improved and how to set a baseline.\n\n"
         "**Result:** two runs completed, comparison opened, baseline selected."
     ),
+    timeout_seconds=120,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -294,6 +295,7 @@ async def test_flows_eval_run_compare(
         "degradation on real conversations.\n\n"
         "**Result:** the monitoring panel with baselines and gate policies is open."
     ),
+    timeout_seconds=120,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e

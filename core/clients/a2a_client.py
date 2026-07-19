@@ -1,6 +1,6 @@
 """
 A2A Client - HTTP клиент для взаимодействия с внешними агентами.
-Реализует A2A протокол.
+Реализует A2A Protocol 1.0 (JSON-RPC).
 Автоматически добавляет заголовки из контекста (Authorization, X-Company-Id и т.д.)
 """
 
@@ -9,6 +9,9 @@ import uuid
 import httpx
 from pydantic import Field
 
+from core.a2a.methods import SEND_MESSAGE
+from core.a2a.task_json import extract_text_from_parts_json, extract_text_from_task_json
+from core.a2a.task_states import wire_task_state_to_platform
 from core.context import get_context
 from core.http import get_httpx_client
 from core.logging import get_logger
@@ -16,51 +19,31 @@ from core.models import StrictBaseModel
 from core.test_scope import TEST_SCOPE_HEADER, resolve_test_scope
 from core.types import (
     JsonObject,
-    JsonValue,
     parse_json_object,
-    require_json_array,
     require_json_object,
 )
 
 logger = get_logger(__name__)
 
+A2A_PROTOCOL_VERSION = "1.0"
+A2A_VERSION_HEADER = "A2A-Version"
+
 
 class A2ATaskResponse(StrictBaseModel):
-    """Нормализованный ответ A2A `message/send`."""
+    """Нормализованный ответ A2A `SendMessage`."""
 
     response: str = Field(..., description="Склеенный текст из text/data artifacts")
-    status: str = Field(..., description="A2A task status.state")
+    status: str = Field(..., description="Platform kebab task status (из TASK_STATE_*)")
     raw: JsonObject = Field(..., description="Исходный JSON-RPC ответ A2A")
 
 
 def _extract_task_status_message(status_obj: JsonObject) -> str | None:
-    """Текст из A2A TaskStatus.message (строка или объект с parts)."""
-    raw = status_obj.get("message")
-    if raw is None:
+    """Текст из A2A 1.0 TaskStatus.message.parts (ProtoJSON Part.text)."""
+    message_value = status_obj.get("message")
+    if not isinstance(message_value, dict):
         return None
-    if isinstance(raw, str):
-        stripped = raw.strip()
-        return stripped if stripped else None
-    if isinstance(raw, dict):
-        parts = raw.get("parts")
-        if not isinstance(parts, list):
-            return None
-        texts: list[str] = []
-        for part in parts:
-            if not isinstance(part, dict):
-                continue
-            root = part.get("root")
-            if isinstance(root, dict):
-                text = root.get("text")
-                if isinstance(text, str) and text:
-                    texts.append(text)
-                continue
-            text = part.get("text")
-            if isinstance(text, str) and text:
-                texts.append(text)
-        joined = "".join(texts).strip()
-        return joined if joined else None
-    return None
+    message = require_json_object(message_value, "A2A result.status.message")
+    return extract_text_from_parts_json(message.get("parts"))
 
 
 class A2AClientError(Exception):
@@ -69,7 +52,7 @@ class A2AClientError(Exception):
 
 class A2AClient:
     """
-    HTTP клиент для A2A протокола.
+    HTTP клиент для A2A Protocol 1.0.
     Позволяет взаимодействовать с внешними агентами.
     """
 
@@ -122,7 +105,7 @@ class A2AClient:
         timeout: float | None = None,
     ) -> A2ATaskResponse:
         """
-        Отправляет задачу внешнему агенту.
+        Отправляет задачу внешнему агенту через `SendMessage`.
 
         Аргументы:
             base_url: Базовый URL агента
@@ -145,9 +128,10 @@ class A2AClient:
         session_id = session_id or str(uuid.uuid4())
 
         message_payload: JsonObject = {
-            "role": "user",
-            "parts": [{"type": "text", "text": content}],
+            "role": "ROLE_USER",
+            "parts": [{"text": content}],
             "messageId": str(uuid.uuid4()),
+            "contextId": session_id,
         }
         params_payload: JsonObject = {
             "message": message_payload,
@@ -158,7 +142,7 @@ class A2AClient:
         payload: JsonObject = {
             "jsonrpc": "2.0",
             "id": task_id,
-            "method": "message/send",
+            "method": SEND_MESSAGE,
             "params": params_payload,
         }
 
@@ -193,7 +177,11 @@ class A2AClient:
 
         try:
             effective_timeout = self.timeout if timeout is None else timeout
-            out_headers = {**request_headers, "Content-Type": "application/json"}
+            out_headers = {
+                **request_headers,
+                "Content-Type": "application/json",
+                A2A_VERSION_HEADER: A2A_PROTOCOL_VERSION,
+            }
             async with get_httpx_client(timeout=effective_timeout, follow_redirects=True) as client:
                 response = await client.post(url, json=payload, headers=out_headers)
 
@@ -202,7 +190,7 @@ class A2AClient:
                         f"Failed to send task to {url}: {response.status_code} - {response.text}"
                     )
 
-                result = parse_json_object(response.content, "A2A message/send response")
+                result = parse_json_object(response.content, "A2A SendMessage response")
 
                 if "error" in result:
                     raise A2AClientError(f"A2A error: {result['error']}")
@@ -241,41 +229,22 @@ class A2AClient:
         state_value = status_obj.get("state")
         if not isinstance(state_value, str) or not state_value:
             raise A2AClientError("A2A response missing result.status.state")
-        status = state_value
+        try:
+            status = wire_task_state_to_platform(state_value)
+        except ValueError as e:
+            raise A2AClientError(f"A2A response unknown result.status.state: {state_value!r}") from e
 
         if status == "failed":
             error_msg = _extract_task_status_message(status_obj)
             raise A2AClientError(f"A2A task failed: {error_msg or 'unknown error'}")
 
-        response_text = ""
-        artifacts_value = task_result.get("artifacts")
-        artifacts = require_json_array(artifacts_value, "A2A result.artifacts") if artifacts_value is not None else []
-        for artifact_value in artifacts:
-            artifact = require_json_object(artifact_value, "A2A result.artifacts[]")
-            parts_value = artifact.get("parts")
-            if parts_value is None:
-                raise A2AClientError("A2A artifact missing parts")
-            parts = require_json_array(parts_value, "A2A artifact.parts")
-            for part in parts:
-                part_obj = require_json_object(part, "A2A artifact.parts[]")
-                part_kind: JsonValue | None = part_obj.get("type")
-                if part_kind is None:
-                    part_kind = part_obj.get("kind")
-                if part_kind == "text":
-                    text = part_obj.get("text")
-                    if isinstance(text, str) and text:
-                        response_text += text + "\n"
-                elif part_kind == "data":
-                    data = part_obj.get("data")
-                    if data is None:
-                        continue
-                    data_obj = require_json_object(data, "A2A data part")
-                    res_value = data_obj.get("res")
-                    if isinstance(res_value, str) and res_value.strip():
-                        response_text += res_value.strip() + "\n"
+        try:
+            response_text = extract_text_from_task_json(task_result)
+        except ValueError:
+            response_text = ""
 
         return A2ATaskResponse(
-            response=response_text.strip(),
+            response=response_text,
             status=status,
             raw=raw_response,
         )

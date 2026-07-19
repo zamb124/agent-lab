@@ -37,6 +37,7 @@ _ = os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
 @pytest.mark.scenario(
     service="worktracker",
     tag="operators",
+    timeout_seconds=60,
     doc_slug="hitl-embedded-operator-chat",
     title="Встроенный чат оператора в задаче HITL",
     description=(
@@ -177,6 +178,7 @@ async def test_worktracker_hitl_embedded_operator_chat(
 @pytest.mark.scenario(
     service="worktracker",
     tag="operators",
+    timeout_seconds=60,
     doc_slug="hitl-single-reply-complete",
     title="Один ответ оператора и завершение HITL",
     description=(

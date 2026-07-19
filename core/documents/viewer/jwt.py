@@ -11,8 +11,8 @@ from core.clients.onlyoffice import (
 )
 from core.documents.viewer.models import (
     DocumentViewerHandlerId,
-    OfficeViewerBindingKind,
     OfficeViewerSaveTokenClaims,
+    OfficeViewerScope,
     OfficeViewerStreamTokenClaims,
 )
 from core.types import require_json_object
@@ -21,8 +21,7 @@ from core.types import require_json_object
 def encode_viewer_stream_token(
     *,
     handler: DocumentViewerHandlerId,
-    binding_kind: OfficeViewerBindingKind,
-    binding_id: str,
+    viewer_scope: OfficeViewerScope,
     file_id: str,
     company_id: str,
     content_type: str,
@@ -36,8 +35,7 @@ def encode_viewer_stream_token(
         OfficeViewerStreamTokenClaims(
             typ="office_view",
             handler=handler,
-            binding_kind=binding_kind,
-            binding_id=binding_id,
+            viewer_scope=viewer_scope,
             file_id=file_id,
             company_id=company_id,
             content_type=content_type,
@@ -61,8 +59,7 @@ def decode_viewer_stream_token(token: str, secret: str) -> OfficeViewerStreamTok
 
 def encode_viewer_save_token(
     *,
-    binding_kind: OfficeViewerBindingKind,
-    binding_id: str,
+    viewer_scope: OfficeViewerScope,
     file_id: str,
     company_id: str,
     secret: str,
@@ -73,8 +70,7 @@ def encode_viewer_save_token(
     payload = require_json_object(
         OfficeViewerSaveTokenClaims(
             typ="office_view_save",
-            binding_kind=binding_kind,
-            binding_id=binding_id,
+            viewer_scope=viewer_scope,
             file_id=file_id,
             company_id=company_id,
             public_link_token_hash=public_link_token_hash,

@@ -8,10 +8,11 @@ Zero-Guess: все системные поля явно типизированы
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Literal, TypedDict, TypeVar, Unpack, cast, get_args, overload, override
+from typing import ClassVar, Literal, TypedDict, TypeVar, Unpack, cast, get_args, overload, override
 
 from a2a.types import Message
 from pydantic import (
+    ConfigDict,
     Field,
     PrivateAttr,
     field_serializer,
@@ -19,6 +20,8 @@ from pydantic import (
     model_validator,
 )
 
+from core.a2a.codec import messages_from_json_list, messages_to_json_list
+from core.agent_plan.models import AgentPlan
 from core.clients.llm.messages import LLMToolCall
 from core.files.file_ref import FileRef
 from core.models import FlexibleBaseModel, StrictBaseModel
@@ -79,6 +82,7 @@ class ExecutionStateCreateKwargs(TypedDict, total=False):
     reasoning_history: list[JsonObject]
     reflection_history: list[ReflectionRecord]
     pending_reasoning: JsonObject | None
+    agent_plan: AgentPlan | None
     breakpoints: dict[str, bool]
     breakpoint_hit: str | None
     breakpoint_state: JsonObject | None
@@ -172,6 +176,14 @@ class PromptHistoryItem(FlexibleBaseModel):
 class NestedStateData(FlexibleBaseModel):
     """Данные вложенного состояния для субагентов."""
 
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow",
+        validate_assignment=False,
+        use_enum_values=True,
+        str_strip_whitespace=True,
+        arbitrary_types_allowed=True,
+    )
+
     messages: list[Message] = Field(default_factory=list, description="История сообщений субагента")
     interrupt_path: list[InterruptPathItem] = Field(
         default_factory=list,
@@ -185,22 +197,16 @@ class NestedStateData(FlexibleBaseModel):
     @field_validator("messages", mode="before")
     @classmethod
     def validate_messages(cls, v: object) -> list[Message]:
-        """Конвертирует словари в объекты Message."""
+        """Конвертирует словари в protobuf Message."""
         if v is None or v == []:
             return []
         if not isinstance(v, list):
             raise ValueError(f"messages: ожидается list, получен {type(v)}")
-        result: list[Message] = []
-        for item in cast(list[object], v):
-            if isinstance(item, Message):
-                result.append(item)
-            elif isinstance(item, dict):
-                result.append(Message.model_validate(item))
-            else:
-                raise ValueError(
-                    f"Ожидается Message или dict, получен {type(item)}"
-                )
-        return result
+        return messages_from_json_list(cast(list[object], v))
+
+    @field_serializer("messages", when_used="always")
+    def serialize_messages(self, v: list[Message]) -> list[JsonObject]:
+        return messages_to_json_list(v)
 
     @field_validator("interrupt_path", mode="before")
     @classmethod
@@ -246,6 +252,14 @@ class ExecutionState(FlexibleBaseModel):
         >>> state.task_id  # Типизированный доступ
         'task-123'
     """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow",
+        validate_assignment=False,
+        use_enum_values=True,
+        str_strip_whitespace=True,
+        arbitrary_types_allowed=True,
+    )
 
     # ========================================================================
     # Системные поля - обязательные
@@ -424,22 +438,16 @@ class ExecutionState(FlexibleBaseModel):
     @field_validator("messages", mode="before")
     @classmethod
     def validate_messages(cls, v: object) -> list[Message]:
-        """Конвертирует словари в объекты Message."""
+        """Конвертирует словари в protobuf Message."""
         if v is None or v == []:
             return []
         if not isinstance(v, list):
             raise ValueError(f"messages: ожидается list, получен {type(v)}")
-        result: list[Message] = []
-        for item in cast(list[object], v):
-            if isinstance(item, Message):
-                result.append(item)
-            elif isinstance(item, dict):
-                result.append(Message.model_validate(item))
-            else:
-                raise ValueError(
-                    f"Ожидается Message или dict, получен {type(item)}"
-                )
-        return result
+        return messages_from_json_list(cast(list[object], v))
+
+    @field_serializer("messages", when_used="always")
+    def serialize_messages(self, v: list[Message]) -> list[JsonObject]:
+        return messages_to_json_list(v)
 
     @field_validator("execution_exceptions", mode="before")
     @classmethod
@@ -677,6 +685,23 @@ class ExecutionState(FlexibleBaseModel):
         default=None,
         description="Текущее pending рассуждение"
     )
+    agent_plan: AgentPlan | None = Field(
+        default=None,
+        description="Активный AgentPlan (flat checklist); перетирается agent_plan_write",
+    )
+
+    @field_validator("agent_plan", mode="before")
+    @classmethod
+    def _validate_agent_plan(cls, value: object) -> AgentPlan | None:
+        if value is None:
+            return None
+        if isinstance(value, AgentPlan):
+            return value
+        if isinstance(value, dict):
+            return AgentPlan.model_validate(value)
+        raise ValueError(
+            f"agent_plan: ожидается AgentPlan | dict | None, получен {type(value)}"
+        )
 
     # ========================================================================
     # Точки перелома (отладка)

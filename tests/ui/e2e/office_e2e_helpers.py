@@ -12,9 +12,9 @@ from playwright.async_api import Locator, Page, expect
 from tests.office.access_helpers import (
     create_private_catalog,
     create_public_catalog,
-    enable_binding_link,
     enable_catalog_link,
-    upload_txt_binding,
+    enable_document_link,
+    upload_txt_document,
 )
 from tests.ui.e2e.sync_e2e_helpers import (
     sync_e2e_activate_namespace_for_next_load,
@@ -24,6 +24,7 @@ from tests.ui.e2e.sync_e2e_helpers import (
     sync_e2e_seed_namespace,
     sync_e2e_select_namespace,
 )
+from tests.ui.e2e_worker import ui_e2e_company_id
 
 _MIN_PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -66,7 +67,7 @@ def office_e2e_nav_rail(page: Page) -> Locator:
 
 
 def office_e2e_catalog_row(page: Page, title: str) -> Locator:
-    return office_e2e_tree(page).locator("button.item").filter(has_text=title).first
+    return office_e2e_tree(page).locator("button.item-main").filter(has_text=title).first
 
 
 async def office_e2e_open(office_ui, page: Page) -> None:
@@ -85,10 +86,15 @@ async def office_e2e_open_with_namespace(
     unique_id: str,
     *,
     suffix: str = "ui",
-    company_id: str = "system",
+    company_id: str | None = None,
 ) -> str:
-    namespace = await sync_e2e_seed_namespace(unique_id, suffix=suffix, company_id=company_id)
-    await sync_e2e_activate_namespace_for_next_load(page, namespace, company_id=company_id)
+    resolved_company_id = company_id if company_id is not None else ui_e2e_company_id()
+    namespace = await sync_e2e_seed_namespace(
+        unique_id, suffix=suffix, company_id=resolved_company_id
+    )
+    await sync_e2e_activate_namespace_for_next_load(
+        page, namespace, company_id=resolved_company_id
+    )
     await office_e2e_set_locale_ru(page)
     await office_e2e_open(office_ui, page)
     await sync_e2e_expect_ws_open(page)
@@ -443,10 +449,10 @@ async def office_api_create_empty_document(
         if response.status_code != 200:
             raise AssertionError(f"create empty doc failed: {response.status_code} {response.text}")
         body = response.json()
-        binding_id = body.get("binding_id")
-        if not isinstance(binding_id, str) or binding_id == "":
-            raise AssertionError("binding_id required in empty document response")
-        return binding_id
+        file_id = body.get("file_id")
+        if not isinstance(file_id, str) or file_id == "":
+            raise AssertionError("file_id required in empty document response")
+        return file_id
 
 
 async def office_api_upload_txt(
@@ -458,13 +464,53 @@ async def office_api_upload_txt(
     title: str,
     content: bytes = b"office e2e content",
 ) -> str:
-    return await upload_txt_binding(
+    return await upload_txt_document(
         office_client_http,
         office_e2e_namespace_headers(auth_headers, namespace),
         catalog_id=catalog_id,
         title=title,
         content=content,
     )
+
+
+async def office_api_upload_txt_auth(
+    origin: str,
+    auth_token: str,
+    *,
+    namespace: str,
+    catalog_id: str,
+    title: str,
+    content: bytes = b"office e2e content",
+) -> str:
+    """Upload txt через тот же cookie-клиент, что create_catalog (без drift headers)."""
+    async with _office_client(origin, auth_token, namespace=namespace) as client:
+        response = await client.post(
+            "/documents/api/v1/documents",
+            files={"file": (f"{title}.txt", content, "text/plain")},
+            data={"title": title, "catalog_id": catalog_id},
+        )
+        if response.status_code != 200:
+            raise AssertionError(
+                f"upload txt failed: {response.status_code} {response.text}"
+            )
+        body = response.json()
+        file_id = body.get("file_id")
+        if not isinstance(file_id, str) or file_id == "":
+            raise AssertionError("file_id required in upload response")
+        return file_id
+
+
+async def office_api_delete_document_auth(
+    origin: str,
+    auth_token: str,
+    file_id: str,
+    *,
+    namespace: str,
+) -> None:
+    async with _office_client(origin, auth_token, namespace=namespace) as client:
+        response = await client.delete(f"/documents/api/v1/documents/{file_id}")
+    if response.status_code not in {200, 204}:
+        raise AssertionError(f"delete document failed: {response.status_code} {response.text}")
 
 
 async def office_api_setup_private_catalog(
@@ -512,12 +558,12 @@ async def office_api_enable_catalog_public_link(
 async def office_api_enable_binding_public_link(
     office_client_http,
     auth_headers: dict[str, str],
-    binding_id: str,
+    file_id: str,
     *,
     namespace: str,
 ) -> str:
     headers = office_e2e_namespace_headers(auth_headers, namespace)
-    token, _body = await enable_binding_link(office_client_http, headers, binding_id)
+    token, _body = await enable_document_link(office_client_http, headers, file_id)
     return token
 
 
@@ -539,12 +585,12 @@ async def office_api_enable_rag_index(
 async def office_api_delete_document(
     office_client_http,
     auth_headers: dict[str, str],
-    binding_id: str,
+    file_id: str,
     *,
     namespace: str,
 ) -> None:
     response = await office_client_http.delete(
-        f"/documents/api/v1/documents/{binding_id}",
+        f"/documents/api/v1/documents/{file_id}",
         headers=office_e2e_namespace_headers(auth_headers, namespace),
     )
     if response.status_code not in {200, 204}:

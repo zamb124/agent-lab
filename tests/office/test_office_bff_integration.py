@@ -130,7 +130,7 @@ async def test_office_empty_document_list_rename_delete(office_client, auth_head
     )
     assert cr.status_code == 200
     created = cr.json()
-    binding_id = created["binding_id"]
+    file_id = created["file_id"]
     catalog_id = created["catalog_id"]
 
     lr = await office_client.get(
@@ -140,7 +140,7 @@ async def test_office_empty_document_list_rename_delete(office_client, auth_head
     )
     assert lr.status_code == 200
     items = lr.json()["items"]
-    match = next((i for i in items if i["binding_id"] == binding_id), None)
+    match = next((i for i in items if i["file_id"] == file_id), None)
     assert match is not None
     assert match["catalog_id"] == catalog_id
     assert match["title"] == title
@@ -155,7 +155,7 @@ async def test_office_empty_document_list_rename_delete(office_client, auth_head
 
     new_title = f"Renamed {unique_id}"
     pr = await office_client.patch(
-        f"/documents/api/v1/documents/{binding_id}",
+        f"/documents/api/v1/documents/{file_id}",
         headers=auth_headers_system,
         json={"title": new_title},
     )
@@ -163,7 +163,7 @@ async def test_office_empty_document_list_rename_delete(office_client, auth_head
     assert pr.json()["title"] == new_title
 
     dr = await office_client.delete(
-        f"/documents/api/v1/documents/{binding_id}",
+        f"/documents/api/v1/documents/{file_id}",
         headers=auth_headers_system,
     )
     assert dr.status_code == 204
@@ -223,7 +223,7 @@ async def test_office_upload_csv_cell_type(office_client, auth_headers_system, u
     )
     assert r.status_code == 200
     j = r.json()
-    assert j["binding_id"]
+    assert j["file_id"]
     assert j["file_id"]
     assert j["catalog_id"]
 
@@ -266,7 +266,7 @@ async def test_open_existing_file_as_document_is_same_file_and_idempotent(
     )
     assert second.status_code == 200, second.text
     second_body = second.json()
-    assert second_body["binding_id"] == first_body["binding_id"]
+    assert second_body["file_id"] == first_body["file_id"]
     assert second_body["file_id"] == file_id
 
 
@@ -295,9 +295,9 @@ async def test_office_empty_document_cell_slide_csv_editor_type(
             json=body,
         )
         assert cr.status_code == 200, payload
-        binding_id = cr.json()["binding_id"]
+        file_id = cr.json()["file_id"]
         er = await office_client.get(
-            f"/documents/api/v1/documents/{binding_id}/editor-config",
+            f"/documents/api/v1/documents/{file_id}/editor-config",
             headers=auth_headers_system,
         )
         assert er.status_code == 200
@@ -331,10 +331,10 @@ async def test_office_editor_config_download_roundtrip(office_client, auth_heade
         json={"title": f"Editor {unique_id}", "catalog_id": catalog_id},
     )
     assert cr.status_code == 200
-    binding_id = cr.json()["binding_id"]
+    file_id = cr.json()["file_id"]
 
     er = await office_client.get(
-        f"/documents/api/v1/documents/{binding_id}/editor-config",
+        f"/documents/api/v1/documents/{file_id}/editor-config",
         headers=auth_headers_system,
     )
     assert er.status_code == 200
@@ -342,26 +342,25 @@ async def test_office_editor_config_download_roundtrip(office_client, auth_heade
     secret = get_office_settings().office.jwt_secret
     cfg = jwt.decode(_onlyoffice_editor_token(body), secret, algorithms=["HS256"])
     assert cfg["documentType"] == "word"
-    assert cfg["document"]["key"] == binding_id or cfg["document"]["key"].startswith(f"{binding_id}_")
+    assert cfg["document"]["key"] == file_id or cfg["document"]["key"].startswith(f"{file_id}_")
     assert cfg["editorConfig"]["mode"] == "edit"
     assert cfg["editorConfig"]["coEditing"]["mode"] == "fast"
     assert cfg["editorConfig"]["lang"] in ("ru", "en")
     cust = cfg["editorConfig"]["customization"]
     assert cust["compactToolbar"] is True
     assert cust["compactHeader"] is True
-    assert cust["uiTheme"] == "theme-humanitec-light"
+    assert cust["uiTheme"] == "theme-platform-docs-light"
     assert cust["features"]["featuresTips"] is False
-    logo = cust["logo"]
-    assert "frontend_logo.svg" in logo["image"]
-    assert "/static/core/" in logo["image"]
-    assert logo["url"].endswith("/documents")
-    assert cust["customer"]["name"] == "HUMANITEC"
+    assert cust["features"]["tabStyle"] == {"mode": "line", "change": False}
+    assert cust["features"]["tabBackground"] == {"mode": "toolbar", "change": False}
+    assert "logo" not in cust
+    assert "customer" not in cust
     dl = cfg["document"]["url"]
     parsed = urlparse(dl)
     qs = parse_qs(parsed.query)
     token = qs["token"][0]
     dl_claims = decode_download_token(token, secret)
-    assert dl_claims.binding_id == binding_id
+    assert dl_claims.file_id == file_id
     assert dl_claims.file_id == cr.json()["file_id"]
     path = parsed.path
     dlr = await office_client.get(f"{path}?token={quote(token, safe='')}")
@@ -383,7 +382,7 @@ async def test_onlyoffice_callback_saves_to_s3(
         json={"title": f"Callback {unique_id}", "catalog_id": catalog_id},
     )
     assert cr.status_code == 200
-    binding_id = cr.json()["binding_id"]
+    file_id = cr.json()["file_id"]
     file_id = cr.json()["file_id"]
 
     new_body = b"replaced-by-onlyoffice-callback-pipeline"
@@ -391,7 +390,7 @@ async def test_onlyoffice_callback_saves_to_s3(
 
     integ = get_office_settings().office
     ctx_tok = encode_callback_context_token(
-        binding_id=binding_id,
+        file_id=file_id,
         company_id="system",
         namespace="default",
         secret=integ.jwt_secret,
@@ -417,12 +416,12 @@ async def test_onlyoffice_callback_saves_to_s3(
     assert meta.file_size == len(new_body)
 
     er = await office_client.get(
-        f"/documents/api/v1/documents/{binding_id}/editor-config",
+        f"/documents/api/v1/documents/{file_id}/editor-config",
         headers=auth_headers_system,
     )
     assert er.status_code == 200
     cfg = jwt.decode(_onlyoffice_editor_token(er.json()), integ.jwt_secret, algorithms=["HS256"])
-    assert cfg["document"]["key"] == f"{binding_id}_{expected_checksum[:24]}"
+    assert cfg["document"]["key"] == f"{file_id}_{expected_checksum[:24]}"
 
     office_saved_file_http["set_body"](b"duplicate-callback-should-not-apply")
     bearer_dup = jwt.encode({"payload": auth_payload}, integ.jwt_secret, algorithm="HS256")
@@ -466,7 +465,7 @@ async def test_office_nested_catalog_documents_list(office_client, auth_headers_
         json={"title": title, "catalog_id": child_id},
     )
     assert doc_cr.status_code == 200
-    binding_id = doc_cr.json()["binding_id"]
+    file_id = doc_cr.json()["file_id"]
 
     parent_lr = await office_client.get(
         "/documents/api/v1/documents",
@@ -474,8 +473,8 @@ async def test_office_nested_catalog_documents_list(office_client, auth_headers_
         headers=auth_headers_system,
     )
     assert parent_lr.status_code == 200
-    parent_ids = {item["binding_id"] for item in parent_lr.json()["items"]}
-    assert binding_id not in parent_ids
+    parent_ids = {item["file_id"] for item in parent_lr.json()["items"]}
+    assert file_id not in parent_ids
 
     child_lr = await office_client.get(
         "/documents/api/v1/documents",
@@ -484,7 +483,7 @@ async def test_office_nested_catalog_documents_list(office_client, auth_headers_
     )
     assert child_lr.status_code == 200
     child_items = child_lr.json()["items"]
-    match = next((item for item in child_items if item["binding_id"] == binding_id), None)
+    match = next((item for item in child_items if item["file_id"] == file_id), None)
     assert match is not None
     assert match["catalog_id"] == child_id
 
@@ -495,7 +494,7 @@ async def test_office_nested_catalog_documents_list(office_client, auth_headers_
     assert delete_parent.status_code == 409
 
     await office_client.delete(
-        f"/documents/api/v1/documents/{binding_id}",
+        f"/documents/api/v1/documents/{file_id}",
         headers=auth_headers_system,
     )
     delete_child = await office_client.delete(
@@ -579,7 +578,7 @@ async def test_office_list_documents_marks_missing_file_without_500(
     )
     assert create_response.status_code == 200
     created = create_response.json()
-    binding_id = created["binding_id"]
+    file_id = created["file_id"]
     file_id = created["file_id"]
 
     container = get_office_container()
@@ -593,14 +592,14 @@ async def test_office_list_documents_marks_missing_file_without_500(
     )
     assert list_response.status_code == 200
     items = list_response.json()["items"]
-    match = next((item for item in items if item["binding_id"] == binding_id), None)
+    match = next((item for item in items if item["file_id"] == file_id), None)
     assert match is not None
     assert match["file_availability"] == "missing"
     assert match["file_size"] == 0
     assert match["title"] == title
 
     delete_response = await office_client.delete(
-        f"/documents/api/v1/documents/{binding_id}",
+        f"/documents/api/v1/documents/{file_id}",
         headers=auth_headers_system,
     )
     assert delete_response.status_code == 204

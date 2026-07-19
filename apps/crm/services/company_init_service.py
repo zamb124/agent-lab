@@ -201,7 +201,9 @@ class CompanyInitService:
             if existing is not None:
                 existing.name = template["name"]
                 existing.description = template.get("description")
-                existing.prompt = template.get("prompt")
+                # prompt — user-editable AI text; re-init не затирает правки компании.
+                if existing.prompt is None:
+                    existing.prompt = template.get("prompt")
                 existing.is_directed = template.get("is_directed", True)
                 existing.inverse_type_id = template.get("inverse_type_id")
                 existing.icon = template.get("icon")

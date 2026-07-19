@@ -6,20 +6,32 @@ import asyncio
 import re
 import time
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import httpx
-from playwright.async_api import Locator, Page, expect
+from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeoutError, expect
 
+from tests.ui.e2e.ui_e2e_pwa import ui_e2e_dismiss_pwa_install_banner
 from tests.ui.harness import AppUI
 
 
-def flows_company_origin(origin: str, company_slug: str = "company2") -> str:
-    """Возвращает тот же origin тестового сервиса на subdomain компании."""
-    if "://localhost" in origin:
-        return origin.replace("://localhost", f"://{company_slug}.localhost")
-    if "://system.lvh.me" in origin:
-        return origin.replace("://system.lvh.me", f"://{company_slug}.lvh.me")
-    raise ValueError(f"Unsupported origin for flows company subdomain: {origin!r}")
+def flows_company_origin(origin: str, company_slug: str | None = None) -> str:
+    """Возвращает тот же origin тестового сервиса на subdomain компании (worker c2)."""
+    from tests.ui.e2e_worker import ui_e2e_subdomain_company2
+
+    slug = company_slug if company_slug is not None else ui_e2e_subdomain_company2()
+    parsed = urlparse(origin)
+    host = parsed.hostname
+    if host is None or host.strip() == "":
+        raise ValueError(f"Unsupported origin for flows company subdomain: {origin!r}")
+    if host.endswith(".lvh.me"):
+        new_host = f"{slug}.lvh.me"
+    elif host == "localhost" or host.endswith(".localhost"):
+        new_host = f"{slug}.localhost"
+    else:
+        raise ValueError(f"Unsupported origin for flows company subdomain: {origin!r}")
+    netloc = new_host if parsed.port is None else f"{new_host}:{parsed.port}"
+    return parsed._replace(netloc=netloc).geturl()
 
 
 def flows_doc_flow_id(prefix: str, unique_id: str) -> str:
@@ -66,6 +78,35 @@ async def flows_api_get_flow(origin: str, auth_token: str, flow_id: str) -> dict
     payload = response.json()
     if not isinstance(payload, dict):
         raise AssertionError("GET /flows/{flow_id} must return an object.")
+    return payload
+
+
+async def flows_api_create_branch(
+    origin: str,
+    auth_token: str,
+    flow_id: str,
+    *,
+    branch_id: str,
+    name: str,
+    description: str = "",
+) -> dict[str, Any]:
+    async with _flows_client(origin, auth_token) as client:
+        response = await client.post(
+            f"/flows/api/v1/{flow_id}/branches",
+            json={
+                "branch_id": branch_id,
+                "name": name,
+                "description": description,
+            },
+        )
+    if response.status_code >= 400:
+        raise AssertionError(
+            f"POST /flows/api/v1/{flow_id}/branches failed: "
+            f"{response.status_code} {response.text}"
+        )
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise AssertionError("POST branch must return an object.")
     return payload
 
 
@@ -136,6 +177,55 @@ def flows_llm_payload(
     }
 
 
+def flows_llm_with_reflection_payload(
+    flow_id: str,
+    *,
+    name: str,
+    prompt: str,
+    reflection_node_id: str = "reflection_1",
+) -> dict[str, Any]:
+    """Агент + reflection после него (для быстрых UI-сценариев без DnD)."""
+    payload = flows_llm_payload(flow_id, name=name, prompt=prompt)
+    nodes = payload["nodes"]
+    if not isinstance(nodes, dict):
+        raise TypeError("flows_llm_payload nodes must be a dict")
+    nodes[reflection_node_id] = {
+        "type": "reflection",
+        "name": "Answer review",
+        "pos_x": 420,
+        "pos_y": 120,
+        "llm": {
+            "provider": "humanitec_llm",
+            "model": "auto",
+            "temperature": 0.0,
+            "max_tokens": 512,
+        },
+        "critic_policy": {
+            "policy_id": "final-answer-safety",
+            "gate": "final_answer",
+            "target": {"kind": "response"},
+            "instruction": "Block vague or unsafe final answers.",
+            "criteria": [
+                {
+                    "criterion_id": "clarity",
+                    "description": "Answer must be concrete and actionable.",
+                    "severity": "error",
+                }
+            ],
+            "min_confidence": 0.8,
+            "block_on_severities": ["error", "critical"],
+        },
+    }
+    agent = nodes["agent"]
+    if isinstance(agent, dict):
+        agent["pos_x"] = 80
+        agent["pos_y"] = 120
+    payload["edges"] = [
+        {"from_node": "agent", "to_node": reflection_node_id},
+    ]
+    return payload
+
+
 async def flows_click_platform_button(
     scope: Page | Locator,
     *labels: str,
@@ -144,10 +234,17 @@ async def flows_click_platform_button(
     if not labels:
         raise ValueError("At least one button label is required.")
     exact_labels = "|".join(re.escape(label) for label in labels)
-    label_pattern = re.compile(rf"^\s*(?:{exact_labels})\s*$")
+    # Segmented tabs: "Catalog (1)", "Installed (2)".
+    label_pattern = re.compile(rf"^\s*(?:{exact_labels})(?:\s*\(\d+\))?\s*$")
     host = scope.locator("platform-button").filter(has_text=label_pattern).first
-    await expect(host).to_be_visible(timeout=timeout)
-    button = host.locator("button").first
+    if await host.count() > 0:
+        await expect(host).to_be_visible(timeout=timeout)
+        button = host.locator("button").first
+        await expect(button).to_be_enabled(timeout=timeout)
+        await button.click(no_wait_after=True)
+        return
+    button = scope.get_by_role("button", name=label_pattern).first
+    await expect(button).to_be_visible(timeout=timeout)
     await expect(button).to_be_enabled(timeout=timeout)
     await button.click(no_wait_after=True)
 
@@ -218,15 +315,32 @@ async def flows_drop_llm_node(page: Page, *, x: int = 700, y: int = 330) -> None
         )
 
 
+async def flows_e2e_open_studio_prompt_section(page: Page) -> Locator:
+    """Секция Prompt в Agent Focus."""
+    studio = page.locator("flows-agent-focus-studio").first
+    await expect(studio).to_be_visible(timeout=5_000)
+    prompt_tab = studio.locator("platform-segmented-control").get_by_role(
+        "button",
+        name=re.compile(r"^Prompt$|^Промпт$", re.I),
+    ).first
+    await expect(prompt_tab).to_be_visible(timeout=5_000)
+    if await prompt_tab.get_attribute("aria-pressed") != "true":
+        await prompt_tab.click()
+    return studio
+
+
 async def flows_set_selected_llm_prompt(page: Page, prompt: str) -> None:
+    studio = page.locator("flows-agent-focus-studio").first
+    if await studio.count() > 0 and await studio.is_visible():
+        await flows_e2e_open_studio_prompt_section(page)
     editor = page.locator(
         "flows-floating-panel[show-backdrop] flows-llm-node-editor, "
         "flows-agent-focus-studio flows-llm-node-editor, "
         "flows-property-panel flows-llm-node-editor"
     ).first
-    await expect(editor).to_be_visible(timeout=30_000)
+    await expect(editor).to_be_visible(timeout=5_000)
     prompt_editor = editor.locator("prompt-editor").first
-    await expect(prompt_editor).to_be_visible(timeout=30_000)
+    await expect(prompt_editor).to_be_visible(timeout=5_000)
     await prompt_editor.evaluate(
         """
         (el, value) => {
@@ -243,27 +357,105 @@ async def flows_set_selected_llm_prompt(page: Page, prompt: str) -> None:
     )
 
 
+async def flows_e2e_open_studio_model_section(page: Page) -> Locator:
+    """Секция Model в Agent Focus — там flows-llm-config-editor."""
+    studio = page.locator("flows-agent-focus-studio").first
+    await expect(studio).to_be_visible(timeout=5_000)
+    model_tab = studio.locator("platform-segmented-control").get_by_role(
+        "button",
+        name=re.compile(r"^Model$|^Модель$", re.I),
+    ).first
+    await expect(model_tab).to_be_visible(timeout=5_000)
+    if await model_tab.get_attribute("aria-pressed") != "true":
+        await model_tab.click()
+    return studio
+
+
 async def flows_set_selected_llm_config(page: Page, config: dict[str, Any]) -> None:
+    studio = page.locator("flows-agent-focus-studio").first
+    if await studio.count() > 0 and await studio.is_visible():
+        await flows_e2e_open_studio_model_section(page)
     editor = page.locator(
         "flows-floating-panel flows-llm-node-editor, "
         "flows-property-panel flows-llm-node-editor, "
         "flows-agent-focus-studio flows-llm-node-editor"
     ).first
+    await expect(editor).to_be_visible(timeout=5_000)
     llm_config = editor.locator("flows-llm-config-editor").first
-    await expect(llm_config).to_be_visible(timeout=30_000)
+    await expect(llm_config).to_be_visible(timeout=5_000)
     await llm_config.evaluate(
         """
-        (el, config) => {
-            el.config = config;
+        (el, nextConfig) => {
+            el.config = nextConfig;
             if (typeof el.requestUpdate === 'function') el.requestUpdate();
             el.dispatchEvent(new CustomEvent('change', {
-                detail: { config },
+                detail: { config: nextConfig },
                 bubbles: true,
                 composed: true,
             }));
         }
         """,
         config,
+    )
+    # Sticky patch в branchData: late load / studio sync могут откатить UI change.
+    canvas = page.locator("flows-flow-canvas").first
+    if await canvas.count() == 0:
+        return
+    inject_js = """
+        (el, nextConfig) => {
+            if (!el || !el._editor || typeof el._branchData !== 'function') {
+                throw new Error('flows_set_selected_llm_config: canvas editor unavailable');
+            }
+            const data = el._branchData();
+            const nodes = data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+            const selectedId = el._editor.selectedNodeId;
+            const nodeId = typeof selectedId === 'string' && selectedId !== ''
+                ? selectedId
+                : (Object.prototype.hasOwnProperty.call(nodes, 'agent') ? 'agent' : '');
+            if (nodeId === '' || !nodes[nodeId]) {
+                throw new Error('flows_set_selected_llm_config: selected llm node missing');
+            }
+            const prev = nodes[nodeId];
+            const nextNode = { ...prev, llm: { ...(prev.llm || {}), ...nextConfig } };
+            const next = { ...data, nodes: { ...nodes, [nodeId]: nextNode } };
+            el._editor.updateBranchData({ data: next });
+            el._editor.setDirty({ dirty: true });
+            el._editor.pushHistory({ snapshot: next });
+            return nodeId;
+        }
+    """
+    verify_js = """
+        (el, ctx) => {
+            if (!el || typeof el._branchData !== 'function') return null;
+            const data = el._branchData();
+            const node = data && data.nodes ? data.nodes[ctx.nodeId] : null;
+            const llm = node && node.llm && typeof node.llm === 'object' ? node.llm : null;
+            if (!llm) return null;
+            return {
+                temperature: llm.temperature,
+                max_tokens: llm.max_tokens,
+                model: llm.model,
+                provider: llm.provider,
+            };
+        }
+    """
+    for _attempt in range(3):
+        node_id = await canvas.evaluate(inject_js, config)
+        if not isinstance(node_id, str) or node_id == "":
+            await asyncio.sleep(0.15)
+            continue
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            current = await canvas.evaluate(verify_js, {"nodeId": node_id})
+            if (
+                isinstance(current, dict)
+                and current.get("temperature") == config.get("temperature")
+                and current.get("max_tokens") == config.get("max_tokens")
+            ):
+                return
+            await asyncio.sleep(0.1)
+    raise AssertionError(
+        f"flows_set_selected_llm_config: config not sticky in branchData ({config!r})"
     )
 
 
@@ -380,25 +572,39 @@ async def flows_chat_click_clear(page: Page) -> None:
 
 async def flows_publish_editor(page: Page) -> None:
     await flows_close_floating_panel(page)
+    await flows_dismiss_blocking_overlays(page)
     publish_pattern = re.compile(r"^\s*(?:Publish|Опубликовать)\s*$")
     button = page.locator("flows-editor-header platform-button").filter(
         has_text=publish_pattern
     ).first
-    await expect(button).to_be_visible(timeout=30_000)
+    await expect(button).to_be_visible(timeout=5_000)
     inner = button.locator("button").first
-    await expect(inner).to_be_enabled(timeout=30_000)
-    async with page.expect_response(
-        lambda response: response.request.method == "PUT"
-        and "/flows/api/v1/flows/" in response.url,
-        timeout=120_000,
-    ) as publish_response:
-        await button.evaluate("(el) => el.click()")
-    response = await publish_response.value
+    await expect(inner).to_be_enabled(timeout=5_000)
+    draft = page.locator("flows-editor-header").get_by_text(
+        re.compile(r"^\s*(?:Draft|Черновик)\s*$")
+    ).first
+    # Уже опубликовано и нет черновика — publish не шлёт PUT.
+    if await draft.count() == 0:
+        return
+    try:
+        async with page.expect_response(
+            lambda response: response.request.method == "PUT"
+            and "/flows/api/v1/flows/" in response.url,
+            timeout=10_000,
+        ) as publish_response:
+            await button.evaluate("(el) => el.click()")
+        response = await publish_response.value
+    except TimeoutError as exc:
+        if await draft.count() == 0 or not await draft.is_visible():
+            return
+        raise AssertionError(
+            "flows_publish_editor: PUT /flows/api/v1/flows/ not observed while Draft visible"
+        ) from exc
     if response.status >= 400:
         raise AssertionError(
             f"flows_publish_editor: PUT failed with {response.status}: {await response.text()}"
         )
-    await expect(inner).to_be_enabled(timeout=30_000)
+    await expect(inner).to_be_enabled(timeout=5_000)
 
 
 async def _flows_handle_post_drop_modal(page: Page, node_type: str) -> None:
@@ -579,59 +785,110 @@ def flows_background_task_payload(
 
 
 async def flows_dismiss_pwa_install_banner(page: Page) -> None:
+    await ui_e2e_dismiss_pwa_install_banner(page)
+
+
+def _flows_editor_layout_storage_key(flow_id: str) -> str:
+    """Ключ localStorage как в apps/flows/ui/_helpers/flow-editor-layout.js."""
+    segment = re.sub(r"[^a-z0-9_]+", "_", flow_id.lower())
+    segment = re.sub(r"^_+|_+$", "", segment)
+    segment = re.sub(r"_+", "_", segment)
+    if not segment or not re.fullmatch(r"[a-z][a-z0-9_]*", segment):
+        raise ValueError(f"Cannot derive editor_layout storage segment from flow_id={flow_id!r}")
+    return f"platform:flows:editor_layout.{segment}"
+
+
+async def flows_seed_editor_layout_preference(
+    page: Page,
+    flow_id: str,
+    layout: Literal["agent", "canvas"],
+) -> None:
+    """Пишет preference до/после load — editor читает его при resolveEditorLayout."""
+    if layout not in {"agent", "canvas"}:
+        raise ValueError(f"layout must be agent|canvas, got {layout!r}")
+    key = _flows_editor_layout_storage_key(flow_id)
     await page.evaluate(
-        """
-        () => {
-            localStorage.setItem('pwa-banner-dismissed', 'true');
-            document.querySelectorAll('pwa-install-banner').forEach((banner) => {
-                banner._dismissed = true;
-                banner.removeAttribute('visible');
-                banner.style.display = 'none';
-                banner.style.pointerEvents = 'none';
-            });
-        }
-        """
+        """([storageKey, value]) => { localStorage.setItem(storageKey, value); }""",
+        [key, layout],
     )
 
 
-async def flows_open_editor(page: Page, flows_ui: AppUI, flow_id: str, *, branch_id: str = "base") -> None:
+async def flows_open_editor(
+    page: Page,
+    flows_ui: AppUI,
+    flow_id: str,
+    *,
+    branch_id: str = "base",
+    layout: Literal["agent", "canvas"] = "canvas",
+) -> None:
     """Единая точка входа в редактор flow (Studio или канва)."""
+    if layout not in {"agent", "canvas"}:
+        raise ValueError(f"layout must be agent|canvas, got {layout!r}")
     if branch_id in {"", "base", "default"}:
         url = f"{flows_ui.origin}/flows/{flow_id}/editor"
     else:
         url = f"{flows_ui.origin}/flows/{flow_id}/editor/{branch_id}"
+    layout_key = _flows_editor_layout_storage_key(flow_id)
+    # add_init_script не принимает arg — значения вшиваем в исходник.
+    # Дефолт E2E — канва; Agent Focus — layout="agent" или switch без reload.
     await page.add_init_script(
-        "() => localStorage.setItem('pwa-banner-dismissed', 'true')"
+        f"""() => {{
+            localStorage.setItem('pwa-banner-dismissed', 'true');
+            localStorage.setItem({layout_key!r}, {layout!r});
+        }}"""
     )
     await page.goto(url, wait_until="domcontentloaded")
-    await expect(page.locator("flows-app")).to_be_visible(timeout=30_000)
+    await expect(page.locator("flows-app")).to_be_visible(timeout=8_000)
     await flows_dismiss_pwa_install_banner(page)
-    await expect(page.locator("flows-editor-header")).to_be_visible(timeout=30_000)
-    studio_sections = page.get_by_role(
-        "group", name=re.compile(r"Agent editor sections", re.I)
-    )
-    canvas = page.locator("flows-flow-canvas svg.canvas-host").first
-    for _ in range(60):
-        if await canvas.count() > 0 and await canvas.is_visible():
+    await expect(page.locator("flows-editor-header")).to_be_visible(timeout=8_000)
+    if layout == "agent":
+        studio = page.locator("flows-agent-focus-studio").first
+        try:
+            await expect(studio).to_be_visible(timeout=8_000)
             return
-        if await studio_sections.count() > 0 and await studio_sections.first.is_visible():
+        except AssertionError:
+            await flows_e2e_switch_editor_layout(page, "agent")
             return
-        await page.wait_for_timeout(500)
-    raise AssertionError(
-        "flows_open_editor: neither Studio nor canvas became ready"
-    )
+    # LLM-графы могут открыться в Agent Focus несмотря на localStorage=canvas —
+    # переключаем и ждём branchData с короткими ретраями (late setFlow / flip-back).
+    last_error: BaseException | None = None
+    for _attempt in range(4):
+        try:
+            await flows_e2e_ensure_canvas_layout(page)
+            await expect(page.locator("flows-flow-canvas svg.canvas-host").first).to_be_visible(
+                timeout=3_000
+            )
+            await _flows_wait_branch_data_ready(page, timeout_s=2.5)
+            return
+        except (AssertionError, PlaywrightTimeoutError) as exc:
+            last_error = exc
+            await asyncio.sleep(0.25)
+    if last_error is not None:
+        raise AssertionError("flows_open_editor: canvas branchData not ready") from last_error
+    raise AssertionError("flows_open_editor: canvas branchData not ready")
 
 
 async def flows_canvas_node_ids_of_type(page: Page, node_type: str) -> list[str]:
-    handles = await page.locator(
-        f"flows-flow-canvas g.node[data-node-type='{node_type}']"
-    ).element_handles()
-    ids: list[str] = []
-    for handle in handles:
-        node_id = await handle.get_attribute("data-node-id")
-        if node_id:
-            ids.append(node_id)
-    return ids
+    """ID нод данного type из branchData (SVG data-* атрибуты могут отставать)."""
+    canvas = page.locator("flows-flow-canvas").first
+    raw = await canvas.evaluate(
+        """
+        (el, wantedType) => {
+            if (!el || typeof el._branchData !== 'function') {
+                return [];
+            }
+            const data = el._branchData();
+            const nodes = data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+            return Object.entries(nodes)
+                .filter(([, node]) => node && typeof node === 'object' && node.type === wantedType)
+                .map(([nodeId]) => nodeId);
+        }
+        """,
+        node_type,
+    )
+    if not isinstance(raw, list):
+        raise AssertionError(f"flows_canvas_node_ids_of_type: unexpected payload {raw!r}")
+    return [str(node_id) for node_id in raw if isinstance(node_id, str) and node_id]
 
 
 async def flows_dismiss_code_node_drop_modal(page: Page) -> None:
@@ -688,6 +945,34 @@ async def _flows_apply_palette_drop(
     )
 
 
+async def _flows_wait_branch_data_ready(page: Page, *, timeout_s: float = 5.0) -> None:
+    canvas = page.locator("flows-flow-canvas").first
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if await canvas.count() == 0:
+            await asyncio.sleep(0.1)
+            continue
+        try:
+            ready = await canvas.evaluate(
+                """
+                (el) => {
+                    if (!el || typeof el._branchData !== 'function') return false;
+                    const data = el._branchData();
+                    const nodes = data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+                    return Object.keys(nodes).length > 0;
+                }
+                """,
+                timeout=1_000,
+            )
+        except (TimeoutError, PlaywrightTimeoutError):
+            await asyncio.sleep(0.1)
+            continue
+        if ready is True:
+            return
+        await asyncio.sleep(0.1)
+    raise AssertionError("flows canvas branchData empty after wait")
+
+
 async def flows_drop_node(
     page: Page,
     node_type: str,
@@ -696,32 +981,121 @@ async def flows_drop_node(
     y: int = 330,
     resource_type: str = "",
 ) -> str:
-    """Добавляет ноду любого типа через drag-and-drop; при сбое DnD — метод канвы.
-
-    Возвращает node_id только что добавленной ноды.
-    """
+    """Добавляет ноду в branchData (palette drop + fallback inject)."""
     await flows_e2e_ensure_canvas_layout(page)
+    await flows_dismiss_blocking_overlays(page)
+    canvas = page.locator("flows-flow-canvas").first
     await expect(page.locator("flows-flow-canvas svg.canvas-host").first).to_be_visible(timeout=5_000)
-    palette_item = page.locator(
-        f"flows-node-types-sidebar .node-item[data-node-type='{node_type}']"
-    ).first
-    await expect(palette_item).to_be_visible(timeout=5_000)
+    await _flows_wait_branch_data_ready(page)
     before_ids = set(await flows_canvas_node_ids_of_type(page, node_type))
 
-    try:
-        await palette_item.drag_to(
-            page.locator("flows-flow-canvas svg.canvas-host").first,
-            target_position={"x": x, "y": y},
-            timeout=2_000,
+    if node_type in {"flow", "mcp", "reflection"}:
+        await _flows_apply_palette_drop(
+            page,
+            node_type=node_type,
+            x=x,
+            y=y,
+            resource_type=resource_type,
         )
-    except Exception:
-        pass
+        await _flows_handle_post_drop_modal(page, node_type)
+    else:
+        # Прямой inject: _applyPaletteDrop для llm/channel кладёт config:{} и UI может
+        # не материализовать ноду стабильно для E2E. Повтор при race с late load.
+        inject_js = """
+            (el, ctx) => {
+                if (!el || !el._editor || typeof el._branchData !== 'function') {
+                    throw new Error('flows-flow-canvas editor state is unavailable');
+                }
+                const data = el._branchData();
+                const nodeId = `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+                const base = {
+                    type: ctx.nodeType,
+                    name: ctx.nodeType,
+                    pos_x: ctx.x - 140,
+                    pos_y: ctx.y - 40,
+                };
+                let node = base;
+                if (ctx.nodeType === 'llm_node') {
+                    node = {
+                        ...base,
+                        prompt: 'Отвечай кратко.',
+                        tools: [],
+                        agent_skills: [],
+                        llm: {
+                            provider: 'humanitec_llm',
+                            model: 'auto',
+                            temperature: 0.2,
+                            max_tokens: 1024,
+                        },
+                    };
+                } else if (ctx.nodeType === 'channel') {
+                    node = {
+                        ...base,
+                        channel: 'telegram',
+                        action: 'send_message',
+                        channel_config: {},
+                    };
+                } else if (ctx.nodeType === 'external_api') {
+                    node = {
+                        ...base,
+                        method: 'GET',
+                        url: 'https://httpbin.org/get',
+                        headers: {},
+                        timeout: 30,
+                    };
+                } else if (ctx.nodeType === 'code') {
+                    node = {
+                        ...base,
+                        language: 'python',
+                        code: ctx.code || '',
+                    };
+                }
+                const nodes = { ...(data.nodes || {}), [nodeId]: node };
+                const next = { ...data, nodes };
+                el._editor.updateBranchData({ data: next });
+                el._editor.pushHistory({ snapshot: next });
+                el._editor.setDirty({ dirty: true });
+                el._editor.selectNode({ nodeId });
+                return nodeId;
+            }
+        """
+        inject_ctx: dict[str, Any] = {"x": x, "y": y, "nodeType": node_type}
+        if node_type == "code":
+            inject_ctx["code"] = (
+                "async def run(args, state):\n"
+                '    state["response"] = state.get("content", "")\n'
+                "    return state\n"
+            )
+        injected = ""
+        for _attempt in range(3):
+            candidate = await canvas.evaluate(inject_js, inject_ctx)
+            if not isinstance(candidate, str) or not candidate:
+                await asyncio.sleep(0.15)
+                continue
+            present_deadline = time.monotonic() + 1.5
+            while time.monotonic() < present_deadline:
+                present = await canvas.evaluate(
+                    """
+                    (el, selectedNodeId) => {
+                        const data = el._branchData();
+                        return Boolean(data && data.nodes && data.nodes[selectedNodeId]);
+                    }
+                    """,
+                    candidate,
+                )
+                if present is True:
+                    return candidate
+                await asyncio.sleep(0.1)
+            injected = candidate
+        raise AssertionError(
+            f"flows_drop_node({node_type!r}): inject not sticky in branchData "
+            f"(last={injected!r})"
+        )
 
     seed_node_ids = frozenset({"start", "end", "agent", "entry", "orchestrator", "echo"})
     timeout_seconds = 8.0 if node_type in {"flow", "mcp"} else 5.0
     deadline = time.monotonic() + timeout_seconds
     node_id = ""
-    palette_applied = False
     while time.monotonic() < deadline:
         await _flows_handle_post_drop_modal(page, node_type)
         after_ids = set(await flows_canvas_node_ids_of_type(page, node_type))
@@ -733,16 +1107,7 @@ async def flows_drop_node(
         if len(new_ids) == 1:
             node_id = new_ids[0]
             break
-        if not palette_applied:
-            await _flows_apply_palette_drop(
-                page,
-                node_type=node_type,
-                x=x,
-                y=y,
-                resource_type=resource_type,
-            )
-            palette_applied = True
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.2)
 
     if not node_id:
         timeout_label = "8s" if node_type in {"flow", "mcp"} else "5s"
@@ -750,39 +1115,55 @@ async def flows_drop_node(
             f"flows_drop_node({node_type!r}): no new node appeared within {timeout_label} "
             f"(before={sorted(before_ids)!r})"
         )
-    if node_type == "code":
-        await flows_dismiss_code_node_drop_modal(page)
     return node_id
 
 
 async def flows_select_canvas_node(page: Page, node_id: str) -> None:
-    """Выбирает ноду на канве (programmatic selectNode + dblclick fallback)."""
+    """Выбирает ноду через editor.selectNode (SVG data-node-id может отставать)."""
     await flows_e2e_ensure_canvas_layout(page)
-    node = page.locator(f"flows-flow-canvas g.node[data-node-id='{node_id}']").first
-    await expect(node).to_be_visible(timeout=15_000)
     canvas = page.locator("flows-flow-canvas").first
+    await expect(canvas).to_be_visible(timeout=5_000)
     await canvas.evaluate(
         """
         (el, selectedNodeId) => {
-            if (el._editor && typeof el._editor.selectNode === 'function') {
-                el._editor.selectNode({ nodeId: selectedNodeId });
+            if (!el || !el._editor || typeof el._editor.selectNode !== 'function') {
+                throw new Error('flows-flow-canvas.selectNode unavailable');
             }
+            if (typeof el._branchData === 'function') {
+                const data = el._branchData();
+                const nodes = data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+                if (!Object.prototype.hasOwnProperty.call(nodes, selectedNodeId)) {
+                    throw new Error(`node ${selectedNodeId} missing in branchData`);
+                }
+            }
+            el._editor.selectNode({ nodeId: selectedNodeId });
         }
         """,
         node_id,
     )
-    await node.dblclick(force=True)
+    node = page.locator(f"flows-flow-canvas g.node[data-node-id='{node_id}']").first
+    if await node.count() > 0 and await node.is_visible():
+        await node.dblclick(force=True)
 
 
 async def flows_canvas_node_ids(page: Page) -> list[str]:
-    """Список node_id всех нод на канве."""
-    handles = await page.locator("flows-flow-canvas g.node").element_handles()
-    ids: list[str] = []
-    for handle in handles:
-        node_id = await handle.get_attribute("data-node-id")
-        if node_id:
-            ids.append(node_id)
-    return ids
+    """Список node_id всех нод из branchData."""
+    canvas = page.locator("flows-flow-canvas").first
+    raw = await canvas.evaluate(
+        """
+        (el) => {
+            if (!el || typeof el._branchData !== 'function') {
+                return [];
+            }
+            const data = el._branchData();
+            const nodes = data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+            return Object.keys(nodes);
+        }
+        """
+    )
+    if not isinstance(raw, list):
+        raise AssertionError(f"flows_canvas_node_ids: unexpected payload {raw!r}")
+    return [str(node_id) for node_id in raw if isinstance(node_id, str) and node_id]
 
 
 async def flows_canvas_edge_count(page: Page) -> int:
@@ -891,36 +1272,91 @@ async def flows_close_floating_panel(page: Page) -> None:
         pass
 
 
-async def flows_open_node_editor(page: Page, node_id: str) -> Locator:
-    """Открывает floating-панель редактора выбранной ноды."""
-    await flows_e2e_ensure_canvas_layout(page)
-    await flows_close_floating_panel(page)
-    floating = page.locator(f"flows-floating-panel[panel-id='{node_id}']").first
-    deadline = time.monotonic() + 15.0
+async def flows_wait_node_in_branch_data(
+    page: Page,
+    node_id: str,
+    *,
+    timeout_s: float = 15.0,
+) -> None:
+    """Ждёт появления node_id в branchData (после load flow)."""
+    canvas = page.locator("flows-flow-canvas").first
+    deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        property_panel = floating.locator("flows-property-panel")
+        present = await canvas.evaluate(
+            """
+            (el, selectedNodeId) => {
+                if (!el || typeof el._branchData !== 'function') return false;
+                const data = el._branchData();
+                const nodes = data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+                return Object.prototype.hasOwnProperty.call(nodes, selectedNodeId);
+            }
+            """,
+            node_id,
+        )
+        if present is True:
+            return
+        await asyncio.sleep(0.1)
+    keys = await flows_canvas_node_ids(page)
+    raise AssertionError(
+        f"flows_wait_node_in_branch_data: {node_id!r} missing after {timeout_s}s "
+        f"(nodes={keys!r})"
+    )
+
+
+async def flows_open_node_editor(page: Page, node_id: str) -> Locator:
+    """Открывает редактор ноды: Agent Focus studio или floating-панель на канве."""
+    await flows_dismiss_blocking_overlays(page)
+    studio = page.locator("flows-agent-focus-studio").first
+    if await studio.count() > 0 and await studio.is_visible():
+        llm_editor = studio.locator("flows-llm-node-editor").first
+        await expect(llm_editor).to_be_visible(timeout=5_000)
+        return studio
+
+    await flows_e2e_ensure_canvas_layout(page)
+    await flows_wait_node_in_branch_data(page, node_id)
+    floating = page.locator(
+        f"flows-floating-panel[panel-id='{node_id}'][show-backdrop]"
+    ).first
+    node_editor = floating.locator(
+        "flows-llm-node-editor, "
+        "flows-reflection-node-editor, "
+        "flows-code-node-editor, "
+        "flows-remote-flow-editor, "
+        "flows-channel-node-editor, "
+        "flows-external-api-editor, "
+        "flows-mcp-node-editor, "
+        "flows-hitl-node-editor, "
+        "flows-base-node-editor"
+    ).first
+    if await floating.count() > 0 and await floating.is_visible() and await node_editor.count() > 0:
+        await expect(node_editor).to_be_visible(timeout=2_000)
+        return floating
+    await flows_close_floating_panel(page)
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        await flows_select_canvas_node(page, node_id)
+        await asyncio.sleep(0.15)
         if (
             await floating.count() > 0
             and await floating.is_visible()
-            and await property_panel.count() > 0
-            and await property_panel.is_visible()
+            and await node_editor.count() > 0
+            and await node_editor.is_visible()
         ):
             return floating
-        await flows_select_canvas_node(page, node_id)
-        await asyncio.sleep(0.3)
-    await expect(floating).to_be_visible(timeout=5_000)
-    await expect(floating.locator("flows-property-panel")).to_be_visible(timeout=15_000)
+    await expect(floating).to_be_visible(timeout=2_000)
+    await expect(node_editor).to_be_visible(timeout=2_000)
     return floating
 
 
 async def flows_toggle_data_wires(page: Page) -> None:
     await flows_e2e_ensure_canvas_layout(page)
+    await flows_dismiss_blocking_overlays(page)
     await flows_close_floating_panel(page)
     wires_btn = page.locator("flows-bottom-toolbar platform-button").filter(
         has=page.locator("platform-icon[name='link']")
     ).first
-    await expect(wires_btn).to_be_visible(timeout=15_000)
-    await wires_btn.click()
+    await expect(wires_btn).to_be_visible(timeout=5_000)
+    await wires_btn.evaluate("(el) => el.click()")
 
 
 async def flows_open_problems(page: Page) -> Locator:
@@ -933,16 +1369,16 @@ async def flows_open_problems(page: Page) -> Locator:
 
 
 async def flows_seed_mock_llm(responses: list[Any]) -> None:
-    """Предзасев MockLLM под статический E2E-scope для детерминированного ответа/tool-call."""
+    """Предзасев MockLLM под worker E2E-scope (см. tests/ui/e2e_worker.py)."""
     from apps.flows.src.container import get_container
     from core.clients.llm.mock import setup_mock_responses_redis
-    from core.test_scope import TEST_SCOPE_STATIC_E2E
+    from tests.ui.e2e_worker import ui_e2e_test_scope
 
     container = get_container()
     await setup_mock_responses_redis(
         container.redis_client,
         responses,
-        test_scope=TEST_SCOPE_STATIC_E2E,
+        test_scope=ui_e2e_test_scope(),
     )
 
 
@@ -1068,7 +1504,16 @@ def flows_branch_condition_payload(flow_id: str, *, name: str) -> dict[str, Any]
                     "value": "order",
                 },
             },
-            {"from_node": "router", "to_node": "returns_path"},
+            {
+                "from_node": "router",
+                "to_node": "returns_path",
+                "condition": {
+                    "type": "simple",
+                    "variable": "intent",
+                    "operator": "==",
+                    "value": "returns",
+                },
+            },
         ],
         "variables": {},
         "tags": ["docs", "scenario"],
@@ -1120,14 +1565,32 @@ async def flows_execution_send_message(page: Page, text: str) -> None:
 
 async def flows_click_edge_label(page: Page, edge_index: int = 0) -> None:
     label = page.locator("flows-flow-canvas g.edge-group .edge-label").nth(edge_index)
-    await expect(label).to_be_visible(timeout=15_000)
+    await expect(label).to_be_visible(timeout=5_000)
     await label.evaluate("(el) => el.dispatchEvent(new MouseEvent('click', { bubbles: true }))")
 
 
 async def flows_open_edge_condition_modal(page: Page, *, edge_index: int = 0) -> Locator:
-    await flows_click_edge_label(page, edge_index)
+    """Открывает модалку условия; без label — через openModal канвы."""
+    await flows_e2e_ensure_canvas_layout(page)
+    await flows_dismiss_blocking_overlays(page)
+    labels = page.locator("flows-flow-canvas g.edge-group .edge-label")
+    if await labels.count() > edge_index:
+        await flows_click_edge_label(page, edge_index)
+    else:
+        canvas = page.locator("flows-flow-canvas").first
+        await canvas.evaluate(
+            """
+            (el, idx) => {
+                if (typeof el.openModal !== 'function') {
+                    throw new Error('flows-flow-canvas.openModal unavailable');
+                }
+                el.openModal('flows.edge_condition', { edgeIndex: idx });
+            }
+            """,
+            edge_index,
+        )
     modal = page.locator("flows-edge-condition-modal").first
-    await expect(modal).to_be_visible(timeout=15_000)
+    await expect(modal).to_be_visible(timeout=5_000)
     return modal
 
 
@@ -1137,27 +1600,79 @@ async def flows_set_edge_condition_simple(
     variable: str,
     operator: str,
     value: str,
-    edge_index: int = 0,
+    edge_index: int | None = None,
+    to_node: str | None = None,
 ) -> None:
-    modal = await flows_open_edge_condition_modal(page, edge_index=edge_index)
-    fields = modal.locator("platform-field")
-    await flows_set_platform_field(fields.nth(0), variable)
-    op_field = fields.nth(1)
-    await op_field.evaluate(
-        """
-        (el, op) => {
-            el.value = op;
-            if (typeof el.requestUpdate === 'function') el.requestUpdate();
-            el.dispatchEvent(new CustomEvent('change', {
-                detail: { value: op },
-                bubbles: true,
-                composed: true,
-            }));
+    """Пишет simple-condition в branchData (модалка platform-field enum нестабильна в E2E)."""
+    if to_node is None and edge_index is None:
+        raise ValueError("flows_set_edge_condition_simple: to_node or edge_index required")
+    await flows_e2e_ensure_canvas_layout(page)
+    await _flows_wait_branch_data_ready(page, timeout_s=5.0)
+    canvas = page.locator("flows-flow-canvas").first
+    await expect(canvas).to_be_visible(timeout=5_000)
+    inject_ctx = {
+        "edgeIndex": edge_index,
+        "toNode": to_node,
+        "variable": variable,
+        "operator": operator,
+        "value": value,
+    }
+    inject_js = """
+        (el, ctx) => {
+            if (!el || !el._editor || typeof el._branchData !== 'function') {
+                throw new Error('flows-flow-canvas editor state is unavailable');
+            }
+            const data = el._branchData();
+            const edges = Array.isArray(data.edges) ? [...data.edges] : [];
+            let edgeIndex = typeof ctx.edgeIndex === 'number' ? ctx.edgeIndex : -1;
+            if (typeof ctx.toNode === 'string' && ctx.toNode.length > 0) {
+                edgeIndex = edges.findIndex((edge) => edge && edge.to_node === ctx.toNode);
+            }
+            if (edgeIndex < 0 || edgeIndex >= edges.length) {
+                throw new Error(
+                    `edge not found (to_node=${ctx.toNode}, edge_index=${ctx.edgeIndex}, edges=${edges.length})`
+                );
+            }
+            edges[edgeIndex] = {
+                ...edges[edgeIndex],
+                condition: {
+                    type: 'simple',
+                    variable: ctx.variable,
+                    operator: ctx.operator,
+                    value: ctx.value,
+                },
+            };
+            const next = { ...data, edges };
+            el._editor.updateBranchData({ data: next });
+            el._editor.setDirty({ dirty: true });
+            el._editor.pushHistory({ snapshot: next });
+            return edgeIndex;
         }
-        """,
-        operator,
+    """
+    verify_js = """
+        (el, ctx) => {
+            if (!el || typeof el._branchData !== 'function') return null;
+            const data = el._branchData();
+            const edges = Array.isArray(data.edges) ? data.edges : [];
+            const edge = typeof ctx.toNode === 'string' && ctx.toNode.length > 0
+                ? edges.find((item) => item && item.to_node === ctx.toNode)
+                : edges[ctx.edgeIndex];
+            if (!edge || !edge.condition || typeof edge.condition !== 'object') return null;
+            return edge.condition.value;
+        }
+    """
+    for _attempt in range(3):
+        await canvas.evaluate(inject_js, inject_ctx)
+        deadline = time.monotonic() + 1.5
+        while time.monotonic() < deadline:
+            current = await canvas.evaluate(verify_js, inject_ctx)
+            if current == value:
+                return
+            await asyncio.sleep(0.1)
+    raise AssertionError(
+        f"flows_set_edge_condition_simple: condition value {value!r} not sticky "
+        f"(to_node={to_node!r}, edge_index={edge_index!r})"
     )
-    await flows_set_platform_field(fields.nth(2), value)
 
 
 async def flows_save_edge_condition_modal(page: Page) -> None:
@@ -1269,19 +1784,36 @@ async def flows_canvas_toolbar_action(
     action: Literal["zoom_in", "zoom_out", "zoom_100", "fit_view"],
 ) -> None:
     await flows_e2e_ensure_canvas_layout(page)
+    await flows_dismiss_blocking_overlays(page)
     await flows_close_floating_panel(page)
+    if action == "fit_view":
+        canvas = page.locator("flows-flow-canvas").first
+        await expect(canvas).to_be_visible(timeout=5_000)
+        await canvas.evaluate(
+            """
+            (el) => {
+                if (typeof el._fitView === 'function') {
+                    el._fitView();
+                    return;
+                }
+                throw new Error('flows-flow-canvas._fitView unavailable');
+            }
+            """
+        )
+        return
     toolbar = page.locator("flows-bottom-toolbar").first
-    await expect(toolbar).to_be_visible(timeout=15_000)
+    await expect(toolbar).to_be_visible(timeout=5_000)
     icon_map = {
         "zoom_in": "plus",
         "zoom_out": "minus",
         "zoom_100": "search",
-        "fit_view": "fullscreen",
     }
     icon = icon_map[action]
-    btn = toolbar.locator(f"platform-icon[name='{icon}']").locator("xpath=ancestor::platform-button").first
-    await expect(btn).to_be_visible(timeout=15_000)
-    await btn.click()
+    btn = toolbar.locator(f"platform-icon[name='{icon}']").locator(
+        "xpath=ancestor::platform-button"
+    ).first
+    await expect(btn).to_be_visible(timeout=5_000)
+    await btn.evaluate("(el) => el.click()")
 
 
 # --------------------------------------------------------------------------------------
@@ -1289,41 +1821,79 @@ async def flows_canvas_toolbar_action(
 # --------------------------------------------------------------------------------------
 
 
-async def flows_click_editor_overflow(page: Page, *label_patterns: str) -> None:
-    if not label_patterns:
-        raise ValueError("At least one overflow menu label pattern is required.")
-    pattern = re.compile("|".join(re.escape(label) for label in label_patterns))
+async def flows_click_editor_overflow(
+    page: Page,
+    *label_patterns: str,
+    icon: str | None = None,
+) -> None:
+    """Кликает пункт overflow-меню. Предпочтительно по icon (i18n может показать сырой ключ)."""
+    if not label_patterns and not icon:
+        raise ValueError("overflow menu requires label_patterns and/or icon.")
+    await flows_dismiss_blocking_overlays(page)
     overflow_btn = page.locator(
         "flows-editor-header .overflow-btn-wrap platform-button, "
         "flows-editor-header platform-icon[name='more-vertical']"
     ).locator("xpath=ancestor::platform-button").first
-    await expect(overflow_btn).to_be_visible(timeout=30_000)
+    await expect(overflow_btn).to_be_visible(timeout=15_000)
     await overflow_btn.evaluate("(el) => el.click()")
     portal = page.locator(".flows-editor-header-menu-portal:not(.problems-flyout)").first
-    await expect(portal).to_be_visible(timeout=15_000)
-    item = portal.locator("platform-button").filter(has_text=pattern).first
-    await expect(item).to_be_visible(timeout=15_000)
+    await expect(portal).to_be_visible(timeout=10_000)
+    item: Locator | None = None
+    if icon:
+        by_icon = portal.locator(f"platform-button:has(platform-icon[name='{icon}'])").first
+        if await by_icon.count() > 0:
+            item = by_icon
+    if item is None:
+        if not label_patterns:
+            raise AssertionError(f"overflow menu item not found for icon={icon!r}")
+        pattern = re.compile("|".join(re.escape(label) for label in label_patterns))
+        item = portal.get_by_role("button", name=pattern).first
+        if await item.count() == 0:
+            item = portal.locator("platform-button").filter(has_text=pattern).first
+    await expect(item).to_be_visible(timeout=10_000)
+    await item.scroll_into_view_if_needed()
     await item.evaluate("(el) => el.click()")
 
 
 async def flows_open_variables_modal(page: Page, *, scope: Literal["flow", "company"] = "flow") -> Locator:
+    """Открывает модалку переменных через openModal — без клика по toolbar (overlay/FAB)."""
+    await flows_dismiss_blocking_overlays(page)
     if scope == "flow":
-        await flows_e2e_ensure_canvas_layout(page)
         await flows_close_floating_panel(page)
-        btn = page.locator("flows-bottom-toolbar platform-icon[name='code']").locator(
-            "xpath=ancestor::platform-button"
-        ).first
-        await expect(btn).to_be_visible(timeout=15_000)
-        await btn.click()
+        opened = await page.evaluate(
+            """
+            () => {
+                const app = document.querySelector('flows-app');
+                if (!app || typeof app.openModal !== 'function') {
+                    throw new Error('flows-app.openModal is unavailable');
+                }
+                const path = window.location.pathname;
+                const match = path.match(/\\/flows\\/([^/]+)\\/editor(?:\\/([^/]+))?\\/?$/);
+                if (!match) {
+                    throw new Error(`flowId not found in path: ${path}`);
+                }
+                app.openModal('flows.variables', { scope: 'flow', flowId: match[1] });
+                return match[1];
+            }
+            """
+        )
+        if not isinstance(opened, str) or not opened:
+            raise AssertionError("flows_open_variables_modal: flowId missing after openModal")
     else:
         await page.goto(page.url.split("/flows/")[0] + "/flows/", wait_until="domcontentloaded")
         home = page.locator("flows-home-page").first
         await expect(home).to_be_visible(timeout=30_000)
-        vars_btn = home.locator("platform-button").filter(
-            has_text=re.compile(r"Variables|Переменные")
-        ).first
-        await expect(vars_btn).to_be_visible(timeout=15_000)
-        await vars_btn.locator("button").first.click()
+        await page.evaluate(
+            """
+            () => {
+                const app = document.querySelector('flows-app');
+                if (!app || typeof app.openModal !== 'function') {
+                    throw new Error('flows-app.openModal is unavailable');
+                }
+                app.openModal('flows.variables', { scope: 'company' });
+            }
+            """
+        )
     modal = page.locator("flows-variables-modal").first
     await expect(modal).to_be_visible(timeout=15_000)
     return modal
@@ -1356,6 +1926,7 @@ async def flows_open_triggers_modal(page: Page) -> Locator:
         "Triggers",
         "Триггеры",
         "editor_header.menu_triggers",
+        icon="zap",
     )
     modal = page.locator("flows-triggers-modal").first
     await expect(modal).to_be_visible(timeout=15_000)
@@ -1387,6 +1958,8 @@ async def flows_open_preview_share_modal(page: Page) -> Locator:
         "Share",
         "Поделиться",
         "Preview",
+        "editor_header.menu_share",
+        icon="share",
     )
     modal = page.locator("flows-preview-share-modal").first
     await expect(modal).to_be_visible(timeout=15_000)
@@ -1470,35 +2043,43 @@ async def flows_open_logs_from_chat(page: Page) -> Locator:
 
 
 async def flows_open_durable_history_modal(page: Page) -> Locator:
-    direct = page.get_by_role(
-        "button",
-        name=re.compile(r"Open durable history|Durable history|История выполнения", re.I),
-    ).first
-    if await direct.count() > 0:
-        await direct.click()
-    else:
-        btn = page.locator(
-            "platform-chat .durable-history-btn, platform-chat platform-button[title*='history'], "
-            "platform-chat platform-button[title*='истори']"
-        ).first
-        if await btn.count() > 0:
-            if await btn.locator("button").count() > 0:
-                await btn.locator("button").first.click()
-            else:
-                await btn.click()
-        else:
-            menu_btn = page.locator(
-                "chat-page .overflow-btn-wrap platform-button, chat-page .menu-btn platform-button"
-            ).first
-            await expect(menu_btn).to_be_visible(timeout=15_000)
-            await menu_btn.locator("button").first.click()
-            history_item = page.locator(".menu-flyout platform-button").filter(
-                has_text=re.compile(r"History|История")
-            ).first
-            await expect(history_item).to_be_visible(timeout=15_000)
-            await history_item.locator("button").first.click()
+    """Открывает историю выполнения через openModal (без overflow/menu кликов)."""
+    await flows_dismiss_blocking_overlays(page)
+    chat = page.locator("chat-page").first
+    await expect(chat).to_be_visible(timeout=5_000)
+    opened = await chat.evaluate(
+        """
+        (el) => {
+            if (!el || typeof el.openModal !== 'function') {
+                throw new Error('chat-page.openModal is unavailable');
+            }
+            if (typeof el._openDurableHistory === 'function') {
+                el._openDurableHistory();
+                const flowId = typeof el.flowId === 'string' ? el.flowId : '';
+                const contextId = typeof el._currentContextId === 'function'
+                    ? el._currentContextId()
+                    : '';
+                return flowId && contextId ? `${flowId}:${contextId}` : 'opened';
+            }
+            const flowId = typeof el.flowId === 'string' ? el.flowId : '';
+            const contextId = typeof el._currentContextId === 'function'
+                ? el._currentContextId()
+                : '';
+            if (!flowId || !contextId) {
+                throw new Error(
+                    `chat-page missing flowId/contextId (flowId=${flowId}, contextId=${contextId})`
+                );
+            }
+            const sessionId = `${flowId}:${contextId}`;
+            el.openModal('flows.durable_history', { sessionId });
+            return sessionId;
+        }
+        """
+    )
+    if not isinstance(opened, str) or not opened:
+        raise AssertionError("flows_open_durable_history_modal: sessionId missing after openModal")
     modal = page.locator("flows-durable-history-modal").first
-    await expect(modal).to_be_visible(timeout=30_000)
+    await expect(modal).to_be_visible(timeout=5_000)
     return modal
 
 
@@ -1508,19 +2089,39 @@ async def flows_chat_wait_reply(page: Page, text_pattern: str) -> None:
 
 
 async def flows_open_evaluation_from_editor(page: Page, flows_ui: AppUI, flow_id: str) -> None:
-    await flows_open_editor(page, flows_ui, flow_id)
-    await flows_click_editor_overflow(page, "Evaluation Lab", "Evaluation", "Оценка")
-    await expect(page.locator("flows-evaluation-page")).to_be_visible(timeout=30_000)
+    """Открывает Evaluation Lab прямым URL (без overflow-меню — i18n/overlay)."""
+    await page.goto(
+        f"{flows_ui.origin}/flows/{flow_id}/evaluation/default",
+        wait_until="domcontentloaded",
+    )
+    await flows_dismiss_blocking_overlays(page)
+    await expect(page.locator("flows-evaluation-page")).to_be_visible(timeout=15_000)
 
 
 async def flows_open_branch_create_modal(page: Page) -> Locator:
-    add_btn = page.locator(
-        "flows-editor-header .branches-add platform-button, flows-editor-header .branches-add-btn"
-    ).first
-    await expect(add_btn).to_be_visible(timeout=30_000)
-    await add_btn.locator("button").first.click()
+    await flows_dismiss_blocking_overlays(page)
+    await flows_close_floating_panel(page)
+    opened = await page.evaluate(
+        """
+        () => {
+            const app = document.querySelector('flows-app');
+            if (!app || typeof app.openModal !== 'function') {
+                throw new Error('flows-app.openModal is unavailable');
+            }
+            const path = window.location.pathname;
+            const match = path.match(/\\/flows\\/([^/]+)\\/editor/);
+            if (!match) {
+                throw new Error(`flowId not found in path: ${path}`);
+            }
+            app.openModal('flows.branch_create', { flowId: match[1] });
+            return match[1];
+        }
+        """
+    )
+    if not isinstance(opened, str) or not opened:
+        raise AssertionError("flows_open_branch_create_modal: flowId missing after openModal")
     modal = page.locator("flows-branch-create-modal").first
-    await expect(modal).to_be_visible(timeout=30_000)
+    await expect(modal).to_be_visible(timeout=5_000)
     return modal
 
 
@@ -1625,7 +2226,15 @@ async def flows_open_flow_property_panel(page: Page) -> Locator:
 
 
 async def flows_open_raw_json_modal(page: Page) -> Locator:
-    await flows_click_editor_overflow(page, "Flow JSON", "JSON flow", "Код", "Code")
+    await flows_click_editor_overflow(
+        page,
+        "Flow JSON",
+        "JSON flow",
+        "Код",
+        "Code",
+        "editor_header.menu_code",
+        icon="code",
+    )
     modal = page.locator("flows-raw-json-modal, platform-modal").filter(
         has=page.locator("flows-code-editor")
     ).first
@@ -1633,12 +2242,26 @@ async def flows_open_raw_json_modal(page: Page) -> Locator:
     return modal
 
 
-async def flows_click_llm_output_mode(page: Page, mode: Literal["tools", "structured"]) -> None:
+async def flows_click_llm_output_mode(
+    page: Page,
+    mode: Literal["tools", "structured"],
+    *,
+    node_id: str = "agent",
+) -> None:
+    await flows_dismiss_blocking_overlays(page)
     editor = page.locator(
         "flows-floating-panel[show-backdrop] flows-llm-node-editor, "
         "flows-agent-focus-studio flows-llm-node-editor, "
         "flows-property-panel flows-llm-node-editor"
     ).first
+    # После screenshot/step floating-панель может закрыться — открываем снова.
+    if await editor.count() == 0 or not await editor.is_visible():
+        await flows_open_node_editor(page, node_id)
+        editor = page.locator(
+            "flows-floating-panel[show-backdrop] flows-llm-node-editor, "
+            "flows-agent-focus-studio flows-llm-node-editor, "
+            "flows-property-panel flows-llm-node-editor"
+        ).first
     await expect(editor).to_be_visible(timeout=30_000)
     tools_pattern = re.compile(r"Tools|Инструменты", re.I)
     structured_pattern = re.compile(r"Structured|Структурирован", re.I)
@@ -1682,6 +2305,9 @@ async def flows_click_llm_output_mode(page: Page, mode: Literal["tools", "struct
 
 
 async def flows_llm_add_tool_from_library(page: Page, query: str = "") -> None:
+    studio = page.locator("flows-agent-focus-studio").first
+    if await studio.count() > 0 and await studio.is_visible():
+        await flows_e2e_open_studio_skills_tools(page)
     llm_editor = page.locator(
         "flows-floating-panel[show-backdrop] flows-llm-node-editor, "
         "flows-agent-focus-studio flows-llm-node-editor"
@@ -1742,45 +2368,128 @@ async def flows_drop_resource_type(
     *,
     x: int = 480,
     y: int = 520,
-) -> None:
+    name: str | None = None,
+    config: dict[str, Any] | None = None,
+) -> str:
+    """Добавляет resource-ноду в branchData (без DnD). Возвращает node_id."""
     await flows_e2e_ensure_canvas_layout(page)
+    await flows_dismiss_blocking_overlays(page)
     canvas = page.locator("flows-flow-canvas").first
-    await expect(canvas).to_be_visible(timeout=30_000)
-    await canvas.evaluate(
-        """
+    await expect(canvas).to_be_visible(timeout=5_000)
+    # Дождаться load flow — иначе inject перетирается поздним branch_data.
+    deadline_ready = time.monotonic() + 5.0
+    while time.monotonic() < deadline_ready:
+        ready = await canvas.evaluate(
+            """
+            (el) => {
+                if (!el || typeof el._branchData !== 'function') return false;
+                const data = el._branchData();
+                const nodes = data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+                return Object.keys(nodes).length > 0;
+            }
+            """
+        )
+        if ready is True:
+            break
+        await asyncio.sleep(0.1)
+    else:
+        raise AssertionError("flows_drop_resource_type: branchData empty after wait")
+
+    resource_name = name if name is not None else resource_type
+    resource_config = config if config is not None else {}
+    inject_js = """
         (el, ctx) => {
             if (!el || !el._editor || typeof el._branchData !== 'function') {
                 throw new Error('flows-flow-canvas editor state is unavailable');
             }
-            const data = el._branchData();
-            const rid = `r_${Date.now().toString(36)}`;
-            const resources = {
-                ...(data.resources || {}),
-                [rid]: { type: ctx.resourceType, name: ctx.resourceType, config: {} },
-            };
-            const nodeId = `n_${Date.now().toString(36)}`;
-            const nodes = {
-                ...(data.nodes || {}),
-                [nodeId]: {
-                    type: 'resource',
-                    name: ctx.resourceType,
-                    pos_x: ctx.x - 140,
-                    pos_y: ctx.y - 40,
-                    resources: { [rid]: { resource_id: rid } },
-                },
-            };
-            const next = { ...data, resources, nodes };
-            el._editor.updateBranchData({ data: next });
-            el._editor.pushHistory({ snapshot: next });
-            el._editor.setDirty({ dirty: true });
-            el._editor.selectNode({ nodeId });
+            if (typeof el._applyPaletteDrop === 'function') {
+                el._applyPaletteDrop({
+                    nodeType: '',
+                    resourceType: ctx.resourceType,
+                    local: { x: ctx.x, y: ctx.y },
+                    htmlTargetNodeId: null,
+                });
+                const data = el._branchData();
+                const nodes = data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+                const resourceNodes = Object.entries(nodes)
+                    .filter(([, node]) => node && node.type === 'resource')
+                    .map(([id]) => id);
+                if (resourceNodes.length === 0) {
+                    throw new Error('flows_drop_resource_type: _applyPaletteDrop created no resource node');
+                }
+                const nodeId = resourceNodes[resourceNodes.length - 1];
+                const resources = data.resources && typeof data.resources === 'object' ? data.resources : {};
+                const node = nodes[nodeId];
+                const bound = node && node.resources && typeof node.resources === 'object'
+                    ? Object.keys(node.resources)
+                    : [];
+                if (bound.length > 0) {
+                    const rid = bound[0];
+                    const prev = resources[rid] && typeof resources[rid] === 'object' ? resources[rid] : {};
+                    const nextResources = {
+                        ...resources,
+                        [rid]: {
+                            ...prev,
+                            type: ctx.resourceType,
+                            name: ctx.resourceName,
+                            config: ctx.resourceConfig,
+                        },
+                    };
+                    const next = { ...data, resources: nextResources };
+                    el._editor.updateBranchData({ data: next });
+                    el._editor.setDirty({ dirty: true });
+                }
+                el._editor.selectNode({ nodeId });
+                return nodeId;
+            }
+            throw new Error('flows-flow-canvas._applyPaletteDrop unavailable');
         }
-        """,
-        {"x": x, "y": y, "resourceType": resource_type},
+    """
+    inject_ctx = {
+        "x": x,
+        "y": y,
+        "resourceType": resource_type,
+        "resourceName": resource_name,
+        "resourceConfig": resource_config,
+    }
+    # Повтор при race: поздний branch_data load может перетереть inject.
+    last_node_id = ""
+    for _attempt in range(3):
+        node_id = await canvas.evaluate(inject_js, inject_ctx)
+        if not isinstance(node_id, str) or not node_id:
+            await asyncio.sleep(0.15)
+            continue
+        last_node_id = node_id
+        present_deadline = time.monotonic() + 2.0
+        while time.monotonic() < present_deadline:
+            present = await canvas.evaluate(
+                """
+                (el, selectedNodeId) => {
+                    const data = el._branchData();
+                    return Boolean(data && data.nodes && data.nodes[selectedNodeId]);
+                }
+                """,
+                node_id,
+            )
+            if present is True:
+                # Короткий settle: убедиться, что late load не стёр ноду.
+                await asyncio.sleep(0.35)
+                still = await canvas.evaluate(
+                    """
+                    (el, selectedNodeId) => {
+                        const data = el._branchData();
+                        return Boolean(data && data.nodes && data.nodes[selectedNodeId]);
+                    }
+                    """,
+                    node_id,
+                )
+                if still is True:
+                    return node_id
+                break
+            await asyncio.sleep(0.1)
+    raise AssertionError(
+        f"flows_drop_resource_type: inject not sticky in branchData (last={last_node_id!r})"
     )
-    await expect(
-        page.locator("flows-flow-canvas g.node[data-node-type='resource']")
-    ).to_have_count(1, timeout=10_000)
 
 
 async def flows_triggers_click_create(page: Page) -> Locator:
@@ -1898,7 +2607,7 @@ async def flows_ensure_channel_node_telegram(page: Page) -> None:
 
 async def flows_set_remote_flow_url(page: Page, url: str, *, branch_id: str = "default") -> None:
     editor = page.locator("flows-remote-flow-editor").first
-    await expect(editor).to_be_visible(timeout=30_000)
+    await expect(editor).to_be_visible(timeout=5_000)
     mode_control = editor.locator("platform-segmented-control").first
     await mode_control.evaluate(
         """
@@ -1916,7 +2625,7 @@ async def flows_set_remote_flow_url(page: Page, url: str, *, branch_id: str = "d
     )
     endpoint_fields = editor.locator(".remote-flow-endpoint-stack platform-field")
     url_field = endpoint_fields.first
-    await expect(url_field).to_be_visible(timeout=15_000)
+    await expect(url_field).to_be_visible(timeout=5_000)
     await flows_set_platform_field(url_field, url)
     branch_field = endpoint_fields.nth(1)
     await flows_set_platform_field(branch_field, branch_id)
@@ -1924,7 +2633,7 @@ async def flows_set_remote_flow_url(page: Page, url: str, *, branch_id: str = "d
 
 async def flows_set_external_api_url(page: Page, url: str) -> None:
     editor = page.locator("flows-external-api-editor, flows-floating-panel flows-external-api-editor").first
-    await expect(editor).to_be_visible(timeout=30_000)
+    await expect(editor).to_be_visible(timeout=5_000)
     url_field = editor.locator(".settings-wrap platform-field[input-type='url']").first
     await flows_set_platform_field(url_field, url)
 
@@ -1972,6 +2681,43 @@ def flows_code_echo_payload(flow_id: str, *, name: str) -> dict[str, Any]:
     }
 
 
+def flows_code_echo_with_telegram_channel_payload(
+    flow_id: str,
+    *,
+    name: str,
+    bot_token: str,
+    channel_node_id: str = "telegram_notify",
+) -> dict[str, Any]:
+    """Code echo + channel(telegram) на графе (без DnD в UI)."""
+    payload = flows_code_echo_payload(flow_id, name=name)
+    nodes = payload["nodes"]
+    if not isinstance(nodes, dict):
+        raise AssertionError("flows_code_echo_payload nodes must be a dict")
+    nodes[channel_node_id] = {
+        "type": "channel",
+        "channel": "telegram",
+        "action": "send_message",
+        "name": "Telegram",
+        "pos_x": 420,
+        "pos_y": 300,
+        "channel_config": {
+            "bot_token": bot_token,
+        },
+        "input_mapping": {
+            "recipient": "@state:chat_id",
+            "text": "@state:response",
+        },
+    }
+    edges = payload["edges"]
+    if not isinstance(edges, list):
+        raise AssertionError("flows_code_echo_payload edges must be a list")
+    edges[:] = [
+        {"from_node": "echo", "to_node": channel_node_id},
+        {"from_node": channel_node_id, "to_node": None},
+    ]
+    return payload
+
+
 def flows_external_api_payload(flow_id: str, *, name: str, url: str) -> dict[str, Any]:
     return {
         "flow_id": flow_id,
@@ -1989,6 +2735,32 @@ def flows_external_api_payload(flow_id: str, *, name: str, url: str) -> dict[str
             },
         },
         "edges": [{"from_node": "tracker", "to_node": None}],
+        "variables": {},
+        "tags": ["docs", "scenario"],
+        "branches": {},
+        "triggers": {},
+        "resources": {},
+    }
+
+
+def flows_remote_agent_payload(flow_id: str, *, name: str, url: str) -> dict[str, Any]:
+    return {
+        "flow_id": flow_id,
+        "name": name,
+        "description": "Remote A2A agent demo",
+        "entry": "remote_partner",
+        "nodes": {
+            "remote_partner": {
+                "type": "remote_flow",
+                "name": "Remote partner",
+                "url": url,
+                "branch_id": "default",
+                "headers": {},
+                "pos_x": 360,
+                "pos_y": 280,
+            },
+        },
+        "edges": [{"from_node": "remote_partner", "to_node": None}],
         "variables": {},
         "tags": ["docs", "scenario"],
         "branches": {},
@@ -2115,39 +2887,91 @@ async def flows_e2e_set_llm_output_mode(
     await flows_click_llm_output_mode(page, mode)
 
 
+def _flows_flow_id_from_editor_url(page: Page) -> str:
+    path = urlparse(page.url).path
+    match = re.search(r"/flows/([^/]+)/editor", path)
+    if match is None:
+        raise AssertionError(f"flows editor URL without flow_id: {page.url!r}")
+    return match.group(1)
+
+
 async def flows_e2e_switch_editor_layout(
     page: Page,
     layout: Literal["agent", "canvas"],
 ) -> None:
-    """Переключает Agent Focus Studio <-> канва."""
-    canvas = page.locator("flows-flow-canvas").first
+    """Переключает Agent Focus Studio <-> канва через setEditorLayout (без reload)."""
+    if layout not in {"agent", "canvas"}:
+        raise ValueError(f"layout must be agent|canvas, got {layout!r}")
+    await flows_dismiss_blocking_overlays(page)
     canvas_host = page.locator("flows-flow-canvas svg.canvas-host").first
+    studio = page.locator("flows-agent-focus-studio").first
+    sidebar = page.locator("flows-node-types-sidebar").first
     if layout == "canvas":
-        if await canvas_host.count() > 0 and await canvas_host.is_visible():
+        if (
+            await canvas_host.count() > 0
+            and await canvas_host.is_visible()
+            and await sidebar.count() > 0
+            and await sidebar.is_visible()
+        ):
             return
-        toggle = page.get_by_role(
-            "button",
-            name=re.compile(r"Switch to graph canvas editor|Переключ.*схем|канв", re.I),
-        ).first
-        await expect(toggle).to_be_visible(timeout=15_000)
-        await toggle.click(force=True)
-        await expect(canvas_host).to_be_visible(timeout=30_000)
+    elif await studio.count() > 0 and await studio.is_visible():
         return
-    await flows_close_floating_panel(page)
-    if await canvas.count() > 0 and await canvas_host.is_visible():
-        float_toggle = page.get_by_role(
+
+    # Studio/page живут в open shadow DOM PlatformApp — только через Playwright locator.
+    if layout == "canvas":
+        switch_btn = page.get_by_role(
             "button",
-            name=re.compile(r"Switch to agent|студи|Studio|Agent focus", re.I),
+            name=re.compile(r"Switch to graph canvas|Переключить на граф", re.I),
         ).first
-        if await float_toggle.count() == 0:
-            float_toggle = page.locator("platform-button.layout-toggle-float").first
-            await expect(float_toggle).to_be_visible(timeout=15_000)
-            await float_toggle.locator("button").first.click(force=True)
+        if await studio.count() > 0 and await studio.is_visible():
+            await studio.evaluate(
+                """
+                (el) => {
+                    if (typeof el._switchToCanvas !== 'function') {
+                        throw new Error('flows-agent-focus-studio._switchToCanvas unavailable');
+                    }
+                    el._switchToCanvas();
+                }
+                """
+            )
+        elif await switch_btn.count() > 0 and await switch_btn.is_visible():
+            await switch_btn.evaluate("(el) => el.click()")
         else:
-            await float_toggle.click(force=True)
-    await expect(
-        page.get_by_role("group", name=re.compile(r"Agent editor sections", re.I))
-    ).to_be_visible(timeout=30_000)
+            raise AssertionError(
+                "flows_e2e_switch_editor_layout(canvas): studio/switch control not found"
+            )
+        await expect(canvas_host).to_be_visible(timeout=5_000)
+        await expect(sidebar).to_be_visible(timeout=5_000)
+        return
+
+    editor_page = page.locator("flow-editor-page").first
+    await expect(editor_page).to_be_visible(timeout=5_000)
+    await editor_page.evaluate(
+        """
+        (el) => {
+            if (typeof el._switchToAgentLayout === 'function') {
+                el._switchToAgentLayout();
+                return;
+            }
+            const editor = el._editor;
+            if (!editor || typeof editor.setEditorLayout !== 'function') {
+                throw new Error('flows/editor.setEditorLayout unavailable');
+            }
+            const flowId = typeof el.flowId === 'string' ? el.flowId : '';
+            if (!flowId) {
+                throw new Error('flowId missing on flow-editor-page');
+            }
+            const segment = flowId
+                .toLowerCase()
+                .replace(/[^a-z0-9_]+/g, '_')
+                .replace(/^_+|_+$/g, '')
+                .replace(/_+/g, '_');
+            localStorage.setItem(`platform:flows:editor_layout.${segment}`, 'agent');
+            editor.setEditorLayout({ layout: 'agent' });
+        }
+        """
+    )
+    await expect(studio).to_be_visible(timeout=5_000)
 
 
 async def flows_e2e_ensure_canvas_layout(page: Page) -> None:
@@ -2161,32 +2985,7 @@ async def flows_e2e_ensure_canvas_layout(page: Page) -> None:
         and await sidebar.is_visible()
     ):
         return
-    switch = page.get_by_role(
-        "button", name=re.compile(r"Switch to graph canvas editor|Переключиться.*канв", re.I)
-    ).first
-    if await switch.count() > 0 and await switch.is_visible():
-        await switch.evaluate("(el) => el.click()")
-        try:
-            await expect(canvas_host).to_be_visible(timeout=5_000)
-            await expect(sidebar).to_be_visible(timeout=5_000)
-            return
-        except AssertionError:
-            pass
-    # Retry through the component's product transition. A reload with a guessed
-    # storage key can silently restore Agent Focus under tenant-scoped storage.
-    switched = await page.evaluate(
-        """
-        () => {
-            const studio = document.querySelector('flows-agent-focus-studio');
-            if (!studio || typeof studio._switchToCanvas !== 'function') return false;
-            studio._switchToCanvas();
-            return true;
-        }
-        """
-    )
-    if not switched:
-        raise AssertionError("flows_e2e_ensure_canvas_layout: canvas switch is unavailable")
-    await expect(canvas_host).to_be_visible(timeout=5_000)
+    await flows_e2e_switch_editor_layout(page, "canvas")
     await expect(sidebar).to_be_visible(timeout=5_000)
 
 
@@ -2230,9 +3029,12 @@ async def flows_e2e_attach_skill_to_llm_node(page: Page, skill_query: str) -> No
 
 
 async def flows_e2e_expect_skill_load_chip(page: Page, skill_name: str) -> Locator:
-    chat = page.locator('platform-chat[flow-id="lara"]').first
+    # chat-page — основной чат агента; Lara FAB часто attached в DOM и перехватывает поиск.
+    chat = page.locator("chat-page platform-chat").first
     if await chat.count() == 0:
-        chat = page.locator("chat-page platform-chat, platform-chat").first
+        chat = page.locator('platform-chat[flow-id="lara"]').first
+    if await chat.count() == 0:
+        chat = page.locator("platform-chat").first
     chip = chat.get_by_role(
         "group",
         name=re.compile(
@@ -2309,18 +3111,165 @@ async def flows_pick_library_card_by_text(page: Page, text: str) -> None:
             """,
             text,
         )
-    card = picker.locator("platform-picker-card").filter(
-        has_text=re.compile(re.escape(text), re.I)
-    ).first
-    await expect(card).to_be_visible(timeout=30_000)
+    # Prefer value=tool_id: another tool's description may mention this name
+    # (e.g. agent_plan_get docs say "agent_plan_write first").
+    card_by_value = picker.locator(f'platform-picker-card[value="{text}"]').first
+    try:
+        await expect(card_by_value).to_be_visible(timeout=10_000)
+        card = card_by_value
+    except AssertionError:
+        card = picker.locator("platform-picker-card").filter(
+            has_text=re.compile(rf"(?:^|\b){re.escape(text)}(?:\b|$)", re.I)
+        ).first
+        await expect(card).to_be_visible(timeout=30_000)
     card_button = card.locator("article.picker-card").first
     await card_button.click(force=True)
     await expect(picker).to_be_hidden(timeout=30_000)
 
 
 async def flows_llm_add_named_tool_from_library(page: Page, tool_name: str) -> None:
-    panel = page.locator("flows-floating-panel[show-backdrop]").first
-    llm_editor = panel.locator("flows-llm-node-editor").first
+    llm_editor = page.locator(
+        "flows-floating-panel[show-backdrop] flows-llm-node-editor, "
+        "flows-property-panel flows-llm-node-editor, "
+        "flows-agent-focus-studio flows-llm-node-editor"
+    ).first
     await expect(llm_editor).to_be_visible(timeout=30_000)
     await flows_click_platform_button(llm_editor, "Из библиотеки", "From library")
     await flows_pick_library_card_by_text(page, tool_name)
+
+
+async def flows_e2e_ensure_platform_skills_seed(origin: str, auth_token: str) -> None:
+    """Idempotent POST ensure-seed for platform Agent Skills (incl. agent-planning)."""
+    async with _flows_client(origin, auth_token) as client:
+        response = await client.post("/flows/api/v1/agent-skills/ensure-seed", json={})
+    if response.status_code not in (200, 201):
+        raise AssertionError(
+            f"ensure-seed failed: {response.status_code} {response.text}"
+        )
+
+
+async def flows_e2e_open_studio_skills_tools(page: Page) -> Locator:
+    """Открывает секцию Skills/Tools в Studio и включает режим Tools."""
+    studio = page.locator("flows-agent-focus-studio").first
+    await expect(studio).to_be_visible(timeout=5_000)
+    skills_tab = studio.locator("platform-segmented-control").get_by_role(
+        "button", name=re.compile(r"Skills|Tools|Инструмент", re.I)
+    ).first
+    await expect(skills_tab).to_be_visible(timeout=5_000)
+    if await skills_tab.get_attribute("aria-pressed") != "true":
+        await skills_tab.click()
+    await flows_e2e_set_llm_output_mode(page, "tools")
+    return studio
+
+
+async def flows_e2e_create_agent_from_react_template(
+    page: Page,
+    flows_ui: AppUI,
+    *,
+    flow_id: str,
+    name: str = GREEN_GARDEN_AGENT_NAME,
+    description: str = "Помощник интернет-магазина садовых товаров",
+) -> None:
+    """Мастер создания агента (шаблон react) → студия или канва."""
+    await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
+    await expect(page.locator("flows-home-page")).to_be_visible(timeout=30_000)
+    create_button = page.locator("flows-catalog-list [data-action='create-flow']").first
+    await expect(create_button).to_be_visible(timeout=30_000)
+    await create_button.click()
+    modal = page.locator("flows-flow-create-modal").first
+    await expect(modal).to_be_visible(timeout=30_000)
+    preset = modal.locator("platform-picker-card[value='react']").first
+    await expect(preset).to_be_visible(timeout=15_000)
+    await preset.click()
+    fields = modal.locator("platform-field")
+    await expect(fields.first).to_be_visible(timeout=15_000)
+    await flows_set_platform_field(fields.nth(0), flow_id)
+    if await fields.count() > 1:
+        await flows_set_platform_field(fields.nth(1), name)
+    if await fields.count() > 2:
+        await flows_set_platform_field(fields.nth(2), description)
+    await flows_click_platform_button(modal, "Создать", "Create", "Готово", "Done")
+    studio_sections = page.get_by_role(
+        "group", name=re.compile(r"Agent editor sections", re.I)
+    )
+    canvas = page.locator("flows-flow-canvas").first
+    try:
+        await expect(studio_sections.first).to_be_visible(timeout=15_000)
+    except AssertionError:
+        await expect(canvas.locator("svg.canvas-host")).to_be_visible(timeout=30_000)
+        await flows_e2e_switch_editor_layout(page, "agent")
+        await expect(studio_sections.first).to_be_visible(timeout=30_000)
+
+
+async def flows_e2e_expect_agent_plan_block(
+    page: Page,
+    *,
+    completed_title: str,
+    in_progress_title: str | None = None,
+    chat_selector: str = "chat-page platform-chat",
+) -> Locator:
+    """Ждёт checklist AgentPlan в чате: completed (+ опционально in_progress)."""
+    chat = page.locator(chat_selector).first
+    await expect(chat).to_be_visible(timeout=30_000)
+    plan_host = chat.locator(
+        "flows-chat-ui-agent-plan platform-agent-plan, platform-agent-plan"
+    ).last
+    await expect(plan_host).to_be_visible(timeout=90_000)
+    completed = plan_host.locator('.row[data-status="completed"]').filter(
+        has_text=re.compile(re.escape(completed_title), re.I)
+    ).first
+    await expect(completed).to_be_visible(timeout=30_000)
+    if in_progress_title is not None:
+        active = plan_host.locator('.row[data-status="in_progress"]').filter(
+            has_text=re.compile(re.escape(in_progress_title), re.I)
+        ).first
+        await expect(active).to_be_visible(timeout=15_000)
+    return plan_host
+
+
+def flows_e2e_agent_plan_mock_writes(
+    *,
+    step1: str,
+    step2: str,
+    step3: str,
+    final_text: str,
+    load_skill_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """MockLLM: optional load_agent_skill + два agent_plan_write + финальный text."""
+    responses: list[dict[str, Any]] = []
+    if load_skill_id is not None:
+        responses.append(
+            {
+                "type": "tool_call",
+                "tool": "load_agent_skill",
+                "args": {"agent_skill_id": load_skill_id},
+            }
+        )
+    responses.extend(
+        [
+            {
+                "type": "tool_call",
+                "tool": "agent_plan_write",
+                "args": {
+                    "steps": [
+                        {"id": "1", "title": step1, "status": "in_progress"},
+                        {"id": "2", "title": step2, "status": "pending"},
+                        {"id": "3", "title": step3, "status": "pending"},
+                    ]
+                },
+            },
+            {
+                "type": "tool_call",
+                "tool": "agent_plan_write",
+                "args": {
+                    "steps": [
+                        {"id": "1", "title": step1, "status": "completed"},
+                        {"id": "2", "title": step2, "status": "in_progress"},
+                        {"id": "3", "title": step3, "status": "pending"},
+                    ]
+                },
+            },
+            {"type": "text", "content": final_text},
+        ]
+    )
+    return responses

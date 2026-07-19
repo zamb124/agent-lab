@@ -7,9 +7,9 @@ A2A API для Flows - это внешний HTTP-интерфейс, через
 1. Создайте API token в консоли платформы.
 2. Сохраните token на своем backend в secret manager или переменной окружения.
 3. Узнайте `flow_id` нужного flow.
-4. Получите Agent Card, чтобы увидеть branches, публичные variables и возможности flow.
-5. Отправьте JSON-RPC запрос `message/send` или `message/stream` на `/flows/api/v1/{flow_id}`.
-6. Для долгих запусков используйте `metadata.execution_mode: "async"` и потом `tasks/get`.
+4. Получите Agent Card, чтобы увидеть `skills` (A2A), platform `branches`/`variables` и capabilities.
+5. Отправьте JSON-RPC запрос `SendMessage` или `SendStreamingMessage` на `/flows/api/v1/{flow_id}`.
+6. Для долгих запусков используйте `configuration.returnImmediately: true` и потом `GetTask`.
 
 Главный публичный URL:
 
@@ -39,7 +39,7 @@ http://lvh.me:8001/flows/api/v1/{flow_id}
 
 `Agent Card` - карточка flow. Это JSON с названием, описанием, URL, branches, capabilities и публичными variables. Ее удобно получать перед интеграцией.
 
-`JSON-RPC` - формат запроса, где вы всегда отправляете `method` и `params`. Это похоже на вызов функции по HTTP: "вызови метод `message/send` с такими параметрами".
+`JSON-RPC` - формат запроса, где вы всегда отправляете `method` и `params`. Это похоже на вызов функции по HTTP: "вызови метод `SendMessage` с такими параметрами".
 
 `Message` - сообщение пользователя для flow. В нем есть `role`, `parts`, `messageId`, а также опциональные `taskId` и `contextId`.
 
@@ -166,16 +166,16 @@ POST /flows/api/v1/{flow_id}
 
 На этот URL отправляются методы:
 
-- `message/send`
-- `message/stream`
-- `tasks/get`
-- `tasks/cancel`
-- `tasks/resubscribe`
-- `tasks/pushNotificationConfig/get`
-- `tasks/pushNotificationConfig/set`
-- `tasks/pushNotificationConfig/delete`
-- `tasks/pushNotificationConfig/list`
-- `agent/getAuthenticatedExtendedCard`
+- `SendMessage`
+- `SendStreamingMessage`
+- `GetTask`
+- `CancelTask`
+- `SubscribeToTask`
+- `GetTaskPushNotificationConfig`
+- `CreateTaskPushNotificationConfig`
+- `DeleteTaskPushNotificationConfig`
+- `ListTaskPushNotificationConfigs`
+- `GetExtendedAgentCard`
 
 ### REST endpoints для branches
 
@@ -204,12 +204,12 @@ POST /flows/api/v1/{flow_id}?v=20260603123000000000
 {
   "jsonrpc": "2.0",
   "id": "run-1",
-  "method": "message/send",
+  "method": "SendMessage",
   "params": {
     "message": {
       "messageId": "msg-1",
-      "role": "user",
-      "parts": [{ "kind": "text", "text": "Привет" }]
+      "role": "ROLE_USER",
+      "parts": [{"text": "Привет" }]
     },
     "metadata": {
       "version": "20260603123000000000"
@@ -228,7 +228,7 @@ POST /flows/api/v1/{flow_id}?v=20260603123000000000
 {
   "jsonrpc": "2.0",
   "id": "request-1",
-  "method": "message/send",
+  "method": "SendMessage",
   "params": {}
 }
 ```
@@ -261,7 +261,7 @@ POST /flows/api/v1/{flow_id}?v=20260603123000000000
   "result": {
     "id": "task-123",
     "contextId": "ctx-123",
-    "status": { "state": "completed" }
+    "status": { "state": "TASK_STATE_COMPLETED" }
   }
 }
 ```
@@ -286,11 +286,9 @@ POST /flows/api/v1/{flow_id}?v=20260603123000000000
 ```json
 {
   "messageId": "msg-001",
-  "role": "user",
+  "role": "ROLE_USER",
   "parts": [
-    {
-      "kind": "text",
-      "text": "Привет! Помоги оформить заявку."
+    {"text": "Привет! Помоги оформить заявку."
     }
   ]
 }
@@ -312,8 +310,8 @@ POST /flows/api/v1/{flow_id}?v=20260603123000000000
   "params": {
     "message": {
       "messageId": "msg-001",
-      "role": "user",
-      "parts": [{ "kind": "text", "text": "Привет" }]
+      "role": "ROLE_USER",
+      "parts": [{"text": "Привет" }]
     },
     "metadata": {
       "branch": "default",
@@ -341,9 +339,9 @@ Runtime variables лежат только внутри `params.metadata.variable
 ```json
 {
   "messageId": "msg-1",
-  "role": "user",
+  "role": "ROLE_USER",
   "contextId": "chat-ivan-001",
-  "parts": [{ "kind": "text", "text": "Меня зовут Иван" }]
+  "parts": [{"text": "Меня зовут Иван" }]
 }
 ```
 
@@ -352,9 +350,9 @@ Runtime variables лежат только внутри `params.metadata.variable
 ```json
 {
   "messageId": "msg-2",
-  "role": "user",
+  "role": "ROLE_USER",
   "contextId": "chat-ivan-001",
-  "parts": [{ "kind": "text", "text": "Как меня зовут?" }]
+  "parts": [{"text": "Как меня зовут?" }]
 }
 ```
 
@@ -376,15 +374,13 @@ curl -sS -X POST "$A2A_URL" \
   -d '{
     "jsonrpc": "2.0",
     "id": "first-run",
-    "method": "message/send",
+    "method": "SendMessage",
     "params": {
       "message": {
         "messageId": "msg-first-run",
-        "role": "user",
+        "role": "ROLE_USER",
         "parts": [
-          {
-            "kind": "text",
-            "text": "Привет! Кратко объясни, что умеет этот flow."
+          {"text": "Привет! Кратко объясни, что умеет этот flow."
           }
         ]
       },
@@ -405,13 +401,11 @@ curl -sS -X POST "$A2A_URL" \
     "id": "generated-task-id",
     "contextId": "generated-context-id",
     "status": {
-      "state": "completed",
+      "state": "TASK_STATE_COMPLETED",
       "message": {
-        "role": "agent",
+        "role": "ROLE_AGENT",
         "parts": [
-          {
-            "kind": "text",
-            "text": "..."
+          {"text": "..."
           }
         ]
       }
@@ -445,6 +439,23 @@ curl -sS "$A2A_URL" \
   },
   "defaultInputModes": ["text/plain"],
   "defaultOutputModes": ["text/plain"],
+  "supportedInterfaces": [
+    {
+      "url": "https://linnex.io/flows/api/v1/support_agent",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "skills": [
+    {
+      "id": "default",
+      "name": "Default",
+      "description": "Основной сценарий",
+      "tags": [],
+      "inputModes": ["text/plain"],
+      "outputModes": ["text/plain"]
+    }
+  ],
   "branches": [
     {
       "id": "default",
@@ -468,25 +479,25 @@ curl -sS "$A2A_URL" \
 Поля:
 
 - `name` и `description` - человекочитаемое название и описание flow.
-- `url` - URL для JSON-RPC вызовов.
-- `capabilities.streaming` - можно ли использовать `message/stream`.
+- `supportedInterfaces` - URL и binding (`JSONRPC` / `1.0`) для JSON-RPC вызовов.
+- `capabilities.streaming` - можно ли использовать `SendStreamingMessage`.
 - `capabilities.pushNotifications` - включены ли push notifications в карточке.
-- `capabilities.stateTransitionHistory` - можно ли получать историю переходов статусов.
-- `branches` - доступные branches. Их `id` передается в `metadata.branch`.
-- `variables` - публичные variables, которые владелец flow разрешил показывать внешнему клиенту.
+- `skills` - обязательное поле A2A 1.0 (ветки flow как skills). Их `id` передается в `metadata.branch`.
+- `branches` - platform extension, зеркало `skills` (для старых клиентов платформы).
+- `variables` - публичные variables (platform extension), которые владелец flow разрешил показывать внешнему клиенту.
 
 Agent Card не должна раскрывать secrets. Если переменная не публичная, ее не будет в `variables`.
 
-## Метод message/send
+## Метод SendMessage
 
-`message/send` отправляет сообщение и возвращает Task.
+`SendMessage` отправляет сообщение и возвращает Task.
 
 Есть два режима:
 
 - синхронный режим по умолчанию: сервер ждет завершения flow и возвращает финальный Task;
-- async/background режим: сервер быстро возвращает Task со статусом `submitted`, а результат вы забираете через `tasks/get`.
+- async/background режим: сервер быстро возвращает Task со статусом `submitted`, а результат вы забираете через `GetTask`.
 
-### Синхронный message/send
+### Синхронный SendMessage
 
 Используйте для коротких flows, которые обычно отвечают быстро.
 
@@ -497,16 +508,14 @@ curl -sS -X POST "$A2A_URL" \
   -d '{
     "jsonrpc": "2.0",
     "id": "sync-1",
-    "method": "message/send",
+    "method": "SendMessage",
     "params": {
       "message": {
         "messageId": "msg-sync-1",
-        "role": "user",
+        "role": "ROLE_USER",
         "contextId": "chat-100",
         "parts": [
-          {
-            "kind": "text",
-            "text": "Составь короткий ответ клиенту о статусе заказа."
+          {"text": "Составь короткий ответ клиенту о статусе заказа."
           }
         ]
       },
@@ -528,7 +537,7 @@ curl -sS -X POST "$A2A_URL" \
 - `metadata.variables` передает значения только для этого запуска или диалога.
 - Если flow долгий, синхронный запрос может ждать долго. Для долгих задач лучше async или streaming.
 
-### Async/background message/send
+### Async/background SendMessage
 
 Используйте для долгих flows, где клиенту не нужно держать HTTP-соединение открытым.
 
@@ -539,22 +548,22 @@ curl -sS -X POST "$A2A_URL" \
   -d '{
     "jsonrpc": "2.0",
     "id": "async-1",
-    "method": "message/send",
+    "method": "SendMessage",
     "params": {
       "message": {
         "messageId": "msg-async-1",
-        "role": "user",
+        "role": "ROLE_USER",
         "contextId": "report-chat-77",
         "parts": [
-          {
-            "kind": "text",
-            "text": "Проанализируй приложенный отчет и подготовь выводы."
+          {"text": "Проанализируй приложенный отчет и подготовь выводы."
           }
         ]
       },
+      "configuration": {
+        "returnImmediately": true
+      },
       "metadata": {
-        "branch": "default",
-        "execution_mode": "async"
+        "branch": "default"
       }
     }
   }'
@@ -570,23 +579,23 @@ curl -sS -X POST "$A2A_URL" \
     "id": "task-abc",
     "contextId": "report-chat-77",
     "status": {
-      "state": "submitted",
+      "state": "TASK_STATE_SUBMITTED",
       "message": {
-        "role": "agent",
-        "parts": [{ "kind": "text", "text": "Task submitted" }]
+        "role": "ROLE_AGENT",
+        "parts": [{"text": "Task submitted" }]
       }
     }
   }
 }
 ```
 
-Дальше опрашивайте `tasks/get` по `id`:
+Дальше опрашивайте `GetTask` по `id`:
 
 ```json
 {
   "jsonrpc": "2.0",
   "id": "get-async-1",
-  "method": "tasks/get",
+  "method": "GetTask",
   "params": {
     "id": "task-abc",
     "historyLength": 20
@@ -594,7 +603,7 @@ curl -sS -X POST "$A2A_URL" \
 }
 ```
 
-Для `execution_mode` также принимается `"background"`.
+`returnImmediately: false` или отсутствие поля — blocking до terminal/interrupted state (канон A2A 1.0).
 
 ### Статусы Task
 
@@ -608,11 +617,11 @@ curl -sS -X POST "$A2A_URL" \
 - `canceled` - задача отменена.
 - `rejected` - задача отклонена до выполнения.
 
-Если статус `input-required`, смотрите `status.message`: там обычно есть вопрос или инструкция, что нужно прислать следующим сообщением. Чтобы продолжить тот же диалог, отправьте новое `message/send` или `message/stream` с тем же `contextId`.
+Если статус `input-required`, смотрите `status.message`: там обычно есть вопрос или инструкция, что нужно прислать следующим сообщением. Чтобы продолжить тот же диалог, отправьте новое `SendMessage` или `SendStreamingMessage` с тем же `contextId`.
 
-## Метод message/stream
+## Метод SendStreamingMessage
 
-`message/stream` запускает flow и возвращает Server-Sent Events (SSE). Это удобно для интерфейса чата, где нужно показывать ответ по мере генерации.
+`SendStreamingMessage` запускает flow и возвращает Server-Sent Events (SSE). Это удобно для интерфейса чата, где нужно показывать ответ по мере генерации.
 
 Запрос:
 
@@ -624,16 +633,14 @@ curl -N -sS -X POST "$A2A_URL" \
   -d '{
     "jsonrpc": "2.0",
     "id": "stream-1",
-    "method": "message/stream",
+    "method": "SendStreamingMessage",
     "params": {
       "message": {
         "messageId": "msg-stream-1",
-        "role": "user",
+        "role": "ROLE_USER",
         "contextId": "chat-stream-1",
         "parts": [
-          {
-            "kind": "text",
-            "text": "Объясни по шагам, как работает доставка."
+          {"text": "Объясни по шагам, как работает доставка."
           }
         ]
       },
@@ -644,24 +651,23 @@ curl -N -sS -X POST "$A2A_URL" \
   }'
 ```
 
-Фреймы SSE выглядят так:
+Фреймы SSE — A2A 1.0 `StreamResponse` (oneof в `result`):
 
 ```text
-data: {"jsonrpc":"2.0","id":"stream-1","result":{"kind":"status-update","status":{"state":"working"}}}
+data: {"jsonrpc":"2.0","id":"stream-1","result":{"statusUpdate":{"taskId":"...","contextId":"...","status":{"state":"TASK_STATE_WORKING"}}}}
 
-data: {"jsonrpc":"2.0","id":"stream-1","result":{"kind":"artifact-update","artifact":{"parts":[{"kind":"text","text":"Шаг 1..."}]}}}
+data: {"jsonrpc":"2.0","id":"stream-1","result":{"artifactUpdate":{"taskId":"...","contextId":"...","artifact":{"parts":[{"text":"Шаг 1..."}]}}}}
 
-data: {"jsonrpc":"2.0","id":"stream-1","result":{"kind":"status-update","status":{"state":"completed"},"final":true}}
+data: {"jsonrpc":"2.0","id":"stream-1","result":{"statusUpdate":{"taskId":"...","contextId":"...","status":{"state":"TASK_STATE_COMPLETED"}}}}
 ```
 
 В каждом событии:
 
-- `jsonrpc` и `id` помогают связать событие с вашим запросом.
-- `result.kind` показывает тип события.
-- `artifact-update` обычно несет кусок результата.
-- `status-update` сообщает состояние задачи.
-- `message` может нести отдельное сообщение агента.
-- `final: true` означает, что поток завершен.
+- `jsonrpc` и `id` связывают событие с запросом.
+- В `result` ровно один ключ: `statusUpdate` | `artifactUpdate` | `task` | `message` (нет `kind`, нет `final` на statusUpdate).
+- `artifactUpdate` обычно несет кусок результата.
+- `statusUpdate` сообщает состояние задачи (`TASK_STATE_*`).
+- Поток закрывается, когда приходит terminal/interrupted state (`TASK_STATE_COMPLETED`, `TASK_STATE_FAILED`, `TASK_STATE_INPUT_REQUIRED`, …).
 
 Если в streaming произошла ошибка, она тоже придет как SSE frame:
 
@@ -678,17 +684,18 @@ const response = await fetch(process.env.A2A_URL, {
     'Authorization': `Bearer ${process.env.PLATFORM_TOKEN}`,
     'Content-Type': 'application/json',
     'Accept': 'text/event-stream',
+    'A2A-Version': '1.0',
   },
   body: JSON.stringify({
     jsonrpc: '2.0',
     id: 'stream-node-1',
-    method: 'message/stream',
+    method: 'SendStreamingMessage',
     params: {
       message: {
         messageId: crypto.randomUUID(),
-        role: 'user',
+        role: 'ROLE_USER',
         contextId: 'chat-node-1',
-        parts: [{ kind: 'text', text: 'Привет!' }],
+        parts: [{ text: 'Привет!' }],
       },
       metadata: { branch: 'default' },
     },
@@ -721,9 +728,9 @@ while (true) {
 }
 ```
 
-## Метод tasks/get
+## Метод GetTask
 
-`tasks/get` возвращает текущее состояние Task.
+`GetTask` возвращает текущее состояние Task.
 
 Параметры:
 
@@ -739,7 +746,7 @@ curl -sS -X POST "$A2A_URL" \
   -d '{
     "jsonrpc": "2.0",
     "id": "get-1",
-    "method": "tasks/get",
+    "method": "GetTask",
     "params": {
       "id": "task-abc",
       "historyLength": 20
@@ -757,10 +764,10 @@ curl -sS -X POST "$A2A_URL" \
     "id": "task-abc",
     "contextId": "report-chat-77",
     "status": {
-      "state": "working",
+      "state": "TASK_STATE_WORKING",
       "message": {
-        "role": "agent",
-        "parts": [{ "kind": "text", "text": "" }]
+        "role": "ROLE_AGENT",
+        "parts": [{"text": "" }]
       }
     },
     "history": []
@@ -780,16 +787,16 @@ curl -sS -X POST "$A2A_URL" \
 
 Типичная схема polling:
 
-1. Запустите `message/send` с `metadata.execution_mode: "async"`.
+1. Запустите `SendMessage` с `configuration.returnImmediately: true`.
 2. Возьмите `result.id`.
-3. Раз в 1-3 секунды вызывайте `tasks/get`.
+3. Раз в 1-3 секунды вызывайте `GetTask`.
 4. Остановите polling, когда `status.state` стал `completed`, `failed`, `canceled`, `rejected` или `input-required`.
 
-Не дергайте `tasks/get` десятки раз в секунду. Это не ускорит flow, но создаст лишнюю нагрузку.
+Не дергайте `GetTask` десятки раз в секунду. Это не ускорит flow, но создаст лишнюю нагрузку.
 
-## Метод tasks/cancel
+## Метод CancelTask
 
-`tasks/cancel` просит отменить выполняющуюся задачу.
+`CancelTask` просит отменить выполняющуюся задачу.
 
 Параметры:
 
@@ -804,7 +811,7 @@ curl -sS -X POST "$A2A_URL" \
   -d '{
     "jsonrpc": "2.0",
     "id": "cancel-1",
-    "method": "tasks/cancel",
+    "method": "CancelTask",
     "params": {
       "id": "task-abc"
     }
@@ -821,10 +828,10 @@ curl -sS -X POST "$A2A_URL" \
     "id": "task-abc",
     "contextId": "report-chat-77",
     "status": {
-      "state": "canceled",
+      "state": "TASK_STATE_CANCELED",
       "message": {
-        "role": "agent",
-        "parts": [{ "kind": "text", "text": "Task cancelled" }]
+        "role": "ROLE_AGENT",
+        "parts": [{"text": "Task cancelled" }]
       }
     }
   }
@@ -846,9 +853,9 @@ curl -sS -X POST "$A2A_URL" \
 
 Отмена - не машина времени. Если flow уже успел завершиться, клиент может увидеть финальный статус вместо отмены.
 
-## Метод tasks/resubscribe
+## Метод SubscribeToTask
 
-`tasks/resubscribe` нужен, если streaming-соединение оборвалось и клиент хочет снова получить состояние задачи.
+`SubscribeToTask` нужен, если streaming-соединение оборвалось и клиент хочет снова получить состояние задачи.
 
 Параметры:
 
@@ -864,7 +871,7 @@ curl -N -sS -X POST "$A2A_URL" \
   -d '{
     "jsonrpc": "2.0",
     "id": "resubscribe-1",
-    "method": "tasks/resubscribe",
+    "method": "SubscribeToTask",
     "params": {
       "id": "task-abc"
     }
@@ -877,151 +884,86 @@ curl -N -sS -X POST "$A2A_URL" \
 
 Push notification methods управляют webhook-конфигурациями для Task:
 
-- `tasks/pushNotificationConfig/set`
-- `tasks/pushNotificationConfig/get`
-- `tasks/pushNotificationConfig/list`
-- `tasks/pushNotificationConfig/delete`
+- `CreateTaskPushNotificationConfig`
+- `GetTaskPushNotificationConfig`
+- `ListTaskPushNotificationConfigs`
+- `DeleteTaskPushNotificationConfig`
 
-Используйте их только если push notifications включены и согласованы для вашего окружения. Для большинства интеграций проще и надежнее начать с `message/stream` или `tasks/get`.
+Используйте их только если push notifications включены и согласованы для вашего окружения. Для большинства интеграций проще и надежнее начать с `SendStreamingMessage` или `GetTask`.
 
-### tasks/pushNotificationConfig/set
+### CreateTaskPushNotificationConfig
 
-Создает или обновляет webhook config для Task.
+Создает webhook config для Task. Params — `TaskPushNotificationConfig` (поля на верхнем уровне).
+
+Предпочтительно регистрировать URL в `SendMessage.configuration.taskPushNotificationConfig` **до** старта task (иначе terminal push может уйти раньше Create).
 
 ```json
 {
   "jsonrpc": "2.0",
   "id": "push-set-1",
-  "method": "tasks/pushNotificationConfig/set",
+  "method": "CreateTaskPushNotificationConfig",
   "params": {
     "taskId": "task-abc",
-    "pushNotificationConfig": {
-      "id": "main-webhook",
-      "url": "https://example.com/humanitec/a2a/task-events",
-      "token": "optional-shared-secret",
-      "authentication": {
-        "schemes": ["bearer"],
-        "credentials": "optional-credentials"
-      }
-    }
+    "id": "main-webhook",
+    "url": "https://example.com/a2a/task-events",
+    "token": "optional-shared-secret"
   }
 }
 ```
 
 Поля:
 
-- `taskId` - ID задачи.
-- `pushNotificationConfig.url` - HTTPS endpoint вашего backend.
-- `pushNotificationConfig.id` - опциональный ID config. Если у задачи несколько webhooks, задавайте разные ID.
-- `pushNotificationConfig.token` - опциональный secret, который ваш backend может использовать для проверки вызова.
-- `authentication.schemes` - список схем авторизации, например `["bearer"]`.
-- `authentication.credentials` - опциональные credentials для выбранной схемы.
+- `taskId` — ID задачи.
+- `url` — HTTPS endpoint вашего backend.
+- `id` — опциональный ID config.
+- `token` — опциональный secret для проверки вызова.
 
-Минимальный вариант:
+Тело webhook — ProtoJSON `StreamResponse` (`statusUpdate` / …), без 0.3 method name.
 
-```json
-{
-  "taskId": "task-abc",
-  "pushNotificationConfig": {
-    "id": "main",
-    "url": "https://example.com/a2a/task-events"
-  }
-}
-```
-
-### tasks/pushNotificationConfig/get
-
-Возвращает один config.
+### GetTaskPushNotificationConfig
 
 ```json
 {
   "jsonrpc": "2.0",
   "id": "push-get-1",
-  "method": "tasks/pushNotificationConfig/get",
+  "method": "GetTaskPushNotificationConfig",
   "params": {
-    "id": "task-abc",
-    "pushNotificationConfigId": "main-webhook"
+    "taskId": "task-abc",
+    "id": "main-webhook"
   }
 }
 ```
 
-Если `pushNotificationConfigId` не передать, сервер может вернуть config по умолчанию для задачи.
-
-### tasks/pushNotificationConfig/list
-
-Возвращает все configs задачи.
+### ListTaskPushNotificationConfigs
 
 ```json
 {
   "jsonrpc": "2.0",
   "id": "push-list-1",
-  "method": "tasks/pushNotificationConfig/list",
+  "method": "ListTaskPushNotificationConfigs",
   "params": {
-    "id": "task-abc"
+    "taskId": "task-abc"
   }
 }
 ```
 
-Ответ:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "push-list-1",
-  "result": [
-    {
-      "taskId": "task-abc",
-      "pushNotificationConfig": {
-        "id": "main-webhook",
-        "url": "https://example.com/humanitec/a2a/task-events"
-      }
-    }
-  ]
-}
-```
-
-### tasks/pushNotificationConfig/delete
-
-Удаляет config.
+### DeleteTaskPushNotificationConfig
 
 ```json
 {
   "jsonrpc": "2.0",
   "id": "push-delete-1",
-  "method": "tasks/pushNotificationConfig/delete",
+  "method": "DeleteTaskPushNotificationConfig",
   "params": {
-    "id": "task-abc",
-    "pushNotificationConfigId": "main-webhook"
+    "taskId": "task-abc",
+    "id": "main-webhook"
   }
 }
 ```
 
-Успешный ответ:
+## Метод GetExtendedAgentCard
 
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "push-delete-1",
-  "result": null
-}
-```
-
-## Метод agent/getAuthenticatedExtendedCard
-
-Метод возвращает расширенную Agent Card для аутентифицированного клиента, если такая карточка включена для flow. Если отдельная расширенная карточка не настроена, возвращается обычная Agent Card.
-
-Пример:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "card-extended-1",
-  "method": "agent/getAuthenticatedExtendedCard",
-  "params": {}
-}
-```
-
-Используйте этот метод, когда A2A-клиент сначала получил публичную карточку, увидел, что есть authenticated mode, и затем хочет получить данные, доступные только после авторизации.
+На платформе `extendedAgentCard=false`: `GetExtendedAgentCard` возвращает JSON-RPC ошибку `-32007` / `-32004` (не silent fallback на обычную Agent Card). Публичная карточка — `GET /{flow_id}/.well-known/agent-card.json`.
 
 ## Branches
 
@@ -1489,25 +1431,20 @@ Variables позволяют передать flow данные без изме�
 
 ## Files
 
-A2A message может содержать файлы. Файлы передаются как `parts` с `kind: "file"`.
+A2A 1.0 Part — oneof `text` | `raw` | `url` | `data` (поля `filename` / `mediaType` опциональны). **Нет** `kind`, `FileWithBytes`, `FileWithUri`.
 
-Есть два способа:
+Два способа вложить файл:
 
-- передать bytes в base64;
-- передать URI файла.
+- `raw` — bytes (в JSON-RPC обычно base64 в ProtoJSON);
+- `url` — HTTP(S) URI (platform download reuse или SSRF-safe fetch).
 
-### Файл bytes/base64
-
-Используйте, когда файл небольшой и ваш backend может безопасно отправить его прямо в JSON.
+### Part.raw (bytes)
 
 ```json
 {
-  "kind": "file",
-  "file": {
-    "name": "invoice.pdf",
-    "mimeType": "application/pdf",
-    "bytes": "JVBERi0xLjQKJ..."
-  }
+  "raw": "JVBERi0xLjQKJ...",
+  "filename": "invoice.pdf",
+  "mediaType": "application/pdf"
 }
 ```
 
@@ -1517,24 +1454,18 @@ A2A message может содержать файлы. Файлы передаю�
 {
   "jsonrpc": "2.0",
   "id": "file-bytes-1",
-  "method": "message/send",
+  "method": "SendMessage",
   "params": {
     "message": {
       "messageId": "msg-file-1",
-      "role": "user",
+      "role": "ROLE_USER",
       "contextId": "file-chat-1",
       "parts": [
+        {"text": "Проверь счет и скажи сумму к оплате."},
         {
-          "kind": "text",
-          "text": "Проверь счет и скажи сумму к оплате."
-        },
-        {
-          "kind": "file",
-          "file": {
-            "name": "invoice.pdf",
-            "mimeType": "application/pdf",
-            "bytes": "JVBERi0xLjQKJ..."
-          }
+          "raw": "JVBERi0xLjQKJ...",
+          "filename": "invoice.pdf",
+          "mediaType": "application/pdf"
         }
       ]
     },
@@ -1547,23 +1478,16 @@ A2A message может содержать файлы. Файлы передаю�
 
 Требования:
 
-- `file.name` обязателен.
-- `file.mimeType` обязателен для корректной передачи файла в flow.
-- `file.bytes` должен быть строкой base64.
-- Не отправляйте огромные файлы через JSON, если можно использовать ссылку.
+- `filename` и `mediaType` обязательны для persist в `state.files`.
+- Не отправляйте огромные файлы через JSON, если можно использовать `url`.
 
-### Файл по URI
-
-Используйте, когда файл уже доступен по URL.
+### Part.url
 
 ```json
 {
-  "kind": "file",
-  "file": {
-    "name": "photo.png",
-    "mimeType": "image/png",
-    "uri": "https://example.com/files/photo.png"
-  }
+  "url": "https://example.com/files/photo.png",
+  "filename": "photo.png",
+  "mediaType": "image/png"
 }
 ```
 
@@ -1573,23 +1497,17 @@ A2A message может содержать файлы. Файлы передаю�
 {
   "jsonrpc": "2.0",
   "id": "file-uri-1",
-  "method": "message/send",
+  "method": "SendMessage",
   "params": {
     "message": {
       "messageId": "msg-file-2",
-      "role": "user",
+      "role": "ROLE_USER",
       "parts": [
+        {"text": "Опиши, что на изображении."},
         {
-          "kind": "text",
-          "text": "Опиши, что на изображении."
-        },
-        {
-          "kind": "file",
-          "file": {
-            "name": "photo.png",
-            "mimeType": "image/png",
-            "uri": "https://example.com/files/photo.png"
-          }
+          "url": "https://example.com/files/photo.png",
+          "filename": "photo.png",
+          "mediaType": "image/png"
         }
       ]
     }
@@ -1597,13 +1515,11 @@ A2A message может содержать файлы. Файлы передаю�
 }
 ```
 
-Для URI:
+Для `url`:
 
-- `file.name` обязателен.
-- `file.mimeType` обязателен.
-- `file.uri` обязателен.
-- URL должен быть доступен тому flow/tool, который будет его использовать.
-- Если URI указывает на файл платформы вида `/flows/api/v1/files/download/{file_id}`, файл должен принадлежать той же компании.
+- `filename` и `mediaType` обязательны.
+- Platform path `/flows/api/v1/files/download/{file_id}` — reuse того же `file_id` (та же компания).
+- Внешний URL — SSRF-safe fetch (private/loopback вне TESTING блокируются).
 
 ### Какие данные о файле получает flow
 
@@ -1631,11 +1547,10 @@ Flow получает нормализованное описание файла
 
 ### Частые ошибки с файлами
 
-- Нет `name` - сервер вернет ошибку валидации файла.
-- Нет `mimeType` - flow не сможет надежно понять тип файла.
-- `bytes` не base64 - будет ошибка декодирования.
-- URI ведет на приватный файл без доступа - flow/tool не сможет его прочитать.
-- URI платформенного файла из другой компании - запрос будет отклонен.
+- Нет `filename` / `mediaType` — ошибка валидации Part.
+- `raw` не декодируется — ошибка декодирования.
+- Внешний `url` на private/loopback IP — SSRF reject.
+- Platform `url` с `file_id` другой компании — запрос отклонен.
 
 ## Data parts
 
@@ -1659,11 +1574,9 @@ Flow получает нормализованное описание файла
 ```json
 {
   "messageId": "msg-data-1",
-  "role": "user",
+  "role": "ROLE_USER",
   "parts": [
-    {
-      "kind": "text",
-      "text": "Создай ответ по этому тикету."
+    {"text": "Создай ответ по этому тикету."
     },
     {
       "kind": "data",
@@ -1948,7 +1861,7 @@ app.post("/api/chat-token", async (req, res) => {
 </html>
 ```
 
-После загрузки страницы должен появиться launcher виджета. При первом сообщении виджет запросит `/api/chat-token`, получит короткий token и отправит A2A `message/stream`.
+После загрузки страницы должен появиться launcher виджета. При первом сообщении виджет запросит `/api/chat-token`, получит короткий token и отправит A2A `SendStreamingMessage`.
 
 ### Каждый атрибут script
 
@@ -2173,30 +2086,25 @@ Embed widget автоматически передает полезный кон
 
 ### Файлы в embed widget
 
-Если UI виджета разрешает прикреплять файлы, пользователь может отправить файл вместе с сообщением. Виджет отправляет файл в A2A как `file` part.
+Если UI виджета разрешает прикреплять файлы, пользователь может отправить файл вместе с сообщением. Виджет отправляет файл как A2A 1.0 Part (`raw` или `url`).
 
 Для custom-клиента формат такой:
 
 ```json
 {
-  "kind": "file",
-  "file": {
-    "name": "invoice.pdf",
-    "mimeType": "application/pdf",
-    "bytes": "JVBERi0xLjQK..."
-  }
+  "raw": "JVBERi0xLjQK...",
+  "filename": "invoice.pdf",
+  "mediaType": "application/pdf"
 }
 ```
 
 Что важно:
 
-- `bytes` - это base64 без префикса `data:application/pdf;base64,`.
-- `name` помогает flow и инструментам показать файл человеку.
-- `mimeType` помогает понять тип файла.
-- Не отправляйте слишком большие файлы без необходимости.
-- Если файл приватный, не передавайте внешний URL, который flow не сможет скачать.
+- `raw` — bytes (в JSON-RPC обычно base64 без префикса `data:...;base64,`).
+- `filename` / `mediaType` обязательны для persist.
+- Не отправляйте слишком большие файлы без необходимости; предпочтителен `url`.
 
-Если flow должен обрабатывать файлы, заранее протестируйте это через A2A API: отправьте `message/stream` с `file` part и убедитесь, что нужный node/tool получает файл.
+Если flow должен обрабатывать файлы, заранее протестируйте через A2A API: `SendStreamingMessage` с Part `raw`/`url`.
 
 ### Embed session-token API
 
@@ -2272,19 +2180,19 @@ Content-Type: application/json
 
 Разрешенные JSON-RPC методы:
 
-- `message/send`
-- `message/stream`
-- `tasks/cancel`
+- `SendMessage`
+- `SendStreamingMessage`
+- `CancelTask`
 
 Запрещенные методы для embed-session token:
 
-- `tasks/get`
-- `tasks/resubscribe`
+- `GetTask`
+- `SubscribeToTask`
 - push notification methods;
 - управление branches;
 - любые методы, которые требуют полноценного company API key.
 
-Пример `message/stream` с коротким token:
+Пример `SendStreamingMessage` с коротким token:
 
 ```bash
 curl -N "https://api.linnex.io/flows/api/v1/embed/embed_abc123" \
@@ -2294,13 +2202,13 @@ curl -N "https://api.linnex.io/flows/api/v1/embed/embed_abc123" \
   -d '{
     "jsonrpc": "2.0",
     "id": "embed-stream-1",
-    "method": "message/stream",
+    "method": "SendStreamingMessage",
     "params": {
       "message": {
         "messageId": "msg-001",
-        "role": "user",
+        "role": "ROLE_USER",
         "parts": [
-          { "kind": "text", "text": "Привет" }
+          {"text": "Привет" }
         ]
       }
     }
@@ -2475,9 +2383,9 @@ Response config содержит и служебные поля:
 - локальный порт совпадает: `localhost:3000` и `localhost:5173` разные origins;
 - browser действительно отправляет request на тот platform host, который указан в `data-flows-base-url`.
 
-JSON-RPC error `-32000` с текстом `supports only message/send, message/stream and tasks/cancel`.
+JSON-RPC error `-32000` с текстом `supports only SendMessage, SendStreamingMessage and CancelTask`.
 
-Причина: embed-session token использовали для запрещенного метода, например `tasks/get`. Для виджета используйте streaming. Если backend должен читать task status, используйте обычный server-to-server A2A с `hum_...` ключом и `/flows/api/v1/{flow_id}`.
+Причина: embed-session token использовали для запрещенного метода, например `GetTask`. Для виджета используйте streaming. Если backend должен читать task status, используйте обычный server-to-server A2A с `hum_...` ключом и `/flows/api/v1/{flow_id}`.
 
 JSON-RPC error `-32000` с `not allowed for this embed`.
 
@@ -2594,7 +2502,7 @@ JSON-RPC error `-32000` с `not allowed for this company`.
 
 Проверьте написание:
 
-- правильно: `message/send`;
+- правильно: `SendMessage`;
 - неправильно: `messages/send`, `messageSend`, `task/get`.
 
 `-32602 Invalid params` - `params` неправильного типа или поля неверны.
@@ -2605,7 +2513,7 @@ JSON-RPC error `-32000` с `not allowed for this company`.
 - `metadata` не объект;
 - `metadata.version` не строка;
 - `message.parts` пустой или содержит неправильный part;
-- `tasks/get` получил `taskId`, а должен получить `id`.
+- `GetTask` получил `taskId`, а должен получить `id`.
 
 `-32000` - прикладная ошибка выполнения.
 
@@ -2635,17 +2543,17 @@ POST /flows/api/v1/support_agent
 {
   "message": {
     "messageId": "msg-1",
-    "role": "user",
-    "parts": [{ "kind": "text", "text": "Привет" }]
+    "role": "ROLE_USER",
+    "parts": [{"text": "Привет" }]
   }
 }
 ```
 
-Неправильно: `tasks/get` с `taskId`.
+Неправильно: `GetTask` с `taskId`.
 
 ```json
 {
-  "method": "tasks/get",
+  "method": "GetTask",
   "params": {
     "taskId": "task-abc"
   }
@@ -2656,7 +2564,7 @@ POST /flows/api/v1/support_agent
 
 ```json
 {
-  "method": "tasks/get",
+  "method": "GetTask",
   "params": {
     "id": "task-abc"
   }
@@ -2732,13 +2640,13 @@ export async function callFlowA2A({
 ```js
 const task = await callFlowA2A({
   flowId: 'support_agent',
-  method: 'message/send',
+  method: 'SendMessage',
   params: {
     message: {
       messageId: crypto.randomUUID(),
-      role: 'user',
+      role: 'ROLE_USER',
       contextId: 'chat-123',
-      parts: [{ kind: 'text', text: 'Где мой заказ?' }],
+      parts: [{ text: 'Где мой заказ?' }],
     },
     metadata: {
       branch: 'support',
@@ -2794,8 +2702,8 @@ async def call_flow_a2a(flow_id: str, method: str, params: dict) -> dict:
 - Используется правильный URL `/flows/api/v1/{flow_id}`.
 - `flow_id` и `branch_id` берутся из конфигурации, а не вводятся пользователем без проверки.
 - Для чата сохраняется и повторно используется `contextId`.
-- Для долгих задач используется `message/stream` или async `message/send` + `tasks/get`.
-- Файлы имеют `name` и `mimeType`.
+- Для долгих задач используется `SendStreamingMessage` или async `SendMessage` + `GetTask`.
+- Файлы — Part `raw`/`url` с `filename` и `mediaType`; заголовок `A2A-Version: 1.0`.
 - Для secrets используются `@var:*` или защищенные настройки, а не открытый текст в запросе.
 - Ошибки JSON-RPC и HTTP обрабатываются отдельно.
 - Для embed не используется company API key в браузере.

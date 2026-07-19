@@ -1041,6 +1041,49 @@
         "title": "DocumentProcessingStatus",
         "description": "Статус обработки документа в RAG.\n\nСтатусы:\n- pending: документ принят, ожидает обработки\n- processing: документ обрабатывается (парсинг, chunking, индексация)\n- completed: документ успешно проиндексирован\n- failed: ошибка при обработке\n\nПервичный ключ в БД — document_id (одна строка на документ)."
       },
+      "DocumentStatusesBatchRequest": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Document Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document_ids"
+        ],
+        "title": "DocumentStatusesBatchRequest"
+      },
+      "DocumentStatusesBatchResponse": {
+        "properties": {
+          "statuses": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/DocumentProcessingStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Statuses"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "statuses"
+        ],
+        "title": "DocumentStatusesBatchResponse"
+      },
       "GlobalSearchResponse": {
         "properties": {
           "results": {
@@ -2407,6 +2450,109 @@
         ],
         "title": "RAGNamespaceSearchRequest",
         "description": "Тело поиска внутри одного RAG namespace."
+      },
+      "RAGSearchOptions": {
+        "properties": {
+          "channels": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchChannelsDefaults"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rrf_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrf K"
+          },
+          "per_channel_top_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Channel Top K"
+          },
+          "rerank": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank"
+          },
+          "rerank_max_candidates": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Max Candidates"
+          },
+          "retrieval": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval"
+          },
+          "freshness_weight": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Weight",
+            "description": "Вес freshness-канала в гибридном скоринге: доля RRF-score, умножаемая на экспоненциальный decay возраста документа. 0/None — выключено."
+          },
+          "freshness_half_life_days": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Half Life Days",
+            "description": "Период полураспада freshness decay в днях."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RAGSearchOptions",
+        "description": "Опции retrieval-поиска, общие для API, HTTP client, repository и provider."
       },
       "RAGSearchResult": {
         "properties": {

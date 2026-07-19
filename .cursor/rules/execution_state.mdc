@@ -27,6 +27,7 @@ llm_context_memory_cursor # offsets закрытых окон context memory; п
 tool_results            # результаты tools
 variables               # переменные flow
 files                   # вложения; при старте сессии включают записи nodes[*].files графа + файлы запроса (flows.mdc)
+agent_plan              # AgentPlan | None — active flat checklist; overwrite via agent_plan_write (→ agent_plan.mdc)
 
 current_nodes           # для resume
 

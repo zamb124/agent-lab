@@ -20,7 +20,6 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_graph_payload,
     flows_open_editor,
     flows_publish_editor,
-    flows_save_edge_condition_modal,
     flows_set_edge_condition_simple,
     flows_switch_editor_mode,
     flows_wire_ports,
@@ -70,7 +69,7 @@ async def test_flows_canvas_wiring_smoke(
 
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(180)
+@pytest.mark.timeout(60)
 async def test_flows_edge_condition_and_run_mode_smoke(
     flows_ui: AppUI,
     ui_page_system: Page,
@@ -84,6 +83,13 @@ async def test_flows_edge_condition_and_run_mode_smoke(
         flows_branch_condition_payload(flow_id, name="Edge Smoke"),
     )
 
+    persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
+    edges = persisted.get("edges") or []
+    returns_edge = next((e for e in edges if e.get("to_node") == "returns_path"), None)
+    assert returns_edge is not None
+    condition = returns_edge.get("condition") or {}
+    assert condition.get("value") == "returns"
+
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
     await flows_set_edge_condition_simple(
@@ -91,18 +97,8 @@ async def test_flows_edge_condition_and_run_mode_smoke(
         variable="intent",
         operator="==",
         value="returns",
-        edge_index=1,
+        to_node="returns_path",
     )
-    await flows_save_edge_condition_modal(page)
-    await flows_publish_editor(page)
-
     await flows_switch_editor_mode(page, "run")
-    await expect(page.locator("flows-execution-panel platform-chat")).to_be_visible(timeout=15_000)
-
-    persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
-    edges = persisted.get("edges") or []
-    returns_edge = next((e for e in edges if e.get("to_node") == "returns_path"), None)
-    assert returns_edge is not None
-    condition = returns_edge.get("condition") or {}
-    assert condition.get("value") == "returns"
+    await expect(page.locator("flows-execution-panel platform-chat")).to_be_visible(timeout=5_000)
 

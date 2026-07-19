@@ -49,6 +49,8 @@ ALLOWLIST_PATHS: tuple[Path, ...] = (
     REPO_ROOT / "core" / "ai" / "providers" / "specs.py",
     REPO_ROOT / "core" / "frontend" / "pwa" / "manifest.json",
     REPO_ROOT / "core" / "frontend" / "pwa" / "sw.js",
+    # OnlyOffice Document Server browser Origins per deployed brand apex.
+    REPO_ROOT / "core" / "office" / "ai_settings.py",
 )
 
 BRAND_LITERAL_PATTERNS: tuple[re.Pattern[str], ...] = (

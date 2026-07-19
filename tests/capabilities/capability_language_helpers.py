@@ -1087,8 +1087,8 @@ async def assert_language_runs_static_platform_capabilities(
     assert results["state.get_user"] == f"user-{language}"
     assert results["state.get_tool_result"] is True
     assert results["state.get_messages"] == 0
-    assert results["state.add_user_message"] == "user"
-    assert results["state.add_agent_message"] == "agent"
+    assert results["state.add_user_message"] == "ROLE_USER"
+    assert results["state.add_agent_message"] == "ROLE_AGENT"
     assert results["state.push_ui_event"] == "capability.single"
     assert results["state.push_ui_events"] == 1
     assert results["state.pop_ui_events"] == 2

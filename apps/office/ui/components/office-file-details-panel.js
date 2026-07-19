@@ -234,7 +234,7 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                     </div>
                     <div class="meta-row">
                         <span class="meta-label">${this.t('details.fileCount')}</span>
-                        <span class="meta-value">${this.t('catalogs.fileCount', { count: catalog.file_count })}</span>
+                        <span class="meta-value">${this.t('catalogs.fileCount', { count: typeof catalog.file_count === 'number' ? catalog.file_count : 0 })}</span>
                     </div>
                     <div class="meta-row">
                         <span class="meta-label">${this.t('details.subcatalogCount')}</span>

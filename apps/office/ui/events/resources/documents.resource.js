@@ -5,8 +5,8 @@
  *   GET    /documents?catalog_ids=...        → OfficeDocumentListResponse { items }
  *   POST   /documents                        → OfficeDocumentCreateResponse (multipart: file, title?, catalog_id)
  *   POST   /documents/empty                  → OfficeDocumentCreateResponse (JSON: title, document_type, catalog_id, spreadsheet_format?)
- *   PATCH  /documents/{binding_id}           → OfficeDocumentRenameResponse (JSON: title)
- *   DELETE /documents/{binding_id}           → 204
+ *   PATCH  /documents/{file_id}              → OfficeDocumentRenameResponse (JSON: title)
+ *   DELETE /documents/{file_id}              → 204
  *
  * `documentsOp` — list по `catalogIds` (sub-resource), slice хранит
  * `items` + `loadedCatalogIds` + `activeCatalogId` + `filterCatalogIds`.
@@ -90,7 +90,6 @@ function _buildDocumentsQuery(ids, payload) {
 }
 
 const _DOCUMENT_ITEM_COMPARE_KEYS = [
-    'binding_id',
     'catalog_id',
     'title',
     'file_id',
@@ -129,11 +128,11 @@ function _sameCatalogIds(left, right) {
  */
 function _mergeDocumentItems(prevItems, nextItems) {
     const prevById = new Map(
-        prevItems.map((item) => [item.binding_id, item]),
+        prevItems.map((item) => [item.file_id, item]),
     );
     const merged = [];
     for (const nextItem of nextItems) {
-        const prevItem = prevById.get(nextItem.binding_id);
+        const prevItem = prevById.get(nextItem.file_id);
         if (prevItem && _documentItemsEqual(prevItem, nextItem)) {
             merged.push(prevItem);
             continue;
@@ -179,12 +178,12 @@ export const documentsOp = createAsyncOp({
         searchMode: _readStoredSearchMode(),
         sortKey: 'updated_at',
         sortDir: 'desc',
-        selectedBindingId: null,
-        selectedBindingIds: [],
+        selectedFileId: null,
+        selectedFileIds: [],
         uploadJobs: [],
         explorerView: 'catalog',
-        recentBindingIds: _readStoredIds(RECENT_STORAGE_KEY),
-        starredBindingIds: _readStoredIds(STARRED_STORAGE_KEY),
+        recentFileIds: _readStoredIds(RECENT_STORAGE_KEY),
+        starredFileIds: _readStoredIds(STARRED_STORAGE_KEY),
         expandedCatalogIds: _readStoredIds(EXPANDED_CATALOGS_STORAGE_KEY),
     },
     extraEvents: {
@@ -196,10 +195,10 @@ export const documentsOp = createAsyncOp({
         SET_SEARCH_QUERY:    'set_search_query',
         SET_SEARCH_MODE:     'set_search_mode',
         SET_SORT:            'set_sort',
-        SET_SELECTED_BINDING: 'set_selected_binding',
-        TOGGLE_BINDING_SELECTION: 'toggle_binding_selection',
-        SET_BINDING_SELECTION: 'set_binding_selection',
-        CLEAR_BINDING_SELECTION: 'clear_binding_selection',
+        SET_SELECTED_FILE:   'set_selected_file',
+        TOGGLE_FILE_SELECTION: 'toggle_file_selection',
+        SET_FILE_SELECTION:  'set_file_selection',
+        CLEAR_FILE_SELECTION: 'clear_file_selection',
         UPLOAD_JOB_ADD:      'upload_job_add',
         UPLOAD_JOB_UPDATE:   'upload_job_update',
         UPLOAD_JOB_REMOVE:   'upload_job_remove',
@@ -217,10 +216,10 @@ export const documentsOp = createAsyncOp({
         setSearchQuery:    'set_search_query',
         setSearchMode:     'set_search_mode',
         setSort:           'set_sort',
-        setSelectedBinding: 'set_selected_binding',
-        toggleBindingSelection: 'toggle_binding_selection',
-        setBindingSelection: 'set_binding_selection',
-        clearBindingSelection: 'clear_binding_selection',
+        setSelectedFile: 'set_selected_file',
+        toggleFileSelection: 'toggle_file_selection',
+        setFileSelection: 'set_file_selection',
+        clearFileSelection: 'clear_file_selection',
         setExplorerView: 'set_explorer_view',
         toggleStarred: 'toggle_starred',
         recordRecentOpen: 'record_recent_open',
@@ -342,35 +341,35 @@ export const documentsOp = createAsyncOp({
                 : state.sortDir;
             return { ...state, sortKey, sortDir };
         }
-        if (event.type === events.SET_SELECTED_BINDING) {
-            const bindingId = event.payload && typeof event.payload.bindingId === 'string'
-                ? event.payload.bindingId
+        if (event.type === events.SET_SELECTED_FILE) {
+            const fileId = event.payload && typeof event.payload.fileId === 'string'
+                ? event.payload.fileId
                 : null;
-            return { ...state, selectedBindingId: bindingId };
+            return { ...state, selectedFileId: fileId };
         }
-        if (event.type === events.TOGGLE_BINDING_SELECTION) {
-            const bindingId = event.payload && typeof event.payload.bindingId === 'string'
-                ? event.payload.bindingId
+        if (event.type === events.TOGGLE_FILE_SELECTION) {
+            const fileId = event.payload && typeof event.payload.fileId === 'string'
+                ? event.payload.fileId
                 : '';
-            if (bindingId.length === 0) {
-                throw new Error('office/documents: bindingId required for toggle');
+            if (fileId.length === 0) {
+                throw new Error('office/documents: fileId required for toggle');
             }
-            const selected = new Set(Array.isArray(state.selectedBindingIds) ? state.selectedBindingIds : []);
-            if (selected.has(bindingId)) {
-                selected.delete(bindingId);
+            const selected = new Set(Array.isArray(state.selectedFileIds) ? state.selectedFileIds : []);
+            if (selected.has(fileId)) {
+                selected.delete(fileId);
             } else {
-                selected.add(bindingId);
+                selected.add(fileId);
             }
-            return { ...state, selectedBindingIds: [...selected] };
+            return { ...state, selectedFileIds: [...selected] };
         }
-        if (event.type === events.SET_BINDING_SELECTION) {
-            const ids = Array.isArray(event.payload && event.payload.bindingIds)
-                ? event.payload.bindingIds.filter((x) => typeof x === 'string' && x.length > 0)
+        if (event.type === events.SET_FILE_SELECTION) {
+            const ids = Array.isArray(event.payload && event.payload.fileIds)
+                ? event.payload.fileIds.filter((x) => typeof x === 'string' && x.length > 0)
                 : [];
-            return { ...state, selectedBindingIds: ids };
+            return { ...state, selectedFileIds: ids };
         }
-        if (event.type === events.CLEAR_BINDING_SELECTION) {
-            return { ...state, selectedBindingIds: [], selectedBindingId: null };
+        if (event.type === events.CLEAR_FILE_SELECTION) {
+            return { ...state, selectedFileIds: [], selectedFileId: null };
         }
         if (event.type === events.UPLOAD_JOB_ADD) {
             const job = event.payload && event.payload.job;
@@ -422,36 +421,36 @@ export const documentsOp = createAsyncOp({
             return { ...state, explorerView };
         }
         if (event.type === events.TOGGLE_STARRED) {
-            const bindingId = event.payload && typeof event.payload.bindingId === 'string'
-                ? event.payload.bindingId
+            const fileId = event.payload && typeof event.payload.fileId === 'string'
+                ? event.payload.fileId
                 : '';
-            if (bindingId.length === 0) {
-                throw new Error('office/documents: bindingId required for toggle starred');
+            if (fileId.length === 0) {
+                throw new Error('office/documents: fileId required for toggle starred');
             }
-            const starred = new Set(Array.isArray(state.starredBindingIds) ? state.starredBindingIds : []);
-            if (starred.has(bindingId)) {
-                starred.delete(bindingId);
+            const starred = new Set(Array.isArray(state.starredFileIds) ? state.starredFileIds : []);
+            if (starred.has(fileId)) {
+                starred.delete(fileId);
             } else {
-                starred.add(bindingId);
+                starred.add(fileId);
             }
-            const starredBindingIds = [...starred];
-            _writeStoredIds(STARRED_STORAGE_KEY, starredBindingIds);
-            return { ...state, starredBindingIds };
+            const starredFileIds = [...starred];
+            _writeStoredIds(STARRED_STORAGE_KEY, starredFileIds);
+            return { ...state, starredFileIds };
         }
         if (event.type === events.RECORD_RECENT_OPEN) {
-            const bindingId = event.payload && typeof event.payload.bindingId === 'string'
-                ? event.payload.bindingId
+            const fileId = event.payload && typeof event.payload.fileId === 'string'
+                ? event.payload.fileId
                 : '';
-            if (bindingId.length === 0) {
-                throw new Error('office/documents: bindingId required for recent');
+            if (fileId.length === 0) {
+                throw new Error('office/documents: fileId required for recent');
             }
             const recent = [
-                bindingId,
-                ...(Array.isArray(state.recentBindingIds) ? state.recentBindingIds : [])
-                    .filter((id) => id !== bindingId),
+                fileId,
+                ...(Array.isArray(state.recentFileIds) ? state.recentFileIds : [])
+                    .filter((id) => id !== fileId),
             ].slice(0, RECENT_LIMIT);
             _writeStoredIds(RECENT_STORAGE_KEY, recent);
-            return { ...state, recentBindingIds: recent };
+            return { ...state, recentFileIds: recent };
         }
         return state;
     },
@@ -541,11 +540,11 @@ export const documentCreateEmptyOp = createAsyncOp({
         });
     },
     onSuccess: (ctx, result, event) => {
-        if (result && typeof result.binding_id === 'string') {
+        if (result && typeof result.file_id === 'string') {
             if (event.payload.openAfterCreate === true) {
                 ctx.dispatch(
                     CoreEvents.ROUTER_NAVIGATE_REQUESTED,
-                    { routeKey: 'document_editor', params: { bindingId: result.binding_id } },
+                    { routeKey: 'document_editor', params: { fileId: result.file_id } },
                     { causation_id: event.id, source: 'local' },
                 );
             }
@@ -603,11 +602,11 @@ export const documentUploadOp = createAsyncOp({
                 );
             }, 3000);
         }
-        if (result && typeof result.binding_id === 'string') {
+        if (result && typeof result.file_id === 'string') {
             if (event.payload.openAfterUpload === true) {
                 ctx.dispatch(
                     CoreEvents.ROUTER_NAVIGATE_REQUESTED,
-                    { routeKey: 'document_editor', params: { bindingId: result.binding_id } },
+                    { routeKey: 'document_editor', params: { fileId: result.file_id } },
                     { causation_id: event.id, source: 'local' },
                 );
             }
@@ -635,20 +634,20 @@ export const documentRenameOp = createAsyncOp({
     name: 'office/document_rename',
     successToastKey: 'documents:toast.document_renamed',
     errorToastKey: 'documents:toast.document_rename_failed',
-    restMirror: { method: 'PATCH', path: '/documents/api/v1/documents/:binding_id' },
+    restMirror: { method: 'PATCH', path: '/documents/api/v1/documents/:file_id' },
     request: ({ payload, ctx }) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('office/document_rename: payload required');
         }
-        if (typeof payload.bindingId !== 'string' || payload.bindingId.length === 0) {
-            throw new Error('office/document_rename: payload.bindingId required');
+        if (typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
+            throw new Error('office/document_rename: payload.fileId required');
         }
         if (typeof payload.title !== 'string' || payload.title.length === 0) {
             throw new Error('office/document_rename: payload.title required');
         }
         return httpRequest({
             method: 'PATCH',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.bindingId)}`,
+            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}`,
             body: { title: payload.title },
             headers: nsHeader(ctx),
         });
@@ -680,14 +679,14 @@ export const documentRestoreOp = createAsyncOp({
     name: 'office/document_restore',
     successToastKey: 'documents:toast.document_restored',
     errorToastKey: 'documents:toast.document_restore_failed',
-    restMirror: { method: 'POST', path: '/documents/api/v1/documents/:binding_id/restore' },
+    restMirror: { method: 'POST', path: '/documents/api/v1/documents/:file_id/restore' },
     request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.bindingId !== 'string' || payload.bindingId.length === 0) {
-            throw new Error('office/document_restore: payload.bindingId required');
+        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
+            throw new Error('office/document_restore: payload.fileId required');
         }
         return httpRequest({
             method: 'POST',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.bindingId)}/restore`,
+            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/restore`,
             headers: nsHeader(ctx),
         });
     },
@@ -700,14 +699,14 @@ export const documentPermanentDeleteOp = createAsyncOp({
     name: 'office/document_permanent_delete',
     successToastKey: 'documents:toast.document_permanent_deleted',
     errorToastKey: 'documents:toast.document_permanent_delete_failed',
-    restMirror: { method: 'DELETE', path: '/documents/api/v1/documents/:binding_id/permanent' },
+    restMirror: { method: 'DELETE', path: '/documents/api/v1/documents/:file_id/permanent' },
     request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.bindingId !== 'string' || payload.bindingId.length === 0) {
-            throw new Error('office/document_permanent_delete: payload.bindingId required');
+        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
+            throw new Error('office/document_permanent_delete: payload.fileId required');
         }
         return httpRequest({
             method: 'DELETE',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.bindingId)}/permanent`,
+            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/permanent`,
             headers: nsHeader(ctx),
         });
     },
@@ -720,17 +719,17 @@ export const documentMoveOp = createAsyncOp({
     name: 'office/document_move',
     successToastKey: 'documents:toast.document_moved',
     errorToastKey: 'documents:toast.document_move_failed',
-    restMirror: { method: 'POST', path: '/documents/api/v1/documents/:binding_id/move' },
+    restMirror: { method: 'POST', path: '/documents/api/v1/documents/:file_id/move' },
     request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.bindingId !== 'string' || payload.bindingId.length === 0) {
-            throw new Error('office/document_move: payload.bindingId required');
+        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
+            throw new Error('office/document_move: payload.fileId required');
         }
         if (typeof payload.catalogId !== 'string' || payload.catalogId.length === 0) {
             throw new Error('office/document_move: payload.catalogId required');
         }
         return httpRequest({
             method: 'POST',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.bindingId)}/move`,
+            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/move`,
             body: { catalog_id: payload.catalogId },
             headers: nsHeader(ctx),
         });
@@ -753,16 +752,16 @@ export const documentShareCreateOp = createAsyncOp({
     name: 'office/document_share_create',
     successToastKey: 'documents:toast.share_created',
     errorToastKey: 'documents:toast.share_create_failed',
-    restMirror: { method: 'POST', path: '/documents/api/v1/documents/:binding_id/shares' },
+    restMirror: { method: 'POST', path: '/documents/api/v1/documents/:file_id/shares' },
     request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.bindingId !== 'string' || payload.bindingId.length === 0) {
-            throw new Error('office/document_share_create: payload.bindingId required');
+        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
+            throw new Error('office/document_share_create: payload.fileId required');
         }
         const permission = payload.permission === 'edit' ? 'edit' : 'view';
         const expiresInHours = typeof payload.expiresInHours === 'number' ? payload.expiresInHours : null;
         return httpRequest({
             method: 'POST',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.bindingId)}/shares`,
+            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/shares`,
             body: { permission, expires_in_hours: expiresInHours },
             headers: nsHeader(ctx),
         });
@@ -773,17 +772,17 @@ export const documentRemoveOp = createAsyncOp({
     name: 'office/document_remove',
     successToastKey: 'documents:toast.document_deleted',
     errorToastKey: 'documents:toast.document_delete_failed',
-    restMirror: { method: 'DELETE', path: '/documents/api/v1/documents/:binding_id' },
+    restMirror: { method: 'DELETE', path: '/documents/api/v1/documents/:file_id' },
     request: ({ payload, ctx }) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('office/document_remove: payload required');
         }
-        if (typeof payload.bindingId !== 'string' || payload.bindingId.length === 0) {
-            throw new Error('office/document_remove: payload.bindingId required');
+        if (typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
+            throw new Error('office/document_remove: payload.fileId required');
         }
         return httpRequest({
             method: 'DELETE',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.bindingId)}`,
+            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}`,
             headers: nsHeader(ctx),
         });
     },
@@ -802,7 +801,7 @@ export const documentRemoveOp = createAsyncOp({
 export const documentRenameForm = createForm({
     name: 'office/document_rename_form',
     schema: {
-        binding_id: { required: true },
+        file_id: { required: true },
         title: {
             required: true,
             minLength: 1,
@@ -811,10 +810,10 @@ export const documentRenameForm = createForm({
         },
         catalog_ids: {},
     },
-    initial: { binding_id: '', title: '', catalog_ids: [] },
+    initial: { file_id: '', title: '', catalog_ids: [] },
     submitEvent: documentRenameOp.events.REQUESTED,
     buildPayload: (draft) => ({
-        bindingId: draft.binding_id,
+        fileId: draft.file_id,
         title: typeof draft.title === 'string' ? draft.title.trim() : '',
         catalogIds: Array.isArray(draft.catalog_ids) ? draft.catalog_ids : [],
     }),

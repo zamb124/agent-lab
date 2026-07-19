@@ -160,11 +160,13 @@ class TestDurableWorkflowRuntime:
             content="test",
             messages=[],
         )
-        from a2a.types import Message, Part, Role, TextPart
+        from a2a.types import Message, Part
+        from a2a.types.a2a_pb2 import ROLE_USER
+
         message = Message(
             message_id="test-msg",
-            role=Role.user,
-            parts=[Part(root=TextPart(text="Hello"))],
+            role=ROLE_USER,
+            parts=[Part(text="Hello")],
             task_id="test-task"
         )
         state.messages.append(message)

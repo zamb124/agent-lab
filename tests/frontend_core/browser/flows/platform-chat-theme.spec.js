@@ -121,7 +121,7 @@ describe('platform-chat theme tokens', () => {
         const logo = el.renderRoot.querySelector('.fab-logo');
         expect(fab).to.exist;
         expect(logo.getAttribute('src')).to.equal(
-            '/static/core/assets/service_logos/linnex_spinner_logo.png',
+            `${window.location.origin}/static/core/assets/service_logos/linnex_spinner_logo.png`,
         );
 
         const rect = fab.getBoundingClientRect();

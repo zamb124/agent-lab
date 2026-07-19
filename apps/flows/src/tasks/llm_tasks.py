@@ -4,11 +4,17 @@ TaskIQ tasks для LLM вызовов.
 Обеспечивает единообразное выполнение LLM через worker.
 """
 
-from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
+from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
 
 import core.tracing.attributes as trace_attributes
 from apps.flows.src.tasks.task_names import TASK_INVOKE_LLM
 from apps.flows_worker.broker_core import broker
+from core.a2a import (
+    coerce_usage_token_count,
+    get_part_text,
+    mapping_from_struct,
+    part_has_text,
+)
 from core.ai.providers import AICapability
 from core.ai.resolver import COST_ORIGIN_COMPANY, resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
@@ -113,19 +119,19 @@ async def invoke_llm(
                     artifact_name = event.artifact.name
                     if event.artifact.parts:
                         for part in event.artifact.parts:
-                            if isinstance(part.root, TextPart):
-                                text = part.root.text
+                            if part_has_text(part):
+                                text = get_part_text(part)
                                 if artifact_name == "reasoning":
                                     reasoning_parts.append(text)
                                 else:
                                     content_parts.append(text)
 
                 if isinstance(event, TaskStatusUpdateEvent):
-                    if event.status.message and event.status.message.metadata:
-                        event_metadata = require_json_object(
-                            event.status.message.metadata,
-                            "invoke_llm.event.metadata",
-                        )
+                    if (
+                        event.status.message
+                        and event.status.message.HasField("metadata")
+                    ):
+                        event_metadata = mapping_from_struct(event.status.message.metadata)
                         tc = event_metadata.get("tool_calls")
                         if tc is not None:
                             tool_calls = tc
@@ -133,25 +139,23 @@ async def invoke_llm(
                         if usage_raw is not None:
                             usage = require_json_object(usage_raw, "invoke_llm.event.usage")
                             input_tokens_raw = usage.get("input_tokens")
-                            if input_tokens_raw is None:
-                                input_tokens = 0
-                            elif isinstance(input_tokens_raw, int) and not isinstance(
-                                input_tokens_raw,
-                                bool,
-                            ):
-                                input_tokens = input_tokens_raw
-                            else:
-                                raise ValueError("invoke_llm.event.usage.input_tokens must be int")
+                            input_tokens = (
+                                0
+                                if input_tokens_raw is None
+                                else coerce_usage_token_count(
+                                    input_tokens_raw,
+                                    "invoke_llm.event.usage.input_tokens",
+                                )
+                            )
                             output_tokens_raw = usage.get("output_tokens")
-                            if output_tokens_raw is None:
-                                output_tokens = 0
-                            elif isinstance(output_tokens_raw, int) and not isinstance(
-                                output_tokens_raw,
-                                bool,
-                            ):
-                                output_tokens = output_tokens_raw
-                            else:
-                                raise ValueError("invoke_llm.event.usage.output_tokens must be int")
+                            output_tokens = (
+                                0
+                                if output_tokens_raw is None
+                                else coerce_usage_token_count(
+                                    output_tokens_raw,
+                                    "invoke_llm.event.usage.output_tokens",
+                                )
+                            )
 
             total_tokens = input_tokens + output_tokens
             if total_tokens > 0:

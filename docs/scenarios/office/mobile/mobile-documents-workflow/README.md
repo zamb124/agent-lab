@@ -13,3 +13,7 @@ Bottom nav, выбор пространства и каталога, редак�
 ## Шаг 3. Выбор каталога на мобильном
 
 ![Выбор каталога на мобильном](mobile-documents-workflow--03-mobile-catalog-picker.png)
+
+## Шаг 4. Редактор скрывает bottom nav
+
+![Редактор скрывает bottom nav](mobile-documents-workflow--04-editor-hides-bottom-nav.png)

@@ -204,6 +204,16 @@
         "work_count_aria": "Открытые задачи",
         "work_count_title": "Открытые задачи"
     },
+    "agent_plan": {
+        "title": "План",
+        "status": {
+            "pending": "ожидает",
+            "in_progress": "в работе",
+            "completed": "готово",
+            "need_help": "нужна помощь",
+            "failed": "ошибка"
+        }
+    },
     "work_item_badge": {
         "loading": "Загрузка…",
         "state": {

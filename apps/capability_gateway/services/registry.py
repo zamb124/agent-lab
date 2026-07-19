@@ -13,11 +13,12 @@ from typing import Literal, cast
 from urllib.parse import urlparse
 
 import httpx
-from a2a.types import Message, Part, Role, TextPart
+from a2a.types import Message, Part, Role
 
 from apps.capability_gateway.services.context_service import CapabilityContextService
 from apps.capability_gateway.services.contracts import CapabilityGatewayContainerProtocol
 from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
+from core.a2a import message_to_json_dict, struct_from_mapping
 from core.ai.runtime import synthesize_speech_audio, transcribe_audio_bytes
 from core.capabilities import (
     CAPABILITY_LANGUAGES,
@@ -454,11 +455,11 @@ def _message_dict(*, role: Role, content: str, task_id: str | None) -> JsonObjec
     message = Message(
         message_id=str(uuid.uuid4()),
         role=role,
-        parts=[Part(root=TextPart(text=content))],
+        parts=[Part(text=content)],
         task_id=task_id,
-        metadata={"node_id": MESSAGE_SOURCE_CAPABILITY},
     )
-    return require_json_object(message.model_dump(mode="json"), "capability.message")
+    message.metadata.CopyFrom(struct_from_mapping({"node_id": MESSAGE_SOURCE_CAPABILITY}))
+    return require_json_object(message_to_json_dict(message), "capability.message")
 
 
 def _append_ui_event(
@@ -1858,7 +1859,7 @@ class CapabilityRegistry:
         self._reject_positional_args(request)
         content = _required_string(request.kwargs.get("content"), "content")
         message = _message_dict(
-            role=Role.user,
+            role=Role.ROLE_USER,
             content=content,
             task_id=request.context.task_id,
         )
@@ -1873,7 +1874,7 @@ class CapabilityRegistry:
         self._reject_positional_args(request)
         content = _required_string(request.kwargs.get("content"), "content")
         message = _message_dict(
-            role=Role.agent,
+            role=Role.ROLE_AGENT,
             content=content,
             task_id=request.context.task_id,
         )

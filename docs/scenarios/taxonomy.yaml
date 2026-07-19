@@ -114,6 +114,12 @@ learning_paths:
       - label_ru: Инструменты агента
         label_en: Agent tools
         href: scenarios/flows/add-agent-tools/
+      - label_ru: План агента через Skill
+        label_en: Agent plan via Skill
+        href: scenarios/flows/agent-plan-via-skill/
+      - label_ru: План агента через инструменты
+        label_en: Agent plan via tools
+        href: scenarios/flows/agent-plan-via-tools/
       - label_ru: Публикация и управление
         label_en: Publish and operate
         href: scenarios/flows/publish-and-operate/
@@ -140,6 +146,12 @@ learning_paths:
       - label_ru: Дублируем и правим Skill
         label_en: Duplicate and edit a Skill
         href: scenarios/flows/duplicate-and-edit-skill/
+      - label_ru: План агента через Skill
+        label_en: Agent plan via Skill
+        href: scenarios/flows/agent-plan-via-skill/
+      - label_ru: План агента через инструменты
+        label_en: Agent plan via tools
+        href: scenarios/flows/agent-plan-via-tools/
 
   - id: worktracker-operators
     label_ru: Операторы и HITL

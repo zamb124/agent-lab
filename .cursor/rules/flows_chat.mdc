@@ -21,7 +21,7 @@ Host API компонента: getter `runtimeState`, методы `loadSession(
 | Модуль | Ответственность |
 |---|---|
 | `chat-state.js` | Pure reducer `applyChatRuntimeEvent(state, verb, payload)` + `createInitialChatRuntimeState` — единственное место мутаций chat state |
-| `a2a-stream.js` | Единственный SSE-клиент `consumeA2aStream` + builders (`buildA2aMessageStreamBody`, `buildA2aCancelBody`, `buildA2aFileParts`) |
+| `a2a-stream.js` | Единственный SSE-клиент `consumeA2aStream` + builders (`buildA2aSendStreamingMessageBody`, `buildA2aCancelBody`, `buildA2aFileParts`) |
 | `chat-controller.js` | `ChatController` — orchestration send/cancel/upload/voice-TTS; `TtsOnlyStreamLifecycle` |
 | `chat-profile.js` | `createChatProfile`, `resolveChatViewConfig(profile, chatPolicy)`, `fetchChatProfile` — `editor_test` игнорирует policy (видно всё), иначе policy ∩ capabilities |
 
@@ -55,7 +55,7 @@ Host API компонента: getter `runtimeState`, методы `loadSession(
 
 Global Lara использует единый toggle `platform-lara-open`, знак Linnex и persistent pointer/touch position launcher по service branch. Сервисный `PlatformApp` задаёт `static platformAssistant` и компактный context hook; отдельный service-owned `<platform-chat flow-id="lara">` запрещён.
 
-После `input-required` с `operator_task` исходный `message/stream` обрывается вместе с worker'ом. User (`spa`/`editor_test`/`embed_*`) и operator (`operator_handoff`) поднимают **live `tasks/resubscribe`** на тот же `a2a_task_id` (snapshot + Redis tail). Ask/close пишут в `ExecutionState.messages` и `Emitter`; company WS не канал пузырей чата.
+После `TASK_STATE_INPUT_REQUIRED` с `operator_task` исходный `SendStreamingMessage` обрывается вместе с worker'ом. User (`spa`/`editor_test`/`embed_*`) и operator (`operator_handoff`) поднимают **live `SubscribeToTask`** на тот же `a2a_task_id` (snapshot + Redis tail). Ask/close пишут в `ExecutionState.messages` и `Emitter`; company WS не канал пузырей чата.
 
 Контракт пузырей HITL / resume:
 
@@ -89,8 +89,8 @@ Layout — **stacked capsule**: textarea на всю ширину в `.composer-
 
 Единственный chat transport — A2A JSON-RPC поверх SSE:
 
-- send/stream: `POST /flows/api/v1/{flow_id}` или `POST /flows/api/v1/embed/{embed_id}`, `method: "message/stream"`;
-- cancel: тот же endpoint, `method: "tasks/cancel"`, `params: { id: task_id }`;
+- send/stream: `POST /flows/api/v1/{flow_id}` или `POST /flows/api/v1/embed/{embed_id}`, `method: "SendStreamingMessage"`, `A2A-Version: 1.0`;
+- cancel: тот же endpoint, `method: "CancelTask"`, `params: { id: task_id }`;
 - branch/context/files — только в A2A params/metadata по контракту `a2a-stream.js`.
 
 Embed endpoint не является отдельным протоколом: он только резолвит `embed_id -> flow_id/branch/company` и применяет embed-session auth/capabilities.
@@ -107,14 +107,15 @@ Embed endpoint не является отдельным протоколом: о
 
 Embed-session JWT обязан быть связан с конкретным `embed_id`, `embed_flow_id`, `embed_branch_id`, `company_id` embed target, optional `allowed_origin`.
 
-Public landing agents — embed configs компании `system` с `landing_visible=true`; публичный запуск всегда через short-lived `embed_session`. `embed_session` разрешает только `message/send`, `message/stream`, `tasks/cancel` (+ chat-profile GET); любой другой A2A method — явная JSON-RPC ошибка, без silent fallback.
+Public landing agents — embed configs компании `system` с `landing_visible=true`; публичный запуск всегда через short-lived `embed_session`. `embed_session` разрешает только `SendMessage`, `SendStreamingMessage`, `CancelTask` (+ chat-profile GET); любой другой A2A method — явная JSON-RPC ошибка, без silent fallback.
 
 ## Tool result UI blocks
 
-Извлечение: `tool-result-blocks.js` → `registerBuiltinFlowChatBlocks` (`card` | `table` | `actions` | `file_card` | `text` | **`viz`**).
+Извлечение: `tool-result-blocks.js` → `registerBuiltinFlowChatBlocks` (`card` | `table` | `actions` | `file_card` | `text` | **`viz`** | **`agent_plan`**).
 
 - `file_card` / `files[]` — открытие через `openFile` (включая `.viz`).
 - `type: "viz"` — inline `<flows-chat-ui-viz>` → `<platform-viz-host compact>`; разворот — `openFile` → Office handler `viz`.
+- `type: "agent_plan"` — inline `<flows-chat-ui-agent-plan>` → `<platform-agent-plan>` (checklist из `agent_plan_write` / `agent_plan_get`; → **`agent_plan.mdc`**).
 - Files panel: `canOpenInDocuments` включает `.viz` / MIME `vnd.platform.viz+json`.
 
 ## Tests

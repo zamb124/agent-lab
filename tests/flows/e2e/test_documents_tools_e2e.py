@@ -109,21 +109,18 @@ async def _send_file_message(
         json={
             "jsonrpc": "2.0",
             "id": f"test-{uuid.uuid4().hex}",
-            "method": "message/send",
+            "method": "SendMessage",
             "params": {
                 "message": {
                     "messageId": str(uuid.uuid4()),
-                    "role": "user",
+                    "role": "ROLE_USER",
                     "contextId": context_id,
                     "parts": [
-                        {"kind": "text", "text": "Edit the attached document."},
+                        {"text": "Edit the attached document."},
                         {
-                            "kind": "file",
-                            "file": {
-                                "bytes": base64.b64encode(file_bytes).decode("ascii"),
-                                "name": file_name,
-                                "mimeType": mime_type,
-                            },
+                            "raw": base64.b64encode(file_bytes).decode("ascii"),
+                            "filename": file_name,
+                            "mediaType": mime_type,
                         },
                     ],
                 }
@@ -133,7 +130,7 @@ async def _send_file_message(
     assert response.status_code == 200, response.text
     data = response.json()
     task = data.get("result", {})
-    assert task.get("status", {}).get("state") == "completed", data
+    assert task.get("status", {}).get("state") == "TASK_STATE_COMPLETED", data
     return data
 
 

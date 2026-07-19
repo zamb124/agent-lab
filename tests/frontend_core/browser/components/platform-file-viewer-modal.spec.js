@@ -110,7 +110,6 @@ function editorConfigFor(fileId, title = `${fileId}.docx`) {
     };
     return {
         handler: 'onlyoffice',
-        binding_id: fileId,
         file_id: fileId,
         title,
         original_name: title,

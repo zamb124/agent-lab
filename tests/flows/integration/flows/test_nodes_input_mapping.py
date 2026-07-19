@@ -840,31 +840,35 @@ class TestMessagesFilter:
 
     def test_filter_all_returns_all_messages(self, container: FlowRuntimeContainer):
         """messages_filter='all' возвращает все сообщения"""
-        from a2a.types import Message, Part, Role, TextPart
+        from a2a.types import Message, Part
+        from a2a.types.a2a_pb2 import (
+            ROLE_USER,
+            ROLE_AGENT,
+        )
 
         node = llm_node(
             container, node_id="test_node", config={"prompt": "Test", "messages_filter": "all"}
         )
         messages = [
             Message(
-                messageId="1",
-                role=Role.user,
-                parts=[Part(root=TextPart(text="User msg"))],
-                taskId="test",
+                message_id="1",
+                role=ROLE_USER,
+                parts=[Part(text="User msg")],
+                task_id="test",
                 metadata={"node_id": "other_node"},
             ),
             Message(
-                messageId="2",
-                role=Role.agent,
-                parts=[Part(root=TextPart(text="Agent msg"))],
-                taskId="test",
+                message_id="2",
+                role=ROLE_AGENT,
+                parts=[Part(text="Agent msg")],
+                task_id="test",
                 metadata={"node_id": "test_node"},
             ),
             Message(
-                messageId="3",
-                role=Role.agent,
-                parts=[Part(root=TextPart(text="Another agent"))],
-                taskId="test",
+                message_id="3",
+                role=ROLE_AGENT,
+                parts=[Part(text="Another agent")],
+                task_id="test",
                 metadata={"node_id": "another_node"},
             ),
         ]
@@ -885,38 +889,38 @@ class TestMessagesFilter:
         self, container: FlowRuntimeContainer
     ):
         """messages_filter='own' — только сообщения с metadata.node_id == эта нода"""
-        from a2a.types import Message, Part, Role, TextPart
+        from a2a.types import Message, Part
 
         node = llm_node(
             container, node_id="test_node", config={"prompt": "Test", "messages_filter": "own"}
         )
         messages = [
             Message(
-                messageId="1",
-                role=Role.user,
-                parts=[Part(root=TextPart(text="User msg"))],
-                taskId="test",
+                message_id="1",
+                role=ROLE_USER,
+                parts=[Part(text="User msg")],
+                task_id="test",
                 metadata={"node_id": "test_node"},
             ),
             Message(
-                messageId="2",
-                role=Role.agent,
-                parts=[Part(root=TextPart(text="My msg"))],
-                taskId="test",
+                message_id="2",
+                role=ROLE_AGENT,
+                parts=[Part(text="My msg")],
+                task_id="test",
                 metadata={"node_id": "test_node"},
             ),
             Message(
-                messageId="3",
-                role=Role.agent,
-                parts=[Part(root=TextPart(text="Other msg"))],
-                taskId="test",
+                message_id="3",
+                role=ROLE_AGENT,
+                parts=[Part(text="Other msg")],
+                task_id="test",
                 metadata={"node_id": "other_node"},
             ),
             Message(
-                messageId="4",
-                role=Role.user,
-                parts=[Part(root=TextPart(text="Other user"))],
-                taskId="test",
+                message_id="4",
+                role=ROLE_USER,
+                parts=[Part(text="Other user")],
+                task_id="test",
                 metadata={"node_id": "other_node"},
             ),
         ]
@@ -937,7 +941,7 @@ class TestMessagesFilter:
 
     def test_filter_list_returns_specified_nodes(self, container: FlowRuntimeContainer):
         """messages_filter=['node1', 'node2'] — только сообщения с node_id из списка"""
-        from a2a.types import Message, Part, Role, TextPart
+        from a2a.types import Message, Part
 
         node = llm_node(
             container,
@@ -946,38 +950,38 @@ class TestMessagesFilter:
         )
         messages = [
             Message(
-                messageId="1",
-                role=Role.user,
-                parts=[Part(root=TextPart(text="User"))],
-                taskId="test",
+                message_id="1",
+                role=ROLE_USER,
+                parts=[Part(text="User")],
+                task_id="test",
                 metadata={"node_id": "node1"},
             ),
             Message(
-                messageId="2",
-                role=Role.agent,
-                parts=[Part(root=TextPart(text="From node1"))],
-                taskId="test",
+                message_id="2",
+                role=ROLE_AGENT,
+                parts=[Part(text="From node1")],
+                task_id="test",
                 metadata={"node_id": "node1"},
             ),
             Message(
-                messageId="3",
-                role=Role.agent,
-                parts=[Part(root=TextPart(text="From node3"))],
-                taskId="test",
+                message_id="3",
+                role=ROLE_AGENT,
+                parts=[Part(text="From node3")],
+                task_id="test",
                 metadata={"node_id": "node3"},
             ),
             Message(
-                messageId="4",
-                role=Role.agent,
-                parts=[Part(root=TextPart(text="From node2"))],
-                taskId="test",
+                message_id="4",
+                role=ROLE_AGENT,
+                parts=[Part(text="From node2")],
+                task_id="test",
                 metadata={"node_id": "node2"},
             ),
             Message(
-                messageId="5",
-                role=Role.user,
-                parts=[Part(root=TextPart(text="node3 user"))],
-                taskId="test",
+                message_id="5",
+                role=ROLE_USER,
+                parts=[Part(text="node3 user")],
+                task_id="test",
                 metadata={"node_id": "node3"},
             ),
         ]
@@ -1002,7 +1006,7 @@ class TestMessagesFilter:
 
     def test_own_filter_full_log_not_truncated(self, container: FlowRuntimeContainer):
         """messages_filter=own сужает только срез для LLM; полный лог в state накапливается."""
-        from a2a.types import Message, Part, Role, TextPart
+        from a2a.types import Message, Part
 
         from apps.flows.src.runtime.runners.llm_runner import new_assistant_message
 
@@ -1013,17 +1017,17 @@ class TestMessagesFilter:
         )
         messages = [
             Message(
-                messageId="1",
-                role=Role.user,
-                parts=[Part(root=TextPart(text="u"))],
-                taskId="t",
+                message_id="1",
+                role=ROLE_USER,
+                parts=[Part(text="u")],
+                task_id="t",
                 metadata={},
             ),
             Message(
-                messageId="2",
-                role=Role.agent,
-                parts=[Part(root=TextPart(text="other"))],
-                taskId="t",
+                message_id="2",
+                role=ROLE_AGENT,
+                parts=[Part(text="other")],
+                task_id="t",
                 metadata={"node_id": "other"},
             ),
         ]

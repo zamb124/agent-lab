@@ -7,13 +7,13 @@
  * клиенте (или в мобильном приложении — тот же контракт) и делает:
  *
  *  - `voice → flows`: на каждое финальное распознавание
- *    (`transcript{final:true}`) отправляет `message/stream` в A2A
+ *    (`transcript{final:true}`) отправляет `SendStreamingMessage` в A2A
  *    (`embed/{embed_id}` или `flow/{flow_id}`). Тело A2A сообщения —
  *    текст пользователя; `voice` в A2A не участвует. Нефинальный
  *    текст (`final:false`) копится последним куском; при `stop()` моста
  *    (выключение микрофона) без последующего финала тот же путь отправки
  *    вызывается один раз для коммита в чат. Если финальный transcript уже
- *    запустил `message/stream`, пустой `stop()` после снятия эфира **не**
+ *    запустил `SendStreamingMessage`, пустой `stop()` после снятия эфира **не**
  *    вызывает `AbortController.abort` на этом fetch (иначе UI успевает показать
  *    сообщение пользователя из `beforeA2aStream`, а ответ гаснет).
  *  - Авто-TTS из ответа обрабатывается отдельно: потребитель SSE-кадров
@@ -22,7 +22,7 @@
  *  - Barge-in: `vad` с непрерывной речью ≥ ~0,3 s (как порог на шлюзе)
  *    во время TTS **или** пока живёт A2A fetch (фаза SSE до первого TTS) →
  *    `voice.stopPlayback()`, `AbortController.abort`, при наличии `taskId` —
- *    `tasks/cancel`. Учитывается и локальная очередь Web Audio (`hasScheduledTtsPlayback`):
+ *    `CancelTask`. Учитывается и локальная очередь Web Audio (`hasScheduledTtsPlayback`):
  *    сервер может прислать `tts_state: stopped` до конца воспроизведения буфера на клиенте. DOM `a2aAborted`: при оборванном SSE — из `catch (AbortError)`
  *    после установки `_pendingA2aAbortDetail`; если fetch уже закрыт (например, только TTS) —
  *    сразу из `_cancelCurrentTask`. Payload: `task_id`/`context_id` для сброса `flows/chat`.
@@ -37,10 +37,12 @@
  * в модулях friend'ах.
  */
 
+import { unwrapA2aStreamResult } from '../chat/a2a-chat-runtime.js';
 import {
+    A2A_PROTOCOL_VERSION,
     a2aEndpointUrl,
     buildA2aCancelBody,
-    buildA2aMessageStreamBody,
+    buildA2aSendStreamingMessageBody,
     consumeA2aStream,
 } from '../chat/runtime/a2a-stream.js';
 import { isVoiceClientDebugEnabled } from './voice-media-session.js';
@@ -58,7 +60,7 @@ const CLIENT_BARGE_MIN_SPEECH_MS = 300;
  * @property {() => Promise<Record<string,string>>} [getHeaders]
  * @property {RequestCredentials} [credentials='omit']
  * @property {string|null} [initialContextId]
- * @property {() => string|null|undefined} [getContextId] — перед каждым message/stream подставляется актуальный contextId из UI (например `<platform-chat>`).
+ * @property {() => string|null|undefined} [getContextId] — перед каждым SendStreamingMessage подставляется актуальный contextId из UI (например `<platform-chat>`).
  * @property {() => Promise<Record<string, unknown>|null|undefined>} [getStreamMetadata] — metadata для A2A (как у текстовой отправки: variables и т.д.).
  * @property {(text: string) => Promise<void>} [beforeA2aStream] — перед fetch (например добавить user/assistant пузыри в чат).
  * @property {(event: object) => void} [onA2aStreamEvent] — каждый SSE-кадр для UI; потребитель вызывает релей/reducer и там же `feedStreamTtsFromA2aResult` (flows: `relayA2aVoiceStreamRpcFrame`, standalone: `<platform-chat>.applyVoiceA2aStreamEvent`). Сам `VoiceAgentBridge` авто-TTS не вызывает.
@@ -155,8 +157,8 @@ export class VoiceAgentBridge extends EventTarget {
 
     /**
      * Отписаться от событий voice и при наличии — отправить последний partial.
-     * Активный fetch `message/stream`, уже запущенный после `transcript{final:true}`,
-     * не отменять: отмена — через barge-in / `tasks/cancel`.
+     * Активный fetch `SendStreamingMessage`, уже запущенный после `transcript{final:true}`,
+     * не отменять: отмена — через barge-in / `CancelTask`.
      */
     stop() {
         if (!this._started) return;
@@ -333,7 +335,7 @@ export class VoiceAgentBridge extends EventTarget {
                         flowId: this._flowId,
                         embedId: this._embedId,
                     }),
-                    body: buildA2aMessageStreamBody({
+                    body: buildA2aSendStreamingMessageBody({
                         message: text,
                         contextId: this._contextId,
                         branchId: this._branchId,
@@ -381,35 +383,30 @@ export class VoiceAgentBridge extends EventTarget {
         const result = event.result;
         if (!result || typeof result !== 'object') return;
 
-        if (typeof result.contextId === 'string' && result.contextId !== '') {
-            this._contextId = result.contextId;
+        const unwrapped = unwrapA2aStreamResult(result);
+        if (!unwrapped) {
+            return;
+        }
+        const payload = unwrapped.event;
+
+        if (typeof payload.contextId === 'string' && payload.contextId !== '') {
+            this._contextId = payload.contextId;
         }
 
-        const kind = typeof result.kind === 'string' ? result.kind : '';
-
-        if (kind === 'task') {
-            if (typeof result.id === 'string' && result.id !== '') {
-                this._currentTaskId = result.id;
+        if (unwrapped.frameKind === 'task') {
+            if (typeof payload.id === 'string' && payload.id !== '') {
+                this._currentTaskId = payload.id;
             }
             return;
         }
 
-        if (kind === 'artifact-update') {
-            if (typeof result.taskId === 'string' && result.taskId !== '') {
-                this._currentTaskId = result.taskId;
-            }
-            return;
-        }
-
-        if (kind === 'status-update') {
-            if (typeof result.taskId === 'string' && result.taskId !== '') {
-                this._currentTaskId = result.taskId;
-            }
+        if (typeof payload.taskId === 'string' && payload.taskId !== '') {
+            this._currentTaskId = payload.taskId;
         }
     }
 
     /**
-     * Кнопка «Стоп» в UI: заглушить TTS и прервать активный A2A fetch + tasks/cancel.
+     * Кнопка «Стоп» в UI: заглушить TTS и прервать активный A2A fetch + CancelTask.
      */
     userStopActiveTurn() {
         this._media.stopPlayback();
@@ -446,6 +443,7 @@ export class VoiceAgentBridge extends EventTarget {
                 credentials: this._credentials,
                 headers: {
                     'Content-Type': 'application/json',
+                    'A2A-Version': A2A_PROTOCOL_VERSION,
                     ...extraHeaders,
                 },
                 body: JSON.stringify(buildA2aCancelBody(taskId)),

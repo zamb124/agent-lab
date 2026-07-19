@@ -1,19 +1,21 @@
 ---
-description: "Streaming: Stream-First, Emitter/EventSubscriber, A2A события, OTEL"
+description: "Streaming: Stream-First, Emitter/EventSubscriber, A2A 1.0 StreamResponse, OTEL"
 alwaysApply: false
 ---
 # Streaming
+
+A2A wire — **только Protocol 1.0** (см. **`a2a.mdc`**). На SSE/Redis нет `kind`, нет `final=` на statusUpdate, нет TextPart/DataPart как отдельных wire-типов.
 
 ## Stream-First
 
 **LLM всегда вызывается через `.stream()`** — синхронных вызовов нет. Все события — через Redis Pub/Sub.
 
 ```
-Worker (TaskIQ) → LlmNodeRunner → Emitter → Redis Pub/Sub → EventSubscriber → Client (SSE/WS)
+Worker (TaskIQ) → LlmNodeRunner → Emitter → Redis Pub/Sub → EventSubscriber → Client (SSE)
                   ↑ llm.stream()           channel: stream:{task_id}
 ```
 
-`LLMClient.stream` (client создан через `core.ai.runtime`): после чанков при наличии `tool_calls` уходит `TaskStatusUpdateEvent` с `metadata.tool_calls`, затем второй `TaskStatusUpdateEvent` с финальным текстом и `metadata.usage` без `tool_calls`. В `LlmNodeRunner` поле `tool_calls` обновляется **только если** в `metadata` непустой `tool_calls` — иначе последнее событие затирало бы список вызовов.
+`LLMClient.stream` (client создан через `core.ai.runtime`): после чанков при наличии `tool_calls` уходит `TaskStatusUpdateEvent` с `metadata.tool_calls`, затем второй `TaskStatusUpdateEvent` с финальным текстом и `metadata.usage` без `tool_calls`. Оба — **`TASK_STATE_WORKING`**. Конец одного LLM-вызова ≠ конец A2A-задачи: `TASK_STATE_COMPLETED` на wire шлёт только `Emitter.emit_complete` (и аналогичные terminal emit_*). Иначе `EventSubscriber.is_final_event` закрывает `SendMessage`/`SendStreamingMessage` после первой llm_node. В `LlmNodeRunner` поле `tool_calls` обновляется **только если** в `metadata` непустой `tool_calls` — иначе последнее событие затирало бы список вызовов.
 
 ## Emitter
 
@@ -26,77 +28,108 @@ await emitter.emit_tool_call(name, args, call_id)
 await emitter.emit_tool_result(name, result, call_id)
 await emitter.emit_ui_event("patch_applied", payload)  # artifact ui_event
 await emitter.emit_complete("Done!")
-await emitter.emit_interrupt(state.interrupt)          # input-required, metadata.platform_interrupt
+await emitter.emit_interrupt(state.interrupt)          # TASK_STATE_INPUT_REQUIRED, metadata.platform_interrupt
 await emitter.emit_error("Connection failed")
 ```
 
 К каждому событию автоматически: `task_id`, `context_id`, `trace_id`, `span_id` (OpenTelemetry).
 
-Сериализация в Redis — `json.dumps(..., ensure_ascii=False, default=str)`: кириллица в теле события не превращается в `\uXXXX`.
+Redis wire: `Emitter._publish` оборачивает protobuf-событие в `StreamResponse` и публикует `MessageToDict(stream)` — JSON без поля `kind`:
 
-В тестах — `InMemoryEmitter` (`apps/flows/src/streaming/memory.py`):
+```json
+{"statusUpdate": {"taskId": "...", "contextId": "...", "status": {"state": "TASK_STATE_WORKING"}}}
+{"artifactUpdate": {"taskId": "...", "contextId": "...", "artifact": {...}, "append": true}}
+```
+
+Сериализация — `json.dumps(..., ensure_ascii=False)`: кириллица в теле события не превращается в `\uXXXX`.
+
+В тестах — `InMemoryEmitter` (`apps/flows/src/streaming/memory.py`): хранит **protobuf** `TaskStatusUpdateEvent | TaskArtifactUpdateEvent` (не Redis JSON). Assert по типу и `status.state`, не по `kind`:
 
 ```python
 emitter = InMemoryEmitter(state)
-await emitter.emit_text("Hello"); await emitter.emit_complete("Done")
-assert emitter.events[0]["kind"] == "task-artifact-update"
-assert emitter.events[1]["kind"] == "task-status-update"
+await emitter.emit_text("Hello")
+await emitter.emit_complete("Done")
+assert isinstance(emitter.events[0], TaskArtifactUpdateEvent)
+assert isinstance(emitter.events[1], TaskStatusUpdateEvent)
+assert emitter.events[1].status.state == TaskState.TASK_STATE_COMPLETED
 ```
 
 ## EventSubscriber
 
-`apps/flows/src/streaming/subscriber.py`. Подписка завершается на `is_final_event`: `TaskStatusUpdateEvent` с `final=True` и терминальным `task_state` (`completed`, `failed`, `input-required`, `canceled`; в A2A JSON это `status.state`).
+`apps/flows/src/streaming/subscriber.py`. `parse_event` принимает A2A 1.0 `StreamResponse` (`statusUpdate` / `artifactUpdate`) или плоский MessageToDict update; `kind: status-update|artifact-update` (0.3) — `ValueError`.
 
-**Отмена задачи (`tasks/cancel`, Redis `cancel:{task_id}`):** перед `emit_cancelled` воркер сохраняет `ExecutionState` и помечает `_cancelled`; частичный текст ответа LLM на момент `FlowCancelled` фиксируется в `state.messages` как сообщение ассистента с `metadata.interrupted=true` (`LlmNodeRunner`). Резолв `session_id` по `tasks/cancel`/`tasks/get` использует `task_id` **или** `context_id` (`BaseChannel._resolve_session_id_for_a2a_lookup`).
+Подписка завершается на `is_final_event`: `TaskStatusUpdateEvent` с **terminal** (`TASK_STATE_COMPLETED` / `FAILED` / `CANCELED` / `REJECTED`) или **interrupted** (`TASK_STATE_INPUT_REQUIRED` / `AUTH_REQUIRED`) state. Поля `final=` нет (удалено в A2A 1.0). На транспортной границе ProtoJSON — `status.state: "TASK_STATE_*"`; внутри платформы — kebab `task_state` / `ExecutionState.terminal_task_state` (`core.a2a.task_states`).
 
-**Исключение:** `input-required` с `metadata.platform_handoff_continue === true` **не** считается финалом для подписчика (многофазный operator HITL **и** agent handoff). Первое событие operator interrupt: `BaseEmitter.emit_interrupt` для `OperatorTaskInterrupt` ставит `final=False` и `platform_handoff_continue`; для `HandoffInterrupt` — тот же флаг через channel/emitter. Финал раунда — после `emit_complete` / handback resume.
+**`input-required` и продолжение стрима:**
 
-**`tasks/resubscribe`:** snapshot текущего `Task` + **live** `EventSubscriber.subscribe(task_id)` пока задача не terminal (`completed`/`failed`/`canceled`/`rejected`). HITL: user и operator чаты после паузы переподписываются сюда; mid-dialog (`operator_reply` / `user_message` artifacts) и resume идут в Redis `stream:{a2a_task_id}`.
+| metadata | `is_final_event` | Смысл |
+|---|---|---|
+| `platform_interrupt.body.kind == "handoff"` | `True` | agent handoff: закрыть `SendStreamingMessage` |
+| `platform_interrupt.body.kind == "operator_task"` | `True` | HITL: закрыть `SendStreamingMessage`; дальше `SubscribeToTask` |
+| `platform_oauth_continue == true` | `False` | OAuth pause, live stream |
+| `platform_handoff_continue == true` (без handoff/operator_task) | `False` | live continue |
+| обычный `input-required` | `True` | interrupt без live-continue |
 
-**UI при handoff:** SSE не закрывается до resume на исходном stream только пока worker жив; после exit — клиентский live resubscribe. Текст оператора — `Emitter.emit_text(..., artifact_name="operator_reply")`.
+`emit_interrupt`: handoff → `platform_handoff_continue`; oauth → `platform_oauth_continue`. Флага `final=` нет.
+
+**Отмена задачи (`CancelTask`, Redis `cancel:{task_id}`):** перед `emit_cancelled` воркер сохраняет `ExecutionState` и помечает `_cancelled`; частичный текст ответа LLM на момент `FlowCancelled` фиксируется в `state.messages` как сообщение ассистента с `metadata.interrupted=true` (`LlmNodeRunner`). Резолв `session_id` по `CancelTask`/`GetTask` использует `task_id` **или** `context_id` (`BaseChannel._resolve_session_id_for_a2a_lookup`).
+
+**`SubscribeToTask`:** snapshot текущего `Task` + **live** `EventSubscriber.subscribe(task_id)` пока задача не terminal (`TASK_STATE_COMPLETED` / `FAILED` / `CANCELED` / `REJECTED`). HITL: user и operator чаты после паузы переподписываются сюда; mid-dialog (`operator_reply` / `user_message` artifacts) и resume идут в Redis `stream:{a2a_task_id}`.
+
+**UI при handoff:** SSE не закрывается до resume на исходном stream только пока worker жив; после exit — клиентский live resubscribe (`SubscribeToTask`). Текст оператора — `Emitter.emit_text(..., artifact_name="operator_reply")`.
 
 **Redis subscribe idle-timeout:** `RedisClient.subscribe` использует **idle-таймаут** (сбрасывается при каждом сообщении, default 300 с) + **max-timeout** (3600 с, защита от утечек). Operator handoff при `takeover` может длиться минуты — активные сообщения сбрасывают idle.
 
-**Дедупликация текста status-update:** в `platform-chat.js` и `embed-stream-handler.js` текст из `message.parts` в `status-update` записывается в `content` **только** для терминальных состояний (`completed`, `finished`, `failed`, `error`). Для `working` текст приходит через `artifact-update` — дублирование исключено.
+**Дедупликация текста statusUpdate:** в `platform-chat.js` / `a2a-chat-runtime.js` текст из `status.message.parts` в `statusUpdate` попадает в content **только** для terminal/interrupted состояний. Для `TASK_STATE_WORKING` текст идёт через `artifactUpdate` — дублирование исключено.
 
-**Завершение одного вызова LLM** (`core/clients/llm.stream`) не должно использовать `final=True` при `state=completed` — иначе SSE обрывается до `node_complete` следующих нод и до `Emitter.emit_complete`. Конец A2A-задачи — только `emit_complete` / `emit_interrupt` / `emit_error`.
+**Завершение одного вызова LLM** (`core/clients/llm.stream`) не должно эмитить `TASK_STATE_COMPLETED` — иначе SSE обрывается до `node_complete` следующих нод и до `Emitter.emit_complete`. Конец A2A-задачи — только `emit_complete` / `emit_interrupt` / `emit_error` / `emit_cancelled`.
 
 ```python
+# SSE result = StreamResponse (camelCase ProtoJSON), не kind=
 async for event in subscriber.subscribe(task_id):
-    if event.kind == "task-status-update": ...
-    elif event.kind == "task-artifact-update": ...
-    yield f"event: {event.kind}\ndata: {json.dumps(event.model_dump())}\n\n"
+    yield _stream_response_result(event)  # {statusUpdate|artifactUpdate|task|message: ...}
 ```
 
 ## A2A типы
 
-Все события — типы из `a2a-sdk`. **Свои типы не создавать.**
-На транспортной границе A2A имя спеки остаётся `TaskStatus.state` / JSON `status.state`; внутри платформенного кода это значение называется `task_state`, а terminal projection field — `ExecutionState.terminal_task_state`.
+Все события — protobuf-типы из `a2a-sdk` (`a2a.types`). **Свои A2A-модели не создавать.** Parts — oneof через хелперы `new_text_part` / `new_data_part` (`a2a.helpers.proto_helpers`), не отдельные `TextPart`/`DataPart` на wire.
 
 ```python
-from a2a.types import TaskStatusUpdateEvent, TaskArtifactUpdateEvent, TaskState, Artifact, Part, TextPart
+from a2a.helpers.proto_helpers import new_text_part
+from a2a.types import Artifact, TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
+from core.a2a import make_task_status
 
-# working | input-required | completed | failed | canceled
-TaskStatusUpdateEvent(kind="task-status-update", taskId=..., contextId=..., status={"state": TaskState.working})
-TaskArtifactUpdateEvent(kind="task-artifact-update", taskId=..., contextId=..., artifact=Artifact(name="response", parts=[...]), append=True)
+TaskStatusUpdateEvent(
+    task_id=...,
+    context_id=...,
+    status=make_task_status(TaskState.TASK_STATE_WORKING),
+)
+TaskArtifactUpdateEvent(
+    task_id=...,
+    context_id=...,
+    artifact=Artifact(name="response", parts=[new_text_part("...")]),
+    append=True,
+)
 ```
+
+Wire SSE `result` — `StreamResponse`: `statusUpdate` | `artifactUpdate` | `task` | `message` (camelCase ProtoJSON). Enums: `TASK_STATE_*`, `ROLE_USER` / `ROLE_AGENT`.
 
 ### UI-события в протоколе
 
 - **`TaskArtifactUpdateEvent`** с `artifact.name = "ui_event"`.
-- В `artifact.parts` — `DataPart`: `{"id": "...", "type": "...", "payload": {...}, "version": "1.0"}`.
+- В `artifact.parts` — Part с `data` (`new_data_part`): `{"id": "...", "type": "...", "payload": {...}, "version": "1.0"}`.
 - Одно UI-событие = одно stream-сообщение (one-event-per-message).
-- Новый `kind` в A2A для UI **не вводится**.
+- Новый oneof-вариант в A2A для UI **не вводится**.
 
-**Граф (ноды/рёбра) в `DataPart`:** помимо `node_start`/`node_complete`/`node_error` с `node_id`, рантайн публикует `event: "edge_executed"` с `edge_index` (0-based, тот же порядок, что у рёбер исполняемого flow), `from_node`, `to_node`. UI сопоставляет `edge_index` с `edges[i]`. При исключении в вычислении `condition` — `event: "edge_error"` с теми же полями плюс `error`.
+**Граф (ноды/рёбра) в data Part:** помимо `node_start`/`node_complete`/`node_error` с `node_id`, рантайн публикует `event: "edge_executed"` с `edge_index` (0-based, тот же порядок, что у рёбер исполняемого flow), `from_node`, `to_node`. UI сопоставляет `edge_index` с `edges[i]`. При исключении в вычислении `condition` — `event: "edge_error"` с теми же полями плюс `error`.
 
 ## Полный поток
 
 ```python
-# A2AChannel: запустить worker, подписаться
+# A2AChannel: SendStreamingMessage — запустить worker, подписаться
 await process_flow_task.kiq(flow_id=..., task_id=..., ...)
 async for event in subscriber.subscribe(task_id):
-    yield event
+    yield event  # → StreamResponse на SSE
 
 # Worker: BaseChannel.process_task()
 emitter = Emitter(redis_client, state)
@@ -129,7 +162,9 @@ Emitter добавляет trace в `metadata` каждого события а�
 
 ## Файлы
 
-- `apps/flows/src/streaming/emitter.py` — `Emitter`, `BaseEmitter`.
-- `apps/flows/src/streaming/subscriber.py` — `EventSubscriber`.
-- `apps/flows/src/streaming/memory.py` — `InMemoryEmitter` (тесты).
-- `apps/flows/src/streaming/base.py` — базовые типы.
+- `apps/flows/src/streaming/emitter.py` — `Emitter`, Redis `StreamResponse` publish.
+- `apps/flows/src/streaming/subscriber.py` — `EventSubscriber`, `parse_event`, `is_final_event`.
+- `apps/flows/src/streaming/memory.py` — `InMemoryEmitter` (тесты; protobuf list).
+- `apps/flows/src/streaming/base.py` — `BaseEmitter`, `StreamEvent`.
+- Chat UI: `core/frontend/static/lib/chat/platform-chat.js`, `a2a-chat-runtime.js` (и `a2a-stream.js`).
+- Канон протокола: **`a2a.mdc`**.

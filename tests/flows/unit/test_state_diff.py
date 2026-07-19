@@ -12,7 +12,7 @@ from apps.flows.src.runtime.state_diff import (
 
 def test_compute_state_diff_skips_messages() -> None:
     old = {"response": None, "messages": []}
-    new = {"response": "hello", "messages": [{"role": "user", "content": "hi"}]}
+    new = {"response": "hello", "messages": [{"role": "ROLE_USER", "content": "hi"}]}
     items = compute_state_diff(old, new)
     paths = [item.path for item in items]
     assert "response" in paths

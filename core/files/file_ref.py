@@ -25,10 +25,9 @@ def file_id_from_download_url(url: str) -> str | None:
 
 
 class FileDocumentCapability(StrictBaseModel):
-    """OnlyOffice document binding attached to a FileRef."""
+    """Documents library capability attached to a FileRef (keyed by file_id)."""
 
     kind: Literal["onlyoffice"] = "onlyoffice"
-    binding_id: str = Field(min_length=1)
     file_id: str = Field(min_length=1)
     catalog_id: str = Field(min_length=1)
     document_type: str = Field(min_length=1)

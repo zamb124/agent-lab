@@ -93,13 +93,13 @@ class OfficeAccessService:
             user_id,
         ):
             return True
-        if await self._access_repository.user_is_binding_member(binding.binding_id, user_id):
+        if await self._access_repository.user_is_document_member(binding.file_id, user_id):
             return True
         if binding.created_by_user_id == user_id:
             return True
         return False
 
-    async def user_can_view_binding(
+    async def user_can_view_document(
         self,
         binding: OfficeDocumentBinding,
         *,
@@ -174,7 +174,7 @@ class OfficeAccessService:
         binding: OfficeDocumentBinding,
         _request: Request,
     ) -> OfficeResourceAccessResponse:
-        members = await self._access_repository.list_binding_members(binding.binding_id)
+        members = await self._access_repository.list_document_members(binding.file_id)
         catalog = await self._catalog_repository.get(
             binding.catalog_id,
             binding.company_id,
@@ -183,7 +183,7 @@ class OfficeAccessService:
         company_visible = catalog.is_public if catalog is not None else False
         return OfficeResourceAccessResponse(
             resource_kind="binding",
-            resource_id=binding.binding_id,
+            resource_id=binding.file_id,
             company_visible=company_visible,
             link_enabled=binding.link_enabled,
             link_permission=_parse_link_permission(binding.link_permission),
@@ -284,8 +284,8 @@ class OfficeAccessService:
                 link_token_hash = None
         if body.link_permission is not None:
             link_permission = body.link_permission
-        updated_binding = await self._access_repository.set_binding_link(
-            binding.binding_id,
+        updated_binding = await self._access_repository.set_document_link(
+            binding.file_id,
             link_enabled=link_enabled,
             link_token_hash=link_token_hash,
             link_permission=link_permission,
@@ -293,15 +293,15 @@ class OfficeAccessService:
         if updated_binding is None:
             raise ValueError("Привязка не найдена")
         if body.member_user_ids is not None:
-            existing = await self._access_repository.list_binding_members(binding.binding_id)
+            existing = await self._access_repository.list_document_members(binding.file_id)
             existing_ids = {row.user_id for row in existing}
             desired_ids = set(body.member_user_ids)
             for uid in existing_ids - desired_ids:
-                _ = await self._access_repository.remove_binding_member(binding.binding_id, uid)
+                _ = await self._access_repository.remove_document_member(binding.file_id, uid)
             for uid in desired_ids - existing_ids:
                 if uid == binding.created_by_user_id:
                     continue
-                _ = await self._access_repository.add_binding_member(binding.binding_id, uid)
+                _ = await self._access_repository.add_document_member(binding.file_id, uid)
         response = await self.get_binding_access(updated_binding, request)
         if raw_token is not None:
             response = response.model_copy(
@@ -344,8 +344,8 @@ class OfficeAccessService:
         if not binding.link_enabled:
             raise ValueError("Публичная ссылка не включена")
         raw_token, token_hash = create_share_token()
-        updated = await self._access_repository.set_binding_link(
-            binding.binding_id,
+        updated = await self._access_repository.set_document_link(
+            binding.file_id,
             link_enabled=True,
             link_token_hash=token_hash,
             link_permission=binding.link_permission,
@@ -363,12 +363,11 @@ class OfficeAccessService:
                 raise ValueError("binding обязателен")
             return OfficePublicResolveResponse(
                 resource_kind="binding",
-                resource_id=binding.binding_id,
+                resource_id=binding.file_id,
                 title=binding.title,
                 link_permission=_parse_link_permission(binding.link_permission),
                 file_id=binding.file_id,
                 catalog_id=binding.catalog_id,
-                binding_id=binding.binding_id,
             )
         catalog = target.catalog
         if catalog is None:
@@ -380,7 +379,6 @@ class OfficeAccessService:
             link_permission=_parse_link_permission(catalog.link_permission),
             file_id=None,
             catalog_id=catalog.catalog_id,
-            binding_id=None,
         )
 
     async def list_public_catalog_items(self, target: PublicLinkTarget) -> OfficePublicCatalogItemsResponse:
@@ -398,7 +396,6 @@ class OfficeAccessService:
                 continue
             items.append(
                 OfficePublicCatalogItem(
-                    binding_id=binding.binding_id,
                     title=binding.title,
                     file_id=binding.file_id,
                     file_category=binding.file_category,
@@ -415,13 +412,13 @@ class OfficeAccessService:
     async def resolve_public_catalog_binding_open(
         self,
         catalog_target: PublicLinkTarget,
-        binding_id: str,
+        file_id: str,
     ) -> OfficeDocumentBinding:
         if catalog_target.kind != "catalog" or catalog_target.catalog is None:
             raise ValueError("Токен не относится к каталогу")
         catalog = catalog_target.catalog
-        binding = await self._binding_repository.get_for_company(
-            binding_id,
+        binding = await self._binding_repository.get(
+            file_id,
             catalog.company_id,
             catalog.namespace,
         )

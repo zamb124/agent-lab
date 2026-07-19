@@ -103,7 +103,7 @@ async def test_documents_list_multiple_catalog_ids(
         json={"title": f"D1 {unique_id}", "catalog_id": id1},
     )
     assert d1.status_code == 200
-    bid1 = d1.json()["binding_id"]
+    bid1 = d1.json()["file_id"]
 
     r_both = await office_client.get(
         "/documents/api/v1/documents",
@@ -112,7 +112,7 @@ async def test_documents_list_multiple_catalog_ids(
     )
     assert r_both.status_code == 200
     items_both = r_both.json()["items"]
-    ids_both = {x["binding_id"] for x in items_both}
+    ids_both = {x["file_id"] for x in items_both}
     assert bid1 in ids_both
 
     r_second_only = await office_client.get(
@@ -122,7 +122,7 @@ async def test_documents_list_multiple_catalog_ids(
     )
     assert r_second_only.status_code == 200
     items_second = r_second_only.json()["items"]
-    ids_second = {x["binding_id"] for x in items_second}
+    ids_second = {x["file_id"] for x in items_second}
     assert bid1 not in ids_second
 
 
@@ -597,15 +597,14 @@ async def test_office_download_rejects_invalid_and_mismatched_tokens(office_clie
     )
     assert r1.status_code == 401
 
-    wrong_binding = encode_download_token(
-        file_id="file_never_exists_zzzz",
+    wrong_file = encode_download_token(
+        file_id="a" * 64,
         company_id="system",
-        binding_id="a" * 64,
         secret=secret,
         ttl_seconds=120,
     )
     r2 = await office_client.get(
-        f"/documents/api/v1/office-download?token={quote(wrong_binding, safe='')}",
+        f"/documents/api/v1/office-download?token={quote(wrong_file, safe='')}",
     )
     assert r2.status_code == 403
 
@@ -648,11 +647,11 @@ async def test_onlyoffice_callback_requires_bearer_and_accepts_status_without_sa
         json={"title": f"Cb meta {unique_id}", "catalog_id": catalog_id},
     )
     assert cr.status_code == 200
-    binding_id = cr.json()["binding_id"]
+    file_id = cr.json()["file_id"]
 
     integ = get_office_settings().office
     ctx_tok = encode_callback_context_token(
-        binding_id=binding_id,
+        file_id=file_id,
         company_id="system",
         namespace="default",
         secret=integ.jwt_secret,
@@ -722,12 +721,12 @@ async def test_office_download_token_mismatch_file_id(
         json={"title": f"Tok {unique_id}", "catalog_id": catalog_id},
     )
     assert cr.status_code == 200
-    binding_id = cr.json()["binding_id"]
+    _created_file_id = cr.json()["file_id"]
+    assert isinstance(_created_file_id, str) and len(_created_file_id) > 0
     secret = get_office_settings().office.jwt_secret
     bad = encode_download_token(
         file_id="file_wrong_id_on_purpose",
         company_id="system",
-        binding_id=binding_id,
         secret=secret,
         ttl_seconds=120,
     )
@@ -756,7 +755,7 @@ async def test_editor_config_jwt_matches_uploaded_xlsx(
         data={"title": f"X {unique_id}", "catalog_id": catalog_id},
     )
     assert up.status_code == 200
-    binding_id = up.json()["binding_id"]
+    file_id = up.json()["file_id"]
 
     lr = await office_client.get(
         "/documents/api/v1/documents",
@@ -764,12 +763,12 @@ async def test_editor_config_jwt_matches_uploaded_xlsx(
         headers=auth_headers_system,
     )
     assert lr.status_code == 200
-    row = next(i for i in lr.json()["items"] if i["binding_id"] == binding_id)
+    row = next(i for i in lr.json()["items"] if i["file_id"] == file_id)
     assert row["file_category"] == "spreadsheet"
     assert row["onlyoffice_document_type"] == "cell"
 
     er = await office_client.get(
-        f"/documents/api/v1/documents/{binding_id}/editor-config",
+        f"/documents/api/v1/documents/{file_id}/editor-config",
         headers=auth_headers_system,
     )
     assert er.status_code == 200
@@ -797,19 +796,19 @@ async def test_editor_config_jwt_matches_uploaded_pptx(
         data={"title": f"P {unique_id}", "catalog_id": catalog_id},
     )
     assert up.status_code == 200
-    binding_id = up.json()["binding_id"]
+    file_id = up.json()["file_id"]
 
     lr = await office_client.get(
         "/documents/api/v1/documents",
         params={"catalog_id": catalog_id},
         headers=auth_headers_system,
     )
-    row = next(i for i in lr.json()["items"] if i["binding_id"] == binding_id)
+    row = next(i for i in lr.json()["items"] if i["file_id"] == file_id)
     assert row["file_category"] == "presentation"
     assert row["onlyoffice_document_type"] == "slide"
 
     er = await office_client.get(
-        f"/documents/api/v1/documents/{binding_id}/editor-config",
+        f"/documents/api/v1/documents/{file_id}/editor-config",
         headers=auth_headers_system,
     )
     assert er.status_code == 200
@@ -838,10 +837,10 @@ async def test_editor_config_jwt_matches_uploaded_csv(
         data={"catalog_id": catalog_id},
     )
     assert up.status_code == 200
-    binding_id = up.json()["binding_id"]
+    file_id = up.json()["file_id"]
 
     er = await office_client.get(
-        f"/documents/api/v1/documents/{binding_id}/editor-config",
+        f"/documents/api/v1/documents/{file_id}/editor-config",
         headers=auth_headers_system,
     )
     assert er.status_code == 200
@@ -869,19 +868,19 @@ async def test_upload_filename_blob_spreadsheet_mime_stores_cell_and_editor_cell
         data={"title": f"Blob {unique_id}", "catalog_id": catalog_id},
     )
     assert up.status_code == 200
-    binding_id = up.json()["binding_id"]
+    file_id = up.json()["file_id"]
 
     lr = await office_client.get(
         "/documents/api/v1/documents",
         params={"catalog_id": catalog_id},
         headers=auth_headers_system,
     )
-    row = next(i for i in lr.json()["items"] if i["binding_id"] == binding_id)
+    row = next(i for i in lr.json()["items"] if i["file_id"] == file_id)
     assert row["file_category"] == "spreadsheet"
     assert row["onlyoffice_document_type"] == "cell"
 
     er = await office_client.get(
-        f"/documents/api/v1/documents/{binding_id}/editor-config",
+        f"/documents/api/v1/documents/{file_id}/editor-config",
         headers=auth_headers_system,
     )
     cfg = _decode_editor_config_token(er.json())

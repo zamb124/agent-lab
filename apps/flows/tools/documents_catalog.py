@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import ClassVar, Literal
 from urllib.parse import quote
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
@@ -57,25 +57,16 @@ class DocumentsFindArgs(BaseModel):
 class DocumentsReadArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    binding_id: str | None = Field(None, description="ID привязки документа в Documents.")
-    file_id: str | None = Field(None, description="ID файла платформы, если binding_id неизвестен.")
+    file_id: str = Field(..., min_length=1, description="ID файла платформы (Documents).")
     page_start: int = Field(0, ge=0, description="Первая страница (0-based), как у read_file.")
     page_end: int = Field(-1, description="Последняя страница включительно; -1 — до конца.")
     budget: int = Field(MAX_READ_BUDGET, ge=0, description="Лимит символов результата.")
-
-    @model_validator(mode="after")
-    def _require_id(self) -> "DocumentsReadArgs":
-        has_binding = isinstance(self.binding_id, str) and self.binding_id.strip() != ""
-        has_file = isinstance(self.file_id, str) and self.file_id.strip() != ""
-        if not has_binding and not has_file:
-            raise ValueError("binding_id or file_id is required")
-        return self
 
 
 class DocumentsGetLinkArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    binding_id: str = Field(..., min_length=1, description="ID привязки документа.")
+    file_id: str = Field(..., min_length=1, description="ID документа Documents.")
     kind: Literal["editor", "preview"] = Field(
         "editor",
         description="editor — SPA path /documents/edit/...; preview — preview_url из BFF.",
@@ -110,7 +101,6 @@ def _catalog_summary(item: JsonObject) -> JsonObject:
 
 def _document_summary(item: JsonObject) -> JsonObject:
     return {
-        "binding_id": item["binding_id"],
         "file_id": item["file_id"],
         "title": item["title"],
         "file_category": item.get("file_category"),
@@ -155,18 +145,6 @@ async def _catalog_by_id(client: ServiceClient, catalog_id: str) -> JsonObject |
         if isinstance(cid, str) and cid == catalog_id:
             return item
     return None
-
-
-async def _resolve_binding_file(
-    client: ServiceClient,
-    binding_id: str,
-) -> JsonObject:
-    raw = await client.get(
-        "office",
-        f"/documents/api/v1/documents/{quote(binding_id, safe='')}/editor-config",
-        headers=_ns_headers(),
-    )
-    return require_json_object(raw, "documents.editor_config")
 
 
 @tool(
@@ -302,7 +280,6 @@ async def documents_find(
         for hit in hits:
             items.append(
                 {
-                    "binding_id": hit.get("binding_id"),
                     "file_id": hit.get("file_id"),
                     "title": hit.get("title"),
                     "snippet": hit.get("snippet"),
@@ -346,7 +323,7 @@ async def documents_find(
 @tool(
     name="documents_read",
     description=(
-        "Read content of a Documents library file by binding_id or file_id "
+        "Read content of a Documents library file by file_id "
         "(FileReader with page_start/page_end pagination). Not limited to state.files."
     ),
     tags=_DOCUMENTS_CATALOG_TAGS,
@@ -354,8 +331,7 @@ async def documents_find(
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def documents_read(
-    binding_id: str | None = None,
-    file_id: str | None = None,
+    file_id: str,
     page_start: int = 0,
     page_end: int = -1,
     budget: int = MAX_READ_BUDGET,
@@ -364,53 +340,28 @@ async def documents_read(
 ) -> JsonObject:
     _ = state
     client = ServiceClient()
-    resolved_binding = (
-        binding_id.strip() if isinstance(binding_id, str) and binding_id.strip() else None
-    )
-    resolved_file = file_id.strip() if isinstance(file_id, str) and file_id.strip() else None
+    resolved_file = file_id.strip()
     title = "document"
     content_type = "application/octet-stream"
     file_size = 0
 
-    if resolved_binding is not None:
-        try:
-            config = await _resolve_binding_file(client, resolved_binding)
-        except ServiceClientError as exc:
-            return {"success": False, "error": str(exc)}
-        fid = config.get("file_id")
-        if not isinstance(fid, str) or not fid.strip():
-            return {"success": False, "error": "editor-config.file_id missing"}
-        resolved_file = fid.strip()
-        name = config.get("original_name")
-        if isinstance(name, str) and name.strip():
-            title = name.strip()
-        elif isinstance(config.get("title"), str) and str(config["title"]).strip():
-            title = str(config["title"]).strip()
-        ctype = config.get("content_type")
+    try:
+        meta_raw = await client.get(
+            "frontend",
+            f"/frontend/api/v1/files/{quote(resolved_file, safe='')}",
+        )
+        meta = require_json_object(meta_raw, "files.metadata")
+        oname = meta.get("original_name")
+        if isinstance(oname, str) and oname.strip():
+            title = oname.strip()
+        ctype = meta.get("content_type")
         if isinstance(ctype, str) and ctype.strip():
             content_type = ctype.strip()
-
-    if resolved_file is None:
-        return {"success": False, "error": "file_id could not be resolved"}
-
-    if resolved_binding is None:
-        try:
-            meta_raw = await client.get(
-                "frontend",
-                f"/frontend/api/v1/files/{quote(resolved_file, safe='')}",
-            )
-            meta = require_json_object(meta_raw, "files.metadata")
-            oname = meta.get("original_name")
-            if isinstance(oname, str) and oname.strip():
-                title = oname.strip()
-            ctype = meta.get("content_type")
-            if isinstance(ctype, str) and ctype.strip():
-                content_type = ctype.strip()
-            size = meta.get("file_size")
-            if isinstance(size, int) and size >= 0:
-                file_size = size
-        except ServiceClientError as exc:
-            return {"success": False, "error": str(exc)}
+        size = meta.get("file_size")
+        if isinstance(size, int) and size >= 0:
+            file_size = size
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
 
     file_ref = FileRef(
         file_id=resolved_file,
@@ -430,7 +381,6 @@ async def documents_read(
     payload = require_json_object(envelope.model_dump(mode="json"), "documents_read.envelope")
     result: dict[str, JsonValue] = {
         "success": True,
-        "binding_id": resolved_binding,
         "file_id": resolved_file,
         "title": title,
         "envelope": payload,
@@ -441,7 +391,7 @@ async def documents_read(
 @tool(
     name="documents_get_link",
     description=(
-        "Return a Documents UI link for a binding: editor path or preview_url. "
+        "Return a Documents UI link for a document: editor path or preview_url. "
         "Public share links are not created by this tool."
     ),
     tags=_DOCUMENTS_CATALOG_TAGS,
@@ -449,19 +399,19 @@ async def documents_read(
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def documents_get_link(
-    binding_id: str,
+    file_id: str,
     kind: Literal["editor", "preview"] = "editor",
     *,
     state: ExecutionState,
 ) -> JsonObject:
     _ = state
     namespace = _namespace()
-    bid = binding_id.strip()
-    editor_path = f"/documents/edit/{quote(bid, safe='')}?namespace={quote(namespace, safe='')}"
+    fid = file_id.strip()
+    editor_path = f"/documents/edit/{quote(fid, safe='')}?namespace={quote(namespace, safe='')}"
     if kind == "editor":
         return {
             "success": True,
-            "binding_id": bid,
+            "file_id": fid,
             "kind": "editor",
             "url": editor_path,
         }
@@ -469,13 +419,13 @@ async def documents_get_link(
     try:
         raw = await client.get(
             "office",
-            f"/documents/api/v1/documents/{quote(bid, safe='')}/preview",
+            f"/documents/api/v1/documents/{quote(fid, safe='')}/preview",
             headers=_ns_headers(),
         )
     except ServiceClientError as exc:
         return {
             "success": False,
-            "binding_id": bid,
+            "file_id": fid,
             "kind": "preview",
             "error": str(exc),
             "editor_url": editor_path,
@@ -485,14 +435,14 @@ async def documents_get_link(
     if not isinstance(preview_url, str) or not preview_url.strip():
         return {
             "success": False,
-            "binding_id": bid,
+            "file_id": fid,
             "kind": "preview",
-            "error": "preview_url is empty for this binding",
+            "error": "preview_url is empty for this document",
             "editor_url": editor_path,
         }
     return {
         "success": True,
-        "binding_id": bid,
+        "file_id": fid,
         "kind": "preview",
         "url": preview_url.strip(),
         "editor_url": editor_path,

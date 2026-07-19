@@ -27,8 +27,8 @@ MockLLMQueue = Callable[[list[MockLLMQueuedResponse]], MockLLM]
 def _message(text: str, context_id: str) -> dict[str, object]:
     return {
         "messageId": str(uuid.uuid4()),
-        "role": "user",
-        "parts": [{"kind": "text", "text": text}],
+        "role": "ROLE_USER",
+        "parts": [{"text": text}],
         "contextId": context_id,
     }
 
@@ -52,7 +52,10 @@ def _event_state(event: dict[str, object]) -> str:
     result = event.get("result")
     if not isinstance(result, dict):
         return ""
-    status = result.get("status")
+    status_update = result.get("statusUpdate")
+    if not isinstance(status_update, dict):
+        return ""
+    status = status_update.get("status")
     if not isinstance(status, dict):
         return ""
     state = status.get("state")
@@ -114,7 +117,7 @@ async def test_lara_a2a_stream_loads_skill_and_runs_crm_tool(
             container.files_service,
             "system",
         )
-        assert seeded == 23
+        assert seeded == 24
         flow = await container.flow_factory.get_flow("lara", branch_id="crm")
         assert flow is not None
         main_node = flow.nodes["main"]
@@ -153,7 +156,7 @@ async def test_lara_a2a_stream_loads_skill_and_runs_crm_tool(
         json={
             "jsonrpc": "2.0",
             "id": f"lara-a2a-{unique_id}",
-            "method": "message/stream",
+            "method": "SendStreamingMessage",
             "params": {
                 "message": _message(f"Find {marker}", context_id),
                 "metadata": {"branch": "crm"},
@@ -164,7 +167,7 @@ async def test_lara_a2a_stream_loads_skill_and_runs_crm_tool(
     assert "text/event-stream" in response.headers.get("content-type", "")
     events = _parse_sse(response.text)
     events_text = _events_text(events)
-    assert any(_event_state(event) == "completed" for event in events), events_text
+    assert any(_event_state(event) == "TASK_STATE_COMPLETED" for event in events), events_text
     assert "platform.skill_loaded" in events_text
     assert "crm_search_entities" in events_text
     assert marker in events_text

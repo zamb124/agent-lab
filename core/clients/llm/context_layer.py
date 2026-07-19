@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import time
-import uuid
 from dataclasses import dataclass
 
-from a2a.types import Message, Part, Role, TextPart
+from a2a.types import Message, Part, Role
 
 from core.clients.llm.messages import (
+    build_a2a_message,
     messages_have_non_text_parts,
     messages_to_openai,
 )
@@ -204,27 +204,26 @@ def openai_messages_to_a2a_messages(messages: list[JsonObject]) -> list[Message]
         role_raw = str(message.get("role", "user"))
         metadata: JsonObject = {}
         if role_raw == "system":
-            role = Role.user
+            role = Role.ROLE_USER
             metadata["system"] = True
         elif role_raw == "assistant":
-            role = Role.agent
+            role = Role.ROLE_AGENT
         elif role_raw == "tool":
-            role = Role.agent
+            role = Role.ROLE_AGENT
             tool_call_id = message.get("tool_call_id")
             if isinstance(tool_call_id, str) and tool_call_id:
                 metadata["tool_call_id"] = tool_call_id
         else:
-            role = Role.user
+            role = Role.ROLE_USER
 
         tool_calls = message.get("tool_calls")
         if tool_calls:
             metadata["tool_calls"] = tool_calls
 
         converted.append(
-            Message(
-                message_id=str(uuid.uuid4()),
+            build_a2a_message(
                 role=role,
-                parts=[Part(root=TextPart(text=_content_to_text(message.get("content"))))],
+                parts=[Part(text=_content_to_text(message.get("content")))],
                 metadata=metadata or None,
             )
         )

@@ -35,6 +35,7 @@ endif
 
 test-static:
 	@$(MAKE) --no-print-directory _lint-py
+	@uv run python scripts/pin_a2a_official_fixtures.py --check
 	@uv run python scripts/check_agent_e2e_coverage.py
 	@uv run python scripts/check_agent_goose_tool_contract.py
 	@uv run python scripts/check_agent_test_no_monkeypatch.py
@@ -92,16 +93,19 @@ test-network: test-up
 		$(_PYTEST_IGNORE_AGENT_DESKTOP)
 
 # E2E UI: pytest + Playwright + фикстуры из tests/fixtures (нужны test-up)
+# UI E2E: xdist workers, изоляция company+MockLLM scope (tests/ui/e2e_worker.py).
+UI_E2E_WORKERS ?= 5
+
 test-ui: test-up
 	@echo "Обеспечение HumanitecAgent release artifacts..."
 	@AGENT_ARTIFACT_MODE=release $(MAKE) --no-print-directory agent-ensure
-	@echo "Запуск E2E UI (pytest tests/ui/e2e)..."
-	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e -v --timeout=180
+	@echo "Запуск E2E UI (pytest tests/ui/e2e, -n$(UI_E2E_WORKERS) --dist=loadfile, default 15s/test)..."
+	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e -n$(UI_E2E_WORKERS) --dist=loadfile -v --timeout=15
 
 # Быстрый прогон chat-related UI E2E (flows chat-page, embed autoload, landing drawer)
 test-ui-chat: test-up
 	@echo "Запуск chat UI E2E (pytest tests/ui/e2e/test_flows_chat_page.py tests/ui/e2e/test_embed_autoload_browser.py tests/ui/e2e/test_landing_demo_chat_drawer.py)..."
-	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e/test_flows_chat_page.py tests/ui/e2e/test_embed_autoload_browser.py tests/ui/e2e/test_landing_demo_chat_drawer.py -v --timeout=300
+	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e/test_flows_chat_page.py tests/ui/e2e/test_embed_autoload_browser.py tests/ui/e2e/test_landing_demo_chat_drawer.py -n$(UI_E2E_WORKERS) --dist=loadfile -v --timeout=15
 
 # E2E UI + статическая документация (README в docs/scenarios из scenario_doc)
 test-ui-doc: test-ui
@@ -253,7 +257,7 @@ test:
 	if [ "$(RUN_UI_IN_TEST)" = "1" ]; then \
 		echo ""; \
 		echo "=== 3/4 Запуск E2E UI (pytest tests/ui/e2e) ==="; \
-		uv run pytest tests/ui/e2e -v --timeout=180 $(_COV_ARGS_APPEND); \
+		uv run pytest tests/ui/e2e -v --timeout=15 $(_COV_ARGS_APPEND); \
 		phase3_rc=$$?; \
 	fi; \
 	echo ""; \
@@ -324,7 +328,7 @@ test-all:
 	fi; \
 	echo ""; \
 	echo "=== 3/3 Запуск E2E UI (pytest tests/ui/e2e) ==="; \
-	uv run pytest tests/ui/e2e -v --timeout=180; \
+	uv run pytest tests/ui/e2e -v --timeout=15; \
 	phase3_rc=$$?; \
 	if [ $$phase1_rc -ne 0 ] || [ $$phase2_rc -ne 0 ] || [ $$phase3_rc -ne 0 ]; then \
 		exit 1; \
@@ -343,7 +347,7 @@ test-cov-all: test-up
 	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
 		--cov=apps --cov=core --cov-report= --cov-report=html:htmlcov
-	uv run pytest tests/ui/e2e -v --timeout=180 \
+	uv run pytest tests/ui/e2e -v --timeout=15 \
 		--cov=apps --cov=core --cov-append --cov-report= --cov-report=html:htmlcov
 	@uv run python -m scripts.test_coverage_report term
 

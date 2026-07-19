@@ -57,7 +57,7 @@ class DocsPlacement(StrictBaseModel):
 
 
 class DocsBindResult(StrictBaseModel):
-    binding_id: str
+    file_id: str
     catalog_id: str
     created: bool
     catalog_path: list[str]

@@ -69,6 +69,7 @@ In-process `run_flow`: child `unique_id` = `child_context_id.removeprefix("conte
 - Ledger: `WorkflowEventType.handoff_initiated`, `handback_completed`.
 - Push UI: `platform.handoff_initiated`, `platform.handback_completed` (`Emitter`).
 - A2A `input-required` с `metadata.platform_handoff_continue=true` — SSE не финал (как operator takeover). Chat: `a2a-chat-runtime.js`.
+- **UI conversation context:** клиентский `contextId` сессии чата (parent) не переключается на child `context_id` из кадров SSE. Handoff-reply emit'ит child context (`{parent}:handoff:{flow}`), но `mapA2aResultToChatRuntimeEvents` / `ChatController.relayA2aFrame` кладут bubbles в parent bucket — иначе лента уходит в пустой context.
 
 ## Observability (handoff trace chain)
 

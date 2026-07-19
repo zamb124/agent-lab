@@ -30,7 +30,7 @@ Flows исполняются как durable workflow runtime: `workflow_events` 
 
 **Агентский инбокс / fire-and-forget.** `AgentAssignment(flow_id)` + `assigned`-хук → flows `internal/work-items/assigned` запускает flow с WorkItem на входе. Tools `work_item_create/complete/list` (`apps/flows/tools/work_item_tools.py`).
 
-**Takeover / single_reply realtime.** После `OperatorTaskInterrupt` worker выходит; исходный `message/stream` обрывается. User и operator во время просмотра чата подписаны на **live `tasks/resubscribe`** (snapshot Task + Redis `stream:{a2a_task_id}` до final). Ask (takeover): REST POST conversation/messages (+ `file_ids`) → durable append + `Emitter` (`operator_reply` / `operator_files`). User mid-dialog: A2A `message/stream` без resume → append + `Emitter` (`user_message`). Close / single_reply Send: complete → `append_closing_operator_reply` (durable + Emitter) → `resume_from_completion` → `process_flow_task(is_resume=True, content=resolution.text)`. UI: `operator_reply` + `completed` с тем же текстом дедупятся в один пузырь. Company push `turn_appended` / `work_item/completed` — для канбана, не для пузырей чата. `WorkItemComment` / «Активность» — внутренние заметки.
+**Takeover / single_reply realtime.** После `OperatorTaskInterrupt` worker выходит; исходный `SendStreamingMessage` обрывается. User и operator во время просмотра чата подписаны на **live `SubscribeToTask`** (snapshot Task + Redis `stream:{a2a_task_id}` до final). Ask (takeover): REST POST conversation/messages (+ `file_ids`) → durable append + `Emitter` (`operator_reply` / `operator_files`). User mid-dialog: A2A `SendStreamingMessage` без resume → append + `Emitter` (`user_message`). Close / single_reply Send: complete → `append_closing_operator_reply` (durable + Emitter) → `resume_from_completion` → `process_flow_task(is_resume=True, content=resolution.text)`. UI: `operator_reply` + `completed` с тем же текстом дедупятся в один пузырь. Company push `turn_appended` / `work_item/completed` — для канбана, не для пузырей чата. `WorkItemComment` / «Активность» — внутренние заметки.
 
 **`HandoffMode`** (StrEnum, `core/state/interrupt.py`): `single_reply` — один ответ оператора через composer Send = complete с `resolution_text`/`resolution_files` (тот же closing append); `takeover` — mid-dialog ask без complete. Режим — `handoff_mode` в `HitlOperatorTaskArgs` или конфиге ноды, хранится в `hook.binding.handoff_mode`/`interrupt_snapshot`.
 
@@ -175,7 +175,7 @@ output_mapping - куда пишем результат:
 
 Бросает `FlowInterrupt(question="...")` или `FlowInterrupt(body=UserMessageInterrupt(...)|OperatorTaskInterrupt(...)|OAuthInterrupt(...))` → выполнение останавливается → в `state.interrupt` попадает типизированный `InterruptData` (`body` + `system`).
 
-**OAuth auto-resume:** `OAuthInterrupt` (kind=`oauth_required`) с `auth_url`, `provider`, `service`. SSE `input-required` с `final=False`, `platform_oauth_continue=true`. После OAuth callback — `process_flow_task.kiq(is_resume=True, content="oauth_completed:...")`. UI показывает кнопку авторизации; flow продолжается автоматически без участия юзера.
+**OAuth auto-resume:** `OAuthInterrupt` (kind=`oauth_required`) с `auth_url`, `provider`, `service`. SSE `statusUpdate` с `TASK_STATE_INPUT_REQUIRED` и `metadata.platform_oauth_continue=true` (поля `final` на statusUpdate нет — stream остаётся open). После OAuth callback — `process_flow_task.kiq(is_resume=True, content="oauth_completed:...")`. UI показывает кнопку авторизации; flow продолжается автоматически без участия юзера.
 
 ### State при interrupt
 

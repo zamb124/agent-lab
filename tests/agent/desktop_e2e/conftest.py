@@ -17,7 +17,11 @@ from playwright.async_api import Browser, Page, async_playwright
 
 from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
-from tests.agent._helpers import AGENT_TEST_PUBLIC_ORIGIN
+from tests.agent._helpers import (
+    AGENT_TEST_PUBLIC_ORIGIN,
+    company_id_from_auth_token,
+    ensure_company_public_flows,
+)
 from tests.agent.desktop_e2e.desktop_app import (
     HumanitecDesktopInstall,
     ensure_humanitec_desktop_release_artifact,
@@ -272,6 +276,7 @@ async def goose_developer_auth(
     if user_id not in system_company.members:
         system_company.members[user_id] = ["admin"]
         await frontend_container.company_repository.set(system_company)
+    await ensure_company_public_flows(company_id)
     token = get_token_service().create_token(user_id, company_id=company_id)
     return _GooseDeveloperAuth(
         auth_token=token,
@@ -525,6 +530,7 @@ async def paired_desktop_ui_session(
     Bootstrap живёт в fixture setup, вне func_only(15s) теста — тело теста
     делает только MCP tool call(s) и/или проверку конкретного UI-элемента.
     """
+    await ensure_company_public_flows(company_id_from_auth_token(auth_token))
     desktop = humanitec_desktop_process_factory()
     desktop.start()
     device_id, credentials = await pair_desktop_via_deep_link(

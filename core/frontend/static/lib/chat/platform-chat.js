@@ -564,7 +564,11 @@ export class PlatformChat extends LitElement {
             position: fixed;
             z-index: 25000;
             right: max(16px, env(safe-area-inset-right, 0px));
-            bottom: max(16px, env(safe-area-inset-bottom, 0px));
+            /* Сервисы с нижним composer (Sync и т.п.) задают --platform-chat-drawer-fab-bottom */
+            bottom: max(
+                var(--platform-chat-drawer-fab-bottom, 16px),
+                calc(16px + env(safe-area-inset-bottom, 0px))
+            );
             width: 56px;
             height: 56px;
             border-radius: 50%;
@@ -628,7 +632,14 @@ export class PlatformChat extends LitElement {
                 width: 52px;
                 height: 52px;
                 right: max(12px, env(safe-area-inset-right, 0px));
-                bottom: max(12px, env(safe-area-inset-bottom, 0px));
+                bottom: max(
+                    var(--platform-chat-drawer-fab-bottom, 12px),
+                    calc(12px + env(safe-area-inset-bottom, 0px))
+                );
+            }
+            :host([data-embed-position='bottom-left']) .fab {
+                right: auto;
+                left: max(12px, env(safe-area-inset-left, 0px));
             }
         }
         .panel {
@@ -870,7 +881,7 @@ export class PlatformChat extends LitElement {
         this.eventAckTimeoutMs = 2500;
         this.getExtraMetadataVariables = undefined;
         this.getContextVariables = undefined;
-        /** Хост-metadata верхнего уровня A2A message/stream (например breakpoints редактора). */
+        /** Хост-metadata верхнего уровня A2A SendStreamingMessage (например breakpoints редактора). */
         this.getSendMetadata = undefined;
         /** Каждый ход — новая сессия (editor test run без persist context). */
         this.freshContextPerTurn = false;
@@ -1033,7 +1044,7 @@ export class PlatformChat extends LitElement {
     }
 
     /**
-     * Смонтировать operator-транспорт: REST snapshot + live tasks/resubscribe.
+     * Смонтировать operator-транспорт: REST snapshot + live SubscribeToTask.
      * Ждёт work-item-id + interaction_policy.conversation с a2a_task_id.
      */
     _ensureOperatorTransport() {
@@ -1092,8 +1103,8 @@ export class PlatformChat extends LitElement {
     }
 
     /**
-     * User-chat: на operator_task — live A2A tasks/resubscribe (тот же stream, что у operator).
-     * Для operator_handoff не нужен — там OperatorConversationTransport со своим resubscribe.
+     * User-chat: на operator_task — live A2A SubscribeToTask (тот же stream, что у operator).
+     * Для operator_handoff не нужен — там OperatorConversationTransport со своим SubscribeToTask.
      */
     _syncHitlLiveTail() {
         if (this._isOperatorProfile()) {
@@ -1274,7 +1285,7 @@ export class PlatformChat extends LitElement {
         this._controller.applyRuntimeVerb('session_loaded', payload);
     }
 
-    /** Отмена активной задачи (abort SSE + tasks/cancel); публичный API хоста. */
+    /** Отмена активной задачи (abort SSE + CancelTask); публичный API хоста. */
     async cancelActiveTask() {
         await this._controller.cancel();
     }
@@ -2286,7 +2297,7 @@ export class PlatformChat extends LitElement {
         });
     }
 
-    /** Metadata для очередного voice message/stream (после prepareVoiceUserTurn). */
+    /** Metadata для очередного voice SendStreamingMessage (после prepareVoiceUserTurn). */
     consumeVoiceStreamMetadata() {
         const m = this._voicePendingStreamMetadata;
         this._voicePendingStreamMetadata = null;
@@ -3074,7 +3085,7 @@ export class PlatformChat extends LitElement {
     /* Send / stop / new chat                                              */
     /* ------------------------------------------------------------------ */
 
-    /** Metadata верхнего уровня для message/stream: host hook (breakpoints и т.п.) + variables. */
+    /** Metadata верхнего уровня для SendStreamingMessage: host hook (breakpoints и т.п.) + variables. */
     async _composeSendMetadata() {
         let hostMetadata = {};
         if (typeof this.getSendMetadata === 'function') {
@@ -3197,7 +3208,7 @@ export class PlatformChat extends LitElement {
             return;
         }
         if (this._isOperatorProfile()) {
-            // operator_handoff: ask/complete через transport; live — tasks/resubscribe.
+            // operator_handoff: ask/complete через transport; live — SubscribeToTask.
             this._stickToBottom = true;
             try {
                 await this._controller.send({ message, files });
@@ -3383,6 +3394,14 @@ export class PlatformChat extends LitElement {
         );
     }
 
+    _staticAssetUrl(path) {
+        const base = this._documentBaseUrl();
+        if (typeof base !== 'string' || base === '') {
+            return path;
+        }
+        return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+    }
+
     _fileFromPanelBlock(block) {
         if (!block || typeof block !== 'object' || block.type !== 'file_card') {
             return null;
@@ -3401,7 +3420,6 @@ export class PlatformChat extends LitElement {
             capabilities.document = document;
         } else if (editorUrl.length > 0) {
             capabilities.document = {
-                binding_id: _chatString(normalized.binding_id),
                 file_id: _chatString(normalized.file_id),
                 catalog_id: _chatString(normalized.catalog_id),
                 document_type: _chatString(normalized.document_type),
@@ -3854,7 +3872,9 @@ export class PlatformChat extends LitElement {
                               : nothing}
                           <img
                               class="fab-logo"
-                              src="/static/core/assets/service_logos/linnex_spinner_logo.png"
+                              src=${this._staticAssetUrl(
+                                  '/static/core/assets/service_logos/linnex_spinner_logo.png',
+                              )}
                               alt=""
                               aria-hidden="true"
                           />

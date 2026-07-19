@@ -53,7 +53,7 @@ async def test_office_edit_in_onlyoffice(
         namespace=namespace,
         title_prefix="editor",
     )
-    binding_id = await office_api_create_empty_document(
+    file_id = await office_api_create_empty_document(
         office_ui.origin,
         auth_token_system,
         namespace=namespace,
@@ -77,7 +77,7 @@ async def test_office_edit_in_onlyoffice(
         label_en="OnlyOffice editor opened",
     )
 
-    await ui_page_system.locator("office-document-editor-page button.back").click()
+    await ui_page_system.locator("office-document-editor-page button.stage-back").click()
     await expect(office_e2e_explorer(ui_page_system)).to_be_visible(timeout=30_000)
     await scenario.step(
         "Возврат к списку документов",
@@ -87,7 +87,7 @@ async def test_office_edit_in_onlyoffice(
 
     await office_e2e_open_document_by_title(ui_page_system, doc_title)
     await office_e2e_expect_editor_loaded(ui_page_system)
-    await expect(ui_page_system).to_have_url(re.compile(rf"/documents/edit/{binding_id}"))
+    await expect(ui_page_system).to_have_url(re.compile(rf"/documents/edit/{file_id}"))
     await scenario.step(
         "Тот же документ открыт повторно",
         ui_page_system,
@@ -165,7 +165,7 @@ async def test_office_view_other_file_types(
         label_en="Text viewer opened",
     )
 
-    await ui_page_system.locator("office-document-editor-page button.back").click()
+    await ui_page_system.locator("office-document-editor-page button.stage-back").click()
     await expect(office_e2e_explorer(ui_page_system)).to_be_visible(timeout=30_000)
     await scenario.step(
         "Возврат к проводнику",

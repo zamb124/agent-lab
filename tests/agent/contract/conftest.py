@@ -43,9 +43,8 @@ def office_editor_bearer(*, auth_token: str) -> str:
         company_id=company_id_from_auth_token(auth_token),
         user_id=user_id_from_auth_token(auth_token),
         namespace="docs",
-        binding_id="binding_contract",
         file_id="file_contract",
-        binding_kind="document",
+        viewer_scope="catalog",
     )
     payload: JsonObject = {
         "document": {"key": "k"},

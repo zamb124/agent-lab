@@ -1,0 +1,7 @@
+tag=v1.0.0
+commit=173695755607e884aa9acf8ce4feed90e32727a1
+protocol_version=1.0
+proto_source=https://raw.githubusercontent.com/a2aproject/A2A/173695755607e884aa9acf8ce4feed90e32727a1/specification/a2a.proto
+json_source=https://a2a-protocol.org/v1.0.0/spec/a2a.json
+proto_sha256=4b74c0baa923ae0acb55474e548f1d6e5d3f83b80d757b65f8bf3e99a3c2257f
+json_sha256=6b6560c726289734799b7d5883be84e4cc0452600736db0f811341bac43b8d62

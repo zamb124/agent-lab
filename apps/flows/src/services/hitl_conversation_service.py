@@ -3,13 +3,15 @@
 Источник правды разговора — `ExecutionState.messages`. Реплики оператора и
 пользователя во время HITL пишутся durable-append'ом в лог сессии (не в
 `WorkItemComment`) и стримятся в Redis `stream:{a2a_task_id}` через `Emitter`
-(user и operator слушают live `tasks/resubscribe`). Company push
+(user и operator слушают live `SubscribeToTask`). Company push
 `flows/hitl_conversation/turn_appended` — для канбана, не для пузырей чата.
 """
 
 from __future__ import annotations
 
-from a2a.types import Message, Role, TextPart
+from a2a.helpers.proto_helpers import get_message_text
+from a2a.types import Message
+from a2a.types.a2a_pb2 import ROLE_USER
 
 from apps.flows.src.durable_execution import ConversationMessageAppendedPayload
 from apps.flows.src.durable_execution.manager import DurableWorkflowRuntime, create_initial_state
@@ -22,10 +24,11 @@ from apps.flows.src.models.hitl_conversation import (
 )
 from apps.flows.src.runtime.a2a_messages import build_operator_message, build_user_message
 from apps.flows.src.streaming.emitter import Emitter
+from core.a2a import mapping_from_struct
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.state import ExecutionState
-from core.types import require_json_array, require_json_object
+from core.types import JsonObject, require_json_array, require_json_object
 from core.ui_events.dispatcher import publish_ui_event_to_company
 from core.worktracker.models import (
     WorkItemConversationRef,
@@ -42,16 +45,17 @@ HITL_CONVERSATION_NODE_ID = "hitl_conversation"
 
 
 def _message_text(message: Message) -> str:
-    parts: list[str] = []
-    for part in message.parts:
-        root = part.root
-        if isinstance(root, TextPart):
-            parts.append(root.text)
-    return "".join(parts)
+    return get_message_text(message)
+
+
+def _message_metadata(message: Message) -> JsonObject:
+    if not message.HasField("metadata"):
+        return {}
+    return mapping_from_struct(message.metadata)
 
 
 def _message_file_ids(message: Message) -> list[str]:
-    metadata = require_json_object(message.metadata or {}, "message.metadata")
+    metadata = require_json_object(_message_metadata(message), "message.metadata")
     raw = metadata.get("hitl_file_ids")
     if raw is None:
         return []
@@ -67,10 +71,10 @@ def _message_file_ids(message: Message) -> list[str]:
 
 
 def _turn_role(message: Message) -> ConversationTurnRole:
-    metadata = message.metadata or {}
+    metadata = _message_metadata(message)
     if metadata.get("hitl_role") == "operator":
         return ConversationTurnRole.OPERATOR
-    if message.role == Role.user:
+    if message.role == ROLE_USER:
         return ConversationTurnRole.USER
     if metadata.get("system") is True:
         return ConversationTurnRole.SYSTEM

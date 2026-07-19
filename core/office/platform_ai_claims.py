@@ -26,9 +26,8 @@ class OfficePlatformAiClaims(BaseModel):
     company_id: str = Field(min_length=1)
     user_id: str = Field(min_length=1)
     namespace: str = Field(min_length=1)
-    binding_id: str = Field(min_length=1)
     file_id: str = Field(min_length=1)
-    binding_kind: Literal["document", "file"] = "document"
+    viewer_scope: Literal["catalog", "file"] = "catalog"
 
 
 def extract_office_platform_ai_claims(editor_jwt_payload: JsonObject) -> OfficePlatformAiClaims:

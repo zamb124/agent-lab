@@ -4,8 +4,12 @@ A member is added to the channel; their message is created via API; the owner op
 
 ## Step 1. Second member added to the channel
 
-![Second member added to the channel](peer-profile-from-message--01-v-kanal-dobavlen-vtoroy-uchastnik.png)
+![Second member added to the channel](peer-profile-from-message--01-second-member-added-to-the-channel.png)
 
 ## Step 2. Message from the second member sent via API
 
-![Message from the second member sent via API](peer-profile-from-message--02-soobshchenie-ot-vtorogo-uchastnika-otpravleno-cherez-api.png)
+![Message from the second member sent via API](peer-profile-from-message--02-message-from-the-second-member-sent-via-api.png)
+
+## Step 3. Sender profile modal opened
+
+![Sender profile modal opened](peer-profile-from-message--03-sender-profile-modal-opened.png)

@@ -5,9 +5,19 @@ Playwright E2E для SPA платформы. Сценарии с `@pytest.mark.
 ## Запуск
 
 ```bash
-make test-ui          # test-up + pytest tests/ui/e2e
+make test-ui          # test-up + pytest tests/ui/e2e -n5 --dist=loadfile
 make test-ui-doc      # test-ui + make doc
+UI_E2E_WORKERS=1 make test-ui   # serial (отладка)
 ```
+
+Бюджет тела теста — **15 с** (`tests/ui/e2e/conftest.py`). Дольше только через `scenario(timeout_seconds=N)`.
+
+### Параллель и изоляция
+
+- **xdist:** `UI_E2E_WORKERS?=5`, `--dist=loadfile` (файл целиком на одном worker).
+- **Company:** `ui_e2e_gw{N}` / subdomain `ui-gw{N}` — не shared `system` roster.
+- **MockLLM:** scope `test_e2e_gw{N}`; браузер шлёт `X-Test-Scope` (см. `tests/ui/e2e_worker.py`).
+- **Запрещено:** дописывать members в `system` из UI session fixtures; assert'ы на глобальный `system.members`.
 
 ## Новая инструкция
 
@@ -67,8 +77,8 @@ docs/scenarios/sync/chat/send-message-in-channel/
 
 - Helpers: [`tests/ui/e2e/office_e2e_helpers.py`](e2e/office_e2e_helpers.py)
 - Матрица покрытия: [`tests/ui/e2e/office_e2e_coverage_matrix.md`](e2e/office_e2e_coverage_matrix.md)
-- Фикстура: `office_ui` (порт 9008, subdomain `system`)
-- API seed: `office_client_http`, `auth_headers_system`; для RAG — `rag_service`, `rag_worker`
+- Фикстура: `office_ui` (порт 9008, subdomain worker `ui-gwN`)
+- API seed: `office_client_http`, `auth_headers_system` (токен worker-компании); для RAG — `rag_service`, `rag_worker`
 - Анонимный preview: `ui_page_anonymous`
 
 ## Правила

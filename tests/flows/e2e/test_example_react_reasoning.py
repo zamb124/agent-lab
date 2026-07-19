@@ -61,12 +61,12 @@ async def send_a2a_message(
         json={
             "jsonrpc": "2.0",
             "id": f"req-{uuid_lib.uuid4()}",
-            "method": "message/send",
+            "method": "SendMessage",
             "params": {
                 "message": {
                     "messageId": f"msg-{uuid_lib.uuid4()}",
-                    "role": "user",
-                    "parts": [{"kind": "text", "text": content}],
+                    "role": "ROLE_USER",
+                    "parts": [{"text": content}],
                 },
             },
         },
@@ -119,7 +119,7 @@ class TestExampleReactReasoning:
         )
 
         state = get_task_state(result)
-        assert state in ["completed", "input_required"]
+        assert state in ["TASK_STATE_COMPLETED", "TASK_STATE_INPUT_REQUIRED"]
 
         artifacts = get_artifacts(result)
         reasoning_artifacts = [a for a in artifacts if a.get("name") == "reasoning"]
@@ -149,7 +149,7 @@ class TestExampleReactReasoning:
         )
 
         state = get_task_state(result)
-        assert state == "completed"
+        assert state == "TASK_STATE_COMPLETED"
 
         response = get_task_response(result)
         assert len(response) > 0

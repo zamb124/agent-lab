@@ -8,9 +8,9 @@ import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TypeAlias, TypeVar, overload
 
+from a2a.helpers.proto_helpers import get_message_text, new_text_message
 from a2a.types import (
     Artifact,
-    FilePart,
     Message,
     Part,
     Role,
@@ -18,11 +18,10 @@ from a2a.types import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
-from a2a.utils.message import get_message_text, new_agent_text_message
 from pydantic import BaseModel
 
+from core.a2a.codec import mapping_from_struct, part_has_raw, part_has_text, struct_from_mapping
 from core.clients.llm.context_layer import (
     LLMContextInput,
     llm_context_trace_metadata,
@@ -31,6 +30,7 @@ from core.clients.llm.context_layer import (
 from core.clients.llm.messages import (
     MessageInput,
     StreamEvent,
+    build_a2a_message,
 )
 from core.clients.llm.messages import (
     normalize_messages as _normalize_messages,
@@ -237,7 +237,7 @@ class MockLLM:
         запроса; вне test scope журнал не ведётся.
 
         `messages` нормализуются как plain text + role + metadata (ключи
-        tool_calls / tool_call_id / system / usage). FilePart-ы выписываются
+        tool_calls / tool_call_id / system / usage). Part(raw=...) выписываются
         как `{"file": True, "mime_type": ...}` без bytes — журнал должен
         оставаться компактным даже для multimodal вызовов.
         """
@@ -404,9 +404,7 @@ class MockLLM:
         last_message = messages[-1]
         content_str = get_message_text(last_message)
         metadata = (
-            require_json_object(last_message.metadata, "message.metadata")
-            if last_message.metadata
-            else {}
+            mapping_from_struct(last_message.metadata) if last_message.metadata else {}
         )
         if metadata and metadata.get("tool_call_id"):
             for key, mock_response_text in self._responses.items():
@@ -546,7 +544,7 @@ class MockLLM:
                     artifact=Artifact(
                         artifact_id=reasoning_artifact_id,
                         name="reasoning",
-                        parts=[Part(root=TextPart(text=chunk))]
+                        parts=[Part(text=chunk)],
                     ),
                     append=True,
                     last_chunk=is_last_reasoning_overall,
@@ -569,7 +567,8 @@ class MockLLM:
                     context_id=context_id,
                     task_id=task_id,
                     artifact=Artifact(
-                        artifact_id=artifact_id, parts=[Part(root=TextPart(text=chunk))]
+                        artifact_id=artifact_id,
+                        parts=[Part(text=chunk)],
                     ),
                     append=True,
                     last_chunk=is_last,
@@ -580,10 +579,9 @@ class MockLLM:
         # второй статус (часто только usage), иначе LlmNodeRunner затирал бы tool_calls.
         if tool_calls:
             usage_data: JsonObject = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
-            message = Message(
-                message_id=str(uuid.uuid4()),
-                role=Role.agent,
-                parts=[Part(root=TextPart(text=content))],
+            message = build_a2a_message(
+                role=Role.ROLE_AGENT,
+                parts=[Part(text=content)],
                 metadata={
                     "tool_calls": tool_calls,
                     "usage": usage_data,
@@ -593,39 +591,42 @@ class MockLLM:
             yield TaskStatusUpdateEvent(
                 context_id=context_id,
                 task_id=task_id,
-                status=TaskStatus(state=TaskState.working, message=message),
-                final=False,
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING, message=message),
             )
-            final_message = new_agent_text_message(content) if content else None
-            if final_message:
-                final_message.metadata = {
-                    "usage": usage_data,
-                    **({"llm_context": context_metadata} if context_metadata else {}),
-                }
+            final_message = new_text_message(content, role=Role.ROLE_AGENT) if content else None
+            if final_message is not None:
+                final_message.metadata.CopyFrom(
+                    struct_from_mapping(
+                        {
+                            "usage": usage_data,
+                            **({"llm_context": context_metadata} if context_metadata else {}),
+                        }
+                    )
+                )
             yield TaskStatusUpdateEvent(
                 context_id=context_id,
                 task_id=task_id,
                 status=TaskStatus(
-                    state=TaskState.working,
+                    state=TaskState.TASK_STATE_WORKING,
                     message=final_message,
                 ),
-                final=False,
             )
         else:
-            # Без tool_calls: статус завершения шага LLM (не конец A2A-задачи, см. factory.stream).
+            # WORKING: конец шага LLM, не конец A2A-задачи (см. transport.py).
             final_message = None
             if content:
-                final_message = Message(
-                    message_id=str(uuid.uuid4()),
-                    role=Role.agent,
-                    parts=[Part(root=TextPart(text=content))],
+                final_message = build_a2a_message(
+                    role=Role.ROLE_AGENT,
+                    parts=[Part(text=content)],
                     metadata={"llm_context": context_metadata} if context_metadata else None,
                 )
             yield TaskStatusUpdateEvent(
                 context_id=context_id,
                 task_id=task_id,
-                status=TaskStatus(state=TaskState.completed, message=final_message),
-                final=False,
+                status=TaskStatus(
+                    state=TaskState.TASK_STATE_WORKING,
+                    message=final_message,
+                ),
             )
 
     async def invoke(
@@ -787,23 +788,18 @@ class MockLLM:
                 if event.artifact and event.artifact.parts:
                     artifact_name = event.artifact.name
                     for part in event.artifact.parts:
-                        root = part.root
-                        if not isinstance(root, TextPart):
+                        if not part_has_text(part):
                             continue
                         if artifact_name == "reasoning":
-                            reasoning_parts.append(root.text)
+                            reasoning_parts.append(part.text)
                         elif artifact_name != "reasoning":
-                            content_parts.append(root.text)
-            if isinstance(event, TaskStatusUpdateEvent) and event.status:
-                if event.status.message:
-                    status_text = get_message_text(event.status.message)
-                    if status_text:
-                        last_status_text = status_text
-                if event.status.message and event.status.message.metadata:
-                    metadata = require_json_object(
-                        event.status.message.metadata,
-                        "mock_llm.status.message.metadata",
-                    )
+                            content_parts.append(part.text)
+            if isinstance(event, TaskStatusUpdateEvent) and event.status.HasField("message"):
+                status_text = get_message_text(event.status.message)
+                if status_text:
+                    last_status_text = status_text
+                if event.status.message.metadata:
+                    metadata = mapping_from_struct(event.status.message.metadata)
                     metadata_tool_calls = metadata.get("tool_calls")
                     if metadata_tool_calls:
                         tool_calls = require_json_array(
@@ -827,46 +823,48 @@ class MockLLM:
             structured_payload = parse_json_value(text_for_json, "mock_llm.structured_output")
             return response_model.model_validate(structured_payload)
 
-        return Message(
-            message_id=str(uuid.uuid4()),
-            role=Role.agent,
-            parts=[Part(root=TextPart(text=content))],
+        return build_a2a_message(
+            role=Role.ROLE_AGENT,
+            parts=[Part(text=content)],
             metadata={"tool_calls": tool_calls} if tool_calls else None,
         )
+
+
+_CAPTURE_ROLE_NAMES: dict[Role | int, str] = {
+    Role.ROLE_USER: "user",
+    Role.ROLE_AGENT: "agent",
+}
 
 
 def _normalize_message_for_capture(message: Message) -> JsonObject:
     """
     Превращает A2A `Message` в JSON-сериализуемое представление для журнала
-    MockLLM. Текст склеивается из всех TextPart-ов; FilePart представляется
+    MockLLM. Текст склеивается из всех text Part-ов; raw Part представляется
     заглушкой `{file: True, mime_type: ...}` без bytes.
     """
-    metadata = (
-        require_json_object(message.metadata, "message.metadata")
-        if message.metadata
-        else {}
-    )
-    parts = message.parts or []
+    metadata = mapping_from_struct(message.metadata) if message.metadata else {}
+    parts = list(message.parts)
 
     text_parts: list[str] = []
     serialized_parts: JsonArray = []
     for part in parts:
-        root = part.root
-        if isinstance(root, TextPart):
-            text_parts.append(root.text)
-            serialized_parts.append({"type": "text", "text": root.text})
+        if part_has_text(part):
+            text_parts.append(part.text)
+            serialized_parts.append({"type": "text", "text": part.text})
             continue
-        if isinstance(root, FilePart):
-            file_obj = root.file
-            mime_type = file_obj.mime_type or "application/octet-stream"
+        if part_has_raw(part):
+            mime_type = part.media_type if part.media_type else "application/octet-stream"
             serialized_parts.append({"type": "file", "mime_type": mime_type})
 
     safe_metadata: JsonObject = {}
     for key in ("system", "tool_call_id", "tool_calls"):
         if key in metadata:
             safe_metadata[key] = metadata[key]
+    role_name = _CAPTURE_ROLE_NAMES.get(message.role)
+    if role_name is None:
+        raise ValueError(f"Unsupported A2A role for mock capture: {message.role!r}")
     return {
-        "role": message.role.value,
+        "role": role_name,
         "text": "".join(text_parts),
         "parts": serialized_parts,
         "metadata": safe_metadata,

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import uuid
-
-from a2a.types import Message, Part, Role, TextPart
-from a2a.utils.message import get_message_text
+from a2a.helpers.proto_helpers import get_message_text
+from a2a.types import Message, Part, Role
 
 from core.ai.models import ResolvedAIModel
 from core.ai.providers import AICapability, split_provider_prefixed_model
@@ -17,6 +15,7 @@ from core.ai.runtime import (
 )
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
+from core.clients.llm.messages import build_a2a_message
 from core.config import get_settings
 from core.context import get_context
 from core.text_transforms.chunking import split_text_into_markdown_chunks
@@ -72,10 +71,9 @@ class TextTransformService:
         )
         sys_text = instruction.strip() if instruction is not None and instruction.strip() else _DEFAULT_SUMMARY_INSTRUCTION
         messages: list[Message] = [
-            Message(
-                message_id=str(uuid.uuid4()),
-                role=Role.user,
-                parts=[Part(root=TextPart(text=sys_text + "\n\n" + stripped))],
+            build_a2a_message(
+                role=Role.ROLE_USER,
+                parts=[Part(text=sys_text + "\n\n" + stripped)],
             ),
         ]
         out = await llm.chat(messages, llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT)
@@ -119,11 +117,10 @@ class TextTransformService:
             user_prompt = (
                 f"This is part {i + 1} of {total}. Convert only the following text to Markdown:\n\n{chunk}"
             )
-            msg = Message(
-                message_id=str(uuid.uuid4()),
-                role=Role.user,
+            msg = build_a2a_message(
+                role=Role.ROLE_USER,
                 parts=[
-                    Part(root=TextPart(text=_MARKDOWN_TO_MD_SYSTEM + "\n\n" + user_prompt)),
+                    Part(text=_MARKDOWN_TO_MD_SYSTEM + "\n\n" + user_prompt),
                 ],
             )
             out = await llm.chat([msg], llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT)

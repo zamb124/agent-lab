@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import uuid
 
-from a2a.types import Message, MessageSendParams, Part, Role, TextPart
+from a2a.types import Message, Part, SendMessageRequest
+from a2a.types.a2a_pb2 import ROLE_USER
 from fastapi import HTTPException
+from google.protobuf.json_format import MessageToDict
 
 from apps.flows.src.channels.a2a import A2AChannel
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
+from core.a2a import extract_text_from_task_json, struct_from_mapping
 from core.context import get_context
 from core.office.ai_settings import LARA_DOCUMENTS_MODEL_ID, parse_lara_branch_model_id
 from core.office.platform_ai_claims import OfficePlatformAiClaims
@@ -71,48 +74,10 @@ def _user_text_from_openai_messages(messages: list[JsonObject]) -> str:
 
 
 def _extract_task_text(task_payload: JsonObject) -> str:
-    status_value = task_payload.get("status")
-    if isinstance(status_value, dict):
-        status_object = require_json_object(status_value, "lara.task.status")
-        message_value = status_object.get("message")
-        if isinstance(message_value, dict):
-            message_object = require_json_object(message_value, "lara.task.status.message")
-            parts_value = message_object.get("parts")
-            if isinstance(parts_value, list):
-                chunks: list[str] = []
-                for part_value in parts_value:
-                    if not isinstance(part_value, dict):
-                        continue
-                    part_object = require_json_object(part_value, "lara.task.status.message.part")
-                    if part_object.get("kind") != "text":
-                        continue
-                    text_value = part_object.get("text")
-                    if isinstance(text_value, str) and text_value.strip():
-                        chunks.append(text_value.strip())
-                if chunks:
-                    return "\n".join(chunks)
-    artifacts = task_payload.get("artifacts")
-    if isinstance(artifacts, list):
-        chunks = []
-        for artifact_value in artifacts:
-            if not isinstance(artifact_value, dict):
-                continue
-            artifact = require_json_object(artifact_value, "lara.task.artifact")
-            parts_value = artifact.get("parts")
-            if not isinstance(parts_value, list):
-                continue
-            for part_value in parts_value:
-                if not isinstance(part_value, dict):
-                    continue
-                part_object = require_json_object(part_value, "lara.task.artifact.part")
-                if part_object.get("kind") != "text":
-                    continue
-                text_value = part_object.get("text")
-                if isinstance(text_value, str) and text_value.strip():
-                    chunks.append(text_value.strip())
-        if chunks:
-            return "\n".join(chunks)
-    raise HTTPException(status_code=502, detail="Lara не вернула текст ответа")
+    try:
+        return extract_text_from_task_json(task_payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Lara не вернула текст ответа") from exc
 
 
 async def run_lara_chat_completion(
@@ -139,15 +104,14 @@ async def run_lara_chat_completion(
     user_message = _user_text_from_openai_messages(openai_messages)
     context_id = str(uuid.uuid4())
     a2a_message = Message(
-        role=Role.user,
+        role=ROLE_USER,
         message_id=str(uuid.uuid4()),
         context_id=context_id,
-        parts=[Part(root=TextPart(text=user_message))],
+        parts=[Part(text=user_message)],
     )
     metadata: JsonObject = {"branch": branch_id}
     variables: JsonObject = {}
     if office_ai is not None:
-        variables["binding_id"] = office_ai.binding_id
         variables["file_id"] = office_ai.file_id
         variables["catalog_id"] = ""
         variables["document_type"] = ""
@@ -155,21 +119,21 @@ async def run_lara_chat_completion(
     if variables:
         metadata["variables"] = variables
 
-    params = MessageSendParams(message=a2a_message, metadata=metadata)
+    params = SendMessageRequest(
+        message=a2a_message,
+        metadata=struct_from_mapping(metadata),
+    )
     channel = A2AChannel(
         _LARA_FLOW_ID,
         context=context,
         container=as_flow_runtime_container(container),
     )
     task = await channel.on_message_send(params)
-    task_payload = require_json_object(
-        task.model_dump(by_alias=True, exclude_none=True),
-        "lara.task.payload",
-    )
+    task_payload = require_json_object(MessageToDict(task), "lara.task.payload")
     status_value = task_payload.get("status")
     if isinstance(status_value, dict):
         state = status_value.get("state")
-        if state == "failed":
+        if state == "TASK_STATE_FAILED":
             raise HTTPException(status_code=502, detail="Lara task failed")
     return _extract_task_text(task_payload)
 

@@ -16,13 +16,15 @@ import pytest
 import pytest_asyncio
 from aiohttp import web
 
+from tests.flows._a2a_v1 import A2A_HEADERS
+
 
 def _msg(text: str, task_id: str = None, context_id: str = None) -> Dict[str, Any]:
     """Создаёт A2A Message с ОБЯЗАТЕЛЬНЫМИ полями."""
     m = {
         "messageId": str(uuid.uuid4()),
-        "role": "user",
-        "parts": [{"kind": "text", "text": text}],
+        "role": "ROLE_USER",
+        "parts": [{"text": text}],
     }
     if task_id:
         m["taskId"] = task_id
@@ -32,31 +34,19 @@ def _msg(text: str, task_id: str = None, context_id: str = None) -> Dict[str, An
 
 
 def _validate_webhook_payload(payload: Dict) -> None:
-    """Строгая валидация webhook payload по A2A спецификации."""
-    # JSON-RPC 2.0 структура
-    assert "jsonrpc" in payload, "Webhook MUST have 'jsonrpc'"
-    assert payload["jsonrpc"] == "2.0", "jsonrpc MUST be '2.0'"
+    """Webhook body = A2A 1.0 StreamResponse ProtoJSON (statusUpdate)."""
+    assert "statusUpdate" in payload, f"Webhook MUST be StreamResponse statusUpdate, got keys={sorted(payload.keys())}"
+    params = payload["statusUpdate"]
+    assert isinstance(params, dict), "statusUpdate MUST be object"
 
-    assert "method" in payload, "Webhook MUST have 'method'"
-    assert payload["method"] == "tasks/pushNotification", \
-        f"method MUST be 'tasks/pushNotification', got {payload['method']}"
-
-    assert "params" in payload, "Webhook MUST have 'params'"
-
-    params = payload["params"]
-
-    # Обязательные поля в params
-    assert "taskId" in params, "params MUST have 'taskId'"
+    assert "taskId" in params, "statusUpdate MUST have 'taskId'"
     assert isinstance(params["taskId"], str), "taskId MUST be string"
 
-    assert "contextId" in params, "params MUST have 'contextId'"
+    assert "contextId" in params, "statusUpdate MUST have 'contextId'"
     assert isinstance(params["contextId"], str), "contextId MUST be string"
 
-    assert "status" in params, "params MUST have 'status'"
+    assert "status" in params, "statusUpdate MUST have 'status'"
     _validate_task_status(params["status"])
-
-    assert "final" in params, "params MUST have 'final'"
-    assert isinstance(params["final"], bool), "final MUST be boolean"
 
 
 def _validate_task_status(status: Dict) -> None:
@@ -64,8 +54,8 @@ def _validate_task_status(status: Dict) -> None:
     assert "state" in status, "status MUST have 'state'"
 
     valid_states = [
-        "submitted", "working", "input-required", "auth-required",
-        "completed", "failed", "rejected", "canceled", "unknown"
+        "TASK_STATE_SUBMITTED", "TASK_STATE_WORKING", "TASK_STATE_INPUT_REQUIRED", "TASK_STATE_AUTH_REQUIRED",
+        "TASK_STATE_COMPLETED", "TASK_STATE_FAILED", "TASK_STATE_REJECTED", "TASK_STATE_CANCELED", "unknown"
     ]
     assert status["state"] in valid_states, f"Invalid state: {status['state']}"
 
@@ -168,13 +158,14 @@ class TestPushNotificationConfig:
 
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {"id": config_id, "url": webhook_url},
+                    "id": config_id, "url": webhook_url,
                 },
             },
         )
@@ -183,9 +174,7 @@ class TestPushNotificationConfig:
         _validate_jsonrpc_response(data)
 
         result = data["result"]
-        assert "pushNotificationConfig" in result
-
-        config = result["pushNotificationConfig"]
+        config = result
         assert config["id"] == config_id
         assert config["url"] == webhook_url
 
@@ -199,13 +188,14 @@ class TestPushNotificationConfig:
         # SET
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {"id": config_id, "url": webhook_url},
+                    "id": config_id, "url": webhook_url,
                 },
             },
         )
@@ -213,18 +203,19 @@ class TestPushNotificationConfig:
         # GET
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "tasks/pushNotificationConfig/get",
-                "params": {"id": task_id, "pushNotificationConfigId": config_id},
+                "method": "GetTaskPushNotificationConfig",
+                "params": {"taskId": task_id, "id": config_id},
             },
         )
 
         data = resp.json()
         _validate_jsonrpc_response(data)
 
-        config = data["result"]["pushNotificationConfig"]
+        config = data["result"]
         assert config["id"] == config_id
         assert config["url"] == webhook_url
 
@@ -238,13 +229,15 @@ class TestPushNotificationConfig:
         for i in range(3):
             await client.post(
                 f"/flows/api/v1/{flow_id}",
+                headers=A2A_HEADERS,
                 json={
                     "jsonrpc": "2.0",
                     "id": str(i),
-                    "method": "tasks/pushNotificationConfig/set",
+                    "method": "CreateTaskPushNotificationConfig",
                     "params": {
                         "taskId": task_id,
-                        "pushNotificationConfig": {"id": f"cfg-{i}", "url": webhook_url},
+                        "id": f"cfg-{i}",
+                        "url": webhook_url,
                     },
                 },
             )
@@ -252,29 +245,31 @@ class TestPushNotificationConfig:
         # LIST
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "list",
-                "method": "tasks/pushNotificationConfig/list",
-                "params": {"id": task_id},
+                "method": "ListTaskPushNotificationConfigs",
+                "params": {"taskId": task_id},
             },
         )
 
         data = resp.json()
         _validate_jsonrpc_response(data)
 
-        configs = data["result"]
+        result = data["result"]
+        configs = result["configs"] if isinstance(result, dict) else result
         assert isinstance(configs, list)
         assert len(configs) == 3
 
         # По A2A SDK: TaskPushNotificationConfig = {taskId, pushNotificationConfig}
         for config in configs:
             assert "taskId" in config, "TaskPushNotificationConfig MUST have 'taskId'"
-            assert "pushNotificationConfig" in config, "TaskPushNotificationConfig MUST have 'pushNotificationConfig'"
-            assert "id" in config["pushNotificationConfig"], "PushNotificationConfig MUST have 'id'"
-            assert "url" in config["pushNotificationConfig"], "PushNotificationConfig MUST have 'url'"
+            assert "id" in config, "TaskPushNotificationConfig MUST have 'id'"
+            assert "url" in config, "TaskPushNotificationConfig MUST have 'url'"
+            assert "taskId" in config, "TaskPushNotificationConfig MUST have 'taskId'"
 
-        config_ids = {c["pushNotificationConfig"]["id"] for c in configs}
+        config_ids = {c["id"] for c in configs}
         assert config_ids == {"cfg-0", "cfg-1", "cfg-2"}
 
     @pytest.mark.asyncio
@@ -287,13 +282,14 @@ class TestPushNotificationConfig:
         # SET
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {"id": config_id, "url": webhook_url},
+                    "id": config_id, "url": webhook_url,
                 },
             },
         )
@@ -301,11 +297,12 @@ class TestPushNotificationConfig:
         # DELETE
         del_resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "tasks/pushNotificationConfig/delete",
-                "params": {"id": task_id, "pushNotificationConfigId": config_id},
+                "method": "DeleteTaskPushNotificationConfig",
+                "params": {"taskId": task_id, "id": config_id},
             },
         )
 
@@ -316,11 +313,12 @@ class TestPushNotificationConfig:
         # GET должен вернуть null
         get_resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "3",
-                "method": "tasks/pushNotificationConfig/get",
-                "params": {"id": task_id, "pushNotificationConfigId": config_id},
+                "method": "GetTaskPushNotificationConfig",
+                "params": {"taskId": task_id, "id": config_id},
             },
         )
 
@@ -335,19 +333,18 @@ class TestPushNotificationConfig:
 
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {
-                        "id": config_id,
-                        "url": webhook_url,
-                        "authentication": {
-                            "schemes": ["bearer"],
-                            "credentials": "secret-token",
-                        },
+                    "id": config_id,
+                    "url": webhook_url,
+                    "authentication": {
+                        "scheme": "bearer",
+                        "credentials": "secret-token",
                     },
                 },
             },
@@ -356,7 +353,7 @@ class TestPushNotificationConfig:
         data = resp.json()
         _validate_jsonrpc_response(data)
 
-        config = data["result"]["pushNotificationConfig"]
+        config = data["result"]
         assert "authentication" in config
 
 
@@ -382,13 +379,14 @@ class TestPushNotificationWebhooks:
         # Регистрируем webhook
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {"id": config_id, "url": webhook_url},
+                    "id": config_id, "url": webhook_url,
                 },
             },
         )
@@ -396,10 +394,11 @@ class TestPushNotificationWebhooks:
         # Выполняем задачу
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Execute", task_id, context_id)},
             },
         )
@@ -418,16 +417,20 @@ class TestPushNotificationWebhooks:
         _validate_webhook_payload(webhook)
 
         # Проверяем конкретные значения
-        assert webhook["params"]["taskId"] == task_id
-        assert webhook["params"]["status"]["state"] == "completed"
-        assert webhook["params"]["final"] is True
+        assert webhook["statusUpdate"]["taskId"] == task_id
+        assert webhook["statusUpdate"]["status"]["state"] == "TASK_STATE_COMPLETED"
+        assert webhook["statusUpdate"].get("metadata", {}).get("final") is True
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(30)
     async def test_webhook_on_canceled_has_valid_structure(
         self, client, flow_id, mock_llm_with_queue, webhook_server, sync_tools
     ):
         """Webhook при canceled имеет валидную структуру."""
-        mock_llm_with_queue([{"type": "text", "content": "Response"}])
+        # Cancel только из non-final (input-required); completed → TaskNotCancelable.
+        mock_llm_with_queue(
+            [{"type": "tool_call", "tool": "ask_user", "args": {"question": "Name?"}}]
+        )
 
         task_context_id = str(uuid.uuid4())
         config_id = str(uuid.uuid4())
@@ -436,40 +439,47 @@ class TestPushNotificationWebhooks:
         # Регистрируем webhook
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_context_id,
-                    "pushNotificationConfig": {"id": config_id, "url": webhook_url},
+                    "id": config_id, "url": webhook_url,
                 },
             },
         )
 
-        # Создаём задачу
-        await client.post(
+        # Создаём задачу и паркуем в input-required
+        create_resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Create", task_context_id, task_context_id)},
             },
         )
+        create_data = create_resp.json()
+        assert create_data["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         webhook_server.clear()
 
         # Отменяем
-        await client.post(
+        cancel_resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "3",
-                "method": "tasks/cancel",
+                "method": "CancelTask",
                 "params": {"id": task_context_id},
             },
         )
+        cancel_data = cancel_resp.json()
+        assert cancel_data["result"]["status"]["state"] == "TASK_STATE_CANCELED"
 
         deadline = time.monotonic() + 8.0
         cancel_webhooks: list = []
@@ -477,7 +487,7 @@ class TestPushNotificationWebhooks:
             cancel_webhooks = [
                 w
                 for w in webhook_server.received_webhooks
-                if w.get("params", {}).get("status", {}).get("state") == "canceled"
+                if w.get("statusUpdate", {}).get("status", {}).get("state") == "TASK_STATE_CANCELED"
             ]
             if cancel_webhooks:
                 break
@@ -488,8 +498,8 @@ class TestPushNotificationWebhooks:
         webhook = cancel_webhooks[0]
         _validate_webhook_payload(webhook)
 
-        assert webhook["params"]["status"]["state"] == "canceled"
-        assert webhook["params"]["final"] is True
+        assert webhook["statusUpdate"]["status"]["state"] == "TASK_STATE_CANCELED"
+        assert webhook["statusUpdate"].get("metadata", {}).get("final") is True
 
     @pytest.mark.asyncio
     async def test_webhook_on_input_required_has_valid_structure(
@@ -510,13 +520,14 @@ class TestPushNotificationWebhooks:
         # Регистрируем webhook
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {"id": config_id, "url": webhook_url},
+                    "id": config_id, "url": webhook_url,
                 },
             },
         )
@@ -524,10 +535,11 @@ class TestPushNotificationWebhooks:
         # Выполняем задачу с interrupt
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Start", task_id, context_id)},
             },
         )
@@ -538,7 +550,7 @@ class TestPushNotificationWebhooks:
             input_required_webhooks = [
                 w
                 for w in webhook_server.received_webhooks
-                if w.get("params", {}).get("status", {}).get("state") == "input-required"
+                if w.get("statusUpdate", {}).get("status", {}).get("state") == "TASK_STATE_INPUT_REQUIRED"
             ]
             if input_required_webhooks:
                 break
@@ -549,8 +561,8 @@ class TestPushNotificationWebhooks:
         webhook = input_required_webhooks[0]
         _validate_webhook_payload(webhook)
 
-        assert webhook["params"]["status"]["state"] == "input-required"
-        assert webhook["params"]["final"] is True
+        assert webhook["statusUpdate"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
+        assert webhook["statusUpdate"].get("metadata", {}).get("final") is True
 
 
 class TestPushNotificationRetries:
@@ -575,16 +587,14 @@ class TestPushNotificationRetries:
         # Webhook на несуществующий URL
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {
-                        "id": config_id,
-                        "url": "http://127.0.0.1:59999/nonexistent",
-                    },
+                    "id": config_id, "url": "http://127.0.0.1:59999/nonexistent",
                 },
             },
         )
@@ -592,10 +602,11 @@ class TestPushNotificationRetries:
         # Выполняем задачу
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Test", task_id, context_id)},
             },
         )
@@ -604,7 +615,7 @@ class TestPushNotificationRetries:
         _validate_jsonrpc_response(data)
 
         # Задача должна завершиться успешно
-        assert data["result"]["status"]["state"] == "completed"
+        assert data["result"]["status"]["state"] == "TASK_STATE_COMPLETED"
 
 
 class TestPushNotificationEdgeCases:
@@ -622,11 +633,12 @@ class TestPushNotificationEdgeCases:
 
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/get",
-                "params": {"id": task_id, "pushNotificationConfigId": config_id},
+                "method": "GetTaskPushNotificationConfig",
+                "params": {"taskId": task_id, "id": config_id},
             },
         )
 
@@ -641,18 +653,19 @@ class TestPushNotificationEdgeCases:
 
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/list",
-                "params": {"id": task_id},
+                "method": "ListTaskPushNotificationConfigs",
+                "params": {"taskId": task_id},
             },
         )
 
         data = resp.json()
         _validate_jsonrpc_response(data)
 
-        assert data["result"] == []
+        assert data["result"].get("configs", []) == []
 
     @pytest.mark.asyncio
     async def test_delete_nonexistent_is_idempotent(self, client, flow_id):
@@ -662,11 +675,12 @@ class TestPushNotificationEdgeCases:
 
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/delete",
-                "params": {"id": task_id, "pushNotificationConfigId": config_id},
+                "method": "DeleteTaskPushNotificationConfig",
+                "params": {"taskId": task_id, "id": config_id},
             },
         )
 
@@ -686,13 +700,14 @@ class TestPushNotificationEdgeCases:
         # Создаём
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {"id": config_id, "url": webhook_url},
+                    "id": config_id, "url": webhook_url,
                 },
             },
         )
@@ -701,13 +716,14 @@ class TestPushNotificationEdgeCases:
         new_url = f"{webhook_url}?updated=true"
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {"id": config_id, "url": new_url},
+                    "id": config_id, "url": new_url,
                 },
             },
         )
@@ -715,17 +731,18 @@ class TestPushNotificationEdgeCases:
         data = resp.json()
         _validate_jsonrpc_response(data)
 
-        assert data["result"]["pushNotificationConfig"]["url"] == new_url
+        assert data["result"]["url"] == new_url
 
         # GET должен вернуть обновлённый
         get_resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "3",
-                "method": "tasks/pushNotificationConfig/get",
-                "params": {"id": task_id, "pushNotificationConfigId": config_id},
+                "method": "GetTaskPushNotificationConfig",
+                "params": {"taskId": task_id, "id": config_id},
             },
         )
 
-        assert get_resp.json()["result"]["pushNotificationConfig"]["url"] == new_url
+        assert get_resp.json()["result"]["url"] == new_url

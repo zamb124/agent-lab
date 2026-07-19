@@ -12,7 +12,7 @@ import { mergeChatAuthor, normalizeChatAuthor } from '../chat-author.js';
 const EMPTY_LIST = Object.freeze([]);
 const EMPTY_OBJECT = Object.freeze({});
 
-/** Ключ i18n `flows.chat_message.*` при обрыве SSE без терминального status-update. */
+/** Ключ i18n `flows.chat_message.*` при обрыве SSE без terminal/interrupted statusUpdate. */
 export const STREAM_INCOMPLETE_I18N_KEY = 'stream_incomplete';
 
 let _traceSeq = 0;

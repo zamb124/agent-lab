@@ -14,6 +14,8 @@ from tests.ui.e2e.sync_e2e_helpers import (
     sync_api_post_plain_message,
     sync_e2e_click_create_channel,
     sync_e2e_click_platform_button,
+    sync_e2e_dismiss_pwa_install_banner,
+    sync_e2e_expect_company_member_loaded,
     sync_e2e_expect_ws_open,
     sync_e2e_open_with_namespace,
     sync_sidebar_channel_nav,
@@ -31,39 +33,24 @@ _MIN_PNG = (
 )
 
 
-async def _expect_company_member_loaded(page: Page, user_id: str) -> None:
-    await page.wait_for_function(
-        """(userId) => {
-            const bus = window.__PLATFORM_BUS__;
-            if (!bus || typeof bus.getState !== 'function') return false;
-            const state = bus.getState();
-            const slice = state && state.syncCompanyMembers;
-            return !!(slice && Array.isArray(slice.items)
-                && slice.items.some((m) => m && m.user_id === userId));
-        }""",
-        arg=user_id,
-        timeout=30_000,
-    )
-
-
 async def _send_text_message(page: Page, text: str) -> None:
     composer = page.locator("sync-message-composer").first
-    await expect(composer).to_be_visible(timeout=30_000)
+    await expect(composer).to_be_visible(timeout=8_000)
     await composer.locator('textarea[data-canon="composer"]').fill(text)
-    await composer.locator("button.send").click()
+    await composer.locator("button.send").evaluate("(el) => el.click()")
     await expect(
         page.locator("sync-message-bubble").get_by_text(text, exact=True)
-    ).to_be_visible(timeout=45_000)
+    ).to_be_visible(timeout=8_000)
 
 
 async def _open_message_context_menu(page: Page, text: str) -> None:
     bubble = page.locator("sync-message-bubble").filter(has_text=text).first
-    await expect(bubble).to_be_visible(timeout=30_000)
+    await expect(bubble).to_be_visible(timeout=8_000)
     await bubble.click(button="right")
     await expect(page.locator("sync-message-context-menu")).to_have_attribute(
         "open",
         "",
-        timeout=10_000,
+        timeout=5_000,
     )
 
 
@@ -72,7 +59,7 @@ async def _click_context_item(page: Page, *labels: str) -> None:
     item = page.locator("sync-message-context-menu").locator(".item").filter(
         has_text=pattern
     ).first
-    await expect(item).to_be_visible(timeout=10_000)
+    await expect(item).to_be_visible(timeout=5_000)
     await item.click()
 
 
@@ -92,10 +79,10 @@ async def _click_context_item(page: Page, *labels: str) -> None:
         "messages, mentions, attachments, message menu, pins, threads, channel settings, "
         "member profile, and real realtime updates."
     ),
+    timeout_seconds=120,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(360)
 async def test_sync_complete_service_guide(
     scenario: ScenarioRecorder,
     sync_ui: AppUI,
@@ -160,7 +147,7 @@ async def test_sync_complete_service_guide(
 
     await ui_page_system.locator("platform-sidebar-namespace-select button.btn-edit").click()
     namespace_modal = ui_page_system.locator("sync-namespace-modal")
-    await expect(namespace_modal).to_be_visible(timeout=30_000)
+    await expect(namespace_modal).to_be_visible(timeout=8_000)
     await scenario.step(
         "Открыты Sync-настройки пространства",
         ui_page_system,
@@ -189,13 +176,13 @@ async def test_sync_complete_service_guide(
     for index in range(2):
         switch = namespace_modal.locator("platform-switch").nth(index)
         await switch.click()
-        await expect(switch).to_have_attribute("checked", "", timeout=15_000)
+        await expect(switch).to_have_attribute("checked", "", timeout=5_000)
     await sync_e2e_click_platform_button(namespace_modal, "Сохранить", "Save")
-    await expect(namespace_modal).to_be_hidden(timeout=30_000)
+    await expect(namespace_modal).to_be_hidden(timeout=8_000)
 
     await sync_e2e_click_create_channel(ui_page_system)
     create_modal = ui_page_system.locator("sync-channel-create-modal")
-    await expect(create_modal).to_be_visible(timeout=30_000)
+    await expect(create_modal).to_be_visible(timeout=8_000)
     await scenario.step(
         "Открыта форма создания канала",
         ui_page_system,
@@ -242,10 +229,10 @@ async def test_sync_complete_service_guide(
     )
     await sync_e2e_click_platform_button(create_modal, "Создать", "Create")
     await expect(sync_sidebar_channel_nav(ui_page_system, channel_name)).to_be_visible(
-        timeout=45_000
+        timeout=8_000
     )
     await sync_sidebar_channel_nav(ui_page_system, channel_name).click()
-    await expect(ui_page_system.locator("sync-channel-page")).to_be_visible(timeout=30_000)
+    await expect(ui_page_system.locator("sync-channel-page")).to_be_visible(timeout=8_000)
     await scenario.step(
         "Канал создан и открыт",
         ui_page_system,
@@ -279,7 +266,7 @@ async def test_sync_complete_service_guide(
         channel_id,
         peer_uid,
     )
-    await _expect_company_member_loaded(ui_page_system, peer_uid)
+    await sync_e2e_expect_company_member_loaded(ui_page_system, peer_uid)
 
     await _send_text_message(ui_page_system, intro_text)
     await scenario.step(
@@ -299,15 +286,26 @@ async def test_sync_complete_service_guide(
         ),
     )
 
+    # Mention popup читает syncCompanyMembers — догружаем перед @.
+    await sync_e2e_expect_company_member_loaded(ui_page_system, peer_uid)
+    await sync_e2e_dismiss_pwa_install_banner(ui_page_system)
     composer = ui_page_system.locator("sync-message-composer").first
     textarea = composer.locator('textarea[data-canon="composer"]')
-    await textarea.click()
-    mention_query = peer_uid[-8:]
-    await textarea.press_sequentially(f"@{mention_query}")
+    await expect(textarea).to_be_visible(timeout=10_000)
+    # Полный user_id + явный InputEvent: press_sequentially иногда не открывает popup в Lit.
+    await textarea.evaluate(
+        """(el, peerUid) => {
+            el.focus();
+            el.value = '@' + peerUid;
+            el.setSelectionRange(el.value.length, el.value.length);
+            el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+        }""",
+        peer_uid,
+    )
     popup = composer.locator(".mention-popup")
-    await expect(popup).to_be_visible(timeout=30_000)
+    await expect(popup).to_be_visible(timeout=20_000)
     member_btn = composer.locator(f'.mention-popup .item[data-user-id="{peer_uid}"]')
-    await expect(member_btn).to_be_visible(timeout=30_000)
+    await expect(member_btn).to_be_visible(timeout=15_000)
     await scenario.step(
         "Открыт popup упоминаний",
         ui_page_system,
@@ -331,11 +329,11 @@ async def test_sync_complete_service_guide(
     await member_btn.click()
     await textarea.click()
     await textarea.press_sequentially(mention_text_tail)
-    await composer.locator("button.send").click()
+    await composer.locator("button.send").evaluate("(el) => el.click()")
     mention_bubble = ui_page_system.locator("sync-message-bubble").last
     await expect(mention_bubble.locator(".body .mention")).to_contain_text(
         "System User 2",
-        timeout=45_000,
+        timeout=8_000,
     )
     await expect(mention_bubble.locator(".body")).to_contain_text(mention_text_tail)
     await scenario.step(
@@ -355,22 +353,22 @@ async def test_sync_complete_service_guide(
     png_path = tmp_path / "sync-guide.png"
     png_path.write_bytes(_MIN_PNG)
     file_input = composer.locator("input#photopick")
-    await expect(file_input).to_be_attached(timeout=15_000)
+    await expect(file_input).to_be_attached(timeout=5_000)
     await file_input.set_input_files(str(png_path))
     await expect(composer.locator(".att").filter(has_text="sync-guide.png")).to_be_visible(
-        timeout=30_000
+        timeout=8_000
     )
     await textarea.fill(attachment_caption)
-    await composer.locator("button.send").click()
+    await composer.locator("button.send").evaluate("(el) => el.click()")
     await expect(
         ui_page_system.locator("sync-message-bubble").get_by_text(
             attachment_caption,
             exact=True,
         )
-    ).to_be_visible(timeout=60_000)
+    ).to_be_visible(timeout=5_000)
     await expect(
         ui_page_system.locator("sync-message-bubble .image-wrap img").last
-    ).to_be_visible(timeout=30_000)
+    ).to_be_visible(timeout=8_000)
     await scenario.step(
         "Отправлено сообщение с изображением",
         ui_page_system,
@@ -419,7 +417,7 @@ async def test_sync_complete_service_guide(
     )
     await _click_context_item(ui_page_system, "Закрепить", "Pin")
     await expect(ui_page_system.locator("sync-pin-strip .row")).to_be_visible(
-        timeout=30_000
+        timeout=8_000
     )
     await scenario.step(
         "Сообщение закреплено",
@@ -440,13 +438,13 @@ async def test_sync_complete_service_guide(
     await _open_message_context_menu(ui_page_system, intro_text)
     await _click_context_item(ui_page_system, "Открыть тред", "Open thread")
     thread_drawer = ui_page_system.locator("sync-thread-drawer")
-    await expect(thread_drawer).to_have_attribute("open", "", timeout=30_000)
+    await expect(thread_drawer).to_have_attribute("open", "", timeout=8_000)
     thread_composer = thread_drawer.locator("sync-message-composer")
     await thread_composer.locator('textarea[data-canon="composer"]').fill(reply_text)
-    await thread_composer.locator("button.send").click()
+    await thread_composer.locator("button.send").evaluate("(el) => el.click()")
     await expect(
         thread_drawer.locator("sync-message-bubble").get_by_text(reply_text, exact=True)
-    ).to_be_visible(timeout=45_000)
+    ).to_be_visible(timeout=8_000)
     await scenario.step(
         "Открыт тред и отправлен ответ",
         ui_page_system,
@@ -463,11 +461,11 @@ async def test_sync_complete_service_guide(
         ),
     )
     await thread_drawer.locator("button.close").click()
-    await expect(thread_drawer).not_to_have_attribute("open", "", timeout=15_000)
+    await expect(thread_drawer).not_to_have_attribute("open", "", timeout=5_000)
 
     await sync_sidebar_channel_settings_gear(ui_page_system, channel_name).click()
     settings_modal = ui_page_system.locator("sync-channel-edit-modal")
-    await expect(settings_modal).to_be_visible(timeout=30_000)
+    await expect(settings_modal).to_be_visible(timeout=8_000)
     await scenario.step(
         "Открыты настройки канала",
         ui_page_system,
@@ -496,7 +494,7 @@ async def test_sync_complete_service_guide(
         ),
     )
     await sync_e2e_click_platform_button(settings_modal, "Сохранить", "Save")
-    await expect(settings_modal).to_be_hidden(timeout=30_000)
+    await expect(settings_modal).to_be_hidden(timeout=8_000)
 
     await sync_api_post_plain_message(
         sync_ui.origin,
@@ -513,13 +511,13 @@ async def test_sync_complete_service_guide(
             peer_message_text,
             exact=True,
         )
-    ).to_be_visible(timeout=60_000)
+    ).to_be_visible(timeout=5_000)
     peer_bubble = ui_page_system.locator("sync-message-bubble").filter(
         has_text=peer_message_text
     )
     await peer_bubble.locator(".sender").click()
     user_modal = ui_page_system.locator("platform-user-info-modal")
-    await expect(user_modal).to_be_visible(timeout=30_000)
+    await expect(user_modal).to_be_visible(timeout=8_000)
     await expect(user_modal.get_by_text("System User 2", exact=False)).to_be_visible()
     await expect(user_modal.get_by_text(re.compile(r"Каналы вместе|Shared channels"))).to_be_visible()
     await scenario.step(

@@ -1,6 +1,6 @@
 ---
 name: documents-platform
-description: Office Documents service — catalogs, bindings, platform files, document editing, templates, visualizations, and company knowledge. Load from the Documents SPA or for document deliverables and indexed knowledge.
+description: Office Documents service — catalogs, documents, platform files, document editing, templates, visualizations, and company knowledge. Load from the Documents SPA or for document deliverables and indexed knowledge.
 depends_on: document-workspace documents-catalog diagrams-viz knowledge-rag
 ---
 
@@ -12,7 +12,7 @@ Choose the correct document workflow and preserve the distinction between Office
 
 ## Procedure
 
-1. Use `catalog_id`, `binding_id`, `file_id` and `document_type` from UI context; never substitute one identifier for another.
+1. Use `catalog_id`, `file_id` and `document_type` from UI context; never substitute one identifier for another.
 2. Load child `documents-catalog` to browse catalogs, find documents (semantic/lexical), read content, or get an editor/preview link. The same tools are platform builtins for any Flows `llm_node`.
 3. Load child `document-workspace` to create, open in editor, or mutate files (replace/append text, cells).
 4. From `document-workspace`, load `docx-templates` for Jinja2 DOCX templates.
@@ -22,4 +22,4 @@ Choose the correct document workflow and preserve the distinction between Office
 
 ## Capability boundary
 
-Tools cover catalog browse/search/read/link, platform files, supported text/cell edits, templates, visualizations and knowledge search/ingest. Office catalog administration, binding ACL, public share rotate, trash and unsupported editor operations have no Lara operational tool; explain the Documents UI path without claiming a mutation.
+Tools cover catalog browse/search/read/link, platform files, supported text/cell edits, templates, visualizations and knowledge search/ingest. Office catalog administration, document ACL, public share rotate, trash and unsupported editor operations have no Lara operational tool; explain the Documents UI path without claiming a mutation.

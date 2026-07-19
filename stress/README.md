@@ -75,11 +75,11 @@ make stress 100 DRY_RUN=1
 
 ## Flows
 
-`stress/services/flows.js` тестирует A2A `message/send` в async-режиме:
+`stress/services/flows.js` тестирует A2A `SendMessage` в async-режиме:
 
-1. `message/send` с `metadata.execution_mode=async`.
+1. `SendMessage` с `configuration.returnImmediately=true` и header `A2A-Version: 1.0`.
 2. Получение `taskId` без ожидания выполнения flow.
-3. Polling результата через A2A `tasks/get`.
+3. Polling результата через A2A `GetTask`.
 
 Покрыты `example_graph` и `example_react`, разные branches и разные входные данные.
 По умолчанию включён `metadata.__mock__` (Mock Control System): каждая llm-нода

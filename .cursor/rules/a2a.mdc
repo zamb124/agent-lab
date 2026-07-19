@@ -1,0 +1,80 @@
+---
+description: "A2A Protocol 1.0 hard cut: JSON-RPC methods, Parts, SSE StreamResponse, fixtures pin, no 0.3"
+alwaysApply: false
+---
+
+# A2A Protocol 1.0 (hard cut)
+
+Платформа реализует **только** [A2A Protocol 1.0.0](https://a2a-protocol.org/v1.0.0/specification/). Binding: **JSON-RPC 2.0 + SSE**. gRPC / HTTP+JSON REST — вне scope.
+
+## Источник правды
+
+| Артефакт | Где |
+|---|---|
+| Normative proto | `tests/flows/a2a_conformance/fixtures/official/a2a.proto` (pin tag `v1.0.0`) |
+| JSON Schema | `tests/flows/a2a_conformance/fixtures/official/a2a.json` |
+| Pin metadata | `VERSION` + `scripts/pin_a2a_official_fixtures.py` (`make check-a2a-fixtures`) |
+| SDK | `a2a-sdk>=1.0,<2` (protobuf types в `a2a.types`) |
+| Platform helpers | `core/a2a/` (`methods`, `errors`, `codec`, `task_states`) |
+
+Запрещено править pin «под код». Drift → чинить платформу или осознанно bump pin.
+
+## JSON-RPC methods (PascalCase only)
+
+`SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask`, `SubscribeToTask`, `CreateTaskPushNotificationConfig`, `GetTaskPushNotificationConfig`, `ListTaskPushNotificationConfigs`, `DeleteTaskPushNotificationConfig`, `GetExtendedAgentCard`.
+
+Любые 0.3 имена (`message/send`, `tasks/resubscribe`, …) → `-32601`. Без aliases.
+
+## Wire
+
+- Parts: oneof `text` | `raw` | `url` | `data` (+ optional `filename`/`mediaType`). **Нет** `kind`, `FileWithBytes`, `FileWithUri`.
+- Stream SSE `result`: `task` | `message` | `statusUpdate` | `artifactUpdate`. **Нет** `kind: status-update`, **нет** `final` на statusUpdate (закрытие стрима = terminal/interrupted state).
+- Push webhook: body = `StreamResponse` ProtoJSON. Опционально platform `statusUpdate.metadata.final` (bool) — **не** поле A2A proto, только extension для подписчиков.
+- Enums ProtoJSON: `ROLE_USER` / `ROLE_AGENT`, `TASK_STATE_*`.
+- Header `A2A-Version: 1.0` (иное → `-32009`).
+- Errors: `-32001`…`-32009` из `core.a2a.errors.A2AErrorCode`.
+
+## Agent Card
+
+`supportedInterfaces[]` с `protocolBinding: JSONRPC`, `protocolVersion: "1.0"`.  
+Capabilities согласованы с кодом: `streaming=true`, `pushNotifications=true`, `extendedAgentCard=false` → `GetExtendedAgentCard` возвращает `-32007`/`-32004`, не silent fallback.
+
+`skills` — **обязательное** поле A2A 1.0 (ветки flow как `AgentSkill[]`).  
+Платформенные extensions: `branches` (зеркало `skills`), `variables` — не заменяют и не удаляют `skills`.
+
+`RegistryFlowCard` (`apps/flows/src/api/registry.py`, поле `protocolVersion`) — **не** A2A Agent Card: это platform registry discovery, отдельный контракт от `GET /{flow_id}/.well-known/agent-card.json`.
+
+## SendMessage blocking
+
+`SendMessageConfiguration.returnImmediately` (A2A 1.0):
+- `false` / omit — blocking до terminal (`COMPLETED`/`FAILED`/`CANCELED`/`REJECTED`) или interrupted (`INPUT_REQUIRED`/`AUTH_REQUIRED`).
+- `true` — сразу `Task` со `TASK_STATE_SUBMITTED`; дальше `GetTask` / `SubscribeToTask` / push.
+
+Запрещён proprietary async через `metadata.execution_mode` / `metadata.mode`.
+
+## Files
+
+- Inbound `Part.raw` → S3 + `FileRecord`.
+- Inbound `Part.url`: platform download → reuse `file_id`; external → SSRF-safe fetch (`apps/flows/src/files/ssrf_fetch.py`) → persist. Fail closed.
+
+## Clients
+
+- HTTP API: `apps/flows/src/api/a2a.py` + `A2AChannel`.
+- Chat UI: `core/frontend/static/lib/chat/runtime/a2a-stream.js`, `a2a-chat-runtime.js`.
+- Outbound: `core/clients/a2a_client.py`.
+- Internal platform `ExecutionTaskState` остаётся kebab-case; маппинг на wire — `core.a2a.task_states`.
+
+## Tests
+
+- Conformance: `tests/flows/a2a_conformance/` — без monkeypatch/MockLLM; code_node + real stack (`make test-up`).
+- Push webhooks: `idle_worker` в `scripts/test_stack.py` (очередь `idle`); регистрация URL — в `SendMessage.configuration.taskPushNotificationConfig` до старта task (иначе race с terminal).
+- Shared builders: `tests/flows/_a2a_v1.py`.
+- CI: `make check-a2a-fixtures` в `test-static`.
+
+## Запреты
+
+1. Dual-stack / `a2a.compat.v0_3` в runtime.
+2. Свои A2A Pydantic-модели вместо `a2a.types`.
+3. Alias старых method names.
+4. `final=` на `TaskStatusUpdateEvent`.
+5. Моки транспорта A2A в conformance suite.

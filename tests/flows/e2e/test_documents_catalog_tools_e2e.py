@@ -12,6 +12,7 @@ import json
 from typing import Any, cast
 
 import pytest
+from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import Message
 from docx import Document
 from fastapi import FastAPI
@@ -28,6 +29,7 @@ from apps.flows.tools.documents_catalog import (
     documents_list_catalog,
     documents_read,
 )
+from core.a2a import mapping_from_struct
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
@@ -84,15 +86,15 @@ def _catalog_ids(payload: JsonObject) -> set[str]:
     return out
 
 
-def _binding_ids(payload: JsonObject, key: str = "documents") -> set[str]:
+def _file_ids(payload: JsonObject, key: str = "documents") -> set[str]:
     items = payload[key]
     assert isinstance(items, list)
     out: set[str] = set()
     for item in items:
         obj = require_json_object(item, f"{key}.item")
-        binding_id = obj["binding_id"]
-        assert isinstance(binding_id, str)
-        out.add(binding_id)
+        file_id = obj["file_id"]
+        assert isinstance(file_id, str)
+        out.add(file_id)
     return out
 
 
@@ -126,7 +128,7 @@ async def _upload_document(
     filename: str,
     content: bytes,
     content_type: str,
-) -> tuple[str, str]:
+) -> str:
     response = await office_client_http.post(
         "/documents/api/v1/documents",
         headers=headers,
@@ -135,11 +137,9 @@ async def _upload_document(
     )
     assert response.status_code == 200, response.text
     payload = response.json()
-    binding_id = payload["binding_id"]
     file_id = payload["file_id"]
-    assert isinstance(binding_id, str) and binding_id
     assert isinstance(file_id, str) and file_id
-    return binding_id, file_id
+    return file_id
 
 
 async def _enable_rag_index(
@@ -258,7 +258,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
 
     leaf_marker = f"LEAF_BODY_{unique_id}"
     leaf_title = f"LeafReport {unique_id}"
-    leaf_binding_id, leaf_file_id = await _upload_document(
+    leaf_file_id = await _upload_document(
         office_client_http,
         headers,
         catalog_id=l3,
@@ -270,7 +270,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
 
     mid_title = f"MidDocx {unique_id}"
     mid_marker = f"MID_DOCX_{unique_id}"
-    mid_binding_id, mid_file_id = await _upload_document(
+    mid_file_id = await _upload_document(
         office_client_http,
         headers,
         catalog_id=l2,
@@ -281,7 +281,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
     )
 
     image_title = f"PreviewPng {unique_id}"
-    image_binding_id, _image_file_id = await _upload_document(
+    image_file_id = await _upload_document(
         office_client_http,
         headers,
         catalog_id=l1,
@@ -292,7 +292,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
     )
 
     decoy_title = f"DecoyRoot {unique_id}"
-    decoy_binding_id, _decoy_file_id = await _upload_document(
+    decoy_file_id = await _upload_document(
         office_client_http,
         headers,
         catalog_id=l0,
@@ -321,7 +321,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
     )
     assert at_l0["success"] is True
     assert _catalog_ids(at_l0) == {l1}
-    assert _binding_ids(at_l0) == {decoy_binding_id}
+    assert _file_ids(at_l0) == {decoy_file_id}
 
     at_l1 = require_json_object(
         await documents_list_catalog.run({"catalog_id": l1}, state),
@@ -329,7 +329,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
     )
     assert at_l1["success"] is True
     assert _catalog_ids(at_l1) == {l2}
-    assert _binding_ids(at_l1) == {image_binding_id}
+    assert _file_ids(at_l1) == {image_file_id}
 
     at_l2 = require_json_object(
         await documents_list_catalog.run({"catalog_id": l2}, state),
@@ -337,7 +337,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
     )
     assert at_l2["success"] is True
     assert _catalog_ids(at_l2) == {l3}
-    assert _binding_ids(at_l2) == {mid_binding_id}
+    assert _file_ids(at_l2) == {mid_file_id}
 
     at_l3 = require_json_object(
         await documents_list_catalog.run({"catalog_id": l3}, state),
@@ -345,7 +345,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
     )
     assert at_l3["success"] is True
     assert _catalog_ids(at_l3) == set()
-    assert _binding_ids(at_l3) == {leaf_binding_id}
+    assert _file_ids(at_l3) == {leaf_file_id}
 
     # --- documents_find: lexical scoped / global / auto / semantic-disabled ---
     lexical_scoped = require_json_object(
@@ -357,7 +357,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
     )
     assert lexical_scoped["success"] is True
     assert lexical_scoped["mode_used"] == "lexical"
-    assert _binding_ids(lexical_scoped, "items") == {leaf_binding_id}
+    assert _file_ids(lexical_scoped, "items") == {leaf_file_id}
 
     lexical_global = require_json_object(
         await documents_find.run(
@@ -367,7 +367,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         "find.lexical_global",
     )
     assert lexical_global["success"] is True
-    assert leaf_binding_id in _binding_ids(lexical_global, "items")
+    assert leaf_file_id in _file_ids(lexical_global, "items")
 
     auto_before_rag = require_json_object(
         await documents_find.run(
@@ -378,7 +378,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
     )
     assert auto_before_rag["success"] is True
     assert auto_before_rag["mode_used"] == "lexical"
-    assert leaf_binding_id in _binding_ids(auto_before_rag, "items")
+    assert leaf_file_id in _file_ids(auto_before_rag, "items")
 
     semantic_disabled = require_json_object(
         await documents_find.run(
@@ -416,7 +416,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
     )
     assert semantic_ok["success"] is True
     assert semantic_ok["mode_used"] == "semantic"
-    assert leaf_binding_id in _binding_ids(semantic_ok, "items")
+    assert leaf_file_id in _file_ids(semantic_ok, "items")
 
     auto_after_rag = require_json_object(
         await documents_find.run(
@@ -427,16 +427,16 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
     )
     assert auto_after_rag["success"] is True
     assert auto_after_rag["mode_used"] == "semantic"
-    assert leaf_binding_id in _binding_ids(auto_after_rag, "items")
+    assert leaf_file_id in _file_ids(auto_after_rag, "items")
 
-    # --- documents_read: binding_id + file_id ---
-    read_binding = require_json_object(
-        await documents_read.run({"binding_id": leaf_binding_id}, state),
-        "read.binding",
+    # --- documents_read: file_id ---
+    read_leaf = require_json_object(
+        await documents_read.run({"file_id": leaf_file_id}, state),
+        "read.leaf",
     )
-    assert read_binding["success"] is True
-    assert read_binding["file_id"] == leaf_file_id
-    assert leaf_marker in str(read_binding["envelope"])
+    assert read_leaf["success"] is True
+    assert read_leaf["file_id"] == leaf_file_id
+    assert leaf_marker in str(read_leaf["envelope"])
 
     read_file = require_json_object(
         await documents_read.run({"file_id": mid_file_id}, state),
@@ -449,19 +449,19 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
     # --- documents_get_link: editor + preview ---
     editor = require_json_object(
         await documents_get_link.run(
-            {"binding_id": leaf_binding_id, "kind": "editor"},
+            {"file_id": leaf_file_id, "kind": "editor"},
             state,
         ),
         "link.editor",
     )
     assert editor["success"] is True
     assert editor["kind"] == "editor"
-    assert f"/documents/edit/{leaf_binding_id}" in str(editor["url"])
+    assert f"/documents/edit/{leaf_file_id}" in str(editor["url"])
     assert "namespace=default" in str(editor["url"])
 
     preview_image = require_json_object(
         await documents_get_link.run(
-            {"binding_id": image_binding_id, "kind": "preview"},
+            {"file_id": image_file_id, "kind": "preview"},
             state,
         ),
         "link.preview_image",
@@ -472,7 +472,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
 
     preview_text = require_json_object(
         await documents_get_link.run(
-            {"binding_id": leaf_binding_id, "kind": "preview"},
+            {"file_id": leaf_file_id, "kind": "preview"},
             state,
         ),
         "link.preview_text",
@@ -483,13 +483,7 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
 
 
 def _message_plain_text(message: Message) -> str:
-    chunks: list[str] = []
-    for part in message.parts:
-        root = part.root
-        text = getattr(root, "text", None)
-        if isinstance(text, str) and text:
-            chunks.append(text)
-    return "".join(chunks)
+    return get_message_text(message)
 
 
 def _json_object_from_tool_result(raw: object) -> dict[str, Any] | None:
@@ -518,8 +512,10 @@ def _successful_tool_payloads_from_messages(state: ExecutionState) -> list[dict[
     for message in state.messages:
         if not isinstance(message, Message):
             continue
-        metadata = message.metadata
-        if not isinstance(metadata, dict) or "tool_call_id" not in metadata:
+        if not message.HasField("metadata"):
+            continue
+        metadata = mapping_from_struct(message.metadata)
+        if "tool_call_id" not in metadata:
             continue
         parsed = _json_object_from_tool_result(_message_plain_text(message))
         if parsed is not None and parsed.get("success") is True:
@@ -553,7 +549,7 @@ async def test_llm_node_runner_documents_catalog_tools(
     )
     marker = f"RUNNER_CATALOG_{unique_id}"
     title = f"RunnerLeaf {unique_id}"
-    binding_id, file_id = await _upload_document(
+    file_id = await _upload_document(
         office_client_http,
         headers,
         catalog_id=l2,
@@ -584,16 +580,16 @@ async def test_llm_node_runner_documents_catalog_tools(
             {
                 "type": "tool_call",
                 "tool": "documents_read",
-                "args": {"binding_id": binding_id, "page_end": 0, "budget": 4000},
+                "args": {"file_id": file_id, "page_end": 0, "budget": 4000},
             },
             {
                 "type": "tool_call",
                 "tool": "documents_get_link",
-                "args": {"binding_id": binding_id, "kind": "editor"},
+                "args": {"file_id": file_id, "kind": "editor"},
             },
             {
                 "type": "text",
-                "content": f"done {binding_id} {file_id}",
+                "content": f"done {file_id}",
             },
         ]
     )
@@ -655,7 +651,7 @@ async def test_llm_node_runner_documents_catalog_tools(
     )
     found_leaf = any(
         payload.get("mode_used") == "lexical"
-        and binding_id in _binding_ids(payload, "items")
+        and file_id in _file_ids(payload, "items")
         for payload in payloads
         if "items" in payload
     )
@@ -665,7 +661,7 @@ async def test_llm_node_runner_documents_catalog_tools(
         if "envelope" in payload
     )
     linked = any(
-        payload.get("kind") == "editor" and binding_id in str(payload.get("url"))
+        payload.get("kind") == "editor" and file_id in str(payload.get("url"))
         for payload in payloads
         if payload.get("kind") == "editor"
     )

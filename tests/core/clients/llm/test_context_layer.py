@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import pytest
-from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
+from a2a.types import Message, Part
+from a2a.types.a2a_pb2 import (
+    ROLE_USER,
+)
 
 from core.ai.company_settings import METADATA_KEY
 from core.clients.llm.context_layer import (
@@ -166,18 +169,10 @@ async def test_context_layer_multimodal_bypasses_compile() -> None:
     messages.append(
         Message(
             message_id="image-message",
-            role=Role.user,
+            role=ROLE_USER,
             parts=[
-                Part(root=TextPart(text="current image request")),
-                Part(
-                    root=FilePart(
-                        file=FileWithBytes(
-                            bytes="aW1hZ2U=",
-                            name="image.png",
-                            mime_type="image/png",
-                        )
-                    )
-                ),
+                Part(text="current image request"),
+                Part(raw=b"image", filename="image.png", media_type="image/png"),
             ],
         )
     )

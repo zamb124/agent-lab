@@ -1,12 +1,64 @@
 /**
- * Чистый A2A chat runtime.
+ * Чистый A2A Protocol 1.0 chat runtime.
  *
  * One JSON-RPC/SSE frame in, normalized chat/runtime events out. No DOM, no
  * EventBus, без fetch, без импортов app.
+ *
+ * Wire: `result.statusUpdate` / `result.artifactUpdate` / `result.task` /
+ * `result.message`. Parts без `kind`. TaskState — `TASK_STATE_*`. Role —
+ * `ROLE_USER` / `ROLE_AGENT`. Поля `final` на statusUpdate нет: граница
+ * стрима = terminal/interrupted state или конец SSE.
  */
 
-export const A2A_CHAT_MESSAGE_METHODS = Object.freeze(['message/send', 'message/stream']);
-export const A2A_CHAT_CANCEL_METHOD = 'tasks/cancel';
+export const A2A_CHAT_MESSAGE_METHODS = Object.freeze(['SendMessage', 'SendStreamingMessage']);
+export const A2A_CHAT_CANCEL_METHOD = 'CancelTask';
+export const A2A_CHAT_SUBSCRIBE_METHOD = 'SubscribeToTask';
+
+const A2A_TASK_STATE_TO_PLATFORM = Object.freeze({
+    TASK_STATE_SUBMITTED: 'submitted',
+    TASK_STATE_WORKING: 'working',
+    TASK_STATE_COMPLETED: 'completed',
+    TASK_STATE_FAILED: 'failed',
+    TASK_STATE_CANCELED: 'canceled',
+    TASK_STATE_INPUT_REQUIRED: 'input-required',
+    TASK_STATE_REJECTED: 'rejected',
+    TASK_STATE_AUTH_REQUIRED: 'auth-required',
+});
+
+/**
+ * A2A 1.0 StreamResponse → `{ frameKind, event }`.
+ * @param {object|null|undefined} result
+ * @returns {{ frameKind: 'statusUpdate'|'artifactUpdate'|'task'|'message', event: object }|null}
+ */
+export function unwrapA2aStreamResult(result) {
+    if (!result || typeof result !== 'object') {
+        return null;
+    }
+    if (result.statusUpdate && typeof result.statusUpdate === 'object') {
+        return { frameKind: 'statusUpdate', event: result.statusUpdate };
+    }
+    if (result.artifactUpdate && typeof result.artifactUpdate === 'object') {
+        return { frameKind: 'artifactUpdate', event: result.artifactUpdate };
+    }
+    if (result.task && typeof result.task === 'object') {
+        return { frameKind: 'task', event: result.task };
+    }
+    if (result.message && typeof result.message === 'object') {
+        return { frameKind: 'message', event: result.message };
+    }
+    return null;
+}
+
+/** Wire `TASK_STATE_*` → platform kebab (`completed`, `input-required`, …). */
+export function normalizeA2aTaskState(state) {
+    if (typeof state !== 'string' || state.length === 0) {
+        return null;
+    }
+    if (Object.prototype.hasOwnProperty.call(A2A_TASK_STATE_TO_PLATFORM, state)) {
+        return A2A_TASK_STATE_TO_PLATFORM[state];
+    }
+    return null;
+}
 
 export function extractA2aTextFromParts(parts) {
     if (!Array.isArray(parts)) {
@@ -17,7 +69,7 @@ export function extractA2aTextFromParts(parts) {
             if (!part || typeof part !== 'object') {
                 return '';
             }
-            if (part.kind === 'text' && typeof part.text === 'string') {
+            if (typeof part.text === 'string') {
                 return part.text;
             }
             const root = part.root;
@@ -30,21 +82,25 @@ export function extractA2aTextFromParts(parts) {
         .join('');
 }
 
+function _eventFromResult(result) {
+    const unwrapped = unwrapA2aStreamResult(result);
+    return unwrapped ? unwrapped.event : result;
+}
+
 export function resolveA2aTaskId(result, fallback) {
-    if (result && typeof result === 'object') {
-        if (typeof result.taskId === 'string' && result.taskId.length > 0) {
-            return result.taskId;
+    const unwrapped = unwrapA2aStreamResult(result);
+    const event = unwrapped ? unwrapped.event : result;
+    if (event && typeof event === 'object') {
+        if (typeof event.taskId === 'string' && event.taskId.length > 0) {
+            return event.taskId;
         }
-        if (typeof result.task_id === 'string' && result.task_id.length > 0) {
-            return result.task_id;
+        if (unwrapped && unwrapped.frameKind === 'task' && typeof event.id === 'string' && event.id.length > 0) {
+            return event.id;
         }
-        const status = result.status;
+        const status = event.status;
         if (status && typeof status === 'object') {
             if (typeof status.taskId === 'string' && status.taskId.length > 0) {
                 return status.taskId;
-            }
-            if (typeof status.task_id === 'string' && status.task_id.length > 0) {
-                return status.task_id;
             }
         }
     }
@@ -52,28 +108,44 @@ export function resolveA2aTaskId(result, fallback) {
 }
 
 export function resolveA2aContextId(result, fallback) {
-    if (result && typeof result === 'object') {
-        if (typeof result.contextId === 'string' && result.contextId.length > 0) {
-            return result.contextId;
-        }
-        if (typeof result.context_id === 'string' && result.context_id.length > 0) {
-            return result.context_id;
+    const event = _eventFromResult(result);
+    if (event && typeof event === 'object') {
+        if (typeof event.contextId === 'string' && event.contextId.length > 0) {
+            return event.contextId;
         }
     }
     return typeof fallback === 'string' && fallback.length > 0 ? fallback : null;
 }
 
-export function isA2aTerminalState(state, final) {
-    if (state === 'completed' || state === 'finished') {
-        return final === true;
-    }
-    if (state === 'failed' || state === 'error') {
-        return true;
-    }
-    if ((state === 'input-required' || state === 'input_required') && final === true) {
-        return true;
-    }
-    return false;
+/** Terminal: COMPLETED / FAILED / CANCELED / REJECTED. */
+export function isA2aTerminalState(state) {
+    const normalized = normalizeA2aTaskState(state);
+    return (
+        normalized === 'completed'
+        || normalized === 'failed'
+        || normalized === 'canceled'
+        || normalized === 'rejected'
+    );
+}
+
+/** Interrupted: INPUT_REQUIRED / AUTH_REQUIRED. */
+export function isA2aInterruptedState(state) {
+    const normalized = normalizeA2aTaskState(state);
+    return normalized === 'input-required' || normalized === 'auth-required';
+}
+
+/** Stream boundary без поля `final`: terminal или interrupted. */
+export function isA2aStreamBoundaryState(state) {
+    return isA2aTerminalState(state) || isA2aInterruptedState(state);
+}
+
+function _isDataPart(part) {
+    return Boolean(
+        part
+        && typeof part === 'object'
+        && part.data != null
+        && typeof part.data === 'object',
+    );
 }
 
 export function inputRequiredFieldsFromA2a(message, resultMetadata) {
@@ -163,15 +235,18 @@ function _authorFromMetadata(metadata) {
 }
 
 function _authorFromResult(result) {
-    if (!result || typeof result !== 'object') return null;
-    if (result.kind === 'artifact-update') {
-        return _authorFromMetadata(result.artifact?.metadata);
+    const unwrapped = unwrapA2aStreamResult(result);
+    if (!unwrapped) {
+        return null;
     }
-    if (result.kind === 'message') {
-        return _authorFromMetadata(result.metadata);
+    if (unwrapped.frameKind === 'artifactUpdate') {
+        return _authorFromMetadata(unwrapped.event.artifact?.metadata);
     }
-    if (result.kind === 'status-update') {
-        return _authorFromMetadata(result.status?.message?.metadata);
+    if (unwrapped.frameKind === 'message') {
+        return _authorFromMetadata(unwrapped.event.metadata);
+    }
+    if (unwrapped.frameKind === 'statusUpdate') {
+        return _authorFromMetadata(unwrapped.event.status?.message?.metadata);
     }
     return null;
 }
@@ -254,21 +329,20 @@ function _terminalEvent(events, traceEntries, contextId, taskId, state, message)
     if (!taskId) {
         return;
     }
-    if (typeof state === 'string') {
-        if (state === 'completed' || state === 'finished' || state === 'failed' || state === 'error') {
-            const text = message ? extractA2aTextFromParts(message.parts) : '';
-            traceEntries.push({
-                context_id: contextId,
-                task_id: taskId,
-                fields: {
-                    kind: 'status_terminal',
-                    terminal_state: state,
-                    message_preview: text.length > 160 ? text.slice(0, 160) : text,
-                },
-            });
-        }
+    const normalized = normalizeA2aTaskState(state);
+    if (normalized === 'completed' || normalized === 'failed' || normalized === 'canceled' || normalized === 'rejected') {
+        const text = message ? extractA2aTextFromParts(message.parts) : '';
+        traceEntries.push({
+            context_id: contextId,
+            task_id: taskId,
+            fields: {
+                kind: 'status_terminal',
+                terminal_state: normalized,
+                message_preview: text.length > 160 ? text.slice(0, 160) : text,
+            },
+        });
     }
-    if (state === 'completed' || state === 'finished') {
+    if (normalized === 'completed') {
         const text = message ? extractA2aTextFromParts(message.parts) : '';
         const author = _authorFromMetadata(message?.metadata);
         events.push({
@@ -282,7 +356,7 @@ function _terminalEvent(events, traceEntries, contextId, taskId, state, message)
         });
         return;
     }
-    if (state === 'failed' || state === 'error') {
+    if (normalized === 'failed' || normalized === 'canceled' || normalized === 'rejected') {
         const text = message ? extractA2aTextFromParts(message.parts) : '';
         events.push({
             type: 'failed',
@@ -338,7 +412,7 @@ function _nodeRuntimeEventsFromArtifact(out, artifact, contextId, taskId) {
         return;
     }
     for (const part of artifact.parts) {
-        if (!part || part.kind !== 'data' || !part.data || typeof part.data !== 'object') {
+        if (!_isDataPart(part)) {
             continue;
         }
         const d = part.data;
@@ -440,7 +514,7 @@ function _artifactDataEvents(out, artifact, contextId, taskId) {
     }
     const canMutateMessages = typeof taskId === 'string' && taskId.length > 0;
     for (const part of artifact.parts) {
-        if (!part || part.kind !== 'data' || !part.data || typeof part.data !== 'object') {
+        if (!_isDataPart(part)) {
             continue;
         }
         const d = part.data;
@@ -590,48 +664,56 @@ export function mapA2aResultToChatRuntimeEvents(result, options = {}) {
         return out;
     }
 
+    const unwrapped = unwrapA2aStreamResult(result);
+    if (!unwrapped) {
+        return out;
+    }
+    const event = unwrapped.event;
+
     const taskId = resolveA2aTaskId(result, currentTaskId);
     const frameContextId = resolveA2aContextId(result, contextId);
+    // Активный conversation context клиента главнее frame.context_id: handoff child
+    // emit'ит `{parent}:handoff:{flow}`, но лента чата живёт в parent context.
+    const effectiveContextId = contextId || frameContextId;
     if (taskId) {
         out.nextTaskId = taskId;
     }
     const frameAuthor = _authorFromResult(result);
-    if (!out.taskPrimed && taskId && frameContextId) {
+    if (!out.taskPrimed && taskId && effectiveContextId) {
         out.events.push({
             type: 'task_started',
             payload: {
                 task_id: taskId,
-                context_id: frameContextId,
+                context_id: effectiveContextId,
                 ...(frameAuthor ? { author: frameAuthor } : {}),
             },
         });
         out.taskPrimed = true;
     }
 
-    if (result.kind === 'task' || (typeof result.id === 'string' && !result.kind)) {
+    if (unwrapped.frameKind === 'task') {
         return out;
     }
 
-    if (result.kind === 'message') {
-        _messageMetadataEvents(out.events, taskId, result);
+    if (unwrapped.frameKind === 'message') {
+        _messageMetadataEvents(out.events, taskId, event);
         return out;
     }
 
-    if (result.kind === 'artifact-update') {
-        return _artifactUpdateToRuntimeEvents(out, result, frameContextId, taskId);
+    if (unwrapped.frameKind === 'artifactUpdate') {
+        return _artifactUpdateToRuntimeEvents(out, event, effectiveContextId, taskId);
     }
 
-    if (result.kind === 'status-update') {
-        return _statusUpdateToRuntimeEvents(out, result, frameContextId, taskId);
+    if (unwrapped.frameKind === 'statusUpdate') {
+        return _statusUpdateToRuntimeEvents(out, event, effectiveContextId, taskId);
     }
 
     return out;
 }
 
-function _artifactUpdateToRuntimeEvents(out, result, contextId, taskId) {
-    const artifact = result.artifact;
+function _artifactUpdateToRuntimeEvents(out, event, contextId, taskId) {
+    const artifact = event.artifact;
     const author = _authorFromMetadata(artifact?.metadata);
-    const final = result.final === true;
     if (artifact) {
         _nodeRuntimeEventsFromArtifact(out, artifact, contextId, taskId);
     }
@@ -713,27 +795,18 @@ function _artifactUpdateToRuntimeEvents(out, result, contextId, taskId) {
         }
     }
 
-    const state = artifact ? artifact.state : null;
-    if (final) {
-        if (state === 'input-required' || state === 'input_required') {
-            _inputRequiredEvent(out.events, out.traceEntries, contextId, taskId, message, result.metadata);
-        } else {
-            _terminalEvent(out.events, out.traceEntries, contextId, taskId, state, message);
-        }
-        out.terminal = isA2aTerminalState(state, final);
-    }
     return out;
 }
 
-function _statusUpdateToRuntimeEvents(out, result, contextId, taskId) {
-    const status = result.status;
+function _statusUpdateToRuntimeEvents(out, event, contextId, taskId) {
+    const status = event.status;
     if (!status) {
         return out;
     }
     const message = status.message;
     const state = status.state;
-    const final = result.final === true;
-    const metadata = _metadataFrom(result, message);
+    const normalized = normalizeA2aTaskState(state);
+    const metadata = _metadataFrom(event, message);
 
     if (metadata && metadata.platform_ping === true) {
         out.events.push({
@@ -753,50 +826,43 @@ function _statusUpdateToRuntimeEvents(out, result, contextId, taskId) {
         _messageMetadataEvents(out.events, taskId, message);
     }
 
-    const activityTerminal =
-        final
-        || state === 'completed'
-        || state === 'finished'
-        || state === 'failed'
-        || state === 'error'
-        || state === 'input-required'
-        || state === 'input_required'
-        || state === 'canceled'
-        || state === 'cancelled';
-    if (!activityTerminal && taskId && message && typeof message === 'object' && Array.isArray(message.parts)) {
+    if (
+        !isA2aStreamBoundaryState(state)
+        && taskId
+        && message
+        && typeof message === 'object'
+        && Array.isArray(message.parts)
+    ) {
         const activity = extractA2aTextFromParts(message.parts);
         if (activity.length > 0) {
             out.events.push({ type: 'activity', payload: { task_id: taskId, text: activity } });
         }
     }
 
-    if (state === 'input-required' || state === 'input_required') {
-        const handoffContinue = metadata && metadata.platform_handoff_continue === true;
-        const oauthContinue = metadata && metadata.platform_oauth_continue === true;
-        if (final || handoffContinue || oauthContinue) {
-            _inputRequiredEvent(out.events, out.traceEntries, contextId, taskId, message, metadata);
-        }
+    if (normalized === 'input-required' || normalized === 'auth-required') {
+        _inputRequiredEvent(out.events, out.traceEntries, contextId, taskId, message, metadata);
         const interrupt = metadata && metadata.platform_interrupt;
         const body = interrupt && typeof interrupt === 'object' ? interrupt.body : null;
-        // Backend RedisSubscriber closes message/stream on an agent handoff even though
-        // the A2A status itself intentionally has final=false. Treat that protocol
-        // boundary as terminal so the chat does not replace it with stream_incomplete.
+        // Backend RedisSubscriber closes SendStreamingMessage on an agent handoff.
+        // Interrupted state is the stream boundary (нет поля final).
         if (body && typeof body === 'object' && body.kind === 'handoff') {
             out.terminal = true;
             return out;
         }
-        // HITL: закрываем message/stream → ChatController.syncHitlLiveTail (tasks/resubscribe).
+        // HITL: закрываем SendStreamingMessage → ChatController.syncHitlLiveTail (SubscribeToTask).
         if (body && typeof body === 'object' && body.kind === 'operator_task') {
             out.terminal = true;
             return out;
         }
-        out.terminal = isA2aTerminalState(state, final);
+        out.terminal = true;
         return out;
     }
 
-    if (final || state === 'failed' || state === 'error') {
+    if (isA2aTerminalState(state)) {
         _terminalEvent(out.events, out.traceEntries, contextId, taskId, state, message);
+        out.terminal = true;
+        return out;
     }
-    out.terminal = isA2aTerminalState(state, final);
+    out.terminal = false;
     return out;
 }

@@ -1067,12 +1067,10 @@
         "editor_customization": {
           "compact_toolbar": true,
           "compact_header": true,
-          "ui_theme": "theme-humanitec-light",
-          "platform_header_branding": true,
-          "logo_image_url": "",
-          "logo_image_dark_url": "",
-          "logo_link_url": "",
-          "features_tips": false
+          "ui_theme": "theme-platform-docs-light",
+          "features_tips": false,
+          "tab_style": "line",
+          "tab_background": "toolbar"
         }
       }
     },

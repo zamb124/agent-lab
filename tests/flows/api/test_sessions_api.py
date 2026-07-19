@@ -37,26 +37,30 @@ def create_test_state(
         branch_id=branch_id,
     )
 
-    from a2a.types import Message, Part, Role, TextPart
+    from a2a.types import Message, Part
+    from a2a.types.a2a_pb2 import (
+        ROLE_USER,
+        ROLE_AGENT,
+    )
 
     messages = []
     if first_message:
         messages.append(
             Message(
                 message_id="msg1",
-                role=Role.user,
-                parts=[Part(root=TextPart(text=first_message))],
+                role=ROLE_USER,
+                parts=[Part(text=first_message)],
                 task_id=task_id,
             )
         )
 
     for i in range(max(0, message_count - (1 if first_message else 0))):
-        role = Role.agent if i % 2 == 0 else Role.user
+        role = ROLE_AGENT if i % 2 == 0 else ROLE_USER
         messages.append(
             Message(
                 message_id=f"msg{i + 2}",
                 role=role,
-                parts=[Part(root=TextPart(text=f"Message {i + 2}"))],
+                parts=[Part(text=f"Message {i + 2}")],
                 task_id=task_id,
             )
         )

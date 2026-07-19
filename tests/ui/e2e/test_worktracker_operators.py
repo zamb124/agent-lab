@@ -37,6 +37,7 @@ from tests.ui.e2e.worktracker_e2e_helpers import (
     worktracker_api_reassign_work_item,
     worktracker_claim_task,
     worktracker_create_queue_ui,
+    worktracker_hitl_single_reply_complete,
     worktracker_open_inbox,
     worktracker_open_queues,
     worktracker_open_task_page,
@@ -53,6 +54,7 @@ OPERATOR_FOLLOWUP = "Уточните, пожалуйста, номер зака
 @pytest.mark.scenario(
     service="worktracker",
     tag="operators",
+    timeout_seconds=180,
     doc_slug="setup-operator-queue",
     title="Готовим очередь поддержки для агента",
     description=(
@@ -151,6 +153,7 @@ async def test_worktracker_setup_operator_queue(
 @pytest.mark.scenario(
     service="worktracker",
     tag="operators",
+    timeout_seconds=60,
     doc_slug="operator-inbox-single-reply",
     title="Оператор берёт задачу и отвечает один раз",
     description=(
@@ -187,7 +190,8 @@ async def test_worktracker_operator_inbox_single_reply(
 ) -> None:
     _ = hitl_demo_ready, flows_service, taskiq_worker, worktracker_http_service
     page = ui_page_system
-    await hitl_open_react_branch_chat(page, flows_ui, branch_id=HITL_BRANCH_NODE)
+    # example_graph HITL (single_reply) — тот же канон, что test_worktracker_hitl_single_reply_complete.
+    await flows_open_chat_page(page, flows_ui, EXAMPLE_GRAPH_ID)
     work_item_id = await hitl_trigger_deterministic(page, GREEN_GARDEN_HITL_MESSAGE)
 
     wt_page = await page.context.new_page()
@@ -229,12 +233,7 @@ async def test_worktracker_operator_inbox_single_reply(
             ),
         )
 
-        await worktracker_api_complete_work_item(
-            worktracker_ui.origin,
-            auth_token_system,
-            work_item_id,
-            resolution_text=GREEN_GARDEN_OPERATOR_REPLY,
-        )
+        await worktracker_hitl_single_reply_complete(editor, GREEN_GARDEN_OPERATOR_REPLY)
     finally:
         await wt_page.close()
 
@@ -265,6 +264,7 @@ async def test_worktracker_operator_inbox_single_reply(
 @pytest.mark.scenario(
     service="worktracker",
     tag="operators",
+    timeout_seconds=60,
     doc_slug="operator-takeover-dialog",
     title="Оператор ведёт живой диалог с покупателем",
     description=(
@@ -382,6 +382,7 @@ async def test_worktracker_operator_takeover_dialog(
 @pytest.mark.scenario(
     service="worktracker",
     tag="operators",
+    timeout_seconds=60,
     doc_slug="route-and-reassign-tasks",
     title="Маршрутизация и переназначение задач",
     description=(
@@ -501,6 +502,7 @@ async def test_worktracker_route_and_reassign_tasks(
 @pytest.mark.scenario(
     service="worktracker",
     tag="operators",
+    timeout_seconds=60,
     doc_slug="track-work-on-board",
     title="Ведём задачи на доске",
     description=(

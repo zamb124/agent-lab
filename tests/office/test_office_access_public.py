@@ -6,10 +6,10 @@ import pytest
 
 from tests.office.access_helpers import (
     create_private_catalog,
-    enable_binding_link,
+    enable_document_link,
     enable_catalog_link,
     extract_public_token,
-    upload_txt_binding,
+    upload_txt_document,
 )
 
 pytestmark = [pytest.mark.timeout(120)]
@@ -22,14 +22,14 @@ async def test_patch_binding_access_enables_public_link(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"access-binding-{unique_id}",
     )
     patch = await office_client.patch(
-        f"/documents/api/v1/documents/{binding_id}/access",
+        f"/documents/api/v1/documents/{file_id}/access",
         headers=auth_headers_system,
         json={"link_enabled": True, "link_permission": "view"},
     )
@@ -48,24 +48,24 @@ async def test_public_file_open_without_session(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"public-open-{unique_id}",
     )
-    token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
 
     resolve = await office_client.get(f"/documents/api/v1/public/resolve/{token}")
     assert resolve.status_code == 200
     resolve_body = resolve.json()
     assert resolve_body["resource_kind"] == "binding"
-    assert resolve_body["binding_id"] == binding_id
+    assert resolve_body["file_id"] == file_id
 
     open_response = await office_client.get(f"/documents/api/v1/public/open/{token}")
     assert open_response.status_code == 200, open_response.text
     open_body = open_response.json()
-    assert open_body["binding_id"] == binding_id
+    assert open_body["file_id"] == file_id
     assert isinstance(open_body.get("download_url"), str)
     assert open_body["download_url"].startswith("http")
 
@@ -77,16 +77,16 @@ async def test_rotate_link_invalidates_old_token(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"rotate-link-{unique_id}",
     )
-    old_token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    old_token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
 
     rotate = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/access/link/rotate",
+        f"/documents/api/v1/documents/{file_id}/access/link/rotate",
         headers=auth_headers_system,
     )
     assert rotate.status_code == 200, rotate.text
@@ -107,26 +107,26 @@ async def test_public_catalog_hides_binding_without_own_link(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    visible_binding_id = await upload_txt_binding(
+    visible_file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"visible-{unique_id}",
     )
-    hidden_binding_id = await upload_txt_binding(
+    hidden_file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"hidden-{unique_id}",
     )
-    await enable_binding_link(office_client, auth_headers_system, visible_binding_id)
+    await enable_document_link(office_client, auth_headers_system, visible_file_id)
     catalog_token, _body = await enable_catalog_link(office_client, auth_headers_system, catalog_id)
 
     items = await office_client.get(f"/documents/api/v1/public/catalog/{catalog_token}/items")
     assert items.status_code == 200
-    listed_ids = {row["binding_id"] for row in items.json()["items"]}
-    assert visible_binding_id in listed_ids
-    assert hidden_binding_id not in listed_ids
+    listed_ids = {row["file_id"] for row in items.json()["items"]}
+    assert visible_file_id in listed_ids
+    assert hidden_file_id not in listed_ids
 
 
 @pytest.mark.asyncio
@@ -136,21 +136,21 @@ async def test_public_catalog_binding_open_without_session(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"catalog-open-{unique_id}",
     )
-    await enable_binding_link(office_client, auth_headers_system, binding_id)
+    await enable_document_link(office_client, auth_headers_system, file_id)
     catalog_token, _body = await enable_catalog_link(office_client, auth_headers_system, catalog_id)
 
     open_response = await office_client.get(
-        f"/documents/api/v1/public/catalog/{catalog_token}/bindings/{binding_id}/open",
+        f"/documents/api/v1/public/catalog/{catalog_token}/files/{file_id}/open",
     )
     assert open_response.status_code == 200, open_response.text
     open_body = open_response.json()
-    assert open_body["binding_id"] == binding_id
+    assert open_body["file_id"] == file_id
     assert isinstance(open_body.get("download_url"), str)
 
 
@@ -161,14 +161,14 @@ async def test_get_binding_access_reflects_catalog_company_visibility(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"member-access-{unique_id}",
     )
     get_access = await office_client.get(
-        f"/documents/api/v1/documents/{binding_id}/access",
+        f"/documents/api/v1/documents/{file_id}/access",
         headers=auth_headers_system,
     )
     assert get_access.status_code == 200
@@ -223,13 +223,13 @@ async def test_public_catalog_items_with_binding_token_rejected(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"wrong-token-{unique_id}",
     )
-    binding_token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    binding_token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
 
     items = await office_client.get(f"/documents/api/v1/public/catalog/{binding_token}/items")
     assert items.status_code == 400
@@ -237,24 +237,24 @@ async def test_public_catalog_items_with_binding_token_rejected(
 
 
 @pytest.mark.asyncio
-async def test_public_catalog_binding_open_wrong_binding_id_not_found(
+async def test_public_catalog_binding_open_wrong_file_id_not_found(
     office_client,
     auth_headers_system,
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"wrong-bind-{unique_id}",
     )
-    await enable_binding_link(office_client, auth_headers_system, binding_id)
+    await enable_document_link(office_client, auth_headers_system, file_id)
     catalog_token, _body = await enable_catalog_link(office_client, auth_headers_system, catalog_id)
 
-    fake_binding_id = f"missing_binding_{unique_id}"
+    fake_file_id = f"missing_binding_{unique_id}"
     open_response = await office_client.get(
-        f"/documents/api/v1/public/catalog/{catalog_token}/bindings/{fake_binding_id}/open",
+        f"/documents/api/v1/public/catalog/{catalog_token}/files/{fake_file_id}/open",
     )
     assert open_response.status_code == 404
 
@@ -266,7 +266,7 @@ async def test_public_catalog_binding_open_without_binding_link_not_found(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
@@ -275,7 +275,7 @@ async def test_public_catalog_binding_open_without_binding_link_not_found(
     catalog_token, _body = await enable_catalog_link(office_client, auth_headers_system, catalog_id)
 
     open_response = await office_client.get(
-        f"/documents/api/v1/public/catalog/{catalog_token}/bindings/{binding_id}/open",
+        f"/documents/api/v1/public/catalog/{catalog_token}/files/{file_id}/open",
     )
     assert open_response.status_code == 404
 
@@ -298,17 +298,17 @@ async def test_public_catalog_binding_open_binding_from_other_catalog_not_found(
         unique_id,
         title_prefix="cat-b",
     )
-    binding_in_b = await upload_txt_binding(
+    binding_in_b = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_b,
         title=f"other-cat-{unique_id}",
     )
-    await enable_binding_link(office_client, auth_headers_system, binding_in_b)
+    await enable_document_link(office_client, auth_headers_system, binding_in_b)
     catalog_a_token, _body = await enable_catalog_link(office_client, auth_headers_system, catalog_a)
 
     open_response = await office_client.get(
-        f"/documents/api/v1/public/catalog/{catalog_a_token}/bindings/{binding_in_b}/open",
+        f"/documents/api/v1/public/catalog/{catalog_a_token}/files/{binding_in_b}/open",
     )
     assert open_response.status_code == 404
 
@@ -320,16 +320,16 @@ async def test_public_open_soft_deleted_binding_not_found(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"deleted-open-{unique_id}",
     )
-    token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
 
     delete_response = await office_client.delete(
-        f"/documents/api/v1/documents/{binding_id}",
+        f"/documents/api/v1/documents/{file_id}",
         headers=auth_headers_system,
     )
     assert delete_response.status_code == 204
@@ -345,13 +345,13 @@ async def test_public_routes_work_without_authorization_header(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"anon-{unique_id}",
     )
-    binding_token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    binding_token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
     catalog_token, _body2 = await enable_catalog_link(office_client, auth_headers_system, catalog_id)
 
     resolve = await office_client.get(f"/documents/api/v1/public/resolve/{binding_token}")
@@ -364,7 +364,7 @@ async def test_public_routes_work_without_authorization_header(
     assert items.status_code == 200
 
     catalog_open = await office_client.get(
-        f"/documents/api/v1/public/catalog/{catalog_token}/bindings/{binding_id}/open",
+        f"/documents/api/v1/public/catalog/{catalog_token}/files/{file_id}/open",
     )
     assert catalog_open.status_code == 200
 
@@ -376,7 +376,7 @@ async def test_access_routes_require_authentication(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
@@ -386,7 +386,7 @@ async def test_access_routes_require_authentication(
     catalog_get = await office_client.get(f"/documents/api/v1/catalogs/{catalog_id}/access")
     assert catalog_get.status_code == 401
 
-    binding_get = await office_client.get(f"/documents/api/v1/documents/{binding_id}/access")
+    binding_get = await office_client.get(f"/documents/api/v1/documents/{file_id}/access")
     assert binding_get.status_code == 401
 
 
@@ -397,16 +397,16 @@ async def test_public_open_after_disable_link_not_found(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"disabled-open-{unique_id}",
     )
-    token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
 
     disable = await office_client.patch(
-        f"/documents/api/v1/documents/{binding_id}/access",
+        f"/documents/api/v1/documents/{file_id}/access",
         headers=auth_headers_system,
         json={"link_enabled": False},
     )

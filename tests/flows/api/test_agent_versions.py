@@ -22,7 +22,7 @@ import pytest
 
 def _msg(text: str, context_id: str = None, metadata: Dict = None) -> Dict[str, Any]:
     """Создаёт A2A Message с ОБЯЗАТЕЛЬНЫМИ полями по спецификации."""
-    m = {"messageId": str(uuid.uuid4()), "role": "user", "parts": [{"kind": "text", "text": text}]}
+    m = {"messageId": str(uuid.uuid4()), "role": "ROLE_USER", "parts": [{"text": text}]}
     if context_id:
         m["contextId"] = context_id
     return m
@@ -398,7 +398,7 @@ class TestA2AVersionQueryParam:
             json={
                 "jsonrpc": "2.0",
                 "id": "test-version-query",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Hello")},
             },
         )
@@ -427,7 +427,7 @@ class TestA2AVersionQueryParam:
             json={
                 "jsonrpc": "2.0",
                 "id": "test-bad-version",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Hello")},
             },
         )
@@ -477,7 +477,7 @@ class TestA2AVersionMetadata:
             json={
                 "jsonrpc": "2.0",
                 "id": "test-metadata-version",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Hello"), "metadata": {"version": v1}},
             },
         )
@@ -523,7 +523,7 @@ class TestA2AVersionMetadata:
             json={
                 "jsonrpc": "2.0",
                 "id": "test-priority",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Hello"), "metadata": {"version": v2}},
             },
         )
@@ -552,7 +552,7 @@ class TestA2AVersionMetadata:
             json={
                 "jsonrpc": "2.0",
                 "id": "test-bad-metadata-version",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": _msg("Hello"),
                     "metadata": {"version": "99999999999999999999"},
@@ -573,7 +573,7 @@ class TestA2AVersionStream:
     async def test_message_stream_with_version_query(
         self, client, unique_id, mock_llm_with_queue, sync_tools
     ):
-        """POST message/stream с ?v= работает с конкретной версией."""
+        """POST SendStreamingMessage с ?v= работает с конкретной версией."""
         flow_id = f"test_a2a_stream_v_{unique_id}"
         await client.post(
             "/flows/api/v1/flows/",
@@ -603,7 +603,7 @@ class TestA2AVersionStream:
             json={
                 "jsonrpc": "2.0",
                 "id": "test-stream-version",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Hello stream")},
             },
         )

@@ -2,7 +2,7 @@
  * OfficeAccessModal — единая модалка доступа для каталога и файла.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
@@ -196,7 +196,7 @@ export class OfficeAccessModal extends PlatformFormModal {
     async _loadAccess() {
         this._loading = true;
         const payload = this.resourceKind === 'binding'
-            ? { bindingId: this.resourceId }
+            ? { fileId: this.resourceId }
             : { catalogId: this.resourceId };
         const data = await this._accessGet.run(payload);
         if (data) {
@@ -264,25 +264,35 @@ export class OfficeAccessModal extends PlatformFormModal {
 
     async _copyPublicUrl() {
         if (this._publicUrl.length === 0) return;
-        await navigator.clipboard.writeText(this._publicUrl);
+        if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(this._publicUrl);
+        } catch {
+            // Permission denied / insecure context — URL уже показан в модалке.
+            return;
+        }
         this.toast('access.linkCopied', { namespace: 'documents' });
     }
 
     async _rotateLink() {
         const payload = this.resourceKind === 'binding'
-            ? { bindingId: this.resourceId }
+            ? { fileId: this.resourceId }
             : { catalogId: this.resourceId };
         const result = await this._accessRotate.run(payload);
-        if (result && typeof result.public_url === 'string') {
-            this._publicUrl = result.public_url;
-            await this._copyPublicUrl();
+        if (!result || typeof result.public_url !== 'string' || result.public_url.length === 0) {
+            return;
         }
+        this._publicUrl = result.public_url;
+        await this.updateComplete;
+        await this._copyPublicUrl();
     }
 
     async _submit() {
         const patchPayload = this.resourceKind === 'binding'
             ? {
-                bindingId: this.resourceId,
+                fileId: this.resourceId,
                 linkEnabled: this._linkEnabled,
                 linkPermission: this._linkPermission,
                 memberUserIds: this._memberUserIds,

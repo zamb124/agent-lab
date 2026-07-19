@@ -68,11 +68,11 @@ class TestReasoningInAgent:
             json={
                 "jsonrpc": "2.0",
                 "id": unique_id,
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": str(uuid.uuid4()),
-                        "role": "user",
+                        "role": "ROLE_USER",
                         "parts": [{"text": "Тестовый вопрос"}],
                     }
                 },
@@ -102,19 +102,17 @@ class TestReasoningInAgent:
         assert len(reasoning_parts) > 0
         reasoning_text = ""
         for part in reasoning_parts:
-            if part.get("kind") == "text" or "text" in part:
-                reasoning_text += part.get("text", "")
-            elif "root" in part and "text" in part.get("root", {}):
-                reasoning_text += part["root"]["text"]
+            text = part.get("text")
+            if isinstance(text, str):
+                reasoning_text += text
         assert "Сначала я подумал" in reasoning_text
         assert "Потом решил" in reasoning_text
         response_parts = response_artifact.get("parts", [])
         response_text = ""
         for part in response_parts:
-            if part.get("kind") == "text" or "text" in part:
-                response_text += part.get("text", "")
-            elif "root" in part and "text" in part.get("root", {}):
-                response_text += part["root"]["text"]
+            text = part.get("text")
+            if isinstance(text, str):
+                response_text += text
         assert "Это ответ на вопрос" in response_text
 
     async def test_flow_with_reasoning_only(
@@ -144,11 +142,11 @@ class TestReasoningInAgent:
             json={
                 "jsonrpc": "2.0",
                 "id": unique_id,
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": str(uuid.uuid4()),
-                        "role": "user",
+                        "role": "ROLE_USER",
                         "parts": [{"text": "Вопрос"}],
                     }
                 },
@@ -165,10 +163,9 @@ class TestReasoningInAgent:
             reasoning_parts = reasoning_artifact.get("parts", [])
             reasoning_text = ""
             for part in reasoning_parts:
-                if part.get("kind") == "text" or "text" in part:
-                    reasoning_text += part.get("text", "")
-                elif "root" in part and "text" in part.get("root", {}):
-                    reasoning_text += part["root"]["text"]
+                text = part.get("text")
+                if isinstance(text, str):
+                    reasoning_text += text
             assert "Я думаю над ответом" in reasoning_text
 
     async def test_flow_with_reasoning_and_tool_call(
@@ -212,11 +209,11 @@ class TestReasoningInAgent:
             json={
                 "jsonrpc": "2.0",
                 "id": unique_id,
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": str(uuid.uuid4()),
-                        "role": "user",
+                        "role": "ROLE_USER",
                         "parts": [{"text": "Сколько будет 2+2?"}],
                     }
                 },
@@ -225,17 +222,16 @@ class TestReasoningInAgent:
         assert response.status_code == 200
         data = response.json()
         result = data["result"]
-        assert result["status"]["state"] == "completed"
+        assert result["status"]["state"] == "TASK_STATE_COMPLETED"
         if result.get("artifacts"):
             reasoning_artifacts = [a for a in result["artifacts"] if a.get("name") == "reasoning"]
             assert len(reasoning_artifacts) >= 1
             all_reasoning_text = ""
             for artifact in reasoning_artifacts:
                 for part in artifact.get("parts", []):
-                    if part.get("kind") == "text" or "text" in part:
-                        all_reasoning_text += part.get("text", "")
-                    elif "root" in part and "text" in part.get("root", {}):
-                        all_reasoning_text += part["root"]["text"]
+                    text = part.get("text")
+                    if isinstance(text, str):
+                        all_reasoning_text += text
             assert (
                 "Нужно вычислить" in all_reasoning_text or "Получил результат" in all_reasoning_text
             )
@@ -243,7 +239,7 @@ class TestReasoningInAgent:
     async def test_stream_returns_reasoning_events(
         self, client, mock_llm_with_queue, sync_tools, unique_id: str
     ):
-        """message/stream возвращает reasoning события в SSE."""
+        """SendStreamingMessage возвращает reasoning события в SSE."""
         from apps.flows.src.container import get_container
 
         flow_id = f"test_reasoning_stream_flow_{unique_id}"
@@ -267,11 +263,11 @@ class TestReasoningInAgent:
             json={
                 "jsonrpc": "2.0",
                 "id": unique_id,
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {
                     "message": {
                         "messageId": str(uuid.uuid4()),
-                        "role": "user",
+                        "role": "ROLE_USER",
                         "parts": [{"text": "Вопрос"}],
                     }
                 },
@@ -292,20 +288,26 @@ class TestReasoningInAgent:
                         events.append(event_data["result"])
                 except Exception:
                     pass
+        def _artifact_from_stream(result: dict) -> dict | None:
+            update = result.get("artifactUpdate")
+            if isinstance(update, dict):
+                return update
+            return None
+
         reasoning_events = [
-            e
+            update
             for e in events
-            if e.get("kind") == "artifact-update"
-            and e.get("artifact", {}).get("name") == "reasoning"
+            if (update := _artifact_from_stream(e)) is not None
+            and update.get("artifact", {}).get("name") == "reasoning"
         ]
         assert len(reasoning_events) > 0, "Должны быть reasoning события в stream"
         response_events = [
-            e
+            update
             for e in events
-            if e.get("kind") == "artifact-update"
+            if (update := _artifact_from_stream(e)) is not None
             and (
-                e.get("artifact", {}).get("name") is None
-                or e.get("artifact", {}).get("name") == "response"
+                update.get("artifact", {}).get("name") is None
+                or update.get("artifact", {}).get("name") == "response"
             )
         ]
         assert len(response_events) > 0, "Должны быть response события в stream"

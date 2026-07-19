@@ -7,25 +7,27 @@ MockLLM для тестов - stream-first архитектура с A2A соб�
 import uuid
 
 import pytest
-from a2a.types import (
-    Message,
-    Part,
-    Role,
-    TaskArtifactUpdateEvent,
-    TaskStatusUpdateEvent,
-    TextPart,
-)
+from a2a.types import Message, Part, TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
+from a2a.types.a2a_pb2 import ROLE_USER, Role
 
+from core.a2a import get_part_text, mapping_from_struct
 from core.clients.llm import MockLLM, setup_mock_responses
 
 
-def _msg(text: str, role: Role = Role.user) -> Message:
+def _msg(text: str, role: Role = ROLE_USER) -> Message:
     """Создаёт A2A Message для тестов."""
     return Message(
-        messageId=str(uuid.uuid4()),
+        message_id=str(uuid.uuid4()),
         role=role,
-        parts=[Part(root=TextPart(text=text))],
+        parts=[Part(text=text)],
     )
+
+
+def _status_message_metadata(event: TaskStatusUpdateEvent) -> dict[str, object]:
+    message = event.status.message
+    if message is None or not message.HasField("metadata"):
+        return {}
+    return mapping_from_struct(message.metadata)
 
 
 class TestMockLLMStreaming:
@@ -47,7 +49,7 @@ class TestMockLLMStreaming:
         assert len(artifact_events) > 1
 
         # Собираем полный текст из чанков
-        full_text = "".join(e.artifact.parts[0].root.text for e in artifact_events)
+        full_text = "".join(get_part_text(e.artifact.parts[0]) for e in artifact_events)
         assert full_text == "Hello world!"
 
         # Последний чанк помечен как last_chunk
@@ -58,7 +60,7 @@ class TestMockLLMStreaming:
 
     @pytest.mark.asyncio
     async def test_stream_yields_final_status_event(self):
-        """stream yield'ит завершающий TaskStatusUpdateEvent (completed; final=False как в LLMClient)."""
+        """stream yield'ит завершающий TaskStatusUpdateEvent (WORKING — не конец A2A-задачи)."""
         mock = MockLLM()
         mock.configure(default_response="Test response")
 
@@ -67,9 +69,11 @@ class TestMockLLMStreaming:
             events.append(event)
 
         status_events = [e for e in events if isinstance(e, TaskStatusUpdateEvent)]
-        completed = [e for e in status_events if e.status.state.value == "completed"]
-        assert len(completed) == 1
-        assert completed[0].final is False
+        assert status_events
+        assert status_events[-1].status.state == TaskState.TASK_STATE_WORKING
+        assert not any(
+            event.status.state == TaskState.TASK_STATE_COMPLETED for event in status_events
+        )
 
     @pytest.mark.asyncio
     async def test_stream_with_response_queue(self):
@@ -86,14 +90,14 @@ class TestMockLLMStreaming:
         content1 = ""
         async for event in mock.stream([_msg("Q1")]):
             if isinstance(event, TaskArtifactUpdateEvent):
-                content1 += event.artifact.parts[0].root.text
+                content1 += get_part_text(event.artifact.parts[0])
         assert content1 == "First response"
 
         # Второй вызов
         content2 = ""
         async for event in mock.stream([_msg("Q2")]):
             if isinstance(event, TaskArtifactUpdateEvent):
-                content2 += event.artifact.parts[0].root.text
+                content2 += get_part_text(event.artifact.parts[0])
         assert content2 == "Second response"
 
     @pytest.mark.asyncio
@@ -113,7 +117,7 @@ class TestMockLLMStreaming:
         tool_call_events = [
             e
             for e in status_events
-            if e.status.message and e.status.message.metadata and "tool_calls" in e.status.message.metadata
+            if "tool_calls" in _status_message_metadata(e)
         ]
         assert len(tool_call_events) == 1
 
@@ -131,21 +135,20 @@ class TestMockLLMStreaming:
 
         status_events = [e for e in events if isinstance(e, TaskStatusUpdateEvent)]
         assert len(status_events) >= 2
-        assert status_events[0].status.message
-        assert status_events[0].status.message.metadata
-        assert status_events[0].status.message.metadata.get("tool_calls")
+        first_metadata = _status_message_metadata(status_events[0])
+        assert "tool_calls" in first_metadata
 
-        second = status_events[1]
-        if second.status.message and second.status.message.metadata:
-            tc = second.status.message.metadata.get("tool_calls")
+        second_metadata = _status_message_metadata(status_events[1])
+        if second_metadata:
+            tc = second_metadata.get("tool_calls")
             assert tc is None or tc == []
 
         merged: list = []
-        for e in status_events:
-            if e.status.message and e.status.message.metadata:
-                t = e.status.message.metadata.get("tool_calls")
-                if t:
-                    merged = t
+        for event in status_events:
+            metadata = _status_message_metadata(event)
+            tool_calls = metadata.get("tool_calls")
+            if tool_calls:
+                merged = tool_calls
         assert merged
 
     @pytest.mark.asyncio
@@ -173,7 +176,7 @@ class TestSetupMockResponses:
         content = ""
         async for event in mock.stream([_msg("test")]):
             if isinstance(event, TaskArtifactUpdateEvent):
-                content += event.artifact.parts[0].root.text
+                content += get_part_text(event.artifact.parts[0])
 
         assert content == "Configured!"
 
@@ -189,7 +192,7 @@ class TestSetupMockResponses:
         content = ""
         async for event in mock.stream([_msg("test")]):
             if isinstance(event, TaskArtifactUpdateEvent):
-                content += event.artifact.parts[0].root.text
+                content += get_part_text(event.artifact.parts[0])
 
         assert content == "Queued response"
 
@@ -208,6 +211,6 @@ class TestSetupMockResponses:
         tool_events = [
             e
             for e in status_events
-            if e.status.message and e.status.message.metadata and "tool_calls" in e.status.message.metadata
+            if "tool_calls" in _status_message_metadata(e)
         ]
         assert len(tool_events) == 1

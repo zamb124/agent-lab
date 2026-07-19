@@ -1,24 +1,36 @@
 """
-HTTP и JSON-RPC эндпоинты A2A для flows (a2a-sdk).
-Полная реализация протокола; поддержаны все методы спецификации.
+HTTP и JSON-RPC эндпоинты A2A Protocol 1.0 для flows (protobuf / a2a-sdk 1.x).
+
+Hard cut: только PascalCase методы из core.a2a.methods; 0.3 names → MethodNotFound.
 """
 
 import hashlib
 import json
 from collections.abc import AsyncGenerator, Mapping
-from typing import cast
+from typing import TypeVar, cast
 
 from a2a.types import (
-    DeleteTaskPushNotificationConfigParams,
-    GetTaskPushNotificationConfigParams,
-    ListTaskPushNotificationConfigParams,
-    MessageSendParams,
-    TaskIdParams,
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTasksRequest,
+    ListTasksResponse,
+    Message,
+    SendMessageRequest,
+    StreamResponse,
+    SubscribeToTaskRequest,
+    Task,
+    TaskArtifactUpdateEvent,
     TaskPushNotificationConfig,
-    TaskQueryParams,
+    TaskStatusUpdateEvent,
 )
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.message import DecodeError
+from google.protobuf.message import Message as ProtoMessage
 from pydantic import BaseModel
 
 from apps.flows.src.channels import PermissionDenied
@@ -35,6 +47,23 @@ from apps.flows.src.models import (
     resolve_effective_flow_chat,
 )
 from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
+from core.a2a import (
+    A2A_ERROR_CODE_NAMES,
+    A2A_METHODS,
+    CANCEL_TASK,
+    CREATE_TASK_PUSH_NOTIFICATION_CONFIG,
+    DELETE_TASK_PUSH_NOTIFICATION_CONFIG,
+    GET_EXTENDED_AGENT_CARD,
+    GET_TASK,
+    GET_TASK_PUSH_NOTIFICATION_CONFIG,
+    LIST_TASK_PUSH_NOTIFICATION_CONFIGS,
+    LIST_TASKS,
+    SEND_MESSAGE,
+    SEND_STREAMING_MESSAGE,
+    SUBSCRIBE_TO_TASK,
+    A2AApplicationError,
+    A2AErrorCode,
+)
 from core.context import get_context
 from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_REDIS_PREFIX,
@@ -51,6 +80,9 @@ from core.utils.tokens import TokenData, TokenType
 
 logger = get_logger(__name__)
 JsonRpcId = str | int
+
+A2A_PROTOCOL_VERSION = "1.0"
+A2A_VERSION_HEADER = "A2A-Version"
 
 
 def _embed_session_branch_from_token_metadata(metadata: JsonObject) -> str | None:
@@ -116,28 +148,71 @@ def _get_user_groups(request: Request) -> list[str]:
 
 router = APIRouter(tags=["public", "a2a"])
 
-
-# Поддерживаемые A2A-методы
-A2A_METHODS = {
-    "message/send",
-    "message/stream",
-    "tasks/get",
-    "tasks/cancel",
-    "tasks/resubscribe",
-    "tasks/pushNotificationConfig/get",
-    "tasks/pushNotificationConfig/set",
-    "tasks/pushNotificationConfig/delete",
-    "tasks/pushNotificationConfig/list",
-    "agent/getAuthenticatedExtendedCard",
-}
-
-_STREAM_METHODS = {"message/stream", "tasks/resubscribe"}
-_EMBED_MESSAGE_METHODS = {"message/send", "message/stream"}
-_EMBED_SESSION_METHODS = _EMBED_MESSAGE_METHODS | {"tasks/cancel"}
+_STREAM_METHODS = frozenset({SEND_STREAMING_MESSAGE, SUBSCRIBE_TO_TASK})
+_EMBED_MESSAGE_METHODS = frozenset({SEND_MESSAGE, SEND_STREAMING_MESSAGE})
+_EMBED_SESSION_METHODS = _EMBED_MESSAGE_METHODS | {CANCEL_TASK}
 _SSE_HEADERS = {
     "Cache-Control": "no-cache, no-transform",
     "X-Accel-Buffering": "no",
 }
+
+
+def _a2a_rpc_error(code: A2AErrorCode, message: str | None = None) -> JsonObject:
+    return {
+        "code": int(code),
+        "message": message if message is not None else A2A_ERROR_CODE_NAMES[code],
+    }
+
+
+_TProto = TypeVar("_TProto", bound=ProtoMessage)
+
+
+def _proto_result(message: ProtoMessage) -> JsonObject:
+    payload = require_json_object(MessageToDict(message), "a2a.result")
+    # ProtoJSON опускает пустые string; ListTasks.next_page_token REQUIRED (может быть "").
+    if isinstance(message, ListTasksResponse) and "nextPageToken" not in payload:
+        payload["nextPageToken"] = ""
+    return payload
+
+
+def _stream_response_result(
+    event: Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent,
+) -> JsonObject:
+    if isinstance(event, TaskStatusUpdateEvent):
+        stream = StreamResponse(status_update=event)
+    elif isinstance(event, TaskArtifactUpdateEvent):
+        stream = StreamResponse(artifact_update=event)
+    elif isinstance(event, Task):
+        stream = StreamResponse(task=event)
+    else:
+        stream = StreamResponse(message=event)
+    return _proto_result(stream)
+
+
+def _parse_proto_params(params_dict: JsonObject, proto_cls: type[_TProto]) -> _TProto:
+    message = proto_cls()
+    try:
+        _ = ParseDict(dict(params_dict), message)
+    except (DecodeError, TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid params for {proto_cls.__name__}: {exc}") from exc
+    return message
+
+
+def _check_a2a_version(request: Request) -> JsonObject | None:
+    """A2A-Version: принимается только \"1.0\"; любое другое значение → -32009.
+
+    Отсутствующий header допускается как implicit 1.0 (платформенные клиенты);
+    не-1.0 значения отклоняются жёстко.
+    """
+    raw = request.headers.get(A2A_VERSION_HEADER)
+    if raw is None:
+        return None
+    if raw.strip() != A2A_PROTOCOL_VERSION:
+        return _a2a_rpc_error(
+            A2AErrorCode.VERSION_NOT_SUPPORTED,
+            f"Supported A2A-Version: {A2A_PROTOCOL_VERSION}",
+        )
+    return None
 
 
 def _is_embed_session_token(token_data: TokenData | None) -> bool:
@@ -322,7 +397,10 @@ def _validate_embed_session_request(
     if method not in _EMBED_SESSION_METHODS:
         return {
             "code": -32000,
-            "message": "Embed session token supports only message/send, message/stream and tasks/cancel",
+            "message": (
+                "Embed session token supports only SendMessage, "
+                "SendStreamingMessage and CancelTask"
+            ),
         }
 
     allowed_branch_id = _embed_session_branch_from_token_metadata(metadata)
@@ -448,14 +526,17 @@ async def get_agent_card(
 
 async def _handle_streaming(
     handler: A2AChannel,
-    params: MessageSendParams,
+    params: SendMessageRequest,
     rpc_id: JsonRpcId,
     context: JsonObject | None = None,
 ) -> AsyncGenerator[str, None]:
     try:
         async for event in handler.on_message_stream(params, context=context):
-            event_data = event.model_dump(by_alias=True, exclude_none=True)
-            response = {"jsonrpc": "2.0", "id": rpc_id, "result": event_data}
+            response = {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "result": _stream_response_result(event),
+            }
             yield f"data: {json.dumps(response, ensure_ascii=False, default=str)}\n\n"
     except PermissionDenied as e:
         error_response = {
@@ -466,12 +547,15 @@ async def _handle_streaming(
         yield f"data: {json.dumps(error_response, ensure_ascii=False, default=str)}\n\n"
 
 
-async def _handle_resubscribe_streaming(
-    handler: A2AChannel, params: TaskIdParams, rpc_id: JsonRpcId
+async def _handle_subscribe_streaming(
+    handler: A2AChannel, params: SubscribeToTaskRequest, rpc_id: JsonRpcId
 ) -> AsyncGenerator[str, None]:
-    async for event in handler.on_resubscribe_to_task(params):
-        event_data = event.model_dump(by_alias=True, exclude_none=True)
-        response = {"jsonrpc": "2.0", "id": rpc_id, "result": event_data}
+    async for event in handler.on_subscribe_to_task(params):
+        response = {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "result": _stream_response_result(event),
+        }
         yield f"data: {json.dumps(response, ensure_ascii=False, default=str)}\n\n"
 
 
@@ -520,6 +604,17 @@ async def _json_rpc_handler_internal(
             "error": {"code": -32600, "message": "Invalid Request: missing 'method' field"},
         }
     method = method_raw.strip()
+
+    version_error = _check_a2a_version(request)
+    if version_error is not None:
+        return {"jsonrpc": "2.0", "id": rpc_id, "error": version_error}
+
+    if method not in A2A_METHODS:
+        return {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "error": {"code": -32601, "message": f"Method not found: {method}"},
+        }
 
     _raw_params = body.get("params")
     if _raw_params is None:
@@ -613,13 +708,6 @@ async def _json_rpc_handler_internal(
             }
         )
 
-    if method not in A2A_METHODS:
-        return {
-            "jsonrpc": "2.0",
-            "id": rpc_id,
-            "error": {"code": -32601, "message": f"Method not found: {method}"},
-        }
-
     # Получаем Context из middleware (установлен при авторизации)
     context = get_context()
 
@@ -646,110 +734,127 @@ async def _json_rpc_handler_internal(
         }
     channel_context: JsonObject = {"user_groups": user_groups}
 
-    # Добавляем groups в metadata для передачи в worker (для проверки прав доступа к tools)
-    params_dict["metadata"] = metadata
+    # metadata + __user_groups__ только в params методов с MessageSendParams
+    # (protobuf GetTask/CancelTask/ListTasks metadata не имеют — ParseDict fail-closed).
     metadata["__user_groups__"] = user_groups
+    if method in (SEND_MESSAGE, SEND_STREAMING_MESSAGE):
+        params_dict["metadata"] = metadata
 
     try:
-        if method == "message/send":
-            params = MessageSendParams.model_validate(params_dict)
+        if method == SEND_MESSAGE:
+            params = _parse_proto_params(params_dict, SendMessageRequest)
+            if not params.HasField("message"):
+                return {
+                    "jsonrpc": "2.0",
+                    "id": rpc_id,
+                    "error": {"code": -32602, "message": "Invalid params: message is required"},
+                }
             result = await handler.on_message_send(params, context=channel_context)
-            return {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "result": result.model_dump(by_alias=True, exclude_none=True),
-            }
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
 
-        elif method == "message/stream":
-            params = MessageSendParams.model_validate(params_dict)
+        if method == SEND_STREAMING_MESSAGE:
+            params = _parse_proto_params(params_dict, SendMessageRequest)
+            if not params.HasField("message"):
+                return {
+                    "jsonrpc": "2.0",
+                    "id": rpc_id,
+                    "error": {"code": -32602, "message": "Invalid params: message is required"},
+                }
             return StreamingResponse(
                 _handle_streaming(handler, params, rpc_id, channel_context),
                 media_type="text/event-stream",
                 headers=_SSE_HEADERS,
             )
 
-        elif method == "tasks/get":
-            params = TaskQueryParams.model_validate(params_dict)
+        if method == GET_TASK:
+            params = _parse_proto_params(params_dict, GetTaskRequest)
             result = await handler.on_get_task(params)
-            return {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "result": result.model_dump(by_alias=True, exclude_none=True) if result else None,
-            }
+            if result is None:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": rpc_id,
+                    "error": _a2a_rpc_error(A2AErrorCode.TASK_NOT_FOUND),
+                }
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
 
-        elif method == "tasks/cancel":
-            params = TaskIdParams.model_validate(params_dict)
+        if method == LIST_TASKS:
+            params = _parse_proto_params(params_dict, ListTasksRequest)
+            result = await handler.on_list_tasks(params, context=channel_context)
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
+
+        if method == CANCEL_TASK:
+            params = _parse_proto_params(params_dict, CancelTaskRequest)
             result = await handler.on_cancel_task(params)
             if result is None:
                 return {
                     "jsonrpc": "2.0",
                     "id": rpc_id,
-                    "error": {"code": -32000, "message": "Task not found"},
+                    "error": _a2a_rpc_error(A2AErrorCode.TASK_NOT_FOUND),
                 }
-            return {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "result": result.model_dump(by_alias=True, exclude_none=True),
-            }
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
 
-        elif method == "tasks/resubscribe":
-            params = TaskIdParams.model_validate(params_dict)
+        if method == SUBSCRIBE_TO_TASK:
+            params = _parse_proto_params(params_dict, SubscribeToTaskRequest)
             return StreamingResponse(
-                _handle_resubscribe_streaming(handler, params, rpc_id),
+                _handle_subscribe_streaming(handler, params, rpc_id),
                 media_type="text/event-stream",
                 headers=_SSE_HEADERS,
             )
 
-        elif method == "tasks/pushNotificationConfig/get":
-            params = GetTaskPushNotificationConfigParams.model_validate(params_dict)
+        if method == GET_TASK_PUSH_NOTIFICATION_CONFIG:
+            params = _parse_proto_params(
+                params_dict, GetTaskPushNotificationConfigRequest
+            )
             result = await handler.on_get_task_push_notification_config(params)
-            return {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "result": result.model_dump(by_alias=True, exclude_none=True) if result else None,
-            }
+            if result is None:
+                return {"jsonrpc": "2.0", "id": rpc_id, "result": None}
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
 
-        elif method == "tasks/pushNotificationConfig/set":
-            params = TaskPushNotificationConfig.model_validate(params_dict)
-            result = await handler.on_set_task_push_notification_config(params)
-            return {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "result": result.model_dump(by_alias=True, exclude_none=True),
-            }
+        if method == CREATE_TASK_PUSH_NOTIFICATION_CONFIG:
+            params = _parse_proto_params(params_dict, TaskPushNotificationConfig)
+            result = await handler.on_create_task_push_notification_config(params)
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
 
-        elif method == "tasks/pushNotificationConfig/delete":
-            params = DeleteTaskPushNotificationConfigParams.model_validate(params_dict)
+        if method == DELETE_TASK_PUSH_NOTIFICATION_CONFIG:
+            params = _parse_proto_params(
+                params_dict, DeleteTaskPushNotificationConfigRequest
+            )
             await handler.on_delete_task_push_notification_config(params)
             return {"jsonrpc": "2.0", "id": rpc_id, "result": None}
 
-        elif method == "tasks/pushNotificationConfig/list":
-            params = ListTaskPushNotificationConfigParams.model_validate(params_dict)
-            result = await handler.on_list_task_push_notification_config(params)
+        if method == LIST_TASK_PUSH_NOTIFICATION_CONFIGS:
+            params = _parse_proto_params(
+                params_dict, ListTaskPushNotificationConfigsRequest
+            )
+            result = await handler.on_list_task_push_notification_configs(params)
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
+
+        if method == GET_EXTENDED_AGENT_CARD:
+            # extended_agent_card=false на AgentCard — без silent fallback на regular card.
             return {
                 "jsonrpc": "2.0",
                 "id": rpc_id,
-                "result": [r.model_dump(by_alias=True, exclude_none=True) for r in result],
+                "error": _a2a_rpc_error(A2AErrorCode.EXTENDED_AGENT_CARD_NOT_CONFIGURED),
             }
 
-        elif method == "agent/getAuthenticatedExtendedCard":
-            base_url = _get_base_url(request)
-            result = await handler.on_get_authenticated_extended_card(params_dict)
-            if result:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": rpc_id,
-                    "result": result.model_dump(by_alias=True, exclude_none=True),
-                }
-            card = await handler.get_agent_card(base_url)
-            return {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "result": card,
-            }
+        return {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "error": {"code": -32601, "message": f"Method not found: {method}"},
+        }
 
-        return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32601, "message": f"Method not found: {method}"}}
-
+    except ValueError as e:
+        logger.warning(f"Invalid params for {method}: {e}")
+        err = {"code": -32602, "message": str(e)}
+        if method in _STREAM_METHODS:
+            return _sse_error_response(rpc_id, -32602, str(e))
+        return {"jsonrpc": "2.0", "id": rpc_id, "error": err}
+    except A2AApplicationError as e:
+        logger.warning(f"A2A application error for {method}: {e}")
+        err = e.to_json_rpc_error()
+        if method in _STREAM_METHODS:
+            return _sse_error_response(rpc_id, int(e.code), e.message)
+        return {"jsonrpc": "2.0", "id": rpc_id, "error": err}
     except PermissionDenied as e:
         logger.warning(f"Permission denied for {method}: {e}")
         err = e.error.to_json_rpc_error()

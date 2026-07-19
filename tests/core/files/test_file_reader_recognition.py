@@ -30,6 +30,8 @@ _CATEGORY_TO_KIND: dict[FileCategory, FileReadKind] = {
     FileCategory.EMAIL: FileReadKind.OFFICE,
     FileCategory.EBOOK: FileReadKind.OFFICE,
     FileCategory.VIZ: FileReadKind.TEXT,
+    # Подписи не извлекаются reader'ом — только распознавание категории в реестре.
+    FileCategory.SIGNATURE: FileReadKind.UNKNOWN,
 }
 
 # HTML/HTM — категория TEXT в реестре, но reader читает как HTML

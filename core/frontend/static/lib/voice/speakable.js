@@ -7,7 +7,7 @@
  * из кадра A2A отправить в `apps/voice` WS-командой
  * `speak`. Именно **этот файл** — единственный источник правды на стороне клиента для
  * имён артефактов и negative-override; для потока без поля `name` при наличии
- * `TextPart` действует то же правило, что и у `speakable.py` (как `response`).
+ * text part действует то же правило, что и у `speakable.py` (как `response`).
  *
  * Парность (`speakable.py` ↔ `speakable.js`) проверяется CI
  * (`scripts/check_speakable_parity.py`).
@@ -32,10 +32,6 @@ function artifactHasAnyTextPart(artifact) {
         }
         const root = part.root !== undefined ? part.root : part;
         if (root === null || typeof root !== 'object') {
-            continue;
-        }
-        const kind = typeof root.kind === 'string' ? root.kind : '';
-        if (kind !== 'text') {
             continue;
         }
         if (typeof root.text === 'string' && root.text !== '') {
@@ -75,8 +71,8 @@ export function isSpeakableArtifact(artifact) {
 /**
  * Выдать только текстовые части speakable-артефакта.
  *
- * `DataPart` / `FilePart` пропускаются — озвучивание таких частей
- * теряет смысл.
+ * Non-text parts (`data` / `raw` / `url`) пропускаются — озвучивание таких
+ * частей теряет смысл.
  *
  * @param {object} artifact
  * @returns {string[]}
@@ -93,10 +89,6 @@ export function iterSpeakableTextParts(artifact) {
         }
         const root = part.root !== undefined ? part.root : part;
         if (root === null || typeof root !== 'object') {
-            continue;
-        }
-        const kind = typeof root.kind === 'string' ? root.kind : '';
-        if (kind !== 'text') {
             continue;
         }
         if (typeof root.text !== 'string') {

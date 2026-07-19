@@ -24,9 +24,9 @@ async for event in subscriber.subscribe(task_id):
     yield event   # SSE/WebSocket
 ```
 
-A2A типы из `a2a-sdk` (свои не создавать): `TaskStatusUpdateEvent` (working/input-required/completed/failed), `TaskArtifactUpdateEvent` (текстовые чанки от LLM). Автоматически добавляются `task_id`, `context_id`, `trace_id`, `span_id` (OpenTelemetry).
+A2A — **Protocol 1.0 hard cut** (см. **`a2a.mdc`**). Типы только из `a2a-sdk` 1.x (protobuf): `TaskStatusUpdateEvent` / `TaskArtifactUpdateEvent` / `Part` / `Message`. Wire enums: `TASK_STATE_*`, `ROLE_*`. Свои A2A-модели и 0.3 aliases запрещены.
 
-**A2A вложения (`FilePart`):** `FileWithBytes` на HTTP API flows не пишется на локальный диск — канал вызывает `FileProcessor.persist_uploaded_file_as_state_files_item` (внутри — `persist_uploaded_file` / S3 + `FileRecord`). Внешние `FileWithBytes.name`/`mimeType` сразу мапятся в `state.files[].original_name/content_type`. В `state.files` — `file_id` и same-origin `url` вида `/{server.name}/api/v1/files/download/{file_id}`. `FileWithUri` — без персиста, `url` остаётся URI, `name` и `mimeType` обязательны на входной границе. Нужен `active_company` в контексте. При takeover ответ пользователя с файлами — в `dialog_log` уходят только `file_id` (чтение локального `url` с диска не используется).
+**A2A вложения (`Part`):** `Part.raw` → S3 + `FileRecord` (`original_name`/`content_type` из `filename`/`mediaType`). `Part.url` — platform download reuse по `file_id`, иначе SSRF-safe HTTP fetch → persist. В `state.files` — `file_id` и same-origin `url` `/{server.name}/api/v1/files/download/{file_id}`. Нужен `active_company`. При takeover в `dialog_log` — только `file_id`.
 
 ## HTTP клиенты
 
@@ -91,7 +91,7 @@ external_flow = await container.flow_discovery.register_agent(
  "input_mapping": {"content": "@state:user_query"}, "branch_id": "default"}
 ```
 
-Требования к внешнему endpoint (A2A): `GET /.well-known/agent-card.json`, `POST /tasks/send` (JSON-RPC 2.0).
+Требования к внешнему endpoint (A2A 1.0): `GET /.well-known/agent-card.json` (Card с `supportedInterfaces` / `protocolVersion: "1.0"`), JSON-RPC `SendMessage` (PascalCase).
 
 ## External API node
 
@@ -144,7 +144,7 @@ external_flow = await container.flow_discovery.register_agent(
 - `OAuthInterrupt` (`core/state/interrupt.py`): `kind=oauth_required`, поля `question`, `auth_url`, `provider`, `service`.
 - `build_auth_url(..., flow_context=...)` сохраняет в OAuth state (Storage) контекст flow: `flow_id`, `session_id`, `task_id`, `context_id`, `branch_id`, `channel`, `context_data`.
 - OAuth callback после `complete_oauth` — если `flow_context` есть, вызывает `process_flow_task.kiq(is_resume=True, content="oauth_completed:...")`.
-- SSE: `emit_interrupt` для `OAUTH_REQUIRED` отправляет `input-required` с `final=False` и `platform_oauth_continue=true` — SSE остаётся открытым.
+- SSE: `emit_interrupt` для `OAUTH_REQUIRED` шлёт `statusUpdate` с `TASK_STATE_INPUT_REQUIRED` и `metadata.platform_oauth_continue=true` (без `final` на wire) — SSE остаётся открытым.
 - UI: `interruptKind === 'oauth_required'` — кнопка/ссылка авторизации (`target=_blank`); юзер авторизуется в новой вкладке → flow продолжается автоматически.
 
 ### Безопасность и прозрачность
@@ -161,5 +161,5 @@ external_flow = await container.flow_discovery.register_agent(
 1. Между сервисами для данных — репозиторий при доступной БД; для HTTP — только `ServiceClient`. Прямой `httpx.AsyncClient` между сервисами запрещён.
 2. Внешние API — `get_httpx_client`. OAuth-провайдеры — `use_proxy_from_config=False`.
 3. LLM — только через `.stream()`, события — Redis Pub/Sub (`streaming.mdc`).
-4. A2A — типы из `a2a-sdk`; свои не создавать.
+4. A2A — только Protocol 1.0 (`a2a.mdc`); типы из `a2a-sdk` 1.x; свои не создавать; 0.3 wire запрещён.
 5. OAuth внешних сервисов — через `core/integrations/OAuthService`, не дублировать в сервисах.

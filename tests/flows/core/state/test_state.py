@@ -5,7 +5,10 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from a2a.types import Message, Part, Role, TextPart
+from a2a.types import Message, Part
+from a2a.types.a2a_pb2 import ROLE_USER, Role
+
+from core.a2a import get_part_text, part_has_text
 
 from apps.flows.src.container import get_container
 from apps.flows.src.durable_execution import (
@@ -21,11 +24,11 @@ from apps.flows.src.durable_execution.manager import DurableWorkflowRuntime
 from core.state import ExecutionState
 
 
-def _msg(text: str, role: Role = Role.user) -> Message:
+def _msg(text: str, role: Role = ROLE_USER) -> Message:
     return Message(
         message_id=str(uuid.uuid4()),
         role=role,
-        parts=[Part(root=TextPart(text=text))],
+        parts=[Part(text=text)],
     )
 
 
@@ -89,7 +92,7 @@ class TestDurableWorkflowProjection:
             user_id="test-user",
             session_id=session_id,
         )
-        state.messages = [_msg("Hello", Role.user)]
+        state.messages = [_msg("Hello", ROLE_USER)]
         state.variables = {"key": "value"}
 
         _ = await workflow_runtime.save_state(
@@ -104,10 +107,10 @@ class TestDurableWorkflowProjection:
         assert loaded is not None
         assert len(loaded.messages) == 1
         assert isinstance(loaded.messages[0], Message)
-        assert loaded.messages[0].role == Role.user
-        root = loaded.messages[0].parts[0].root
-        assert isinstance(root, TextPart)
-        assert root.text == "Hello"
+        assert loaded.messages[0].role == ROLE_USER
+        part = loaded.messages[0].parts[0]
+        assert part_has_text(part)
+        assert get_part_text(part) == "Hello"
         assert loaded.variables == {"key": "value"}
 
     @pytest.mark.asyncio

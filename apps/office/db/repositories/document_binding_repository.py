@@ -2,7 +2,6 @@
 Репозиторий привязок документов OnlyOffice к компании и namespace.
 """
 
-import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -90,10 +89,10 @@ class DocumentBindingRepository:
             rows = list(result.scalars().all())
         return [row for row in rows if needle in row.title.casefold()]
 
-    async def list_by_binding_ids(
-        self, company_id: str, namespace: str, binding_ids: list[str]
+    async def list_by_file_ids(
+        self, company_id: str, namespace: str, file_ids: list[str]
     ) -> list[OfficeDocumentBinding]:
-        if not binding_ids:
+        if not file_ids:
             return []
         async with self._db.session() as session:
             result = await session.execute(
@@ -101,54 +100,35 @@ class DocumentBindingRepository:
                 .where(
                     OfficeDocumentBinding.company_id == company_id,
                     OfficeDocumentBinding.namespace == namespace,
-                    OfficeDocumentBinding.binding_id.in_(binding_ids),
+                    OfficeDocumentBinding.file_id.in_(file_ids),
                     self._active_filter(),
                 )
                 .order_by(OfficeDocumentBinding.updated_at.desc())
             )
             return list(result.scalars().all())
 
-    async def get_for_company(
-        self, binding_id: str, company_id: str, namespace: str
+    async def get(
+        self, file_id: str, company_id: str, namespace: str
     ) -> OfficeDocumentBinding | None:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding).where(
-                    OfficeDocumentBinding.binding_id == binding_id,
-                    OfficeDocumentBinding.company_id == company_id,
-                    OfficeDocumentBinding.namespace == namespace,
-                )
-            )
-            return result.scalar_one_or_none()
-
-    async def get_by_binding_and_company(
-        self, binding_id: str, company_id: str
-    ) -> OfficeDocumentBinding | None:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeDocumentBinding).where(
-                    OfficeDocumentBinding.binding_id == binding_id,
-                    OfficeDocumentBinding.company_id == company_id,
-                )
-            )
-            return result.scalar_one_or_none()
-
-    async def get_by_file_for_company(
-        self,
-        file_id: str,
-        company_id: str,
-        namespace: str,
-    ) -> OfficeDocumentBinding | None:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeDocumentBinding)
-                .where(
                     OfficeDocumentBinding.file_id == file_id,
                     OfficeDocumentBinding.company_id == company_id,
                     OfficeDocumentBinding.namespace == namespace,
-                    self._active_filter(),
                 )
-                .order_by(OfficeDocumentBinding.created_at.desc())
+            )
+            return result.scalar_one_or_none()
+
+    async def get_by_file_and_company(
+        self, file_id: str, company_id: str
+    ) -> OfficeDocumentBinding | None:
+        async with self._db.session() as session:
+            result = await session.execute(
+                select(OfficeDocumentBinding).where(
+                    OfficeDocumentBinding.file_id == file_id,
+                    OfficeDocumentBinding.company_id == company_id,
+                )
             )
             return result.scalar_one_or_none()
 
@@ -164,14 +144,12 @@ class DocumentBindingRepository:
         title: str,
         created_by_user_id: str,
     ) -> OfficeDocumentBinding:
-        binding_id = uuid.uuid4().hex
         now = datetime.now(timezone.utc)
         row = OfficeDocumentBinding(
-            binding_id=binding_id,
+            file_id=file_id,
             company_id=company_id,
             namespace=namespace,
             catalog_id=catalog_id,
-            file_id=file_id,
             file_category=file_category,
             onlyoffice_document_type=onlyoffice_document_type,
             title=title,
@@ -187,7 +165,7 @@ class DocumentBindingRepository:
 
     async def update_title(
         self,
-        binding_id: str,
+        file_id: str,
         company_id: str,
         namespace: str,
         title: str,
@@ -195,7 +173,7 @@ class DocumentBindingRepository:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding).where(
-                    OfficeDocumentBinding.binding_id == binding_id,
+                    OfficeDocumentBinding.file_id == file_id,
                     OfficeDocumentBinding.company_id == company_id,
                     OfficeDocumentBinding.namespace == namespace,
                 )
@@ -211,7 +189,7 @@ class DocumentBindingRepository:
 
     async def soft_delete(
         self,
-        binding_id: str,
+        file_id: str,
         company_id: str,
         namespace: str,
         deleted_by_user_id: str,
@@ -219,7 +197,7 @@ class DocumentBindingRepository:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding).where(
-                    OfficeDocumentBinding.binding_id == binding_id,
+                    OfficeDocumentBinding.file_id == file_id,
                     OfficeDocumentBinding.company_id == company_id,
                     OfficeDocumentBinding.namespace == namespace,
                     self._active_filter(),
@@ -235,12 +213,12 @@ class DocumentBindingRepository:
             return True
 
     async def restore(
-        self, binding_id: str, company_id: str, namespace: str
+        self, file_id: str, company_id: str, namespace: str
     ) -> OfficeDocumentBinding | None:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding).where(
-                    OfficeDocumentBinding.binding_id == binding_id,
+                    OfficeDocumentBinding.file_id == file_id,
                     OfficeDocumentBinding.company_id == company_id,
                     OfficeDocumentBinding.namespace == namespace,
                     OfficeDocumentBinding.deleted_at.is_not(None),
@@ -258,7 +236,7 @@ class DocumentBindingRepository:
 
     async def move_to_catalog(
         self,
-        binding_id: str,
+        file_id: str,
         company_id: str,
         namespace: str,
         catalog_id: str,
@@ -266,7 +244,7 @@ class DocumentBindingRepository:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding).where(
-                    OfficeDocumentBinding.binding_id == binding_id,
+                    OfficeDocumentBinding.file_id == file_id,
                     OfficeDocumentBinding.company_id == company_id,
                     OfficeDocumentBinding.namespace == namespace,
                     self._active_filter(),
@@ -282,12 +260,12 @@ class DocumentBindingRepository:
             return row
 
     async def delete_binding(
-        self, binding_id: str, company_id: str, namespace: str
+        self, file_id: str, company_id: str, namespace: str
     ) -> bool:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding).where(
-                    OfficeDocumentBinding.binding_id == binding_id,
+                    OfficeDocumentBinding.file_id == file_id,
                     OfficeDocumentBinding.company_id == company_id,
                     OfficeDocumentBinding.namespace == namespace,
                 )

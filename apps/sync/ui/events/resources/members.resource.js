@@ -26,6 +26,8 @@ export const companyMembersResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 5_000,
+    listFetchAllPages: true,
+    listQuery: () => ({ limit: 200, offset: 0 }),
     mapItem: _normalizeMember,
 });
 

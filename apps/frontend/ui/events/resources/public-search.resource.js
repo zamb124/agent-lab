@@ -10,7 +10,7 @@ import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest, HttpError } from '@platform/lib/events/http.js';
 import {
     a2aEndpointUrl,
-    buildA2aMessageStreamBody,
+    buildA2aSendStreamingMessageBody,
     consumeA2aStream,
 } from '@platform/lib/chat/runtime/a2a-stream.js';
 import { mapA2aResultToChatRuntimeEvents } from '@platform/lib/chat/a2a-chat-runtime.js';
@@ -919,7 +919,7 @@ async function _runPublicSearch({ payload, ctx, event }) {
     try {
         await consumeA2aStream({
             url: a2aEndpointUrl({ baseUrl: _flowsBaseUrl(), embedId: session.embed_id }),
-            body: buildA2aMessageStreamBody({
+            body: buildA2aSendStreamingMessageBody({
                 message: request.query,
                 contextId: stream.context_id,
                 branchId: session.branch_id,
@@ -1019,7 +1019,7 @@ async function _runPublicSearchSourceDescribe({ payload, ctx, event }) {
     try {
         await consumeA2aStream({
             url: a2aEndpointUrl({ baseUrl: _flowsBaseUrl(), embedId: session.embed_id }),
-            body: buildA2aMessageStreamBody({
+            body: buildA2aSendStreamingMessageBody({
                 message: _sourceDescribeMessage(request),
                 contextId: sourceStream.context_id,
                 branchId: session.branch_id,

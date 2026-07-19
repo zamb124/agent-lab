@@ -4,16 +4,16 @@
 
 ## Шаг 1. Созданы пространство и канал
 
-![Созданы пространство и канал](thread-reply-drawer--01-sozdany-prostranstvo-i-kanal.png)
+![Созданы пространство и канал](thread-reply-drawer--01-space-and-channel-created.png)
 
 ## Шаг 2. Отправлено корневое сообщение
 
-![Отправлено корневое сообщение](thread-reply-drawer--02-otpravleno-kornevoe-soobshchenie.png)
+![Отправлено корневое сообщение](thread-reply-drawer--02-root-message-sent.png)
 
 ## Шаг 3. Открыт тред и отправлен ответ
 
-![Открыт тред и отправлен ответ](thread-reply-drawer--03-otkryt-tred-i-otpravlen-otvet.png)
+![Открыт тред и отправлен ответ](thread-reply-drawer--03-thread-opened-and-reply-sent.png)
 
 ## Шаг 4. Открыта панель тредов
 
-![Открыта панель тредов](thread-reply-drawer--04-otkryta-panel-tredov.png)
+![Открыта панель тредов](thread-reply-drawer--04-threads-panel-opened.png)

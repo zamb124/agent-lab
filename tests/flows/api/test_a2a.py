@@ -13,10 +13,12 @@ from typing import Any, Dict, List
 
 import pytest
 
+from tests.flows._a2a_v1 import A2A_HEADERS
+
 
 def _msg(text: str, task_id: str = None, context_id: str = None) -> Dict[str, Any]:
     """Создаёт A2A Message с ОБЯЗАТЕЛЬНЫМИ полями по спецификации."""
-    m = {"messageId": str(uuid.uuid4()), "role": "user", "parts": [{"kind": "text", "text": text}]}
+    m = {"messageId": str(uuid.uuid4()), "role": "ROLE_USER", "parts": [{"text": text}]}
     if task_id:
         m["taskId"] = task_id
     if context_id:
@@ -45,8 +47,6 @@ def _validate_task(task: Dict, *, require_history: bool = False) -> None:
     assert isinstance(task["contextId"], str), "Task.contextId MUST be string"
     assert "status" in task, "Task MUST have 'status' field"
     _validate_task_status(task["status"])
-    if "kind" in task:
-        assert task["kind"] == "task", f"Task.kind MUST be 'task', got {task['kind']}"
     if require_history:
         assert "history" in task and task["history"] is not None, "Task MUST have history"
         assert isinstance(task["history"], list), "Task.history MUST be list"
@@ -58,14 +58,14 @@ def _validate_task_status(status: Dict) -> None:
     """Строгая валидация TaskStatus по A2A SDK спецификации."""
     assert "state" in status, "TaskStatus MUST have 'state' field"
     valid_states = [
-        "submitted",
-        "working",
-        "input-required",
-        "auth-required",
-        "completed",
-        "failed",
-        "rejected",
-        "canceled",
+        "TASK_STATE_SUBMITTED",
+        "TASK_STATE_WORKING",
+        "TASK_STATE_INPUT_REQUIRED",
+        "TASK_STATE_AUTH_REQUIRED",
+        "TASK_STATE_COMPLETED",
+        "TASK_STATE_FAILED",
+        "TASK_STATE_REJECTED",
+        "TASK_STATE_CANCELED",
         "unknown",
     ]
     assert status["state"] in valid_states, f"Invalid TaskState: {status['state']}"
@@ -78,7 +78,7 @@ def _validate_message(msg: Dict) -> None:
     assert "messageId" in msg, "Message MUST have 'messageId' field"
     assert isinstance(msg["messageId"], str), "Message.messageId MUST be string"
     assert "role" in msg, "Message MUST have 'role' field"
-    assert msg["role"] in ["user", "agent"], f"Invalid role: {msg['role']}"
+    assert msg["role"] in ["ROLE_USER", "ROLE_AGENT"], f"Invalid role: {msg['role']}"
     assert "parts" in msg, "Message MUST have 'parts' field"
     assert isinstance(msg["parts"], list), "Message.parts MUST be list"
     assert len(msg["parts"]) > 0, "Message.parts MUST NOT be empty"
@@ -87,34 +87,52 @@ def _validate_message(msg: Dict) -> None:
 
 
 def _validate_part(part: Dict) -> None:
-    """Строгая валидация Part по A2A SDK спецификации."""
-    if "kind" in part:
-        assert part["kind"] in ["text", "file", "data"], f"Invalid Part.kind: {part['kind']}"
-        if part["kind"] == "text":
-            assert "text" in part, "TextPart MUST have 'text' field"
+    """Строгая валидация Part по A2A Protocol 1.0 ProtoJSON."""
+    has_text = "text" in part
+    has_raw = "raw" in part
+    has_url = "url" in part
+    has_data = "data" in part
+    assert has_text or has_raw or has_url or has_data, f"Part must have text/raw/url/data: {part}"
+    if has_text:
+        assert isinstance(part["text"], str), "Part.text MUST be string"
+    if has_raw or has_url:
+        assert "filename" in part, "File Part MUST have filename"
+
+
+def _stream_payload(result: Dict) -> tuple[Dict, str]:
+    """Unwrap StreamResponse ProtoJSON: statusUpdate / artifactUpdate."""
+    if "statusUpdate" in result:
+        body = result["statusUpdate"]
+        assert isinstance(body, dict), "statusUpdate MUST be object"
+        return body, "statusUpdate"
+    if "artifactUpdate" in result:
+        body = result["artifactUpdate"]
+        assert isinstance(body, dict), "artifactUpdate MUST be object"
+        return body, "artifactUpdate"
+    raise AssertionError(f"StreamResponse MUST have statusUpdate or artifactUpdate, got keys={sorted(result.keys())}")
 
 
 def _validate_status_update_event(event: Dict) -> None:
-    """Строгая валидация TaskStatusUpdateEvent по A2A SDK спецификации."""
+    """Строгая валидация StreamResponse.statusUpdate."""
     result = event.get("result", event)
-    assert result.get("kind") == "status-update", "Event.kind MUST be 'status-update'"
-    assert "taskId" in result, "TaskStatusUpdateEvent MUST have 'taskId'"
-    assert isinstance(result["taskId"], str), "taskId MUST be string"
-    assert "contextId" in result, "TaskStatusUpdateEvent MUST have 'contextId'"
-    assert isinstance(result["contextId"], str), "contextId MUST be string"
-    assert "final" in result, "TaskStatusUpdateEvent MUST have 'final'"
-    assert isinstance(result["final"], bool), "final MUST be boolean"
-    assert "status" in result, "TaskStatusUpdateEvent MUST have 'status'"
-    _validate_task_status(result["status"])
+    body, kind = _stream_payload(result)
+    assert kind == "statusUpdate"
+    assert "taskId" in body, "TaskStatusUpdateEvent MUST have 'taskId'"
+    assert isinstance(body["taskId"], str), "taskId MUST be string"
+    assert "contextId" in body, "TaskStatusUpdateEvent MUST have 'contextId'"
+    assert isinstance(body["contextId"], str), "contextId MUST be string"
+    assert "status" in body, "TaskStatusUpdateEvent MUST have 'status'"
+    _validate_task_status(body["status"])
 
 
 def _validate_artifact_update_event(event: Dict) -> None:
-    """Строгая валидация TaskArtifactUpdateEvent по A2A SDK спецификации."""
+    """Строгая валидация StreamResponse.artifactUpdate."""
     result = event.get("result", event)
-    assert result.get("kind") == "artifact-update", "Event.kind MUST be 'artifact-update'"
-    assert "taskId" in result, "TaskArtifactUpdateEvent MUST have 'taskId'"
-    assert "contextId" in result, "TaskArtifactUpdateEvent MUST have 'contextId'"
-    assert "artifact" in result, "TaskArtifactUpdateEvent MUST have 'artifact'"
+    body, kind = _stream_payload(result)
+    assert kind == "artifactUpdate"
+    assert "taskId" in body, "TaskArtifactUpdateEvent MUST have 'taskId'"
+    assert "contextId" in body, "TaskArtifactUpdateEvent MUST have 'contextId'"
+    assert "artifact" in body, "TaskArtifactUpdateEvent MUST have 'artifact'"
 
 
 def _validate_jsonrpc_response(data: Dict) -> None:
@@ -143,8 +161,14 @@ class TestA2AAgentCard:
         card = resp.json()
         assert "name" in card, "AgentCard MUST have 'name'"
         assert isinstance(card["name"], str), "AgentCard.name MUST be string"
-        assert "url" in card, "AgentCard MUST have 'url'"
-        assert isinstance(card["url"], str), f"AgentCard.url MUST be string, got: {card.get('url')}"
+        assert "supportedInterfaces" in card, "AgentCard MUST have 'supportedInterfaces'"
+        interfaces = card["supportedInterfaces"]
+        assert isinstance(interfaces, list) and len(interfaces) > 0
+        primary = interfaces[0]
+        assert "url" in primary, "AgentInterface MUST have 'url'"
+        assert isinstance(primary["url"], str), f"AgentInterface.url MUST be string, got: {primary.get('url')}"
+        assert primary.get("protocolBinding") == "JSONRPC"
+        assert primary.get("protocolVersion") == "1.0"
         assert "version" in card, "AgentCard MUST have 'version'"
         assert isinstance(card["version"], str), "AgentCard.version MUST be string"
         assert "capabilities" in card, "AgentCard MUST have 'capabilities'"
@@ -163,18 +187,21 @@ class TestA2AAgentCard:
 
     @pytest.mark.asyncio
     async def test_agent_card_branches(self, client, flow_id):
-        """Agent Card содержит branches в правильном формате."""
+        """Agent Card: A2A skills + platform branches extension."""
         resp = await client.get(f"/flows/api/v1/{flow_id}")
         card = resp.json()
+        assert "skills" in card
+        assert isinstance(card["skills"], list), "skills MUST be a list"
+        assert len(card["skills"]) >= 1
         assert "branches" in card
-        assert isinstance(card["branches"], list), "branches MUST be a list"
-        for branch_entry in card["branches"]:
-            assert "id" in branch_entry, "branch entry MUST have 'id'"
-            assert "name" in branch_entry, "branch entry MUST have 'name'"
+        assert card["branches"] == card["skills"]
+        for skill_entry in card["skills"]:
+            assert "id" in skill_entry, "skill entry MUST have 'id'"
+            assert "name" in skill_entry, "skill entry MUST have 'name'"
 
 
 class TestA2AMessageSend:
-    """Тесты message/send - строгая проверка Task response."""
+    """Тесты SendMessage - строгая проверка Task response."""
 
     @pytest.fixture
     async def flow_id(self, client):
@@ -184,14 +211,15 @@ class TestA2AMessageSend:
     async def test_message_send_returns_valid_task(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):
-        """message/send возвращает валидный Task по A2A спецификации."""
+        """SendMessage возвращает валидный Task по A2A спецификации."""
         mock_llm_with_queue(["Test response"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "test-1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Hello")},
             },
         )
@@ -201,21 +229,22 @@ class TestA2AMessageSend:
         assert "result" in data
         task = data["result"]
         _validate_task(task)
-        assert task["status"]["state"] == "completed"
+        assert task["status"]["state"] == "TASK_STATE_COMPLETED"
 
     @pytest.mark.asyncio
     async def test_message_send_with_context_id(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):
-        """message/send сохраняет переданный contextId."""
+        """SendMessage сохраняет переданный contextId."""
         mock_llm_with_queue(["Response"])
         context_id = str(uuid.uuid4())
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "test-2",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Test", context_id=context_id)},
             },
         )
@@ -227,14 +256,15 @@ class TestA2AMessageSend:
 
     @pytest.mark.asyncio
     async def test_message_send_history(self, client, flow_id, mock_llm_with_queue, sync_tools):
-        """message/send возвращает history с валидными Messages."""
+        """SendMessage возвращает history с валидными Messages."""
         mock_llm_with_queue(["Agent response"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "test-3",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("User message")},
             },
         )
@@ -243,18 +273,19 @@ class TestA2AMessageSend:
         _validate_task(task, require_history=True)
         assert len(task["history"]) >= 2
         roles = [msg["role"] for msg in task["history"]]
-        assert "user" in roles, "History MUST contain user message"
-        assert "agent" in roles, "History MUST contain agent message"
+        assert "ROLE_USER" in roles, "History MUST contain user message"
+        assert "ROLE_AGENT" in roles, "History MUST contain agent message"
 
     @pytest.mark.asyncio
     async def test_unknown_flow_error(self, client):
         """Неизвестный flow возвращает JSON-RPC ошибку."""
         resp = await client.post(
             "/flows/api/v1/unknown_flow_xyz",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Test")},
             },
         )
@@ -266,7 +297,7 @@ class TestA2AMessageSend:
 
 
 class TestA2ATasksGet:
-    """Тесты tasks/get - строгая проверка."""
+    """Тесты GetTask - строгая проверка."""
 
     @pytest.fixture
     async def flow_id(self, client):
@@ -276,21 +307,23 @@ class TestA2ATasksGet:
     async def test_tasks_get_returns_valid_task(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):
-        """tasks/get возвращает валидный Task."""
+        """GetTask возвращает валидный Task."""
         mock_llm_with_queue(["Initial response"])
         context_id = str(uuid.uuid4())
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Create task", context_id=context_id)},
             },
         )
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
-            json={"jsonrpc": "2.0", "id": "2", "method": "tasks/get", "params": {"id": context_id}},
+            headers=A2A_HEADERS,
+            json={"jsonrpc": "2.0", "id": "2", "method": "GetTask", "params": {"id": context_id}},
         )
         data = resp.json()
         _validate_jsonrpc_response(data)
@@ -301,25 +334,27 @@ class TestA2ATasksGet:
     async def test_tasks_get_with_history_length(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):
-        """tasks/get с historyLength ограничивает историю."""
+        """GetTask с historyLength ограничивает историю."""
         mock_llm_with_queue(["Response 1", "Response 2", "Response 3"])
         context_id = str(uuid.uuid4())
         for i in range(3):
             await client.post(
                 f"/flows/api/v1/{flow_id}",
+                headers=A2A_HEADERS,
                 json={
                     "jsonrpc": "2.0",
                     "id": str(i),
-                    "method": "message/send",
+                    "method": "SendMessage",
                     "params": {"message": _msg(f"Message {i}", context_id=context_id)},
                 },
             )
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "get",
-                "method": "tasks/get",
+                "method": "GetTask",
                 "params": {"id": context_id, "historyLength": 2},
             },
         )
@@ -330,23 +365,25 @@ class TestA2ATasksGet:
 
     @pytest.mark.asyncio
     async def test_tasks_get_not_found(self, client, flow_id):
-        """tasks/get для несуществующей задачи возвращает null."""
+        """GetTask для несуществующей задачи возвращает TASK_NOT_FOUND."""
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/get",
+                "method": "GetTask",
                 "params": {"id": str(uuid.uuid4())},
             },
         )
         data = resp.json()
         _validate_jsonrpc_response(data)
-        assert data["result"] is None
+        assert "error" in data
+        assert data["error"]["code"] == -32001
 
 
 class TestA2ATasksCancel:
-    """Тесты tasks/cancel - строгая проверка."""
+    """Тесты CancelTask - строгая проверка."""
 
     @pytest.fixture
     async def flow_id(self, client):
@@ -356,24 +393,31 @@ class TestA2ATasksCancel:
     async def test_tasks_cancel_returns_canceled_task(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):
-        """tasks/cancel возвращает Task со статусом canceled."""
-        mock_llm_with_queue(["Response"])
+        """CancelTask возвращает Task со статусом canceled (из input-required)."""
+        mock_llm_with_queue(
+            [{"type": "tool_call", "tool": "ask_user", "args": {"question": "Name?"}}]
+        )
         context_id = str(uuid.uuid4())
-        await client.post(
+        create_resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Create", context_id=context_id)},
             },
         )
+        create_data = create_resp.json()
+        _validate_jsonrpc_response(create_data)
+        assert create_data["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "tasks/cancel",
+                "method": "CancelTask",
                 "params": {"id": context_id},
             },
         )
@@ -381,11 +425,11 @@ class TestA2ATasksCancel:
         _validate_jsonrpc_response(data)
         task = data["result"]
         _validate_task(task)
-        assert task["status"]["state"] == "canceled"
+        assert task["status"]["state"] == "TASK_STATE_CANCELED"
 
 
 class TestA2AMessageStream:
-    """Тесты message/stream - строгая проверка SSE событий."""
+    """Тесты SendStreamingMessage - строгая проверка SSE событий."""
 
     @pytest.fixture
     async def flow_id(self, client):
@@ -393,14 +437,15 @@ class TestA2AMessageStream:
 
     @pytest.mark.asyncio
     async def test_stream_returns_sse(self, client, flow_id, mock_llm_with_queue, sync_tools):
-        """message/stream возвращает SSE формат."""
+        """SendStreamingMessage возвращает SSE формат."""
         mock_llm_with_queue(["Streaming response"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Stream test")},
             },
         )
@@ -413,10 +458,11 @@ class TestA2AMessageStream:
         mock_llm_with_queue(["Valid events"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Test events")},
             },
         )
@@ -425,30 +471,40 @@ class TestA2AMessageStream:
         for event in events:
             _validate_jsonrpc_response(event)
             result = event.get("result", {})
-            kind = result.get("kind")
-            if kind == "status-update":
+            if "statusUpdate" in result:
                 _validate_status_update_event(event)
-            elif kind == "artifact-update":
+            elif "artifactUpdate" in result:
                 _validate_artifact_update_event(event)
-            elif kind == "task":
-                _validate_task(result)
+            elif "task" in result:
+                _validate_task(result["task"])
 
     @pytest.mark.asyncio
     async def test_stream_has_final_event(self, client, flow_id, mock_llm_with_queue, sync_tools):
-        """Stream содержит финальное событие с final=true."""
+        """Stream содержит терминальный statusUpdate (COMPLETED/FAILED/...)."""
         mock_llm_with_queue(["Final test"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Test final")},
             },
         )
         events = _parse_sse(resp.text)
-        final_events = [e for e in events if e.get("result", {}).get("final") is True]
-        assert len(final_events) > 0, "Stream MUST contain event with final=true"
+        final_events = [
+            e
+            for e in events
+            if e.get("result", {}).get("statusUpdate", {}).get("status", {}).get("state")
+            in (
+                "TASK_STATE_COMPLETED",
+                "TASK_STATE_FAILED",
+                "TASK_STATE_CANCELED",
+                "TASK_STATE_INPUT_REQUIRED",
+            )
+        ]
+        assert len(final_events) > 0, "Stream MUST contain terminal statusUpdate"
 
 
 class TestA2AInterrupt:
@@ -468,10 +524,11 @@ class TestA2AInterrupt:
         )
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Start")},
             },
         )
@@ -479,7 +536,7 @@ class TestA2AInterrupt:
         _validate_jsonrpc_response(data)
         task = data["result"]
         _validate_task(task)
-        assert task["status"]["state"] == "input-required"
+        assert task["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
         assert task["status"]["message"] is not None
         _validate_message(task["status"]["message"])
 
@@ -495,21 +552,23 @@ class TestA2AInterrupt:
         context_id = str(uuid.uuid4())
         r1 = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Start", context_id=context_id)},
             },
         )
         data1 = r1.json()
-        assert data1["result"]["status"]["state"] == "input-required"
+        assert data1["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
         r2 = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("John", context_id=context_id)},
             },
         )
@@ -517,33 +576,35 @@ class TestA2AInterrupt:
         _validate_jsonrpc_response(data2)
         task2 = data2["result"]
         _validate_task(task2)
-        assert task2["status"]["state"] == "completed"
+        assert task2["status"]["state"] == "TASK_STATE_COMPLETED"
 
     @pytest.mark.asyncio
     async def test_tasks_get_shows_input_required(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):
-        """tasks/get показывает input-required состояние."""
+        """GetTask показывает input-required состояние."""
         mock_llm_with_queue(
             [{"type": "tool_call", "tool": "ask_user", "args": {"question": "Age?"}}]
         )
         context_id = str(uuid.uuid4())
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Start", context_id=context_id)},
             },
         )
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
-            json={"jsonrpc": "2.0", "id": "2", "method": "tasks/get", "params": {"id": context_id}},
+            headers=A2A_HEADERS,
+            json={"jsonrpc": "2.0", "id": "2", "method": "GetTask", "params": {"id": context_id}},
         )
         data = resp.json()
         task = data["result"]
-        assert task["status"]["state"] == "input-required"
+        assert task["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
     @pytest.mark.asyncio
     async def test_stream_interrupt_has_input_required_event(
@@ -555,10 +616,11 @@ class TestA2AInterrupt:
         )
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Stream interrupt")},
             },
         )
@@ -566,7 +628,7 @@ class TestA2AInterrupt:
         input_required = [
             e
             for e in events
-            if e.get("result", {}).get("status", {}).get("state") == "input-required"
+            if e.get("result", {}).get("statusUpdate", {}).get("status", {}).get("state") == "TASK_STATE_INPUT_REQUIRED"
         ]
         assert len(input_required) > 0, "Stream MUST contain input-required event"
 
@@ -596,10 +658,11 @@ class TestA2AInterrupt:
         context_id = str(uuid.uuid4())
         r1 = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("Hello", context_id=context_id)},
             },
         )
@@ -607,7 +670,7 @@ class TestA2AInterrupt:
         _validate_jsonrpc_response(data1)
         task1 = data1["result"]
         _validate_task(task1)
-        assert task1["status"]["state"] == "input-required", (
+        assert task1["status"]["state"] == "TASK_STATE_INPUT_REQUIRED", (
             f"First request MUST return input-required, got: {task1['status']['state']}"
         )
         first_task_id = task1["id"]
@@ -615,17 +678,18 @@ class TestA2AInterrupt:
         assert task1["status"]["message"] is not None, "input-required MUST have message"
         question_parts = task1["status"]["message"]["parts"]
         question_text = "".join(
-            (p.get("text", "") for p in question_parts if p.get("kind") == "text")
+            (p.get("text", "") for p in question_parts if "text" in p)
         )
         assert "name" in question_text.lower(), (
             f"Question should ask about name, got: {question_text}"
         )
         r2 = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("TestUser", context_id=context_id)},
             },
         )
@@ -633,7 +697,7 @@ class TestA2AInterrupt:
         _validate_jsonrpc_response(data2)
         task2 = data2["result"]
         _validate_task(task2)
-        assert task2["status"]["state"] == "completed", (
+        assert task2["status"]["state"] == "TASK_STATE_COMPLETED", (
             f"Resume MUST return completed, got: {task2['status']['state']}"
         )
         assert task2["id"] == first_task_id, (
@@ -642,7 +706,7 @@ class TestA2AInterrupt:
         assert task2["status"]["message"] is not None, "completed MUST have message"
         response_parts = task2["status"]["message"]["parts"]
         response_text = "".join(
-            (p.get("text", "") for p in response_parts if p.get("kind") == "text")
+            (p.get("text", "") for p in response_parts if "text" in p)
         )
         assert "TestUser" in response_text, (
             f"Response should contain user name, got: {response_text}"
@@ -671,10 +735,11 @@ class TestA2AInterrupt:
         context_id = str(uuid.uuid4())
         r1 = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Start", context_id=context_id)},
             },
         )
@@ -682,30 +747,31 @@ class TestA2AInterrupt:
         input_required_events = [
             e
             for e in events1
-            if e.get("result", {}).get("status", {}).get("state") == "input-required"
+            if e.get("result", {}).get("statusUpdate", {}).get("status", {}).get("state") == "TASK_STATE_INPUT_REQUIRED"
         ]
         assert len(input_required_events) > 0, "First stream MUST contain input-required event"
         r2 = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Moscow", context_id=context_id)},
             },
         )
         events2 = _parse_sse(r2.text)
         completed_events = [
-            e for e in events2 if e.get("result", {}).get("status", {}).get("state") == "completed"
+            e for e in events2 if e.get("result", {}).get("statusUpdate", {}).get("status", {}).get("state") == "TASK_STATE_COMPLETED"
         ]
         assert len(completed_events) > 0, (
             f"Resume stream MUST contain completed event. Got events: {[e.get('result', {}).get('status', {}).get('state') for e in events2]}"
         )
         completed = completed_events[-1]
-        msg = completed.get("result", {}).get("status", {}).get("message", {})
+        msg = completed.get("result", {}).get("statusUpdate", {}).get("status", {}).get("message", {})
         if msg:
             parts = msg.get("parts", [])
-            text = "".join((p.get("text", "") for p in parts if p.get("kind") == "text"))
+            text = "".join((p.get("text", "") for p in parts if "text" in p))
             assert "Moscow" in text, f"Response should mention Moscow, got: {text}"
 
 
@@ -718,121 +784,123 @@ class TestA2APushNotificationConfig:
 
     @pytest.mark.asyncio
     async def test_set_config_valid_response(self, client, flow_id):
-        """tasks/pushNotificationConfig/set возвращает валидный конфиг."""
+        """CreateTaskPushNotificationConfig возвращает валидный конфиг."""
         task_id = str(uuid.uuid4())
         config_id = str(uuid.uuid4())
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {
-                        "id": config_id,
-                        "url": "http://example.com/webhook",
-                    },
+                    "id": config_id, "url": "http://example.com/webhook",
                 },
             },
         )
         data = resp.json()
         _validate_jsonrpc_response(data)
         result = data["result"]
-        assert "pushNotificationConfig" in result
-        config = result["pushNotificationConfig"]
-        assert config["id"] == config_id
-        assert "url" in config
+        assert result["id"] == config_id
+        assert "url" in result
+        assert result.get("taskId")
 
     @pytest.mark.asyncio
     async def test_get_config_valid_response(self, client, flow_id):
-        """tasks/pushNotificationConfig/get возвращает конфиг или null."""
+        """GetTaskPushNotificationConfig возвращает конфиг или null."""
         task_id = str(uuid.uuid4())
         config_id = str(uuid.uuid4())
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {"id": config_id, "url": "http://example.com"},
+                    "id": config_id, "url": "http://example.com",
                 },
             },
         )
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "tasks/pushNotificationConfig/get",
-                "params": {"id": task_id, "pushNotificationConfigId": config_id},
+                "method": "GetTaskPushNotificationConfig",
+                "params": {"taskId": task_id, "id": config_id},
             },
         )
         data = resp.json()
         _validate_jsonrpc_response(data)
         if data["result"] is not None:
-            assert "pushNotificationConfig" in data["result"]
+            assert "id" in data["result"] and "url" in data["result"]
 
     @pytest.mark.asyncio
     async def test_list_configs_valid_response(self, client, flow_id):
-        """tasks/pushNotificationConfig/list возвращает список."""
+        """ListTaskPushNotificationConfigs возвращает список."""
         task_id = str(uuid.uuid4())
         for i in range(3):
             await client.post(
                 f"/flows/api/v1/{flow_id}",
+                headers=A2A_HEADERS,
                 json={
                     "jsonrpc": "2.0",
                     "id": str(i),
-                    "method": "tasks/pushNotificationConfig/set",
+                    "method": "CreateTaskPushNotificationConfig",
                     "params": {
                         "taskId": task_id,
-                        "pushNotificationConfig": {
-                            "id": f"cfg-{i}",
-                            "url": f"http://example.com/{i}",
-                        },
+                        "id": f"cfg-{i}",
+                        "url": f"http://example.com/{i}",
                     },
                 },
             )
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "list",
-                "method": "tasks/pushNotificationConfig/list",
-                "params": {"id": task_id},
+                "method": "ListTaskPushNotificationConfigs",
+                "params": {"taskId": task_id},
             },
         )
         data = resp.json()
         _validate_jsonrpc_response(data)
-        assert isinstance(data["result"], list)
-        assert len(data["result"]) == 3
+        configs = data["result"].get("configs") if isinstance(data["result"], dict) else data["result"]
+        assert isinstance(configs, list)
+        assert len(configs) == 3
 
     @pytest.mark.asyncio
     async def test_delete_config_valid_response(self, client, flow_id):
-        """tasks/pushNotificationConfig/delete возвращает null."""
+        """DeleteTaskPushNotificationConfig возвращает null."""
         task_id = str(uuid.uuid4())
         config_id = str(uuid.uuid4())
         await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "tasks/pushNotificationConfig/set",
+                "method": "CreateTaskPushNotificationConfig",
                 "params": {
                     "taskId": task_id,
-                    "pushNotificationConfig": {"id": config_id, "url": "http://example.com"},
+                    "id": config_id, "url": "http://example.com",
                 },
             },
         )
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "2",
-                "method": "tasks/pushNotificationConfig/delete",
-                "params": {"id": task_id, "pushNotificationConfigId": config_id},
+                "method": "DeleteTaskPushNotificationConfig",
+                "params": {"taskId": task_id, "id": config_id},
             },
         )
         data = resp.json()
@@ -980,6 +1048,7 @@ class TestA2ABranches:
         branch_id = f"test_branch_{unique_id}"
         resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
+            headers=A2A_HEADERS,
             json={
                 "branch_id": branch_id,
                 "name": "Test Branch",
@@ -1006,11 +1075,13 @@ class TestA2ABranches:
         branch_id = f"test_branch_dup_{unique_id}"
         resp1 = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
+            headers=A2A_HEADERS,
             json={"branch_id": branch_id, "name": "Test Branch"},
         )
         assert resp1.status_code == 201
         resp2 = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
+            headers=A2A_HEADERS,
             json={"branch_id": branch_id, "name": "Test Branch"},
         )
         assert resp2.status_code == 409
@@ -1027,6 +1098,7 @@ class TestA2ABranches:
         """POST /flows/{id}/branches возвращает 404 для несуществующего flow."""
         resp = await client.post(
             "/flows/api/v1/nonexistent_flow/branches",
+            headers=A2A_HEADERS,
             json={"branch_id": f"test_branch_{unique_id}", "name": "Test Branch"},
         )
         assert resp.status_code == 404
@@ -1037,6 +1109,7 @@ class TestA2ABranches:
         branch_id = f"test_branch_update_{unique_id}"
         create_resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
+            headers=A2A_HEADERS,
             json={
                 "branch_id": branch_id,
                 "name": "Original Name",
@@ -1089,6 +1162,7 @@ class TestA2ABranches:
         branch_id = f"test_branch_delete_{unique_id}"
         create_resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
+            headers=A2A_HEADERS,
             json={"branch_id": branch_id, "name": "To Delete"},
         )
         assert create_resp.status_code == 201
@@ -1139,6 +1213,7 @@ class TestA2ABranches:
         branch_id = f"test_branch_edges_{unique_id}"
         resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
+            headers=A2A_HEADERS,
             json={
                 "branch_id": branch_id,
                 "name": "Test Branch with Edges",
@@ -1181,10 +1256,11 @@ class TestA2AConversation:
         for i in range(3):
             resp = await client.post(
                 f"/flows/api/v1/{flow_id}",
+                headers=A2A_HEADERS,
                 json={
                     "jsonrpc": "2.0",
                     "id": str(i),
-                    "method": "message/send",
+                    "method": "SendMessage",
                     "params": {"message": _msg(f"Message {i}", context_id=context_id)},
                 },
             )
@@ -1193,10 +1269,11 @@ class TestA2AConversation:
             _validate_task(data["result"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "get",
-                "method": "tasks/get",
+                "method": "GetTask",
                 "params": {"id": context_id},
             },
         )
@@ -1218,6 +1295,7 @@ class TestA2AJSONRPCErrors:
         """Неизвестный метод возвращает -32601."""
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={"jsonrpc": "2.0", "id": "1", "method": "unknown/method", "params": {}},
         )
         data = resp.json()
@@ -1227,22 +1305,26 @@ class TestA2AJSONRPCErrors:
 
     @pytest.mark.asyncio
     async def test_missing_params_error(self, client, flow_id):
-        """Отсутствующие params для message/send."""
+        """Отсутствующие params для SendMessage."""
         resp = await client.post(
-            f"/flows/api/v1/{flow_id}", json={"jsonrpc": "2.0", "id": "1", "method": "message/send"}
+            f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
+            json={"jsonrpc": "2.0", "id": "1", "method": "SendMessage"},
         )
         data = resp.json()
         assert "error" in data
+        assert data["error"]["code"] == -32602
 
     @pytest.mark.asyncio
     async def test_invalid_message_format_error(self, client, flow_id):
         """Невалидный формат message."""
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": "not_an_object"},
             },
         )
@@ -1263,10 +1345,11 @@ class TestA2AEdgeCases:
         mock_llm_with_queue(["Handled empty"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("")},
             },
         )
@@ -1282,10 +1365,11 @@ class TestA2AEdgeCases:
         special = "ураааа"
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg(special)},
             },
         )
@@ -1323,10 +1407,11 @@ class TestA2ARealisticStreaming:
         mock_llm_with_queue([{"type": "text", "content": long_response}])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "stream-chunks",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Test streaming")},
             },
         )
@@ -1334,17 +1419,17 @@ class TestA2ARealisticStreaming:
         events = _parse_sse(resp.text)
         assert len(events) > 0, "Should receive events from Redis"
         artifact_events = [
-            e for e in events if e.get("result", {}).get("kind") == "artifact-update"
+            e for e in events if "artifactUpdate" in e.get("result", {})
         ]
         assert len(artifact_events) >= 5, (
             f"Expected multiple artifact chunks, got {len(artifact_events)}"
         )
         full_text = ""
         for event in artifact_events:
-            result = event.get("result", {})
+            result = event.get("result", {}).get("artifactUpdate", {})
             parts = result.get("artifact", {}).get("parts", [])
             for part in parts:
-                if part.get("kind") == "text":
+                if "text" in part:
                     full_text += part.get("text", "")
         assert full_text == long_response
 
@@ -1356,35 +1441,36 @@ class TestA2ARealisticStreaming:
         mock_llm_with_queue(["Multiple chunks with same artifact ID test."])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "artifact-id-test",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Test artifact ID consistency")},
             },
         )
         events = _parse_sse(resp.text)
         artifact_events = [
-            e for e in events if e.get("result", {}).get("kind") == "artifact-update"
+            e for e in events if "artifactUpdate" in e.get("result", {})
         ]
         text_stream_events = [
             e
             for e in artifact_events
-            if not str((e.get("result", {}).get("artifact") or {}).get("name") or "").startswith(
+            if not str((e.get("result", {}).get("artifactUpdate", {}).get("artifact") or {}).get("name") or "").startswith(
                 "node_"
             )
             and any(
                 (
-                    p.get("kind") == "text"
-                    for p in (e.get("result", {}).get("artifact") or {}).get("parts", [])
+                    "text" in p
+                    for p in (e.get("result", {}).get("artifactUpdate", {}).get("artifact") or {}).get("parts", [])
                 )
             )
         ]
         assert len(text_stream_events) >= 2, "Should have multiple text artifact chunks"
         artifact_ids = set()
         for event in text_stream_events:
-            result = event.get("result", {})
-            artifact_id = result.get("artifact", {}).get("artifactId")
+            artifact_update = event.get("result", {}).get("artifactUpdate", {})
+            artifact_id = artifact_update.get("artifact", {}).get("artifactId")
             if artifact_id:
                 artifact_ids.add(artifact_id)
         assert len(artifact_ids) == 1, (
@@ -1397,52 +1483,58 @@ class TestA2ARealisticStreaming:
         mock_llm_with_queue(["Content with last chunk marker"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "last-chunk-test",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Check last chunk")},
             },
         )
         events = _parse_sse(resp.text)
         artifact_events = [
-            e for e in events if e.get("result", {}).get("kind") == "artifact-update"
+            e for e in events if "artifactUpdate" in e.get("result", {})
         ]
         content_artifacts = [
             e
             for e in artifact_events
-            if not str((e.get("result", {}).get("artifact") or {}).get("name") or "").startswith(
+            if not str((e.get("result", {}).get("artifactUpdate", {}).get("artifact") or {}).get("name") or "").startswith(
                 "node_"
             )
         ]
         assert len(content_artifacts) >= 1, "Должен быть хотя бы один контентный artifact chunk"
-        last_result = content_artifacts[-1].get("result", {})
+        last_result = content_artifacts[-1].get("result", {}).get("artifactUpdate", {})
         assert last_result.get("lastChunk") is True, (
             "Last content artifact chunk should have lastChunk=True"
         )
         for event in content_artifacts[:-1]:
-            result = event.get("result", {})
+            result = event.get("result", {}).get("artifactUpdate", {})
             assert result.get("lastChunk") is not True, (
                 "Intermediate content chunks should not have lastChunk=True"
             )
 
     @pytest.mark.asyncio
     async def test_stream_status_events(self, client, flow_id, mock_llm_with_queue, sync_tools):
-        """Stream содержит status-update события с финальным final=True."""
+        """Stream содержит statusUpdate frames; boundary = TASK_STATE_*."""
         mock_llm_with_queue(["Test response"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "status-events",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Test status events")},
             },
         )
         events = _parse_sse(resp.text)
-        status_events = [e for e in events if e.get("result", {}).get("kind") == "status-update"]
+        status_events = [e for e in events if "statusUpdate" in e.get("result", {})]
         assert len(status_events) >= 1, "Should have at least one status event"
-        final_events = [e for e in status_events if e.get("result", {}).get("final") is True]
+        final_events = [
+            e for e in status_events
+            if e.get("result", {}).get("statusUpdate", {}).get("status", {}).get("state")
+            in ("TASK_STATE_COMPLETED", "TASK_STATE_FAILED", "TASK_STATE_CANCELED", "TASK_STATE_INPUT_REQUIRED")
+        ]
         assert len(final_events) >= 1, "Should have final status event"
 
     @pytest.mark.asyncio
@@ -1451,23 +1543,29 @@ class TestA2ARealisticStreaming:
         mock_llm_with_queue(["Testing event order in stream"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "event-order",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Test order")},
             },
         )
         events = _parse_sse(resp.text)
         assert len(events) > 0, "Should receive events"
         last_result = events[-1].get("result", {})
-        last_kind = last_result.get("kind")
-        if last_kind == "status-update":
-            assert last_result.get("final") is True, "Last status-update should be final"
+        if "statusUpdate" in last_result:
+            state = last_result.get("statusUpdate", {}).get("status", {}).get("state")
+            assert state in (
+                "TASK_STATE_COMPLETED",
+                "TASK_STATE_FAILED",
+                "TASK_STATE_CANCELED",
+                "TASK_STATE_INPUT_REQUIRED",
+            ), f"Last statusUpdate should be terminal/interrupt, got {state}"
         artifact_indices = [
             i
             for (i, e) in enumerate(events)
-            if e.get("result", {}).get("kind") == "artifact-update"
+            if "artifactUpdate" in e.get("result", {})
         ]
         if artifact_indices:
             final_index = len(events) - 1
@@ -1485,10 +1583,11 @@ class TestA2ARealisticStreaming:
         )
         resp1 = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "turn1",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("First message", context_id=context_id)},
             },
         )
@@ -1496,10 +1595,11 @@ class TestA2ARealisticStreaming:
         assert len(events1) > 0, "First turn should produce events"
         resp2 = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "turn2",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Second message", context_id=context_id)},
             },
         )
@@ -1515,10 +1615,11 @@ class TestA2ARealisticStreaming:
         mock_llm_with_queue(["Testing ID consistency across events"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "id-consistency",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("Check IDs", context_id=context_id)},
             },
         )

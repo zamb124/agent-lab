@@ -24,7 +24,7 @@ import fitz as pymupdf
 import olefile
 import trafilatura
 import xlrd
-from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
+from a2a.types import Message, Part, Role
 from botocore.exceptions import ClientError
 from bs4 import BeautifulSoup
 from charset_normalizer import from_bytes
@@ -624,20 +624,15 @@ async def run_vision_on_image_bytes(
     payload, payload_mime = prepare_visual_payload(
         raw, file_name=file_name, mime=mime, compression=compression
     )
-    b64 = base64.b64encode(payload).decode("utf-8")
     message = Message(
         message_id=str(uuid.uuid4()),
-        role=Role.user,
+        role=Role.ROLE_USER,
         parts=[
-            Part(root=TextPart(text=prompt)),
+            Part(text=prompt),
             Part(
-                root=FilePart(
-                    file=FileWithBytes(
-                        bytes=b64,
-                        mime_type=payload_mime,
-                        name=file_name,
-                    )
-                )
+                raw=payload,
+                media_type=payload_mime,
+                filename=file_name,
             ),
         ],
     )
@@ -676,7 +671,6 @@ async def _read_image_impl(
     mime: str,
     opts: ReadOptions,
 ) -> FileReadResult:
-    b64 = base64.b64encode(raw).decode("utf-8")
     if opts.vision_prompt is not None:
         stripped = opts.vision_prompt.strip()
         if not stripped:
@@ -686,17 +680,13 @@ async def _read_image_impl(
         prompt = _DEFAULT_IMAGE_VISION_PROMPT
     message = Message(
         message_id=str(uuid.uuid4()),
-        role=Role.user,
+        role=Role.ROLE_USER,
         parts=[
-            Part(root=TextPart(text=prompt)),
+            Part(text=prompt),
             Part(
-                root=FilePart(
-                    file=FileWithBytes(
-                        bytes=b64,
-                        mime_type=mime,
-                        name=file_name,
-                    )
-                )
+                raw=raw,
+                media_type=mime,
+                filename=file_name,
             ),
         ],
     )

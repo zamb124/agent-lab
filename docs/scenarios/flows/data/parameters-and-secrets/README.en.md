@@ -14,13 +14,13 @@ In the editor bottom bar click the variables icon. Here you define values availa
 
 ## Step 2. Verify the variable in the list
 
-After saving, the greeting variable appears in the modal table. This confirms the value is available to the whole graph before editing the prompt.
+The greeting variable is already in the modal table. This confirms the value is available to the whole graph before editing the prompt.
 
 ![Verify the variable in the list](parameters-and-secrets--02-variable-greeting-listed.png)
 
 ## Step 3. Add variables and update the prompt
 
-Create a greeting variable and put support address support@zeleniy-sad.ru and secret @var:telegram_bot_token_fc9c1eee in the prompt. Contacts can change without rewriting the whole instruction.
+Create a greeting variable and put support address support@zeleniy-sad.ru and secret @var:telegram_bot_token_e56da2f5 in the prompt. Contacts can change without rewriting the whole instruction.
 
 ![Add variables and update the prompt](parameters-and-secrets--03-prompt-with-variables.png)
 

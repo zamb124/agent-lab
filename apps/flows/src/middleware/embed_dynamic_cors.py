@@ -78,9 +78,15 @@ def _is_origin_allowed(origin: str, allowed_origins: list[str]) -> bool:
     return origin in allowed_origins
 
 
+_EMBED_CORS_ALLOW_HEADERS = (
+    "Accept, Authorization, Content-Type, A2A-Version, X-Platform-Namespace, X-Test-Scope"
+)
+
+
 def _apply_cors_headers(response: Response, origin: str) -> None:
     response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Platform-Namespace"
+    # browser chat шлёт A2A-Version (+ Accept) на POST /embed/{id}; иначе preflight CORS fail
+    response.headers["Access-Control-Allow-Headers"] = _EMBED_CORS_ALLOW_HEADERS
     response.headers["Vary"] = "Origin"

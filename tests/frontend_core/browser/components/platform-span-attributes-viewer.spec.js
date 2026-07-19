@@ -22,7 +22,7 @@ describe('platform-span-attributes-viewer', () => {
                 'platform.flow_id': 'crm',
                 'platform.llm.model': 'qwen/qwen3.5',
                 'platform.llm.request': JSON.stringify({
-                    messages: [{ role: 'user', parts: [{ kind: 'text', text: 'Daily summary: chunk' }] }],
+                    messages: [{ role: 'user', parts: [{ text: 'Daily summary: chunk' }] }],
                     tools: [],
                 }),
                 'platform.llm.response': JSON.stringify({

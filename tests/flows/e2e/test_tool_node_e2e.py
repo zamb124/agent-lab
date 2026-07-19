@@ -17,7 +17,7 @@ import pytest
 
 def _msg(text: str, context_id: str | None = None) -> Dict[str, Any]:
     """Создаёт A2A Message."""
-    m = {"messageId": str(uuid.uuid4()), "role": "user", "parts": [{"kind": "text", "text": text}]}
+    m = {"messageId": str(uuid.uuid4()), "role": "ROLE_USER", "parts": [{"text": text}]}
     if context_id:
         m["contextId"] = context_id
     return m
@@ -89,14 +89,14 @@ class TestCodeNodeE2E:
             json={
                 "jsonrpc": "2.0",
                 "id": f"test-{unique_id}",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("calculate")},
             },
         )
         assert exec_response.status_code == 200
         data = exec_response.json()
         task = get_task_from_response(data)
-        assert get_task_state(task) == "completed"
+        assert get_task_state(task) == "TASK_STATE_COMPLETED"
         response_text = get_task_response(task)
         assert "42" in response_text or "Сумма" in response_text
         await client.delete(f"/flows/api/v1/{flow_id}")
@@ -140,13 +140,13 @@ class TestCodeNodeE2E:
             json={
                 "jsonrpc": "2.0",
                 "id": f"test-{unique_id}",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("format order")},
             },
         )
         assert exec_response.status_code == 200
         task = get_task_from_response(exec_response.json())
-        assert get_task_state(task) == "completed"
+        assert get_task_state(task) == "TASK_STATE_COMPLETED"
         response_text = get_task_response(task)
         assert "ORD-12345" in response_text
         await client.delete(f"/flows/api/v1/{flow_id}")
@@ -195,13 +195,13 @@ class TestCodeNodeE2E:
             json={
                 "jsonrpc": "2.0",
                 "id": f"test-{unique_id}",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("chain")},
             },
         )
         assert exec_response.status_code == 200
         task = get_task_from_response(exec_response.json())
-        assert get_task_state(task) == "completed"
+        assert get_task_state(task) == "TASK_STATE_COMPLETED"
         response_text = get_task_response(task)
         assert "400" in response_text
         await client.delete(f"/flows/api/v1/{flow_id}")
@@ -247,13 +247,13 @@ class TestCodeNodeE2E:
             json={
                 "jsonrpc": "2.0",
                 "id": f"test-{unique_id}",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("greet")},
             },
         )
         assert exec_response.status_code == 200
         task = get_task_from_response(exec_response.json())
-        assert get_task_state(task) == "completed"
+        assert get_task_state(task) == "TASK_STATE_COMPLETED"
         response_text = get_task_response(task)
         assert "Привет, Иван!" in response_text
         await client.delete(f"/flows/api/v1/{flow_id}")
@@ -320,7 +320,7 @@ class TestCodeNodeE2E:
             json={
                 "jsonrpc": "2.0",
                 "id": f"test1-{unique_id}",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("calculate please")},
             },
         )
@@ -332,7 +332,7 @@ class TestCodeNodeE2E:
             json={
                 "jsonrpc": "2.0",
                 "id": f"test2-{unique_id}",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": _msg("something else")},
             },
         )

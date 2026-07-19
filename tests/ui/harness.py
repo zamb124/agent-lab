@@ -8,6 +8,7 @@ from typing import Literal
 from playwright.async_api import Page, expect
 
 from tests.ui.apps import ServiceUiSpec
+from tests.ui.e2e_worker import resolve_ui_e2e_host_subdomain
 
 
 def ui_e2e_use_lvh_me() -> bool:
@@ -26,11 +27,11 @@ class AppUI:
         return self._spec
 
     def _host(self) -> str:
+        subdomain = resolve_ui_e2e_host_subdomain(self._spec.subdomain_prefix)
         if ui_e2e_use_lvh_me():
-            subdomain = self._spec.subdomain_prefix if self._spec.subdomain_prefix else "system"
             return f"{subdomain}.lvh.me"
-        if self._spec.subdomain_prefix:
-            return f"{self._spec.subdomain_prefix}.localhost"
+        if subdomain != "system" or self._spec.subdomain_prefix:
+            return f"{subdomain}.localhost"
         return "localhost"
 
     @property

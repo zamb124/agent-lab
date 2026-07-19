@@ -67,7 +67,7 @@ async def test_office_document_actions(
     )
 
     await office_e2e_open_document_by_title(ui_page_system, original_title)
-    await ui_page_system.locator("office-document-editor-page button.back").click()
+    await ui_page_system.locator("office-document-editor-page button.stage-back").click()
     await scenario.step(
         "Документ открыт и закрыт",
         ui_page_system,

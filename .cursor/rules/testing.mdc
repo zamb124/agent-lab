@@ -49,7 +49,7 @@ uv run python analyze_imports.py
 
 - Захардкоженные идентификаторы (`task_id="my-task"`, `flow_id="test_flow"`) запрещены — все ID содержат `unique_id`.
 - Захардкоженные порты, временные файлы, Redis-ключи без `unique_id`/scope запрещены.
-- **MockLLM** маршрутизируется по `test_scope` (`mock_llm:responses:<scope>`), а не по gw/lane. Scope прокидывается через `X-Test-Scope` (HTTP), TaskIQ labels и autouse `platform_test_scope`. E2E browser/desktop (`-n0`) — статический scope `test_e2e_static` (`TEST_SCOPE_DEFAULT` в стеке + `bind_static_e2e_scope`).
+- **MockLLM** маршрутизируется по `test_scope` (`mock_llm:responses:<scope>`), а не по gw/lane. Scope прокидывается через `X-Test-Scope` (HTTP), TaskIQ labels и autouse `platform_test_scope`. UI E2E (`make test-ui`, `-n5`) — per-worker `test_e2e_gwN` (`tests/ui/e2e_worker.py`: Playwright `extra_http_headers` + `bind_ui_e2e_worker_scope`). Desktop/agent E2E (`-n0`) — статический `test_e2e_static` (`TEST_SCOPE_DEFAULT` в стеке + `bind_static_e2e_scope`).
 - `time.sleep` для ожидания асинхронного результата запрещён — только `asyncio.wait_for`/`asyncio.sleep` с поллингом или `await` с таймаутом.
 - **FileLock / SessionServerManager / SessionWorkerManager в фикстурах запрещены.** Единственный владелец процессов — `make test-up`. pytest только проверяет readiness (`require_http_service`, `require_taskiq_worker`).
 
@@ -174,9 +174,10 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 ## E2E UI
 
-- **Инфраструктура:** `make test-ui` = `test-up` + `pytest tests/ui/e2e`; браузер: `uv run playwright install chromium`. Чтобы обновить статический сайт из записанных `docs/scenarios/**/README*.md`: `make doc` или `make test-ui-doc`. Описание дерева исходников: `doc-sources.md`.
-- **Реестр SPA:** `tests/ui/apps.py` (`AppUI`, порты 9001–9005); обёртка `tests/ui/harness.py`.
-- **Персоны:** четыре сессионных пользователя (две компании). Страницы: `ui_page_system`, `ui_page_system_member`, `ui_page_company2`, `ui_page_company2_member`, `page` / `ui_page_anonymous`. Метаданные для assert: `ui_user_*` (`UiTestUser` из `tests/ui/personas.py`).
+- **Инфраструктура:** `make test-ui` = `test-up` + `pytest tests/ui/e2e -n$(UI_E2E_WORKERS) --dist=loadfile` (`UI_E2E_WORKERS?=5`, `--timeout=15`). Дефолт бюджета тела теста — **15 с** (`tests/ui/e2e/conftest.py`); итог = `max(scenario.timeout_seconds, @pytest.mark.timeout)` в диапазоне 15..360. Браузер: `uv run playwright install chromium`. Документация: `make doc` / `make test-ui-doc`. Источники: `doc-sources.md`.
+- **Изоляция xdist:** каждый worker — своя компания `ui_e2e_gwN` (subdomain `ui-gwN`), MockLLM scope `test_e2e_gwN`, 1 Chromium session. **Запрещено** раздувать shared `system.members` из UI session fixtures и assert'ить глобальный roster `system`. Данные сценария — `unique_id` namespaces/channels/flows. Канон: `tests/ui/e2e_worker.py`.
+- **Реестр SPA:** `tests/ui/apps.py` (`AppUI`, порты 9001–9005); обёртка `tests/ui/harness.py` (Host → worker subdomain при `UI_E2E_USE_LVH_ME=1`).
+- **Персоны:** четыре сессионных пользователя на worker-компаниях (имена фикстур `auth_token_system*` / `ui_page_system*` сохранены). Страницы: `ui_page_system`, `ui_page_system_member`, `ui_page_company2`, `ui_page_company2_member`, `page` / `ui_page_anonymous`. Метаданные для assert: `ui_user_*` (`UiTestUser` из `tests/ui/personas.py`).
 - **Click highlight:** `install_click_highlight_on_context` в `tests/ui/conftest.py` рисует зелёную рамку (`outline`) вокруг цели каждого клика — видно на скриншотах `scenario.step` (`tests/ui/click_highlight.py`).
 - **Sync UI:** `tests/ui/e2e/test_sync_*.py`; хелперы `tests/ui/e2e/sync_e2e_helpers.py` (локаторы сайдбара без коллизии с шапкой чата, опционально вызовы Sync REST с cookie `auth_token`). Теги — `sync.mdc` («Тестирование»).
 - **Только Playwright Sync:** `uv run pytest tests/ui/e2e/test_sync_*.py -m e2e` — фикстура `sync_ui` подключает реальный HTTP `sync_service` (порт из `tests/ui/apps.py`) и `sync_worker` для TaskIQ.
@@ -243,7 +244,7 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 **DB pool в тестах:** `core/db/sqlalchemy_pool` — prod `5+10`, `pool_timeout=30`; `TESTING=true` (стек) `1+2`, `pool_timeout=60`; pytest-xdist `1+2`, `pool_timeout=60` (overflow для вложенных `session()` в одном call-stack). QueuePool ждёт свободное соединение до `pool_timeout`, затем `TimeoutError`; `TooManyConnectionsError` — лимит Postgres, не пула. Test Postgres: `max_connections=450` (`docker-compose-test.yaml`). Канон для `core/db/database.py` и `apps/*/db/base.py`.
 
-**A2A tasks/get poll:** пока задача в `working`, `result` может быть `null` — poll-циклы в тестах пропускают такие ответы, не падают через `require_jsonrpc_result`.
+**A2A GetTask poll:** пока задача в `TASK_STATE_WORKING` / `TASK_STATE_SUBMITTED`, `result` может быть `null` — poll-циклы пропускают такие ответы. Helpers: `tests/flows/_a2a_v1.py`. Conformance (без MockLLM/monkeypatch): `tests/flows/a2a_conformance/`. Fixtures pin: `make check-a2a-fixtures`. Канон → **`a2a.mdc`**.
 
 **Tracing `_wait_spans`:** не возвращать при первом span — для graph-path тестов ждать `required_operation_substrings` (classifier + branch processor) до 30 с.
 

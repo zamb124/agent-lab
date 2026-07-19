@@ -12,6 +12,7 @@ from contextlib import suppress
 from typing import Protocol
 
 import httpx
+from a2a.helpers.proto_helpers import new_text_message
 from a2a.types import (
     Artifact,
     Message,
@@ -21,10 +22,9 @@ from a2a.types import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
-from a2a.utils.message import new_agent_text_message
 
+from core.a2a.codec import struct_from_mapping
 from core.clients.llm.errors import (
     INTER_CHUNK_WARN_SECONDS as _INTER_CHUNK_WARN_SECONDS,
 )
@@ -34,7 +34,12 @@ from core.clients.llm.errors import (
     LLMStreamUserCancelledError,
 )
 from core.clients.llm.logging import compute_llm_output_tokens_per_second, log_llm_stream_response
-from core.clients.llm.messages import LLMToolCall, LLMToolCallFunction, StreamEvent
+from core.clients.llm.messages import (
+    LLMToolCall,
+    LLMToolCallFunction,
+    StreamEvent,
+    build_a2a_message,
+)
 from core.clients.llm.messages import messages_to_openai as _messages_to_openai
 from core.clients.llm.openai_compat import (
     masked_headers as _masked_headers,
@@ -384,7 +389,7 @@ async def stream_once(
                                         task_id=task_id,
                                         artifact=Artifact(
                                             artifact_id=str(uuid.uuid4()),
-                                            parts=[Part(root=TextPart(text=message_content))],
+                                            parts=[Part(text=message_content)],
                                         ),
                                         append=True,
                                         last_chunk=False,
@@ -408,7 +413,7 @@ async def stream_once(
                                     task_id=task_id,
                                     artifact=Artifact(
                                         artifact_id=str(uuid.uuid4()),
-                                        parts=[Part(root=TextPart(text=text))],
+                                        parts=[Part(text=text)],
                                     ),
                                     append=True,
                                     last_chunk=False,
@@ -443,7 +448,7 @@ async def stream_once(
                                     artifact=Artifact(
                                         artifact_id=str(uuid.uuid4()),
                                         name="reasoning",
-                                        parts=[Part(root=TextPart(text=reasoning_text))],
+                                        parts=[Part(text=reasoning_text)],
                                     ),
                                     append=True,
                                     last_chunk=False,
@@ -586,10 +591,9 @@ async def stream_once(
             )
             for tool_call in parsed_tool_calls
         ]
-        message = Message(
-            message_id=str(uuid.uuid4()),
-            role=Role.agent,
-            parts=[Part(root=TextPart(text=full_content))],
+        message = build_a2a_message(
+            role=Role.ROLE_AGENT,
+            parts=[Part(text=full_content)],
             metadata={
                 "tool_calls": tool_call_payloads,
                 "usage": usage_data,
@@ -601,8 +605,7 @@ async def stream_once(
         yield TaskStatusUpdateEvent(
             context_id=context_id,
             task_id=task_id,
-            status=TaskStatus(state=TaskState.working, message=message),
-            final=False,
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING, message=message),
         )
 
     stream_duration = time.monotonic() - stream_start_time
@@ -619,26 +622,31 @@ async def stream_once(
         ttft_ms=ttft_ms,
     )
 
-    final_message = new_agent_text_message(full_content) if full_content else None
-    if final_message:
-        final_message.metadata = {
-            "usage": usage_data,
-            "model": client.model,
-            "provider": client.llm_provider,
-            "source": client.llm_source,
-            "ttft_ms": ttft_ms,
-            "output_tokens_per_second": output_tokens_per_second,
-        }
-    # final=False: это конец одного вызова LLM внутри задачи, не конец A2A-задачи.
-    # completed+final=True рвёт EventSubscriber до node_complete и emit_complete канала.
+    final_message = (
+        new_text_message(full_content, role=Role.ROLE_AGENT) if full_content else None
+    )
+    if final_message is not None:
+        final_message.metadata.CopyFrom(
+            struct_from_mapping(
+                {
+                    "usage": usage_data,
+                    "model": client.model,
+                    "provider": client.llm_provider,
+                    "source": client.llm_source,
+                    "ttft_ms": ttft_ms,
+                    "output_tokens_per_second": output_tokens_per_second,
+                }
+            )
+        )
+    # WORKING: конец одного LLM-вызова внутри A2A-задачи. COMPLETED закрыл бы
+    # EventSubscriber / SendMessage до emit_complete flow.
     yield TaskStatusUpdateEvent(
         context_id=context_id,
         task_id=task_id,
         status=TaskStatus(
-            state=TaskState.completed if not tool_calls_buffer else TaskState.working,
+            state=TaskState.TASK_STATE_WORKING,
             message=final_message,
         ),
-        final=False,
     )
 
     logger.info(
@@ -691,7 +699,7 @@ async def invoke_once(
     Удобен для vision/OCR запросов где не нужен streaming.
 
     Аргументы:
-        messages: Список A2A сообщений (может содержать FilePart)
+        messages: Список A2A сообщений (может содержать Part(raw=...))
         json_output: Запросить JSON формат ответа
         max_tokens: Максимальное количество токенов
         extra_body: Доп. поля JSON-тела; мержатся последними

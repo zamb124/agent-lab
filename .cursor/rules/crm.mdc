@@ -220,7 +220,8 @@ Redis hot cache + locks + S3 долговечные снимки.
 `CompanyInitService.initialize_company(company_id)` — при старте CRM (lifespan для `"system"`) и при первом запросе каждой компании в процессе (`dependencies.py`, in-memory set).
 
 - `_init_entity_types`: создаёт новые / `update_metadata` существующих системных (перезаписывает `optional_fields`/`prompt` из шаблонов).
-- `_init_relationship_types`, `_init_namespace_templates`.
+- `_init_relationship_types`: structural fields из seed; `prompt` на existing не затирается (только заполняется если `None`).
+- `_init_namespace_templates`.
 - `_ensure_company_entity` / `_ensure_namespace_entity("default")` (идемпотентно).
 
 ## `crm_worker` и TaskIQ

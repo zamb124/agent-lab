@@ -11,7 +11,8 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Literal, Protocol
 
-from a2a.types import Message, Part, Role, TextPart
+from a2a.types import Message, Part
+from a2a.types.a2a_pb2 import ROLE_AGENT
 
 from apps.flows.src.models import NodeConfig, ReactLoopMode
 from apps.flows.src.models.enums import ReactToolRole
@@ -20,6 +21,7 @@ from apps.flows.src.runtime.message_author import build_flow_message_author
 from apps.flows.src.streaming.base import BaseEmitter, StreamEvent
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.tools.finish_tool import finish
+from core.a2a import struct_from_mapping
 from core.clients.llm import LLMClient, LLMToolCall, MockLLM
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
@@ -183,9 +185,9 @@ class BaseLlmNodeRunner(ABC):
             ]
         message = Message(
             message_id=str(uuid.uuid4()),
-            role=Role.agent,
-            parts=[Part(root=TextPart(text=content))],
-            metadata=meta,
+            role=ROLE_AGENT,
+            parts=[Part(text=content)],
+            metadata=struct_from_mapping(meta),
             task_id=state.task_id,
         )
         self.add_message(state, message)
@@ -196,16 +198,18 @@ class BaseLlmNodeRunner(ABC):
             raise ValueError("add_tool_message: node_config required")
         message = Message(
             message_id=str(uuid.uuid4()),
-            role=Role.agent,
-            parts=[Part(root=TextPart(text=content))],
-            metadata={
-                "tool_call_id": tool_call_id,
-                "node_id": self.node_config.node_id,
-                "author": build_flow_message_author(
-                    state,
-                    node_id=self.node_config.node_id,
-                ),
-            },
+            role=ROLE_AGENT,
+            parts=[Part(text=content)],
+            metadata=struct_from_mapping(
+                {
+                    "tool_call_id": tool_call_id,
+                    "node_id": self.node_config.node_id,
+                    "author": build_flow_message_author(
+                        state,
+                        node_id=self.node_config.node_id,
+                    ),
+                }
+            ),
             task_id=state.task_id,
         )
         self.add_message(state, message)

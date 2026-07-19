@@ -6,11 +6,15 @@ import json
 from datetime import datetime, timezone
 from typing import override
 
+from a2a.types import StreamResponse, TaskStatusUpdateEvent
+from google.protobuf.json_format import MessageToDict
+
 from apps.flows.src.observability.flow_timing import maybe_record_flow_first_content_chunk
+from core.a2a import struct_from_mapping
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.state import ExecutionState
-from core.types import JsonObject, parse_json_object, require_json_object
+from core.types import JsonObject, require_json_object
 
 from .base import BaseEmitter, StreamEvent
 
@@ -82,26 +86,33 @@ class Emitter(BaseEmitter):
     @override
     async def _publish(self, event: StreamEvent) -> None:
         """
-        Публикует событие в Redis с автоматическим добавлением trace контекста.
+        Публикует событие в Redis как A2A 1.0 StreamResponse (MessageToDict).
 
         Аргументы:
             event: A2A событие
         """
-        event_dict = parse_json_object(event.model_dump_json(), "StreamEvent")
-
         if self._span_context:
-            metadata = event_dict.get("metadata")
-            if metadata is None:
-                metadata_obj: JsonObject = {}
-            else:
-                metadata_obj = require_json_object(metadata, "StreamEvent.metadata")
-            metadata_obj["trace_id"] = self._span_context.get("trace_id")
-            metadata_obj["span_id"] = self._span_context.get("span_id")
-            event_dict["metadata"] = metadata_obj
+            meta: JsonObject = {
+                "trace_id": self._span_context.get("trace_id"),
+                "span_id": self._span_context.get("span_id"),
+            }
+            if event.HasField("metadata"):
+                existing = require_json_object(
+                    MessageToDict(event.metadata),
+                    "StreamEvent.metadata",
+                )
+                meta = {**existing, **meta}
+            event.metadata.CopyFrom(struct_from_mapping(meta))
 
+        if isinstance(event, TaskStatusUpdateEvent):
+            stream = StreamResponse(status_update=event)
+            event_kind = "statusUpdate"
+        else:
+            stream = StreamResponse(artifact_update=event)
+            event_kind = "artifactUpdate"
+
+        event_dict = MessageToDict(stream)
         channel = f"stream:{self.state.task_id}"
-        raw_event_kind = event_dict.get("kind")
-        event_kind = raw_event_kind if isinstance(raw_event_kind, str) else "unknown"
         logger.debug(f"[Emitter] Publishing {event_kind} to {channel}")
         _ = await self.redis.publish(
             channel,
@@ -182,8 +193,4 @@ class Emitter(BaseEmitter):
         )
 
 
-# Алиас для обратной совместимости
-RedisEmitter = Emitter
-
-
-__all__ = ["Emitter", "RedisEmitter"]
+__all__ = ["Emitter"]

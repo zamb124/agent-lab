@@ -13,3 +13,19 @@
 ## Шаг 3. Публичная ссылка включена
 
 ![Публичная ссылка включена](share-catalog-and-document--03-public-link-enabled.png)
+
+## Шаг 4. Ссылка скопирована
+
+![Ссылка скопирована](share-catalog-and-document--04-link-copied.png)
+
+## Шаг 5. Ссылка обновлена
+
+![Ссылка обновлена](share-catalog-and-document--05-link-rotated.png)
+
+## Шаг 6. Публичная ссылка отключена
+
+![Публичная ссылка отключена](share-catalog-and-document--06-public-link-disabled.png)
+
+## Шаг 7. Доступ к отдельному документу
+
+![Доступ к отдельному документу](share-catalog-and-document--07-document-level-access.png)

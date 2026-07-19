@@ -20,6 +20,7 @@ from apps.flows.src.runtime.llm_context_memory import (
     write_runtime_memory_episode,
 )
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from core.a2a import get_part_text
 from core.llm_context import (
     LLMContextBudget,
     LLMContextMemoryEpisode,
@@ -510,7 +511,7 @@ async def test_runtime_memory_prunes_state_messages_and_rebases_cursors() -> Non
     assert pruned == [2]
     assert state.llm_context_memory_cursor == {"session:flow:ctx": 0}
     assert len(state.messages) == 1
-    assert state.messages[0].parts[0].root.text == "current question"
+    assert get_part_text(state.messages[0].parts[0]) == "current question"
     assert "old alpha beta gamma" in store.episodes[0].content
 
 
@@ -536,7 +537,7 @@ def test_runtime_memory_prune_uses_min_cursor_and_keeps_last_message() -> None:
     pruned = prune_state_messages_to_memory_cursor_for_runtime(state)
 
     assert pruned == 2
-    assert [message.parts[0].root.text for message in state.messages] == ["m2", "m3"]
+    assert [get_part_text(message.parts[0]) for message in state.messages] == ["m2", "m3"]
     assert state.llm_context_memory_cursor == {
         "session:flow:ctx": 1,
         "node:flow:agent": 0,

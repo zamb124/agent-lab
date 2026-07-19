@@ -1,6 +1,6 @@
 /**
  * Транспорт встроенного чата HITL (operator_handoff): snapshot + POST ask.
- * Live tail — tasks/resubscribe (мокаем fetch: snapshot OK, resubscribe не резолвится).
+ * Live tail — SubscribeToTask (мокаем fetch: snapshot OK, resubscribe не резолвится).
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -44,7 +44,7 @@ function makeFetch(snapshotBody) {
         if (u.includes('/conversation') && (!init || init.method === 'GET' || init.method == null)) {
             return jsonResponse(snapshotBody);
         }
-        // tasks/resubscribe SSE
+        // SubscribeToTask SSE
         const stream = new ReadableStream({
             start() {
                 /* держим открытым до abort */

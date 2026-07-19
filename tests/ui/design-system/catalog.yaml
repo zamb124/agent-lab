@@ -1,4 +1,9 @@
 components:
+- component: platform-agent-plan
+  doc_slug: platform-agent-plan
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-animated-number
   doc_slug: platform-animated-number
   status: backlog

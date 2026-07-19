@@ -18,7 +18,9 @@ os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
 
 @pytest_asyncio.fixture
 async def system_agent_settings_empty(frontend_container) -> None:
-    await reset_company_agent_ui_state(frontend_container, company_id="system")
+    from tests.ui.e2e_worker import ui_e2e_company_id
+
+    await reset_company_agent_ui_state(frontend_container, company_id=ui_e2e_company_id())
 
 
 async def _open_settings_page(scenario: ScenarioRecorder, frontend_ui: AppUI, page: Page) -> None:
@@ -413,7 +415,10 @@ async def test_f9_settings_agent_devices_after_pair(
     )
     await ui_page_system.goto(f"{frontend_ui.origin}/settings", wait_until="domcontentloaded")
     await _open_settings_agent_tab_raw(ui_page_system, origin=frontend_ui.origin)
-    await expect(ui_page_system.get_by_text(device_name)).to_be_visible(timeout=30_000)
+    # title-line + ref-line оба содержат device_name — берём видимый title.
+    await expect(
+        ui_page_system.locator(".title-line").filter(has_text=device_name).first
+    ).to_be_visible(timeout=30_000)
 
 
 @pytest.mark.asyncio
@@ -533,7 +538,9 @@ async def test_f14_settings_agent_release_banner_lvh_origin(
     frontend_ui: AppUI,
     ui_page_system: Page,
 ) -> None:
-    assert "system.lvh.me" in frontend_ui.origin
+    from tests.ui.e2e_worker import ui_e2e_subdomain
+
+    assert f"{ui_e2e_subdomain()}.lvh.me" in frontend_ui.origin
     await _open_settings_agent_tab_raw(ui_page_system, origin=frontend_ui.origin)
     await _wait_agent_releases_status(ui_page_system)
     await expect(

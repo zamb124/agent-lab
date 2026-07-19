@@ -8,20 +8,21 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from a2a.helpers.proto_helpers import new_data_part, new_text_part
 from a2a.types import (
     Artifact,
-    DataPart,
     Message,
     Part,
     Role,
     TaskArtifactUpdateEvent,
     TaskState,
-    TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
+from google.protobuf.struct_pb2 import Struct
 
 from apps.flows.src.runtime.message_author import build_flow_message_author
+from core.a2a import make_task_status
+from core.a2a.codec import struct_from_mapping
 from core.state import ExecutionState
 from core.state.interrupt import InterruptKind
 from core.types import JsonObject, JsonValue, parse_json_object
@@ -33,11 +34,18 @@ StreamEvent = TaskStatusUpdateEvent | TaskArtifactUpdateEvent
 
 
 def _text_part(text: str) -> Part:
-    return Part(root=TextPart(text=text))
+    return new_text_part(text)
 
 
 def _data_part(data: JsonObject) -> Part:
-    return Part(root=DataPart(data=data))
+    return new_data_part(data)
+
+
+def _apply_struct_metadata(target: Struct, metadata: JsonObject) -> None:
+    """Копирует JSON object в protobuf Struct-поле `.metadata`."""
+    if not metadata:
+        return
+    target.CopyFrom(struct_from_mapping(metadata))
 
 
 class BaseEmitter(ABC):
@@ -45,7 +53,7 @@ class BaseEmitter(ABC):
     Базовый класс для публикации событий.
 
     Реализации:
-    - RedisEmitter: публикация в Redis Pub/Sub
+    - Emitter: публикация в Redis Pub/Sub
     - InMemoryEmitter: хранение в памяти (для внешних агентов)
     """
 
@@ -71,12 +79,13 @@ class BaseEmitter(ABC):
         """Создаёт A2A Message объект."""
         message_metadata: JsonObject = dict(metadata or {})
         message_metadata["author"] = build_flow_message_author(self.state)
-        return Message(
+        message = Message(
             message_id=message_id or str(uuid.uuid4()),
-            role=Role.agent,
+            role=Role.ROLE_AGENT,
             parts=[_text_part(text)],
-            metadata=message_metadata,
         )
+        _apply_struct_metadata(message.metadata, message_metadata)
+        return message
 
     async def emit_text(
         self,
@@ -91,7 +100,10 @@ class BaseEmitter(ABC):
             artifact_id=str(uuid.uuid4()),
             name=artifact_name,
             parts=[_text_part(text)],
-            metadata={"author": build_flow_message_author(self.state)},
+        )
+        _apply_struct_metadata(
+            artifact.metadata,
+            {"author": build_flow_message_author(self.state)},
         )
 
         event = TaskArtifactUpdateEvent(
@@ -170,13 +182,12 @@ class BaseEmitter(ABC):
         event = TaskStatusUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
-            status=TaskStatus(
-                state=TaskState.completed,
+            status=make_task_status(
+                TaskState.TASK_STATE_COMPLETED,
                 message=self._create_message(response, message_id=message_id),
             ),
-            final=True,
-            metadata={"has_artifact": has_artifact},
         )
+        _apply_struct_metadata(event.metadata, {"has_artifact": has_artifact})
 
         await self._publish(event)
 
@@ -190,8 +201,7 @@ class BaseEmitter(ABC):
         meta: JsonObject = {"platform_interrupt": interrupt_payload}
         is_oauth = interrupt.body.kind == InterruptKind.OAUTH_REQUIRED
         is_handoff = interrupt.body.kind == InterruptKind.HANDOFF
-        # operator_task: закрываем message/stream (final=True); клиенты — live tasks/resubscribe.
-        keep_stream_open = is_oauth or is_handoff
+        # operator_task: terminal-ish interrupt; oauth/handoff — live SubscribeToTask.
         if is_handoff:
             meta["platform_handoff_continue"] = True
         if is_oauth:
@@ -199,13 +209,14 @@ class BaseEmitter(ABC):
         event = TaskStatusUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
-            status=TaskStatus(
-                state=TaskState.input_required,
-                message=self._create_message(interrupt.question, metadata=meta, message_id=message_id),
+            status=make_task_status(
+                TaskState.TASK_STATE_INPUT_REQUIRED,
+                message=self._create_message(
+                    interrupt.question, metadata=meta, message_id=message_id
+                ),
             ),
-            final=not keep_stream_open,
-            metadata=meta,
         )
+        _apply_struct_metadata(event.metadata, meta)
 
         await self._publish(event)
 
@@ -214,11 +225,10 @@ class BaseEmitter(ABC):
         event = TaskStatusUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
-            status=TaskStatus(
-                state=TaskState.canceled,
+            status=make_task_status(
+                TaskState.TASK_STATE_CANCELED,
                 message=self._create_message("Task cancelled"),
             ),
-            final=True,
         )
         await self._publish(event)
 
@@ -231,11 +241,10 @@ class BaseEmitter(ABC):
         event = TaskStatusUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
-            status=TaskStatus(
-                state=TaskState.failed,
+            status=make_task_status(
+                TaskState.TASK_STATE_FAILED,
                 message=self._create_message(error, message_id=message_id),
             ),
-            final=True,
         )
 
         await self._publish(event)
@@ -246,21 +255,22 @@ class BaseEmitter(ABC):
 
     async def emit_ping(self, *, sequence: int | None = None) -> None:
         """Публикует heartbeat кадр для живого SSE-потока без пользовательского текста."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
         metadata: JsonObject = {
             "platform_ping": True,
-            "sent_at": now,
+            "sent_at": now.isoformat(),
         }
         if sequence is not None:
             metadata["sequence"] = sequence
 
+        status = make_task_status(TaskState.TASK_STATE_WORKING)
+        status.timestamp.FromDatetime(now)
         event = TaskStatusUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
-            status=TaskStatus(state=TaskState.working, timestamp=now),
-            final=False,
-            metadata=metadata,
+            status=status,
         )
+        _apply_struct_metadata(event.metadata, metadata)
 
         await self._publish(event)
 
@@ -502,18 +512,20 @@ class BaseEmitter(ABC):
         """
         Публикует событие срабатывания breakpoint.
 
-        Использует TaskState.input_required (ждём "Continue" от пользователя).
+        Использует TASK_STATE_INPUT_REQUIRED (ждём "Continue" от пользователя).
         Breakpoint отличается от interrupt по metadata.breakpoint=true.
         """
         event = TaskStatusUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
-            status=TaskStatus(
-                state=TaskState.input_required,
+            status=make_task_status(
+                TaskState.TASK_STATE_INPUT_REQUIRED,
                 message=self._create_message(f"Breakpoint at node '{node_id}'"),
             ),
-            final=True,
-            metadata={
+        )
+        _apply_struct_metadata(
+            event.metadata,
+            {
                 "breakpoint": True,
                 "node_id": node_id,
                 "node_type": node_type,

@@ -509,18 +509,17 @@ async def test_lara_is_attached_in_all_platform_spa_shells(
     rag_ui: AppUI,
     office_ui: AppUI,
     worktracker_ui: AppUI,
-    litserve_ui: AppUI,
 ) -> None:
     page = ui_page_system
+    # LitServe UI — только company system (AuthMiddleware); worker-компании UI E2E сюда не входят.
     matrix = [
         (frontend_ui, "frontend-app", "console", "/settings"),
         (crm_ui, "crm-app", "crm", None),
         (flows_ui, "flows-app", "flows", "/flows/"),
         (sync_ui, "sync-app", "sync", None),
-        (rag_ui, "rag-app", "rag", None),
+        (rag_ui, "rag-app", "documents", None),
         (office_ui, "office-app", "documents", None),
         (worktracker_ui, "worktracker-app", "worktracker", None),
-        (litserve_ui, "litserve-app", "litserve", None),
     ]
     for app_ui, shell_selector, branch_id, path_override in matrix:
         if path_override is None:

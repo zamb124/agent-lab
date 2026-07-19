@@ -452,16 +452,16 @@ async def test_embed_guest_limit_on_public_landing_session(
         for i in range(5):
             r = await flows_client.post(
                 f"/flows/api/v1/embed/{embed_id}",
-                headers={"Authorization": f"Bearer {token}", "Origin": "http://testserver"},
+                headers={"Authorization": f"Bearer {token}", "Origin": "http://testserver", "A2A-Version": "1.0"},
                 json={
                     "jsonrpc": "2.0",
                     "id": f"rpc-{i}",
-                    "method": "message/send",
+                    "method": "SendMessage",
                     "params": {
                         "message": {
                             "messageId": str(uuid.uuid4()),
-                            "role": "user",
-                            "parts": [{"kind": "text", "text": f"m{i}"}],
+                            "role": "ROLE_USER",
+                            "parts": [{"text": f"m{i}"}],
                             "contextId": ctx_id,
                         }
                     },
@@ -473,16 +473,16 @@ async def test_embed_guest_limit_on_public_landing_session(
             assert "result" in body
         r6 = await flows_client.post(
             f"/flows/api/v1/embed/{embed_id}",
-            headers={"Authorization": f"Bearer {token}", "Origin": "http://testserver"},
+            headers={"Authorization": f"Bearer {token}", "Origin": "http://testserver", "A2A-Version": "1.0"},
             json={
                 "jsonrpc": "2.0",
                 "id": "rpc-6",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": str(uuid.uuid4()),
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "over"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "over"}],
                         "contextId": f"{ctx_id}-new",
                     }
                 },

@@ -447,7 +447,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         });
     }
 
-    /** metadata верхнего уровня A2A message/stream: breakpoints с канвы редактора. */
+    /** metadata верхнего уровня A2A SendStreamingMessage: breakpoints с канвы редактора. */
     _sendMetadataForRun() {
         const editorState = asObject(this._editor.state);
         const nodeIds = asArray(editorState.breakpointNodeIds);

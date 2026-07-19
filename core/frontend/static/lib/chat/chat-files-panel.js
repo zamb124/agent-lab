@@ -202,7 +202,6 @@ function withDocumentCapability(file, raw, namespace) {
     const caps = isPlainObject(file.capabilities) ? file.capabilities : {};
     const doc = {
         kind: 'onlyoffice',
-        binding_id: asString(raw.binding_id),
         file_id: asString(raw.file_id),
         catalog_id: asString(raw.catalog_id),
         document_type: asString(raw.document_type),
@@ -599,7 +598,7 @@ export class FlowsChatFilesPanel extends PlatformElement {
         this._editorPortal = null;
         this._editorDocument = null;
         this._editorDirty = false;
-        this._editorDirtyBindingId = '';
+        this._editorDirtyFileId = '';
         this._closingEditor = false;
         this._editorDragState = null;
         this._editorResizeState = null;
@@ -638,13 +637,13 @@ export class FlowsChatFilesPanel extends PlatformElement {
         if (!isPlainObject(data) || data.type !== 'platform.office.document-state') {
             return;
         }
-        const bindingId = asString(data.bindingId);
-        const currentBindingId = asString(documentCapability(this._selectedFile())?.binding_id)
-            || asString(this._editorDocument?.binding_id);
-        if (!bindingId || bindingId !== currentBindingId) {
+        const fileId = asString(data.fileId);
+        const currentFileId = asString(documentCapability(this._selectedFile())?.file_id)
+            || asString(this._editorDocument?.file_id);
+        if (!fileId || fileId !== currentFileId) {
             return;
         }
-        this._editorDirtyBindingId = bindingId;
+        this._editorDirtyFileId = fileId;
         this._editorDirty = Boolean(data.dirty);
     }
 
@@ -1074,12 +1073,12 @@ export class FlowsChatFilesPanel extends PlatformElement {
         }
     }
 
-    async _waitForEditorChangesToFlush(bindingId) {
-        if (!this._editorDirty || this._editorDirtyBindingId !== bindingId) {
+    async _waitForEditorChangesToFlush(fileId) {
+        if (!this._editorDirty || this._editorDirtyFileId !== fileId) {
             return;
         }
         const deadline = Date.now() + 4000;
-        while (this._editorDirty && this._editorDirtyBindingId === bindingId && Date.now() < deadline) {
+        while (this._editorDirty && this._editorDirtyFileId === fileId && Date.now() < deadline) {
             await new Promise((resolve) => setTimeout(resolve, 150));
         }
     }
@@ -1108,7 +1107,7 @@ export class FlowsChatFilesPanel extends PlatformElement {
         this._editorRect = null;
         this._editorRestoreHeight = 0;
         this._editorDirty = false;
-        this._editorDirtyBindingId = '';
+        this._editorDirtyFileId = '';
         this._error = '';
         this._clearEditorPortal();
     }

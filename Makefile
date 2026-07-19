@@ -124,6 +124,9 @@ check-logging:
 check-no-uvicorn:
 	@./scripts/check_no_uvicorn.sh
 
+check-a2a-fixtures:
+	@uv run python scripts/pin_a2a_official_fixtures.py --check
+
 check-ft-wheels:
 	@./scripts/check_ft_wheels.sh
 

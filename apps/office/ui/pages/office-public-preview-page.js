@@ -142,14 +142,14 @@ export class OfficePublicPreviewPage extends PlatformPage {
         this._loading = false;
     }
 
-    async _openBindingItem(item) {
+    async _openFileItem(item) {
         const token = (this.token || '').trim();
-        if (typeof item.binding_id !== 'string' || item.binding_id.length === 0) return;
+        if (typeof item.file_id !== 'string' || item.file_id.length === 0) return;
         if (token.length === 0) return;
         this._loading = true;
         const openConfig = await this._publicCatalogBindingOpen.run({
             token,
-            bindingId: item.binding_id,
+            fileId: item.file_id,
         });
         this._loading = false;
         if (!openConfig) {
@@ -175,7 +175,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
                     ? html`
                         <div class="catalog-grid">
                             ${this._catalogItems.map((item) => html`
-                                <button class="catalog-item" type="button" @click=${() => this._openBindingItem(item)}>
+                                <button class="catalog-item" type="button" @click=${() => this._openFileItem(item)}>
                                     <platform-icon name="file" size="24"></platform-icon>
                                     <span>${item.title}</span>
                                 </button>
@@ -189,7 +189,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
                 ${this._openConfig ? html`
                     <div class="viewer-shell">
                         <platform-document-viewer-host
-                            .bindingId=${this._openConfig.binding_id}
+                            .fileId=${this._openConfig.file_id}
                             .openConfig=${this._openConfig}
                         >
                             <glass-spinner slot="loading"></glass-spinner>

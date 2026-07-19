@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import suppress
 from typing import (
@@ -14,17 +13,17 @@ from typing import (
 )
 
 import httpx
+from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
     Message,
     Part,
     Role,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
-    TextPart,
 )
-from a2a.utils.message import get_message_text
 from pydantic import BaseModel
 
+from core.a2a.codec import mapping_from_struct, part_has_text, struct_from_mapping
 from core.ai.llm_config import LLMCallConfig, ReasoningEffort
 from core.clients.llm.candidates import (
     candidate_key as _candidate_key,
@@ -44,6 +43,7 @@ from core.clients.llm.errors import (
 from core.clients.llm.messages import (
     MessageInput,
     StreamEvent,
+    build_a2a_message,
 )
 from core.clients.llm.messages import (
     messages_have_non_text_parts as _messages_have_non_text_parts,
@@ -835,23 +835,18 @@ class LLMClient:
                 if event.artifact and event.artifact.parts:
                     artifact_name = event.artifact.name
                     for part in event.artifact.parts:
-                        root = part.root
-                        if not isinstance(root, TextPart):
+                        if not part_has_text(part):
                             continue
                         if artifact_name == "reasoning":
-                            reasoning_parts.append(root.text)
+                            reasoning_parts.append(part.text)
                         elif artifact_name != "reasoning":
-                            content_parts.append(root.text)
-            if isinstance(event, TaskStatusUpdateEvent) and event.status:
-                if event.status.message:
-                    status_text = get_message_text(event.status.message)
-                    if status_text:
-                        last_status_text = status_text
-                if event.status.message and event.status.message.metadata:
-                    metadata = require_json_object(
-                        event.status.message.metadata,
-                        "llm.status.message.metadata",
-                    )
+                            content_parts.append(part.text)
+            if isinstance(event, TaskStatusUpdateEvent) and event.status.HasField("message"):
+                status_text = get_message_text(event.status.message)
+                if status_text:
+                    last_status_text = status_text
+                if event.status.message.metadata:
+                    metadata = mapping_from_struct(event.status.message.metadata)
                     metadata_tool_calls = metadata.get("tool_calls")
                     if metadata_tool_calls:
                         tool_calls = require_json_array(
@@ -884,10 +879,9 @@ class LLMClient:
                 )
             return response_model.model_validate(structured_payload)
 
-        return Message(
-            message_id=str(uuid.uuid4()),
-            role=Role.agent,
-            parts=[Part(root=TextPart(text=content))],
+        return build_a2a_message(
+            role=Role.ROLE_AGENT,
+            parts=[Part(text=content)],
             metadata={"tool_calls": tool_calls} if tool_calls else None,
         )
 
@@ -923,11 +917,11 @@ def _attach_llm_context_metadata(
     metadata = llm_context_trace_metadata(compiled_context, compile_ms=compile_ms)
     if not metadata or not isinstance(event, TaskStatusUpdateEvent):
         return event
-    if event.status.message is None:
+    if not event.status.HasField("message"):
         return event
-    event_metadata = dict(event.status.message.metadata or {})
-    event_metadata.setdefault("llm_context", metadata)
-    event.status.message.metadata = event_metadata
+    event_metadata = mapping_from_struct(event.status.message.metadata)
+    _ = event_metadata.setdefault("llm_context", metadata)
+    _ = event.status.message.metadata.CopyFrom(struct_from_mapping(event_metadata))
     return event
 
 

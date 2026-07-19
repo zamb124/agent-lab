@@ -35,7 +35,7 @@ function handlerPayload(openConfig) {
 export class PlatformDocumentViewerHost extends PlatformElement {
     static properties = {
         openConfig: { type: Object, attribute: false },
-        bindingId: { type: String, attribute: 'binding-id' },
+        fileId: { type: String, attribute: 'file-id' },
         suspended: { type: Boolean, reflect: true },
     };
 
@@ -58,7 +58,7 @@ export class PlatformDocumentViewerHost extends PlatformElement {
     constructor() {
         super();
         this.openConfig = null;
-        this.bindingId = '';
+        this.fileId = '';
         this.suspended = false;
     }
 
@@ -164,7 +164,7 @@ export class PlatformDocumentViewerHost extends PlatformElement {
             }
             return html`
                 <platform-onlyoffice-host
-                    .bindingId=${this.bindingId}
+                    .fileId=${this.fileId}
                     .config=${hostConfig}
                     .suspended=${this.suspended}
                     @editor-error=${this._onEditorError}

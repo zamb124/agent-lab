@@ -18,22 +18,29 @@ from uuid import UUID
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
     AgentSkill,
-    DeleteTaskPushNotificationConfigParams,
-    GetTaskPushNotificationConfigParams,
-    ListTaskPushNotificationConfigParams,
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
+    ListTasksRequest,
+    ListTasksResponse,
     Message,
-    MessageSendParams,
+    Part,
+    Role,
+    SendMessageRequest,
+    SubscribeToTaskRequest,
     Task,
     TaskArtifactUpdateEvent,
-    TaskIdParams,
     TaskPushNotificationConfig,
-    TaskQueryParams,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.message import new_agent_text_message
+from google.protobuf.json_format import MessageToDict
 
 from apps.agent.device_binding import bind_user_device_variables
 from apps.flows.config import get_settings
@@ -52,6 +59,7 @@ from apps.flows.src.durable_execution import (
     WorkflowEventType,
     create_initial_state,
 )
+from apps.flows.src.durable_execution.repository import WorkflowConcurrencyError
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models.branch_contracts import (
     BranchCreateRequest,
@@ -97,6 +105,12 @@ from apps.flows.src.utils import extract_json_from_response
 from apps.flows_worker.broker_core import broker as flows_broker
 from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
+from core.a2a import (
+    A2AApplicationError,
+    A2AErrorCode,
+    platform_task_state_to_a2a,
+    set_task_status_state,
+)
 from core.auth import permission_checker
 from core.auth.errors import PermissionDeniedA2AError
 from core.billing.exceptions import BillingBalanceBlockedError
@@ -142,6 +156,15 @@ def effective_stream_task_id_for_session(
     if saved_state is not None and saved_state.task_id:
         return saved_state.task_id
     return ""
+
+
+def _agent_text_message(text: str) -> Message:
+    """A2A 1.0 ROLE_AGENT text message."""
+    return Message(
+        message_id=str(uuid.uuid4()),
+        role=Role.ROLE_AGENT,
+        parts=[Part(text=text)],
+    )
 
 
 class PermissionDenied(Exception):
@@ -371,7 +394,7 @@ class BaseChannel(ABC):
         )
 
     async def _resolve_session_id_for_a2a_lookup(self, lookup_id: str) -> str | None:
-        """А2A ``tasks/get`` / ``tasks/cancel`` передают ``id`` (= task_id из стрима или context_id).
+        """A2A GetTask / CancelTask передают ``id`` (= task_id из стрима или context_id).
 
         Хранение state — по ``flow_id:context_id``; ``task_id`` может отличаться от ``context_id``,
         поэтому сначала прямой ключ, затем поиск по полям state.
@@ -1292,38 +1315,68 @@ class BaseChannel(ABC):
             return None
 
         if state.terminal_task_state:
-            task_state = TaskState(state.terminal_task_state)
-            if task_state == TaskState.input_required and state.interrupt:
+            task_state = platform_task_state_to_a2a(state.terminal_task_state)
+            if task_state == TaskState.TASK_STATE_INPUT_REQUIRED and state.interrupt:
                 response = state.interrupt.question
-            elif task_state == TaskState.canceled:
+            elif task_state == TaskState.TASK_STATE_CANCELED:
                 response = "Task cancelled"
-            elif task_state == TaskState.failed:
+            elif task_state == TaskState.TASK_STATE_FAILED:
                 response = state.terminal_task_error or "Task failed"
             else:
                 response = state.response or state.terminal_task_error or ""
         elif state.interrupt:
-            task_state = TaskState.input_required
+            task_state = TaskState.TASK_STATE_INPUT_REQUIRED
             response = state.interrupt.question
         elif state.response:
-            task_state = TaskState.completed
+            task_state = TaskState.TASK_STATE_COMPLETED
             response = state.response
         else:
-            task_state = TaskState.working
+            task_state = TaskState.TASK_STATE_WORKING
             response = ""
 
-        messages: list[Message] = list(state.messages)
-
-        task_id = state.task_id
-
-        return Task(
-            id=task_id,
+        task_status = TaskStatus(message=_agent_text_message(response))
+        set_task_status_state(task_status, task_state)
+        task = Task(
+            id=state.task_id,
             context_id=state.context_id,
-            status=TaskStatus(state=task_state, message=new_agent_text_message(response)),
-            history=messages if messages else None,
+            status=task_status,
+        )
+        if state.messages:
+            task.history.extend(state.messages)
+        return task
+
+    def _canceled_task_from_state(self, state: ExecutionState) -> Task:
+        canceled_status = TaskStatus(message=_agent_text_message("Task cancelled"))
+        set_task_status_state(canceled_status, TaskState.TASK_STATE_CANCELED)
+        return Task(
+            id=state.task_id,
+            context_id=state.context_id,
+            status=canceled_status,
+        )
+
+    def _raise_if_not_cancelable(self, state: ExecutionState) -> None:
+        """Non-cancelable A2A finals → TaskNotCancelableError.
+
+        ``terminal_task_state`` также хранит parked interrupts (`input-required`,
+        `auth-required`, `handback`) — их отменять можно. Нельзя: completed /
+        failed / rejected / unknown (canceled — idempotent выше по стеку).
+        """
+        terminal = state.terminal_task_state
+        if terminal is None:
+            return
+        if terminal in {"input-required", "auth-required", "handback", "canceled"}:
+            return
+        raise A2AApplicationError(
+            A2AErrorCode.TASK_NOT_CANCELABLE,
+            f"Task {state.task_id!r} is already in terminal state {terminal!r}",
         )
 
     async def _cancel_task_in_state(self, lookup_id: str) -> Task | None:
-        """Отменяет Task в state (``id`` из ``tasks/cancel`` = task_id или context_id)."""
+        """Отменяет Task в state (``id`` из CancelTask = task_id или context_id).
+
+        Гонка с worker (OCC / уже completed): Redis cancel flag уже выставлен;
+        если ledger уже terminal completed/failed — ``TASK_NOT_CANCELABLE`` (-32002).
+        """
         session_id = await self._resolve_session_id_for_a2a_lookup(lookup_id)
 
         if session_id is None:
@@ -1334,30 +1387,31 @@ class BaseChannel(ABC):
         if state is None:
             return None
 
+        if state.terminal_task_state == "canceled":
+            return self._canceled_task_from_state(state)
+        self._raise_if_not_cancelable(state)
+
         await self._cancel_handoff_children(state)
-        await self._save_state(
-            session_id,
-            state,
-            event_type=WorkflowEventType.state_projection_committed,
-            payload=None,
-        )
 
-        await self._save_terminal_state(session_id, state, "canceled")
+        try:
+            await self._save_terminal_state(session_id, state, "canceled")
+        except WorkflowConcurrencyError:
+            # Worker дописал ledger раньше (часто completed) — читаем актуальную проекцию.
+            raced = await self._get_state(session_id)
+            if raced is None:
+                return None
+            if raced.terminal_task_state == "canceled":
+                return self._canceled_task_from_state(raced)
+            self._raise_if_not_cancelable(raced)
+            raise
 
-        return Task(
-            id=state.task_id,
-            context_id=state.context_id,
-            status=TaskStatus(
-                state=TaskState.canceled,
-                message=new_agent_text_message("Task cancelled"),
-            ),
-        )
+        return self._canceled_task_from_state(state)
 
     # === Обязательные методы (abstract) ===
 
     @abstractmethod
     async def on_message_send(
-        self, params: MessageSendParams, context: ChannelRequestContext = None
+        self, params: SendMessageRequest, context: ChannelRequestContext = None
     ) -> Task | Message:
         """
         Отправка сообщения (синхронно).
@@ -1368,7 +1422,7 @@ class BaseChannel(ABC):
 
     @abstractmethod
     def on_message_stream(
-        self, params: MessageSendParams, context: ChannelRequestContext = None
+        self, params: SendMessageRequest, context: ChannelRequestContext = None
     ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """
         Отправка сообщения (streaming).
@@ -1379,58 +1433,65 @@ class BaseChannel(ABC):
 
     @abstractmethod
     async def on_get_task(
-        self, params: TaskQueryParams, context: ChannelRequestContext = None
+        self, params: GetTaskRequest, context: ChannelRequestContext = None
     ) -> Task | None:
         """Получение задачи по ID."""
         pass
 
     @abstractmethod
     async def on_cancel_task(
-        self, params: TaskIdParams, context: ChannelRequestContext = None
+        self, params: CancelTaskRequest, context: ChannelRequestContext = None
     ) -> Task | None:
         """Отмена задачи."""
         pass
 
     @abstractmethod
-    def on_resubscribe_to_task(
-        self, params: TaskIdParams, context: ChannelRequestContext = None
+    def on_subscribe_to_task(
+        self, params: SubscribeToTaskRequest, context: ChannelRequestContext = None
     ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
-        """Переподписка на события задачи."""
+        """Подписка на события задачи (SubscribeToTask)."""
         raise NotImplementedError
+
+    async def on_list_tasks(
+        self, params: ListTasksRequest, context: ChannelRequestContext = None
+    ) -> ListTasksResponse:
+        """Список задач flow (по умолчанию не поддерживается)."""
+        _ = params, context
+        raise NotImplementedError(f"Channel '{self.name}' does not support ListTasks")
 
     # === Опциональные методы (push notifications) ===
 
-    async def on_set_task_push_notification_config(
+    async def on_create_task_push_notification_config(
         self, params: TaskPushNotificationConfig, context: ChannelRequestContext = None
     ) -> TaskPushNotificationConfig:
-        """Установка конфигурации push notification."""
+        """CreateTaskPushNotificationConfig."""
         _ = params, context
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
 
     async def on_get_task_push_notification_config(
         self,
-        params: GetTaskPushNotificationConfigParams,
+        params: GetTaskPushNotificationConfigRequest,
         context: ChannelRequestContext = None,
     ) -> TaskPushNotificationConfig | None:
-        """Получение конфигурации push notification."""
+        """GetTaskPushNotificationConfig."""
         _ = params, context
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
 
-    async def on_list_task_push_notification_config(
+    async def on_list_task_push_notification_configs(
         self,
-        params: ListTaskPushNotificationConfigParams,
+        params: ListTaskPushNotificationConfigsRequest,
         context: ChannelRequestContext = None,
-    ) -> list[TaskPushNotificationConfig]:
-        """Список конфигураций push notification."""
+    ) -> ListTaskPushNotificationConfigsResponse:
+        """ListTaskPushNotificationConfigs."""
         _ = params, context
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
 
     async def on_delete_task_push_notification_config(
         self,
-        params: DeleteTaskPushNotificationConfigParams,
+        params: DeleteTaskPushNotificationConfigRequest,
         context: ChannelRequestContext = None,
     ) -> None:
-        """Удаление конфигурации push notification."""
+        """DeleteTaskPushNotificationConfig."""
         _ = params, context
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
 
@@ -1876,31 +1937,35 @@ class BaseChannel(ABC):
             )
 
         svc = get_settings().server.name
+        agent_url = f"{base_url}/{svc}/api/v1/{config.flow_id}"
         card = AgentCard(
             name=config.name,
             description=config.description,
             version="1.0.0",
-            url=f"{base_url}/{svc}/api/v1/{config.flow_id}",
+            supported_interfaces=[
+                AgentInterface(
+                    url=agent_url,
+                    protocol_binding="JSONRPC",
+                    protocol_version="1.0",
+                )
+            ],
             capabilities=AgentCapabilities(
                 streaming=True,
-                push_notifications=False,
-                state_transition_history=True,
+                push_notifications=True,
+                extended_agent_card=False,
             ),
             skills=card_branch_entries,
             default_input_modes=["text/plain"],
             default_output_modes=["text/plain"],
-            supports_authenticated_extended_card=False,
         )
 
-        card_dict = require_json_object(
-            card.model_dump(by_alias=True, exclude_none=True),
-            "agent.card",
-        )
-        skills_payload = card_dict.pop("skills", None)
+        card_dict = require_json_object(MessageToDict(card), "agent.card")
+        # A2A 1.0: skills — required. branches — platform extension (тот же список).
+        skills_payload = card_dict.get("skills")
         if skills_payload is not None:
             card_dict["branches"] = skills_payload
 
-        # Добавляем публичные variables как дополнительное поле (не входит в стандарт A2A)
+        # Публичные variables — platform extension (не входит в стандарт A2A)
         public_vars: JsonObject = {}
         flow_variables = config.variables or {}
         for var_name, var_config in flow_variables.items():

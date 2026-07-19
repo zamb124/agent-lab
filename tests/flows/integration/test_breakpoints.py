@@ -520,12 +520,12 @@ class TestBreakpointsAPIIntegration:
             json={
                 "jsonrpc": "2.0",
                 "id": jsonrpc_id,
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": message_id,
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Start"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Start"}],
                         "contextId": context_id,
                     },
                     "metadata": {"breakpoints": {"step1": True}},

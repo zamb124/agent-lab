@@ -77,21 +77,38 @@ async def remote_flow_server():
     async def handle_agent_card(request):
         return web.json_response({
             "name": "Test Remote Agent",
-            "url": public["base"],
+            "description": "Test remote A2A 1.0 agent",
+            "supportedInterfaces": [
+                {
+                    "url": public["base"],
+                    "protocolBinding": "JSONRPC",
+                    "protocolVersion": "1.0",
+                }
+            ],
+            "capabilities": {"streaming": False, "pushNotifications": False},
+            "defaultInputModes": ["text"],
+            "defaultOutputModes": ["text"],
+            "skills": [],
             "branches": [{"id": "default", "name": "Default"}],
         })
 
     async def handle_send_task(request):
         data = await request.json()
+        assert data["method"] == "SendMessage"
         content = data["params"]["message"]["parts"][0]["text"]
 
         return web.json_response({
             "jsonrpc": "2.0",
             "id": data["id"],
             "result": {
-                "status": {"state": "completed"},
+                "id": data["id"],
+                "contextId": data["params"]["message"]["contextId"],
+                "status": {"state": "TASK_STATE_COMPLETED"},
                 "artifacts": [
-                    {"parts": [{"type": "text", "text": f"Remote response: {content}"}]}
+                    {
+                        "artifactId": "remote-1",
+                        "parts": [{"text": f"Remote response: {content}"}],
+                    }
                 ],
             },
         })

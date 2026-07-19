@@ -388,7 +388,6 @@ async def test_compute_daily_summary_uses_structured_data_summary():
                         {
                             "parts": [
                                 {
-                                    "kind": "data",
                                     "data": {
                                         "summary": "Structured summary from artifact",
                                         "entities": ["Yandex", "Sber"],
@@ -457,7 +456,6 @@ async def test_compute_daily_summary_adds_inline_entity_links_from_note_graph():
                         {
                             "parts": [
                                 {
-                                    "kind": "data",
                                     "data": {
                                         "summary": "Договорились с Yandex о следующей встрече",
                                         "entities": ["Yandex"],
@@ -514,7 +512,6 @@ async def test_compute_daily_summary_uses_nested_structured_output_summary():
                         {
                             "parts": [
                                 {
-                                    "kind": "data",
                                     "data": {
                                         "structured_output": {
                                             "summary": "Nested structured summary",
@@ -563,7 +560,6 @@ async def test_compute_daily_summary_uses_entities_from_notes_when_payload_entit
                         {
                             "parts": [
                                 {
-                                    "kind": "data",
                                     "data": {"summary": "Итог дня без списка сущностей"},
                                 }
                             ]
@@ -614,7 +610,6 @@ async def test_compute_daily_summary_raises_when_summary_empty():
                         {
                             "parts": [
                                 {
-                                    "kind": "data",
                                     "data": {"res": json.dumps(body, ensure_ascii=False)},
                                 }
                             ]
@@ -641,7 +636,6 @@ def test_extract_data_from_a2a_response_res_as_dict_not_string():
                         {
                             "parts": [
                                 {
-                                    "kind": "data",
                                     "data": {
                                         "res": {"summary": "OK", "entities": []},
                                     },

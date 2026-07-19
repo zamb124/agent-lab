@@ -248,9 +248,9 @@ async def test_flows_attach_skills_to_agent(
     )
 
     page = ui_page_system
-    await flows_open_editor(page, flows_ui, flow_id)
+    await flows_open_editor(page, flows_ui, flow_id, layout="agent")
     studio = page.locator("flows-agent-focus-studio").first
-    await expect(studio).to_be_visible(timeout=30_000)
+    await expect(studio).to_be_visible(timeout=8_000)
     skills_tab = studio.locator("platform-segmented-control").get_by_role(
         "button", name=re.compile(r"Skills|Tools|Инструмент", re.I)
     ).first
@@ -384,6 +384,7 @@ async def test_flows_attach_skills_to_agent(
         "calculator in the reply came from.\n\n"
         "**Result:** the chat shows a Skill load chip and a reply with the calculation."
     ),
+    timeout_seconds=120,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e

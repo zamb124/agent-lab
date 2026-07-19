@@ -168,11 +168,20 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 "diagrams-viz",
                 "web-research",
                 "work-tracking",
+                "agent-planning",
             }
             work = _load_payload(
                 await load_agent_skill.run({"agent_skill_id": "work-tracking"}, state)
             )
             assert work["depth"] == 1
+            planning = _load_payload(
+                await load_agent_skill.run({"agent_skill_id": "agent-planning"}, state)
+            )
+            assert planning["depth"] == 1
+            _assert_tools_include(
+                planning,
+                {"agent_plan_write", "agent_plan_get"},
+            )
             _assert_tools_include(
                 work,
                 {

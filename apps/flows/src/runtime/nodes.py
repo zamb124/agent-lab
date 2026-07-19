@@ -24,7 +24,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from typing import ClassVar, Literal, TypeAlias, cast, overload, override
 
-from a2a.types import Message, Part, Role, TextPart
+from a2a.types import Message, Part
+from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
 
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.clients.mcp_client import MCPClient
@@ -73,6 +74,7 @@ from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.registry import ToolMaterializeInput
 from apps.flows.src.variables import VariableResolver, VarResolver
 from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
+from core.a2a import mapping_from_struct, struct_from_mapping
 from core.ai.runtime import create_llm_client_from_call_config
 from core.clients.llm.mock_control import (
     MOCK_MISS,
@@ -617,9 +619,9 @@ class BaseNode(ABC):
         text = str(result) if not isinstance(result, str) else result
         message = Message(
             message_id=str(uuid.uuid4()),
-            role=Role.agent,
-            parts=[Part(root=TextPart(text=text))],
-            metadata={"node_id": self.node_id},
+            role=ROLE_AGENT,
+            parts=[Part(text=text)],
+            metadata=struct_from_mapping({"node_id": self.node_id}),
             task_id=state.task_id,
         )
         state.messages.append(message)
@@ -627,7 +629,9 @@ class BaseNode(ABC):
     @staticmethod
     def _get_message_node_id(msg: Message) -> str | None:
         """Извлекает node_id из metadata сообщения."""
-        metadata = require_json_object(msg.metadata or {}, "message.metadata")
+        if not msg.HasField("metadata"):
+            return None
+        metadata = mapping_from_struct(msg.metadata)
         node_id = metadata.get("node_id")
         return node_id if isinstance(node_id, str) else None
 
@@ -2386,7 +2390,7 @@ class ChannelNode(BaseNode):
     - send_photo: фото с подписью
     - send_document: документ/файл
     - send_payload: произвольный JSON (для webhook)
-    - send_notification: A2A нотификация (для webhook)
+    - send_notification: A2A Protocol 1.0 StreamResponse statusUpdate (webhook push)
     """
 
     node_type: ClassVar[NodeType | None] = NodeType.CHANNEL
@@ -2855,9 +2859,14 @@ class ReflectionNode(BaseNode):
         prompt = self._critic_prompt(target_snapshot)
         message = Message(
             message_id=message_id,
-            role=Role.user,
-            parts=[Part(root=TextPart(text=prompt))],
-            metadata={"node_id": self.node_id, "reflection_policy_id": self.critic_policy.policy_id},
+            role=ROLE_USER,
+            parts=[Part(text=prompt)],
+            metadata=struct_from_mapping(
+                {
+                    "node_id": self.node_id,
+                    "reflection_policy_id": self.critic_policy.policy_id,
+                }
+            ),
             task_id=state.task_id,
             context_id=state.context_id,
         )

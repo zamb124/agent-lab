@@ -7,8 +7,8 @@
  * - Если объект с полем `blocks` (массив) — используется `blocks`.
  * - Если объект с полем `files` (массив) — каждый элемент мапится в блок `file_card`
  *   (`file_id`, `name`, `mime_type`, `url`, `preview_url`).
- * Типы `card` / `table` / `actions` / `text` / `viz`: см. `flows-chat-builtin-blocks.js`
- * и `flows-chat-block-renderer.js`
+ * Типы `card` / `table` / `actions` / `text` / `viz` / `agent_plan`: см. `chat-builtin-blocks.js`
+ * и `chat-block-renderer.js`
  * (у `table` поле JSON `title` → свойство `caption` у Lit-компонента).
  * Невалидный JSON не даёт блоков; рендерер показывает fallback для неизвестного `type`.
  */
@@ -60,7 +60,6 @@ function fileCardFromToolFile(file, document = null) {
         url: file.url,
         preview_url: file.preview_url,
         editor_url: editorUrl,
-        binding_id: file.binding_id || doc?.binding_id,
         catalog_id: file.catalog_id || doc?.catalog_id,
         document_type: file.document_type || doc?.document_type,
         namespace: file.namespace || doc?.namespace,

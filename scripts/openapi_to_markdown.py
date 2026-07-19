@@ -385,11 +385,11 @@ title: {json.dumps("API" if lang == "en" else "API", ensure_ascii=False)}
             if service_name == "flows":
                 service_title = "Flows A2A API"
                 service_description = (
-                    "A2A интеграция с flows: token, авторизация, message/send, streaming, tasks, "
+                    "A2A интеграция с flows: token, авторизация, SendMessage, streaming, tasks, "
                     "branches, variables и files."
                     if lang == "ru"
                     else (
-                        "A2A integration with flows: token, authorization, message/send, streaming, tasks, "
+                        "A2A integration with flows: token, authorization, SendMessage, streaming, tasks, "
                         "branches, variables, and files."
                     )
                 )

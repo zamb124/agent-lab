@@ -18,14 +18,16 @@ from typing import Any, Callable
 
 import pytest
 from a2a.types import (
-    Message,
+Message,
     Part,
-    Role,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
-    TextPart,
 )
-from a2a.utils.message import get_message_text
+from a2a.types.a2a_pb2 import (
+ROLE_USER,
+)
+
+from a2a.helpers.proto_helpers import get_message_text
 
 from core.ai.llm_config import LLMCallConfig
 from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
@@ -189,9 +191,9 @@ async def _write_invalid_json_after_first_chunk(writer: asyncio.StreamWriter) ->
 
 def _message(text: str) -> Message:
     return Message(
-        messageId="test-user-message",
-        role=Role.user,
-        parts=[Part(root=TextPart(text=text))],
+        message_id="test-user-message",
+        role=ROLE_USER,
+        parts=[Part(text=text)],
     )
 
 
@@ -377,9 +379,9 @@ async def test_stream_context_layer_clamps_to_candidate_context_length_and_repor
         )
         messages = [
             Message(
-                messageId="system-message",
-                role=Role.user,
-                parts=[Part(root=TextPart(text="strict rules"))],
+                message_id="system-message",
+                role=ROLE_USER,
+                parts=[Part(text="strict rules")],
                 metadata={"system": True},
             ),
             _message(" ".join(f"old{i}" for i in range(160))),
@@ -425,9 +427,9 @@ async def test_stream_context_layer_adds_openrouter_anthropic_cache_control() ->
         )
         messages = [
             Message(
-                messageId="system-message",
-                role=Role.user,
-                parts=[Part(root=TextPart(text="stable rules"))],
+                message_id="system-message",
+                role=ROLE_USER,
+                parts=[Part(text="stable rules")],
                 metadata={"system": True},
             ),
             _message("current"),

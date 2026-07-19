@@ -76,7 +76,7 @@ async def _send_message(client, flow_id: str, context_id: str, content: str, tas
         json={
             "jsonrpc": "2.0",
             "id": str(uuid.uuid4()),
-            "method": "message/send",
+            "method": "SendMessage",
             "params": {"message": message},
         },
     )
@@ -107,7 +107,7 @@ class TestHandoffA2A:
         data = resp.json()
         _validate_jsonrpc_response(data)
         task = data["result"]
-        assert task["status"]["state"] == "input-required"
+        assert task["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
         metadata = task["status"]["message"]["metadata"]
         interrupt = metadata["platform_interrupt"]
         assert interrupt["body"]["kind"] == "handoff"
@@ -144,7 +144,7 @@ class TestHandoffA2A:
 
         first = await _send_message(client, parent_fid, context_id, "start handoff")
         first_data = first.json()
-        assert first_data["result"]["status"]["state"] == "input-required"
+        assert first_data["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         child_session = f"{child_fid}:{context_id}:handoff:{child_fid}"
         child_before = await container.workflow_runtime.get_state(child_session)
@@ -194,7 +194,7 @@ class TestHandoffA2A:
 
         first = await _send_message(client, parent_fid, context_id, "handoff to child")
         first_data = first.json()
-        assert first_data["result"]["status"]["state"] == "input-required"
+        assert first_data["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         child_session = f"{child_fid}:{context_id}:handoff:{child_fid}"
         child_state = await container.workflow_runtime.get_state(child_session)
@@ -208,7 +208,10 @@ class TestHandoffA2A:
             task_id=first_data["result"]["id"],
         )
         second_data = second.json()
-        assert second_data["result"]["status"]["state"] in ("input-required", "completed")
+        assert second_data["result"]["status"]["state"] in (
+            "TASK_STATE_INPUT_REQUIRED",
+            "TASK_STATE_COMPLETED",
+        )
 
         parent_state = await container.workflow_runtime.get_state(f"{parent_fid}:{context_id}")
         assert parent_state is not None
@@ -239,7 +242,7 @@ class TestHandoffA2A:
 
         first = await _send_message(client, parent_fid, context_id, "start")
         first_data = first.json()
-        assert first_data["result"]["status"]["state"] == "input-required"
+        assert first_data["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         parent_session = f"{parent_fid}:{context_id}"
         child_session = f"{child_fid}:{context_id}:handoff:{child_fid}"
@@ -254,7 +257,10 @@ class TestHandoffA2A:
             task_id=first_data["result"]["id"],
         )
         second_data = second.json()
-        assert second_data["result"]["status"]["state"] in ("input-required", "completed")
+        assert second_data["result"]["status"]["state"] in (
+            "TASK_STATE_INPUT_REQUIRED",
+            "TASK_STATE_COMPLETED",
+        )
 
         parent_state = await container.workflow_runtime.get_state(parent_session)
         child_after = await container.workflow_runtime.get_state(child_session)
@@ -311,7 +317,7 @@ class TestHandoffA2A:
         ])
 
         first = await _send_message(client, fid_a, context_id, "chain start")
-        assert first.json()["result"]["status"]["state"] == "input-required"
+        assert first.json()["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         second = await _send_message(
             client,
@@ -320,7 +326,10 @@ class TestHandoffA2A:
             "continue chain",
             task_id=first.json()["result"]["id"],
         )
-        assert second.json()["result"]["status"]["state"] in ("input-required", "completed")
+        assert second.json()["result"]["status"]["state"] in (
+            "TASK_STATE_INPUT_REQUIRED",
+            "TASK_STATE_COMPLETED",
+        )
 
         parent_state = await container.workflow_runtime.get_state(f"{fid_a}:{context_id}")
         assert parent_state is not None
@@ -367,24 +376,25 @@ class TestHandoffA2A:
         ])
 
         first = await _send_message(client, parent_fid, context_id, "cancel me")
-        assert first.json()["result"]["status"]["state"] == "input-required"
+        assert first.json()["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         cancel_resp = await client.post(
             f"/flows/api/v1/{parent_fid}",
             json={
                 "jsonrpc": "2.0",
                 "id": "cancel",
-                "method": "tasks/cancel",
+                "method": "CancelTask",
                 "params": {"id": context_id},
             },
         )
         cancel_data = cancel_resp.json()
         _validate_jsonrpc_response(cancel_data)
-        assert cancel_data["result"]["status"]["state"] == "canceled"
+        assert cancel_data["result"]["status"]["state"] == "TASK_STATE_CANCELED"
 
         child_session = f"{child_fid}:{context_id}:handoff:{child_fid}"
         child_state = await container.workflow_runtime.get_state(child_session)
         if child_state is not None:
+            # ExecutionTaskState — kebab; wire CancelTask уже проверен как TASK_STATE_CANCELED выше.
             assert child_state.terminal_task_state in ("canceled", None)
 
     @pytest.mark.asyncio
@@ -417,7 +427,7 @@ class TestHandoffA2A:
         resp = await _send_message(client, parent_fid, f"ctx-k8-{unique_id}", "go")
         data = resp.json()
         _validate_jsonrpc_response(data)
-        assert data["result"]["status"]["state"] == "failed"
+        assert data["result"]["status"]["state"] == "TASK_STATE_FAILED"
 
     @pytest.mark.asyncio
     async def test_k9_stream_keeps_open_on_handoff(
@@ -441,7 +451,7 @@ class TestHandoffA2A:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {"message": _msg("stream handoff", context_id=f"ctx-k9-{unique_id}")},
             },
         )
@@ -449,16 +459,18 @@ class TestHandoffA2A:
         input_required = [
             e
             for e in events
-            if e.get("result", {}).get("status", {}).get("state") == "input-required"
+            if e.get("result", {}).get("statusUpdate", {}).get("status", {}).get("state")
+            == "TASK_STATE_INPUT_REQUIRED"
         ]
         assert len(input_required) > 0
-        meta = input_required[-1]["result"]["status"]["message"]["metadata"]
+        meta = input_required[-1]["result"]["statusUpdate"]["status"]["message"]["metadata"]
         assert meta.get("platform_handoff_continue") is True
-        assert input_required[-1]["result"].get("final") is False
         ui_event_types = [
             part.get("data", {}).get("type")
             for event in events
-            for part in event.get("result", {}).get("artifact", {}).get("parts", [])
+            for part in (
+                event.get("result", {}).get("artifactUpdate", {}).get("artifact", {}).get("parts", [])
+            )
             if isinstance(part, dict)
         ]
         assert "platform.handoff_initiated" in ui_event_types
@@ -490,7 +502,7 @@ class TestHandoffA2A:
         ])
 
         first = await _send_message(client, parent_fid, context_id, "courier problem")
-        assert first.json()["result"]["status"]["state"] == "input-required"
+        assert first.json()["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         second = await _send_message(
             client,
@@ -499,4 +511,7 @@ class TestHandoffA2A:
             "continue",
             task_id=first.json()["result"]["id"],
         )
-        assert second.json()["result"]["status"]["state"] in ("input-required", "completed")
+        assert second.json()["result"]["status"]["state"] in (
+            "TASK_STATE_INPUT_REQUIRED",
+            "TASK_STATE_COMPLETED",
+        )

@@ -3,7 +3,7 @@ E2E тест для variables: полный сценарий с публичны
 
 Сценарий:
 1. Получаем agent card - проверяем что видны публичные variables
-2. Отправляем message/send с variables в metadata (примитивы и JSON/dict)
+2. Отправляем SendMessage с variables в metadata (примитивы и JSON/dict)
 3. Проверяем что variables переопределились и используются в промптах
 4. Проверяем доступ к JSON/dict переменным через точку в промптах
 """
@@ -18,8 +18,8 @@ def _msg(text: str, task_id: str = None, context_id: str = None, metadata: Dict[
     """Создаёт A2A Message с metadata."""
     m = {
         "messageId": str(uuid.uuid4()),
-        "role": "user",
-        "parts": [{"kind": "text", "text": text}],
+        "role": "ROLE_USER",
+        "parts": [{"text": text}],
     }
     if task_id:
         m["taskId"] = task_id
@@ -99,19 +99,19 @@ class TestVariablesE2E:
     async def test_message_send_with_primitive_variables_in_metadata(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):
-        """2. message/send с примитивными variables в metadata переопределяют flow variables."""
+        """2. SendMessage с примитивными variables в metadata переопределяют flow variables."""
         # Настраиваем mock LLM ответ
         mock_llm_with_queue([{"type": "text", "content": "Ответ с переопределенной компанией: MetadataCompany"}])
 
         context_id = str(uuid.uuid4())
 
-        # Отправляем message/send с variables в metadata
+        # Отправляем SendMessage с variables в metadata
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
                 "jsonrpc": "2.0",
                 "id": "test-vars-1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": _msg(
                         "Привет",
@@ -132,7 +132,7 @@ class TestVariablesE2E:
         assert "result" in data
 
         task = data["result"]
-        assert task["status"]["state"] == "completed"
+        assert task["status"]["state"] == "TASK_STATE_COMPLETED"
 
         # Проверяем что ответ содержит переопределенное значение
         response_text = get_task_response(task)
@@ -144,7 +144,7 @@ class TestVariablesE2E:
     async def test_message_send_with_dict_variables_in_metadata(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):
-        """3. message/send с dict variables в metadata доступны через точку в промптах."""
+        """3. SendMessage с dict variables в metadata доступны через точку в промптах."""
         # Настраиваем mock LLM ответ, который использует dict переменные
         mock_llm_with_queue([
             {"type": "text", "content": "Пользователь: TestUser, Email: test@example.com, Тема: dark"}
@@ -152,13 +152,13 @@ class TestVariablesE2E:
 
         context_id = str(uuid.uuid4())
 
-        # Отправляем message/send с dict variables в metadata
+        # Отправляем SendMessage с dict variables в metadata
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
                 "jsonrpc": "2.0",
                 "id": "test-vars-2",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": _msg(
                         "Покажи мои настройки",
@@ -186,7 +186,7 @@ class TestVariablesE2E:
         assert "result" in data
 
         task = data["result"]
-        assert task["status"]["state"] == "completed"
+        assert task["status"]["state"] == "TASK_STATE_COMPLETED"
 
         # Проверяем что dict переменные доступны
         response_text = get_task_response(task)
@@ -197,7 +197,7 @@ class TestVariablesE2E:
     async def test_message_send_with_mixed_variables_in_metadata(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):
-        """4. message/send с смешанными variables (примитивы + dict) в metadata."""
+        """4. SendMessage с смешанными variables (примитивы + dict) в metadata."""
         mock_llm_with_queue([
             {"type": "text", "content": "Компания: MixedCompany, Адрес: Москва, Телефон: +7-999-111-11-11"}
         ])
@@ -210,7 +210,7 @@ class TestVariablesE2E:
             json={
                 "jsonrpc": "2.0",
                 "id": "test-vars-3",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": _msg(
                         "Покажи информацию",
@@ -237,7 +237,7 @@ class TestVariablesE2E:
         assert "result" in data
 
         task = data["result"]
-        assert task["status"]["state"] == "completed"
+        assert task["status"]["state"] == "TASK_STATE_COMPLETED"
 
         response_text = get_task_response(task)
         # Проверяем что все типы переменных доступны
@@ -250,7 +250,7 @@ class TestVariablesE2E:
         """
         5. Полный E2E сценарий:
         - Получаем agent card (публичные variables)
-        - Отправляем message/send с variables в metadata
+        - Отправляем SendMessage с variables в metadata
         - Проверяем что variables переопределились
         - Проверяем что dict variables доступны через точку
         """
@@ -277,13 +277,13 @@ class TestVariablesE2E:
 
         context_id = str(uuid.uuid4())
 
-        # 3. Отправляем message/send с полным набором variables
+        # 3. Отправляем SendMessage с полным набором variables
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
                 "jsonrpc": "2.0",
                 "id": "test-vars-full",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": _msg(
                         "Полный тест variables",
@@ -314,7 +314,7 @@ class TestVariablesE2E:
         assert "result" in data
 
         task = data["result"]
-        assert task["status"]["state"] == "completed"
+        assert task["status"]["state"] == "TASK_STATE_COMPLETED"
 
         # 4. Проверяем что все variables применились
         response_text = get_task_response(task)
@@ -332,8 +332,8 @@ class TestVariablesE2E:
         assert "history" in task
         assert len(task["history"]) >= 2
         roles = [msg["role"] for msg in task["history"]]
-        assert "user" in roles
-        assert "agent" in roles
+        assert "ROLE_USER" in roles
+        assert "ROLE_AGENT" in roles
 
     @pytest.mark.asyncio
     async def test_current_date_variable_from_metadata_with_var_reference(
@@ -359,13 +359,13 @@ class TestVariablesE2E:
 
         context_id = str(uuid.uuid4())
 
-        # Отправляем message/send с @var:current_date в metadata
+        # Отправляем SendMessage с @var:current_date в metadata
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
                 "jsonrpc": "2.0",
                 "id": "test-current-date-var",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": _msg(
                         "Какая сегодня дата?",
@@ -386,7 +386,7 @@ class TestVariablesE2E:
         assert "result" in data
 
         task = data["result"]
-        assert task["status"]["state"] == "completed"
+        assert task["status"]["state"] == "TASK_STATE_COMPLETED"
 
         # Проверяем что ответ содержит значение из БД (не строку "current_date" или "@var:current_date")
         response_text = get_task_response(task)
@@ -430,13 +430,13 @@ class TestVariablesE2E:
 
         context_id = str(uuid.uuid4())
 
-        # Отправляем message/send с @var: ссылкой в metadata
+        # Отправляем SendMessage с @var: ссылкой в metadata
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
                 "jsonrpc": "2.0",
                 "id": "test-var-reference-recursive",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": _msg(
                         "Какой API endpoint?",
@@ -457,7 +457,7 @@ class TestVariablesE2E:
         assert "result" in data
 
         task = data["result"]
-        assert task["status"]["state"] == "completed"
+        assert task["status"]["state"] == "TASK_STATE_COMPLETED"
 
         # Проверяем что обе ссылки были зарезолвлены рекурсивно
         response_text = get_task_response(task)
@@ -500,13 +500,13 @@ class TestVariablesE2E:
 
         context_id = str(uuid.uuid4())
 
-        # Отправляем message/send с JSON объектом, содержащим @var: ссылки
+        # Отправляем SendMessage с JSON объектом, содержащим @var: ссылки
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
                 "jsonrpc": "2.0",
                 "id": "test-var-reference-json",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": _msg(
                         "Какая строка подключения к БД?",
@@ -531,7 +531,7 @@ class TestVariablesE2E:
         assert "result" in data
 
         task = data["result"]
-        assert task["status"]["state"] == "completed"
+        assert task["status"]["state"] == "TASK_STATE_COMPLETED"
 
         # Проверяем что все ссылки были зарезолвлены рекурсивно
         response_text = get_task_response(task)
@@ -577,13 +577,13 @@ class TestVariablesE2E:
 
         context_id = str(uuid.uuid4())
 
-        # Отправляем message/send с глубоко вложенным JSON объектом
+        # Отправляем SendMessage с глубоко вложенным JSON объектом
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
                 "jsonrpc": "2.0",
                 "id": "test-var-reference-nested-json",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": _msg(
                         "Какой полный идентификатор сервиса?",
@@ -614,7 +614,7 @@ class TestVariablesE2E:
         assert "result" in data
 
         task = data["result"]
-        assert task["status"]["state"] == "completed"
+        assert task["status"]["state"] == "TASK_STATE_COMPLETED"
 
         # Проверяем что все ссылки были зарезолвлены рекурсивно
         response_text = get_task_response(task)

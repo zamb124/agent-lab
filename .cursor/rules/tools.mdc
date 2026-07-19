@@ -37,6 +37,7 @@ alwaysApply: false
 ## Builtin tools
 
 - Lifecycle: `reason`, `ask_user`, `hitl_operator_task`, `self_check`, `final_answer`, `finish`.
+- Agent plan: `agent_plan_write`, `agent_plan_get` — flat checklist в `ExecutionState.agent_plan` (full overwrite); skill `agent-planning`; UI block `type=agent_plan` (→ **`agent_plan.mdc`**).
 - Files: `read_file`, `create_file`.
 - Documents (Office) mutate/open: `documents_open_file`, `documents_replace_text`, `documents_append_text`, `documents_update_cells` — tags `documents`/`files`/`office`.
 - Documents catalog pack (Flows + Lara): `documents_list_catalog`, `documents_find`, `documents_read`, `documents_get_link` — модуль `apps/flows/tools/documents_catalog.py`, tags `documents`/`office`/`catalog`. Browse/search/read/link поверх Office BFF; вешаются на любой `llm_node.tools` или unlock через Agent Skill `documents-catalog`.

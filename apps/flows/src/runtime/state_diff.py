@@ -44,6 +44,7 @@ STATE_DIFF_SKIP_KEYS: frozenset[str] = frozenset({
     "handoff_trace_id",
     "handoff_parent_session_id",
     "handback_return_variables",
+    "agent_plan",
 })
 
 CANVAS_DIFF_LIMIT = 8

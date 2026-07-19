@@ -121,9 +121,20 @@ export class PlatformSpinner extends PlatformElement {
         }
     }
 
+    _logoSrc() {
+        const hostWithOrigin = this.closest('[platform-ui-origin]');
+        const rawOrigin =
+            hostWithOrigin instanceof HTMLElement
+                ? hostWithOrigin.getAttribute('platform-ui-origin')
+                : null;
+        const origin =
+            typeof rawOrigin === 'string' ? rawOrigin.trim().replace(/\/+$/, '') : '';
+        return origin !== '' ? `${origin}${SPINNER_LOGO_SRC}` : SPINNER_LOGO_SRC;
+    }
+
     render() {
         return html`
-            <img class="spinner-logo" src="${SPINNER_LOGO_SRC}" alt="" aria-hidden="true" draggable="false" />
+            <img class="spinner-logo" src="${this._logoSrc()}" alt="" aria-hidden="true" draggable="false" />
             ${this.text ? html`<div class="spinner-text">${this.text}</div>` : ''}
         `;
     }

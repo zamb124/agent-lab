@@ -40,15 +40,13 @@ class MediaViewerHandler:
         return "audio"
 
     async def build_open_config(self, ctx: ViewerOpenContext) -> DocumentOpenConfigResponse:
-        binding_kind = "file" if ctx.binding_kind == "file" else "document"
         content_type = ctx.file_record.content_type or "application/octet-stream"
         normalized = content_type.split(";", 1)[0].strip()
         kind = self._media_kind(ctx.file_category)
         stream_url = viewer_stream_url(
             base_url=ctx.browser_public_base_url,
             handler="media",
-            binding_kind=binding_kind,
-            binding_id=ctx.binding_id,
+            viewer_scope=ctx.viewer_scope,
             file_id=ctx.file_record.file_id,
             company_id=ctx.company_id,
             content_type=normalized,
@@ -59,7 +57,6 @@ class MediaViewerHandler:
         caps = self.capabilities(file_record=ctx.file_record, integration_configured=True)
         return DocumentOpenConfigResponse(
             handler="media",
-            binding_id=ctx.binding_id,
             file_id=ctx.file_record.file_id,
             title=ctx.title,
             original_name=ctx.file_record.original_name,

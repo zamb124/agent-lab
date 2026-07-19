@@ -268,6 +268,35 @@ describe('createResourceCollection: effect (HTTP)', () => {
         expect(loaded.payload.items).toEqual([{ id: 'a' }]);
     });
 
+    it('listFetchAllPages: несколько GET с offset пока items < total', async () => {
+        const r = createResourceCollection({
+            ...baseOpts(),
+            operations: ['list'],
+            toastKeys: {},
+            listFetchAllPages: true,
+            listQuery: () => ({ limit: 2, offset: 0 }),
+        });
+        fetchMock.respondJson('GET', '/api/items?limit=2&offset=0', {
+            items: [{ id: 'a' }, { id: 'b' }],
+            total: 3,
+        });
+        fetchMock.respondJson('GET', '/api/items?limit=2&offset=2', {
+            items: [{ id: 'c' }],
+            total: 3,
+        });
+        const dispatched = [];
+        await r.effect(
+            { type: r.events.LIST_REQUESTED, payload: null, id: 'l-all', meta: {} },
+            buildCtx(() => ({}), dispatched),
+        );
+        const loaded = dispatched.find((d) => d.type === r.events.LIST_LOADED);
+        expect(loaded).toBeTruthy();
+        expect(loaded.payload.items).toEqual([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
+        expect(loaded.payload.total).toBe(3);
+        const getCalls = fetchMock.calls.filter((c) => c.method === 'GET');
+        expect(getCalls).toHaveLength(2);
+    });
+
     it('CREATE_REQUESTED → fetch POST → CREATED + UI_TOAST_SHOW', async () => {
         const r = createResourceCollection(baseOpts());
         fetchMock.respondJson('POST', '/api/items', { id: 'new', name: 'Hi' });

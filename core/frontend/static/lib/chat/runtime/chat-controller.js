@@ -12,15 +12,17 @@
  */
 
 import {
-    isA2aTerminalState,
+    isA2aStreamBoundaryState,
     mapA2aResultToChatRuntimeEvents,
     resolveA2aContextId,
+    unwrapA2aStreamResult,
 } from '../a2a-chat-runtime.js';
 import {
+    A2A_PROTOCOL_VERSION,
     a2aEndpointUrl,
     buildA2aCancelBody,
-    buildA2aMessageStreamBody,
-    buildA2aResubscribeBody,
+    buildA2aSendStreamingMessageBody,
+    buildA2aSubscribeToTaskBody,
     consumeA2aStream,
 } from './a2a-stream.js';
 import {
@@ -107,7 +109,7 @@ export class ChatController {
         await this._transport.loadHistory();
     }
 
-    /** Освободить ресурсы транспорта и HITL live resubscribe. */
+    /** Освободить ресурсы транспорта и HITL SubscribeToTask live-tail. */
     dispose() {
         this.stopHitlLiveTail();
         if (this._transport !== null && typeof this._transport.dispose === 'function') {
@@ -235,9 +237,16 @@ export class ChatController {
         if (mapped.nextTaskId) {
             streamState.taskId = mapped.nextTaskId;
         }
-        const resolvedContextId = resolveA2aContextId(result, streamState.contextId);
-        if (typeof resolvedContextId === 'string' && resolvedContextId.length > 0) {
-            streamState.contextId = resolvedContextId;
+        // Conversation context фиксируется на send(); handoff child frames несут
+        // свой context_id и не должны уводить ленту в пустой bucket.
+        if (
+            typeof streamState.contextId !== 'string'
+            || streamState.contextId.length === 0
+        ) {
+            const resolvedContextId = resolveA2aContextId(result, streamState.contextId);
+            if (typeof resolvedContextId === 'string' && resolvedContextId.length > 0) {
+                streamState.contextId = resolvedContextId;
+            }
         }
         for (const runEvent of mapped.runEvents) {
             if (this._onRunEvent) {
@@ -265,12 +274,16 @@ export class ChatController {
         feedStreamTtsFromA2aResult(result);
 
         let stateValue = null;
-        if (result.kind === 'status-update' && result.status && typeof result.status.state === 'string') {
-            stateValue = result.status.state;
-        } else if (result.kind === 'artifact-update' && result.artifact && typeof result.artifact.state === 'string') {
-            stateValue = result.artifact.state;
+        const unwrapped = unwrapA2aStreamResult(result);
+        if (
+            unwrapped
+            && unwrapped.frameKind === 'statusUpdate'
+            && unwrapped.event.status
+            && typeof unwrapped.event.status.state === 'string'
+        ) {
+            stateValue = unwrapped.event.status.state;
         }
-        return { terminal: mapped.terminal || isA2aTerminalState(stateValue, result.final === true) };
+        return { terminal: mapped.terminal || isA2aStreamBoundaryState(stateValue) };
     }
 
     /**
@@ -323,7 +336,7 @@ export class ChatController {
             };
         this.addUserMessage(contextId, userMessage);
 
-        const body = buildA2aMessageStreamBody({
+        const body = buildA2aSendStreamingMessageBody({
             message,
             contextId,
             branchId: this._target.branchId != null ? this._target.branchId : null,
@@ -361,7 +374,7 @@ export class ChatController {
                 context_id: streamState.contextId,
             });
             if (!terminal && typeof streamState.taskId === 'string' && streamState.taskId.length > 0) {
-                // Не затирать HITL pause stream_incomplete — нужен live tasks/resubscribe.
+                // Не затирать HITL pause stream_incomplete — нужен live SubscribeToTask.
                 if (findActiveHitlPause(this._state) === null) {
                     this.applyRuntimeVerb('failed', {
                         task_id: streamState.taskId,
@@ -419,7 +432,7 @@ export class ChatController {
             throw new Error('ChatController.sendResume: contextId required');
         }
 
-        const body = buildA2aMessageStreamBody({
+        const body = buildA2aSendStreamingMessageBody({
             message: '',
             contextId,
             branchId: this._target.branchId != null ? this._target.branchId : null,
@@ -496,7 +509,7 @@ export class ChatController {
     }
 
     /**
-     * На активной operator_task паузе — live `tasks/resubscribe` (тот же Redis stream,
+     * На активной operator_task паузе — live `SubscribeToTask` (тот же Redis stream,
      * что у operator chat). Не используется при operator_handoff transport.
      */
     syncHitlLiveTail() {
@@ -546,7 +559,7 @@ export class ChatController {
                     await consumeA2aStream(
                         {
                             url: a2aEndpointUrl(this._target),
-                            body: buildA2aResubscribeBody(pause.taskId),
+                            body: buildA2aSubscribeToTaskBody(pause.taskId),
                             headers,
                             credentials: this._credentials,
                             signal: abort.signal,
@@ -582,7 +595,7 @@ export class ChatController {
         }
     }
 
-    /** Отмена активного выполнения: abort SSE + JSON-RPC tasks/cancel. */
+    /** Отмена активного выполнения: abort SSE + JSON-RPC CancelTask. */
     async cancel() {
         if (this._cancelBusy) {
             return;
@@ -607,7 +620,11 @@ export class ChatController {
             const headers = await this._getHeaders();
             await fetch(a2aEndpointUrl(this._target), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', ...headers },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'A2A-Version': A2A_PROTOCOL_VERSION,
+                    ...headers,
+                },
                 credentials: this._credentials,
                 body: JSON.stringify(buildA2aCancelBody(taskId)),
             });

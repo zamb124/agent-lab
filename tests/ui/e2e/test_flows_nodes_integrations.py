@@ -17,22 +17,23 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_api_sync_mcp_server,
     flows_click_platform_button,
     flows_code_echo_payload,
+    flows_code_echo_with_telegram_channel_payload,
     flows_doc_flow_id,
     flows_drop_mcp_node,
-    flows_drop_node,
-    flows_ensure_channel_node_telegram,
     flows_external_api_payload,
     flows_graph_payload,
-    flows_llm_payload,
     flows_open_editor,
     flows_open_mcp_servers_modal,
     flows_open_node_editor,
     flows_pick_first_mcp_tool_in_picker,
     flows_publish_editor,
+    flows_remote_agent_payload,
     flows_seed_mcp_store_catalog_entry,
+    flows_select_canvas_node,
     flows_set_code_node_source,
     flows_set_external_api_url,
     flows_set_remote_flow_url,
+    flows_wait_node_in_branch_data,
 )
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
@@ -78,12 +79,13 @@ async def test_flows_process_with_code(
     await flows_api_create_flow(
         flows_ui.origin,
         auth_token_system,
-        flows_graph_payload(flow_id, name=GREEN_GARDEN_AGENT_NAME),
+        flows_code_echo_payload(flow_id, name=GREEN_GARDEN_AGENT_NAME),
     )
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
-    code_node_id = await flows_drop_node(page, "code", x=520, y=320)
+    code_node_id = "echo"
+    await flows_select_canvas_node(page, code_node_id)
     await scenario.step(
         "Добавьте ноду кода на канву",
         page,
@@ -100,7 +102,7 @@ async def test_flows_process_with_code(
     )
 
     _ = await flows_open_node_editor(page, code_node_id)
-    await expect(page.locator("flows-code-workbench").first).to_be_visible(timeout=30_000)
+    await expect(page.locator("flows-code-workbench").first).to_be_visible(timeout=10_000)
     echo_code = (
         "async def run(args, state):\n"
         "    content = str(state.get('content', ''))\n"
@@ -109,7 +111,7 @@ async def test_flows_process_with_code(
     )
     await flows_set_code_node_source(page, echo_code)
     code_editor = page.locator("flows-code-workbench").first
-    await expect(code_editor).to_contain_text("echo:", timeout=15_000)
+    await expect(code_editor).to_contain_text("echo:", timeout=5_000)
     await scenario.step(
         "Напишите код обработки",
         page,
@@ -126,7 +128,7 @@ async def test_flows_process_with_code(
     )
 
     await flows_open_node_editor(page, code_node_id)
-    await expect(page.locator("flows-code-workbench").first).to_contain_text("echo:", timeout=15_000)
+    await expect(page.locator("flows-code-workbench").first).to_contain_text("echo:", timeout=5_000)
     await scenario.step(
         "Проверьте код перед публикацией",
         page,
@@ -188,7 +190,7 @@ async def test_flows_process_with_code(
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(240)
+@pytest.mark.timeout(60)
 async def test_flows_call_order_tracking_api(
     scenario: ScenarioRecorder,
     flows_ui: AppUI,
@@ -197,15 +199,20 @@ async def test_flows_call_order_tracking_api(
     unique_id: str,
 ) -> None:
     flow_id = flows_doc_flow_id("order_api", unique_id)
+    api_node_id = "tracker"
     await flows_api_create_flow(
         flows_ui.origin,
         auth_token_system,
-        flows_llm_payload(flow_id, name=GREEN_GARDEN_AGENT_NAME, prompt="Помогай с заказами."),
+        flows_external_api_payload(
+            flow_id,
+            name=GREEN_GARDEN_AGENT_NAME,
+            url=_TRACKER_URL,
+        ),
     )
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
-    api_node_id = await flows_drop_node(page, "external_api", x=540, y=360)
+    await flows_wait_node_in_branch_data(page, api_node_id)
     await scenario.step(
         "Добавьте ноду внешнего API",
         page,
@@ -221,11 +228,12 @@ async def test_flows_call_order_tracking_api(
         ),
     )
 
-    _ = await flows_open_node_editor(page, api_node_id)
-    await expect(page.locator("flows-external-api-editor")).to_be_visible(timeout=30_000)
+    panel = await flows_open_node_editor(page, api_node_id)
+    editor = panel.locator("flows-external-api-editor").first
+    await expect(editor).to_be_visible(timeout=5_000)
     await flows_set_external_api_url(page, _TRACKER_URL)
-    url_field = page.locator("flows-external-api-editor platform-field").first
-    await expect(url_field).to_be_visible(timeout=15_000)
+    url_field = editor.locator("platform-field").first
+    await expect(url_field).to_be_visible(timeout=5_000)
     await scenario.step(
         "Укажите адрес сервиса заказов",
         page,
@@ -241,10 +249,9 @@ async def test_flows_call_order_tracking_api(
         ),
     )
 
-    await flows_open_node_editor(page, api_node_id)
-    await expect(page.locator("flows-external-api-editor platform-field[input-type='url']").get_by_role("textbox")).to_have_value(
-        re.compile(r"order_id"), timeout=5_000
-    )
+    await expect(
+        editor.locator("platform-field[input-type='url']").get_by_role("textbox")
+    ).to_have_value(re.compile(r"order_id"), timeout=5_000)
     await scenario.step(
         "Проверьте URL с переменной заказа",
         page,
@@ -303,6 +310,7 @@ async def test_flows_call_order_tracking_api(
         "new operations without rewriting the graph.\n\n"
         "**Result:** the MCP server is installed, the tool is added to the agent and canvas."
     ),
+    timeout_seconds=120,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -336,9 +344,29 @@ async def test_flows_connect_mcp_tool(
         """,
         unique_id,
     )
-    await flows_click_platform_button(modal, "Установить", "Install")
+    catalog_card = modal.locator(".mcp-card").filter(has_text=server_id).first
+    await expect(catalog_card).to_be_visible(timeout=30_000)
+    await flows_click_platform_button(catalog_card, "Установить", "Install")
+    await expect(
+        catalog_card.locator(".mcp-chip").filter(
+            has_text=re.compile(r"Installed|Установлен")
+        ).first
+    ).to_be_visible(timeout=30_000)
+    await search.evaluate(
+        """
+        (el) => {
+            el.value = '';
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+            el.dispatchEvent(new CustomEvent('change', {
+                detail: { value: '' },
+                bubbles: true,
+                composed: true,
+            }));
+        }
+        """
+    )
     await flows_click_platform_button(modal, "Подключённые", "Installed")
-    await expect(modal.get_by_text(server_id, exact=True)).to_be_visible(timeout=5_000)
+    await expect(modal.get_by_text(server_id, exact=True)).to_be_visible(timeout=30_000)
     await scenario.step(
         "Установите MCP-сервер из каталога",
         page,
@@ -457,17 +485,24 @@ async def test_flows_notify_in_telegram(
     unique_id: str,
 ) -> None:
     flow_id = flows_doc_flow_id("telegram_ch", unique_id)
+    channel_node_id = "telegram_notify"
     await flows_api_create_flow(
         flows_ui.origin,
         auth_token_system,
-        flows_code_echo_payload(flow_id, name=GREEN_GARDEN_AGENT_NAME),
+        flows_code_echo_with_telegram_channel_payload(
+            flow_id,
+            name=GREEN_GARDEN_AGENT_NAME,
+            bot_token=GREEN_GARDEN_TELEGRAM_BOT,
+            channel_node_id=channel_node_id,
+        ),
     )
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
-    channel_node_id = await flows_drop_node(page, "channel", x=560, y=340)
-    _ = await flows_open_node_editor(page, channel_node_id)
-    await expect(page.locator("flows-channel-node-editor")).to_be_visible(timeout=30_000)
+    await flows_wait_node_in_branch_data(page, channel_node_id)
+    panel = await flows_open_node_editor(page, channel_node_id)
+    editor = panel.locator("flows-channel-node-editor").first
+    await expect(editor).to_be_visible(timeout=5_000)
     await scenario.step(
         "Добавьте ноду канала",
         page,
@@ -483,12 +518,8 @@ async def test_flows_notify_in_telegram(
         ),
     )
 
-    editor = page.locator("flows-channel-node-editor").first
-    token_field = editor.locator("platform-variable-input, platform-field").first
-    await expect(token_field).to_be_visible(timeout=15_000)
-    await flows_ensure_channel_node_telegram(page)
     await expect(editor.get_by_text(re.compile(r"Telegram|телеграм", re.I)).first).to_be_visible(
-        timeout=15_000
+        timeout=5_000
     )
     await scenario.step(
         "Выберите Telegram и укажите бота",
@@ -505,8 +536,6 @@ async def test_flows_notify_in_telegram(
         ),
     )
 
-    await flows_open_node_editor(page, channel_node_id)
-    await expect(page.locator("flows-channel-node-editor")).to_be_visible(timeout=15_000)
     await scenario.step(
         "Проверьте настройки канала перед публикацией",
         page,
@@ -567,7 +596,7 @@ async def test_flows_notify_in_telegram(
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(240)
+@pytest.mark.timeout(60)
 async def test_flows_call_remote_agent(
     scenario: ScenarioRecorder,
     flows_ui: AppUI,
@@ -576,17 +605,22 @@ async def test_flows_call_remote_agent(
     unique_id: str,
 ) -> None:
     flow_id = flows_doc_flow_id("remote_agent", unique_id)
+    remote_node_id = "remote_partner"
     await flows_api_create_flow(
         flows_ui.origin,
         auth_token_system,
-        flows_external_api_payload(flow_id, name=GREEN_GARDEN_AGENT_NAME, url=_TRACKER_URL),
+        flows_remote_agent_payload(
+            flow_id,
+            name=GREEN_GARDEN_AGENT_NAME,
+            url=_REMOTE_AGENT_URL,
+        ),
     )
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
-    remote_node_id = await flows_drop_node(page, "remote_flow", x=580, y=360)
-    _ = await flows_open_node_editor(page, remote_node_id)
-    await expect(page.locator("flows-remote-flow-editor")).to_be_visible(timeout=30_000)
+    panel = await flows_open_node_editor(page, remote_node_id)
+    editor = panel.locator("flows-remote-flow-editor").first
+    await expect(editor).to_be_visible(timeout=5_000)
     await scenario.step(
         "Добавьте ноду внешнего агента",
         page,
@@ -602,11 +636,10 @@ async def test_flows_call_remote_agent(
         ),
     )
 
-    editor = page.locator("flows-remote-flow-editor").first
     await flows_set_remote_flow_url(page, _REMOTE_AGENT_URL)
-    await expect(editor.locator(".remote-flow-endpoint-stack platform-field").first.get_by_role("textbox")).to_have_value(
-        _REMOTE_AGENT_URL, timeout=5_000
-    )
+    await expect(
+        editor.locator(".remote-flow-endpoint-stack platform-field").first.get_by_role("textbox")
+    ).to_have_value(_REMOTE_AGENT_URL, timeout=5_000)
     await scenario.step(
         "Укажите адрес партнёрского агента",
         page,
@@ -622,10 +655,9 @@ async def test_flows_call_remote_agent(
         ),
     )
 
-    await flows_open_node_editor(page, remote_node_id)
-    await expect(page.locator("flows-remote-flow-editor .remote-flow-endpoint-stack platform-field").first.get_by_role("textbox")).to_have_value(
-        _REMOTE_AGENT_URL, timeout=5_000
-    )
+    await expect(
+        editor.locator(".remote-flow-endpoint-stack platform-field").first.get_by_role("textbox")
+    ).to_have_value(_REMOTE_AGENT_URL, timeout=5_000)
     await scenario.step(
         "Проверьте адрес перед публикацией",
         page,

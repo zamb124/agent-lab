@@ -1,5 +1,5 @@
 """
-Тестовый A2A агент для интеграционных тестов.
+Тестовый A2A агент для интеграционных тестов (Protocol 1.0).
 Полностью автономный агент без зависимостей от core/agents.
 """
 
@@ -7,16 +7,17 @@ import os
 from typing import ClassVar, override
 
 import httpx
-from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes.agent_card_routes import create_agent_card_routes
+from a2a.server.routes.fastapi_routes import add_a2a_routes_to_fastapi
+from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
 from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
+from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-from starlette.routing import Route
 
 from apps.test_a2a_sample.simple_agent import SimpleTestAgent
 
@@ -65,9 +66,8 @@ def health(_request: Request) -> JSONResponse:
     return JSONResponse({"status": "healthy"})
 
 
-def create_app() -> Starlette:
-    """Создает FastAPI приложение с A2A протоколом."""
-    # Создаем простого тестового агента
+def create_app() -> FastAPI:
+    """Создает FastAPI приложение с A2A Protocol 1.0."""
     executor = SimpleTestAgent(
         tools=[CatFactTool()],
     )
@@ -84,24 +84,33 @@ def create_app() -> Starlette:
     card = AgentCard(
         name="Test Cat Agent",
         description="Тестовый агент для интеграционных тестов",
-        url=AGENT_URL,
         version="1.0.0",
         capabilities=AgentCapabilities(streaming=True, push_notifications=False),
         skills=skills,
         default_input_modes=["text/plain"],
         default_output_modes=["text/plain"],
     )
-
-    app = A2AStarletteApplication(
-        card,
-        DefaultRequestHandler(executor, InMemoryTaskStore()),
-    ).build()
-
-    app.add_middleware(APIKeyMiddleware)
-    app.routes.append(
-        Route("/health", health, methods=["GET"])
+    card.supported_interfaces.append(
+        AgentInterface(
+            url=AGENT_URL,
+            protocol_binding="JSONRPC",
+            protocol_version="1.0",
+        )
     )
 
+    handler = DefaultRequestHandler(executor, InMemoryTaskStore(), card)
+    app = FastAPI(title="Test A2A Agent")
+    add_a2a_routes_to_fastapi(
+        app,
+        agent_card_routes=create_agent_card_routes(card),
+        jsonrpc_routes=create_jsonrpc_routes(
+            handler,
+            rpc_url="/",
+            enable_v0_3_compat=False,
+        ),
+    )
+    app.add_middleware(APIKeyMiddleware)
+    app.add_api_route("/health", health, methods=["GET"])
     return app
 
 

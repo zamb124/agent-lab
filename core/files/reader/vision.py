@@ -17,7 +17,7 @@ from core.logging import get_logger
 # Загрузка нативной библиотеки — внешняя техническая граница, поэтому импорт guarded:
 # отсутствие libcairo делает SVG-транскод недоступным, не ломая остальной reader.
 try:
-    import cairosvg  # pyright: ignore[reportMissingTypeStubs]
+    import cairosvg  # pyright: ignore[reportMissingImports]
 
     _cairosvg_raw: object | None = cairosvg
     _cairosvg_error: str = ""

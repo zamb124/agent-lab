@@ -9,18 +9,20 @@ resolution-markers = [
 
 [[package]]
 name = "a2a-sdk"
-version = "0.3.26"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-core" },
+    { name = "googleapis-common-protos" },
     { name = "httpx" },
-    { name = "httpx-sse" },
+    { name = "json-rpc" },
+    { name = "packaging" },
     { name = "protobuf" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/be/97/a6840e01795b182ce751ca165430d46459927cde9bfab838087cbb24aef7/a2a_sdk-0.3.26.tar.gz", hash = "sha256:44068e2d037afbb07ab899267439e9bc7eaa7ac2af94f1e8b239933c993ad52d", size = 274598, upload-time = "2026-04-09T15:21:13.902Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/1d/5214ce0a1932a986002b2d22f457d260376e7f91134f978f58a214b5ad88/a2a_sdk-1.1.1.tar.gz", hash = "sha256:1662462d1d0efef697917c59ffdef543248a1ffa9ea0f7c8403d087f4958e28b", size = 377552, upload-time = "2026-07-16T13:29:58.911Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dd/d5/51f4ee1bf3b736add42a542d3c8a3fd3fa85f3d36c17972127defc46c26f/a2a_sdk-0.3.26-py3-none-any.whl", hash = "sha256:754e0573f6d33b225c1d8d51f640efa69cbbed7bdfb06ce9c3540ea9f58d4a91", size = 151016, upload-time = "2026-04-09T15:21:12.35Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/91/ab2ba19dea0771f7d5503f80e2f756f8f7195acd0e91d55e8ea893bf626f/a2a_sdk-1.1.1-py3-none-any.whl", hash = "sha256:60608eb77d62ae962795cf0bcb06f24be8470b4bf97adbc4ed32f170e9f40c3e", size = 244090, upload-time = "2026-07-16T13:29:57.387Z" },
 ]
 
 [[package]]
@@ -203,7 +205,7 @@ agents = [
 ]
 browser = [{ name = "playwright", specifier = ">=1.58.0" }]
 core = [
-    { name = "a2a-sdk", specifier = ">=0.3.7,<1" },
+    { name = "a2a-sdk", specifier = ">=1.0,<2" },
     { name = "aioboto3", specifier = ">=13.0.0" },
     { name = "alembic", specifier = ">=1.13.0" },
     { name = "asyncpg", specifier = ">=0.31.0" },
@@ -1959,6 +1961,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5d/ac/d4fd5b30f82900eac60d765f179f0ba005825ac462cc8ced6e13ec685ab3/joserfc-1.6.8.tar.gz", hash = "sha256:878620c553a6ebdd76ccdc356782fee3f735f21a356d079a546b42a4670ace5f", size = 232930, upload-time = "2026-05-27T03:22:37.819Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/98/8c/5cdce2cf3ce8155849baf9a5e2ce77e89dc87ec3bdb38259e5d85fbc45bd/joserfc-1.6.8-py3-none-any.whl", hash = "sha256:22fb31a69094a5e6f44632002a9df2c30c941fc6c8ce1b037e92c03de954cf9f", size = 70927, upload-time = "2026-05-27T03:22:35.796Z" },
+]
+
+[[package]]
+name = "json-rpc"
+version = "1.15.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/9e/59f4a5b7855ced7346ebf40a2e9a8942863f644378d956f68bcef2c88b90/json-rpc-1.15.0.tar.gz", hash = "sha256:e6441d56c1dcd54241c937d0a2dcd193bdf0bdc539b5316524713f554b7f85b9", size = 28854, upload-time = "2023-06-11T09:45:49.078Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/94/9e/820c4b086ad01ba7d77369fb8b11470a01fac9b4977f02e18659cf378b6b/json_rpc-1.15.0-py2.py3-none-any.whl", hash = "sha256:4a4668bbbe7116feb4abbd0f54e64a4adcf4b8f648f19ffa0848ad0f6606a9bf", size = 39450, upload-time = "2023-06-11T09:45:47.136Z" },
 ]
 
 [[package]]

@@ -10,9 +10,11 @@ flow компании как tools ``flow_{flow_id}`` и каталог туло
 import json
 import uuid
 
-from a2a.types import Message, MessageSendParams, Part, Role, TextPart
+from a2a.types import Message, Part, SendMessageRequest
+from a2a.types.a2a_pb2 import ROLE_USER
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from google.protobuf.json_format import MessageToDict
 
 from apps.agent.config import get_agent_settings
 from apps.agent.device_auth import (
@@ -35,6 +37,11 @@ from apps.flows.src.services.agent_toolkit_service import (
     resolve_allowed_tool_ids,
 )
 from apps.flows.src.tools.base import sanitize_tool_name
+from core.a2a import (
+    extract_text_from_task_json,
+    struct_from_mapping,
+    wire_task_state_to_platform,
+)
 from core.context import get_context, require_context
 from core.logging import get_logger
 from core.state import ExecutionState
@@ -290,55 +297,21 @@ async def _resolve_flow_context_id(
 
 
 def _extract_task_text(task_payload: JsonObject) -> str:
-    history_raw = task_payload.get("history")
-    if isinstance(history_raw, list):
-        for message_item in reversed(history_raw):
-            if not isinstance(message_item, dict):
-                continue
-            role = message_item.get("role")
-            if role != "agent":
-                continue
-            parts_raw = message_item.get("parts")
-            if not isinstance(parts_raw, list):
-                continue
-            text_chunks: list[str] = []
-            for part_item in parts_raw:
-                if not isinstance(part_item, dict):
-                    continue
-                if part_item.get("kind") != "text":
-                    continue
-                text_value = part_item.get("text")
-                if isinstance(text_value, str) and text_value.strip():
-                    text_chunks.append(text_value.strip())
-            if text_chunks:
-                return "\n".join(text_chunks)
-
-    status_raw = task_payload.get("status")
-    if isinstance(status_raw, dict):
-        message_raw = status_raw.get("message")
-        if isinstance(message_raw, dict):
-            parts_raw = message_raw.get("parts")
-            if isinstance(parts_raw, list):
-                for part_item in parts_raw:
-                    if not isinstance(part_item, dict):
-                        continue
-                    if part_item.get("kind") != "text":
-                        continue
-                    text_value = part_item.get("text")
-                    if isinstance(text_value, str) and text_value.strip():
-                        return text_value.strip()
-
-    raise ValueError("Flow task не содержит текстового ответа")
+    try:
+        return extract_text_from_task_json(task_payload)
+    except ValueError as exc:
+        raise ValueError("Flow task не содержит текстового ответа") from exc
 
 
 def _extract_task_state(task_payload: JsonObject) -> str:
+    """A2A Task.status.state (ProtoJSON) → platform kebab `task_state`."""
     status_raw = task_payload.get("status")
     if not isinstance(status_raw, dict):
         raise ValueError("Flow task status missing")
     state = status_raw.get("state")
     if not isinstance(state, str) or not state:
         raise ValueError("Flow task status.state missing")
-    return state
+    return wire_task_state_to_platform(state)
 
 
 async def _execute_flow_tool_call(
@@ -360,10 +333,10 @@ async def _execute_flow_tool_call(
     message_id = str(uuid.uuid4())
     resolved_context_id = context_id if context_id is not None else str(uuid.uuid4())
     a2a_message = Message(
-        role=Role.user,
+        role=ROLE_USER,
         message_id=message_id,
         context_id=resolved_context_id,
-        parts=[Part(root=TextPart(text=user_message))],
+        parts=[Part(text=user_message)],
     )
     metadata: JsonObject = {}
     if flow_id == _LARA_FLOW_ID:
@@ -373,37 +346,24 @@ async def _execute_flow_tool_call(
         variables["device_id"] = device_id
     if flow_id == _LARA_FLOW_ID or device_id is not None:
         metadata["variables"] = variables
-    params = MessageSendParams(message=a2a_message, metadata=metadata if metadata else None)
+    params = SendMessageRequest(message=a2a_message)
+    if metadata:
+        params.metadata.CopyFrom(struct_from_mapping(metadata))
     channel = A2AChannel(
         flow_id,
         context=context,
         container=as_flow_runtime_container(container),
     )
     task = await channel.on_message_send(params)
-    task_payload = require_json_object(
-        task.model_dump(by_alias=True, exclude_none=True),
-        "task.payload",
-    )
+    task_payload = require_json_object(MessageToDict(task), "task.payload")
     task_state = _extract_task_state(task_payload)
     if task_state == "failed":
-        status_value = task_payload.get("status")
-        if status_value is not None:
-            status_object = require_json_object(status_value, "task.status")
-            message_value = status_object.get("message")
-            if message_value is not None:
-                message_object = require_json_object(message_value, "task.status.message")
-                parts_value = message_object.get("parts")
-                if isinstance(parts_value, list):
-                    for part_value in parts_value:
-                        part_object = require_json_object(part_value, "task.status.message.part")
-                        if part_object.get("kind") != "text":
-                            continue
-                        text_value = part_object.get("text")
-                        if isinstance(text_value, str) and text_value.strip():
-                            raise HTTPException(
-                                status_code=500,
-                                detail=text_value.strip(),
-                            )
+        try:
+            fail_text = extract_text_from_task_json(task_payload)
+        except ValueError:
+            fail_text = None
+        if fail_text is not None:
+            raise HTTPException(status_code=500, detail=fail_text)
         raise HTTPException(status_code=500, detail="Flow task failed")
     response_text = _extract_task_text(task_payload)
     return response_text, resolved_context_id, task_state

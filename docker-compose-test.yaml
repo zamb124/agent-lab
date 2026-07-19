@@ -86,7 +86,7 @@ services:
       - ONLYOFFICE_APPLY_AI_SCRIPT=/opt/platform/onlyoffice_apply_ai_settings.sh
     command: ["/bin/bash", "/opt/platform/onlyoffice_ds_entrypoint.sh"]
     volumes:
-      - ./deploy/helm/agent-lab/files/onlyoffice-theme.json:/var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-humanitec-light.json:ro
+      - ./deploy/helm/agent-lab/files/onlyoffice-theme.json:/var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-platform-docs-light.json:ro
       - ./deploy/helm/agent-lab/files/onlyoffice-ai-local-fragment.json:/opt/platform/onlyoffice-ai-local-fragment.json:ro
       - ./deploy/helm/agent-lab/files/onlyoffice_apply_ai_settings.sh:/opt/platform/onlyoffice_apply_ai_settings.sh:ro
       - ./deploy/helm/agent-lab/files/onlyoffice_ds_entrypoint.sh:/opt/platform/onlyoffice_ds_entrypoint.sh:ro

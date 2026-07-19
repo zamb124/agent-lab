@@ -22,13 +22,13 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_dataflow_problems_payload,
     flows_doc_flow_id,
     flows_e2e_ensure_canvas_layout,
+    flows_e2e_open_studio_prompt_section,
     flows_e2e_switch_editor_layout,
     flows_execution_send_message,
     flows_llm_payload,
     flows_open_editor,
     flows_open_node_editor,
     flows_publish_editor,
-    flows_save_edge_condition_modal,
     flows_set_edge_condition_simple,
     flows_set_selected_llm_config,
     flows_set_selected_llm_prompt,
@@ -91,8 +91,7 @@ async def test_flows_configure_agent_answers(
     )
 
     page = ui_page_system
-    await flows_open_editor(page, flows_ui, flow_id)
-    await flows_e2e_ensure_canvas_layout(page)
+    await flows_open_editor(page, flows_ui, flow_id, layout="agent")
     await scenario.step(
         "Откройте агента в редакторе",
         page,
@@ -193,10 +192,13 @@ async def test_flows_configure_agent_answers(
     assert float(llm_cfg.get("temperature", -1)) == 0.4, f"temperature not saved: {llm_cfg!r}"
     assert int(llm_cfg.get("max_tokens", 0)) == 800, f"max_tokens not saved: {llm_cfg!r}"
 
-    await flows_open_editor(page, flows_ui, flow_id)
-    await flows_e2e_ensure_canvas_layout(page)
-    editor = await flows_open_node_editor(page, "agent")
-    await expect(editor).to_contain_text("доставки", timeout=15_000)
+    await flows_open_editor(page, flows_ui, flow_id, layout="agent")
+    await flows_open_node_editor(page, "agent")
+    await flows_e2e_open_studio_prompt_section(page)
+    prompt_editor = page.locator("flows-agent-focus-studio prompt-editor").first
+    await expect(prompt_editor).to_be_visible(timeout=5_000)
+    prompt_value = await prompt_editor.evaluate("(el) => String(el.value || '')")
+    assert "доставки" in prompt_value, f"reopened prompt missing доставки: {prompt_value!r}"
     await scenario.step(
         "Переоткройте агента и проверьте настройки",
         page,
@@ -283,9 +285,8 @@ async def test_flows_branch_by_condition(
         variable="intent",
         operator="==",
         value="returns",
-        edge_index=1,
+        to_node="returns_path",
     )
-    await flows_save_edge_condition_modal(page)
     await scenario.step(
         "Задайте условие на связи к возвратам",
         page,
@@ -566,11 +567,11 @@ async def test_flows_agent_focus_vs_canvas(
     )
 
     page = ui_page_system
-    await flows_open_editor(page, flows_ui, flow_id)
+    await flows_open_editor(page, flows_ui, flow_id, layout="agent")
     studio = page.locator("flows-agent-focus-studio").first
-    await expect(studio).to_be_visible(timeout=30_000)
+    await expect(studio).to_be_visible(timeout=5_000)
     await expect(studio.locator("platform-segmented-control").first).to_be_visible(
-        timeout=15_000
+        timeout=5_000
     )
     await scenario.step(
         "Откройте агента в режиме студии",
@@ -578,18 +579,18 @@ async def test_flows_agent_focus_vs_canvas(
         screenshot_name="studio-opened",
         label_en="Open the agent in Studio mode",
         details=(
-            "Для агента с одной нодой ответа по умолчанию открывается студия: секции "
+            "Для агента с одной нодой ответа переключитесь в студию: секции "
             "промпт, модель, Skills и tools, дополнительно. Это удобный экран без "
             "схемы графа."
         ),
         details_en=(
-            "For a single answer-node agent, Studio opens by default: prompt, model, "
+            "For a single answer-node agent, switch to Studio: prompt, model, "
             "Skills and tools, advanced. A focused screen without the graph canvas."
         ),
     )
 
     await flows_set_selected_llm_prompt(page, _STUDIO_PROMPT)
-    await expect(studio).to_contain_text("Зелёного сада", timeout=15_000)
+    await expect(studio).to_contain_text("Зелёного сада", timeout=5_000)
     await scenario.step(
         "Измените промпт в студии",
         page,
@@ -607,7 +608,7 @@ async def test_flows_agent_focus_vs_canvas(
 
     await flows_e2e_switch_editor_layout(page, "canvas")
     canvas = page.locator("flows-flow-canvas").first
-    await expect(canvas.locator("g.node")).to_have_count(1, timeout=30_000)
+    await expect(canvas.locator("g.node")).to_have_count(1, timeout=5_000)
     await scenario.step(
         "Переключитесь на схему (канву)",
         page,
@@ -623,7 +624,7 @@ async def test_flows_agent_focus_vs_canvas(
         ),
     )
 
-    await expect(canvas.locator("g.node")).to_be_visible(timeout=15_000)
+    await expect(canvas.locator("g.node")).to_be_visible(timeout=5_000)
     await scenario.step(
         "Убедитесь, что нода на схеме",
         page,
@@ -638,8 +639,8 @@ async def test_flows_agent_focus_vs_canvas(
     )
 
     await flows_e2e_switch_editor_layout(page, "agent")
-    await expect(studio).to_be_visible(timeout=30_000)
-    await expect(studio).to_contain_text("Зелёного сада", timeout=15_000)
+    await expect(studio).to_be_visible(timeout=5_000)
+    await expect(studio).to_contain_text("Зелёного сада", timeout=5_000)
     await scenario.step(
         "Вернитесь в студию и проверьте изменение",
         page,

@@ -1,32 +1,33 @@
 """
-Извлечение вложений FilePart из A2A Message в память (без записи на диск).
+Извлечение вложений Part.raw / Part.url из A2A Message (protobuf A2A 1.0).
 
-A2A SDK-поля нормализуются в canonical state.files на границе канала.
+External Part.url: байты не скачиваются здесь — SSRF-safe fetch в channel persist path
+(`A2AChannel._persist_incoming_a2a_files`). Platform download URL резолвится по file_id.
 """
 
-import base64
 from dataclasses import dataclass
 
-from a2a.types import FilePart, FileWithBytes, FileWithUri, Message
+from a2a.types import Message, Part
 
+from core.a2a import get_part_raw, get_part_url, part_has_raw, part_has_url
 from core.files.file_ref import FileRef
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-def get_file_parts(message: Message) -> list[FilePart]:
-    """Извлекает все FilePart из Message."""
-    file_parts: list[FilePart] = []
+def get_file_parts(message: Message) -> list[Part]:
+    """Извлекает все Part с raw или url content из Message."""
+    file_parts: list[Part] = []
     for part in message.parts:
-        if isinstance(part.root, FilePart):
-            file_parts.append(part.root)
+        if part_has_raw(part) or part_has_url(part):
+            file_parts.append(part)
     return file_parts
 
 
 @dataclass
 class IncomingA2aFile:
-    """Вложение из A2A: либо байты (FileWithBytes), либо URI (FileWithUri)."""
+    """Вложение из A2A: либо байты (Part.raw), либо URL (Part.url)."""
 
     original_name: str
     content_type: str | None
@@ -35,44 +36,54 @@ class IncomingA2aFile:
     uri: str | None = None
 
 
-def _payload_from_bytes(file_data: FileWithBytes) -> IncomingA2aFile:
-    file_bytes = base64.b64decode(file_data.bytes)
-    if not file_data.name:
-        raise ValueError("FileWithBytes.name обязателен")
+def _payload_from_raw(part: Part) -> IncomingA2aFile:
+    file_bytes = get_part_raw(part)
+    filename = part.filename.strip() if part.filename else ""
+    if not filename:
+        raise ValueError("Part.raw требует filename")
+    media_type = part.media_type.strip() if part.media_type else None
     return IncomingA2aFile(
-        original_name=file_data.name,
-        content_type=file_data.mime_type,
+        original_name=filename,
+        content_type=media_type,
         file_size=len(file_bytes),
         data=file_bytes,
     )
 
 
-def _payload_from_uri(file_data: FileWithUri) -> IncomingA2aFile:
-    if not file_data.name:
-        raise ValueError("FileWithUri.name обязателен")
+def _payload_from_url(part: Part) -> IncomingA2aFile:
+    uri = get_part_url(part)
+    if not uri.strip():
+        raise ValueError("Part.url пустой")
+    filename = part.filename.strip() if part.filename else ""
+    if not filename:
+        raise ValueError("Part.url требует filename")
+    media_type = part.media_type.strip() if part.media_type else None
     return IncomingA2aFile(
-        original_name=file_data.name,
-        content_type=file_data.mime_type,
+        original_name=filename,
+        content_type=media_type,
         file_size=0,
-        uri=file_data.uri,
+        uri=uri.strip(),
     )
 
 
 def extract_incoming_a2a_files(message: Message) -> list[IncomingA2aFile]:
     """
-    Извлекает вложения из Message. Байты остаются в памяти, URI не скачиваются.
+    Извлекает вложения из Message.
+
+    Part.raw — байты в памяти. Part.url — только URI (fetch в channel).
     """
     file_parts = get_file_parts(message)
     if not file_parts:
         return []
 
     result: list[IncomingA2aFile] = []
-    for file_part in file_parts:
-        file_data = file_part.file
-        if isinstance(file_data, FileWithBytes):
-            result.append(_payload_from_bytes(file_data))
+    for part in file_parts:
+        if part_has_raw(part):
+            result.append(_payload_from_raw(part))
+        elif part_has_url(part):
+            result.append(_payload_from_url(part))
         else:
-            result.append(_payload_from_uri(file_data))
+            raise ValueError(f"Part без raw/url: {part.WhichOneof('content')!r}")
 
     return result
 

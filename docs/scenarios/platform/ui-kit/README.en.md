@@ -4,6 +4,7 @@ Catalog of core `platform-*` components with contract tests, Playwright scenario
 
 | Component | Tier | Status |
 | --- | --- | --- |
+| [platform-agent-plan](../platform-agent-plan/) | T0 | backlog |
 | [platform-animated-number](../platform-animated-number/) | T0 | backlog |
 | [platform-assistant-message-actions](../platform-assistant-message-actions/) | T0 | backlog |
 | [platform-audio-message-player](../platform-audio-message-player/) | T0 | backlog |

@@ -12,10 +12,10 @@ Test scope — сквозная метка теста для маршрутиз�
 MockLLM читает scope из лог-контекста и работает строго со своей очередью
 ``mock_llm:responses:<scope>`` — никакого скана чужих ключей.
 
-E2E-фазы (-n0: Playwright browser, Electron desktop) не могут поставить
-заголовок на запросы из браузера/приложения — сервисы стека берут статический
-scope из env ``TEST_SCOPE_DEFAULT`` (``TEST_SCOPE_STATIC_E2E``), а conftest'ы
-этих фаз биндят тот же scope в тестовом процессе.
+E2E UI (Playwright): браузер шлёт ``X-Test-Scope`` per xdist-worker
+(``test_e2e_gwN``, см. ``tests/ui/e2e_worker.py``); pytest биндит тот же scope
+для ``flows_seed_mock_llm``. Desktop/agent E2E без заголовка — fallback
+``TEST_SCOPE_DEFAULT`` / ``TEST_SCOPE_STATIC_E2E``.
 
 Вне TESTING слой мёртв: заголовок не читается, env не смотрится.
 """

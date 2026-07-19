@@ -145,7 +145,7 @@ def test_merge_layers_and_token_counters_are_concrete_implementations() -> None:
 
     simple = SimpleTokenCounter()
     assert simple.count_text("") == 0
-    assert simple.count_message({"role": "user", "content": {"text": "hello"}}) >= 2
+    assert simple.count_message({"role": "ROLE_USER", "content": {"text": "hello"}}) >= 2
 
     tiktoken_counter = TiktokenTokenCounter()
     assert tiktoken_counter.count_text("") == 0

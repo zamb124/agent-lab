@@ -204,6 +204,16 @@
         "work_count_aria": "Open tasks",
         "work_count_title": "Open tasks"
     },
+    "agent_plan": {
+        "title": "Plan",
+        "status": {
+            "pending": "pending",
+            "in_progress": "in progress",
+            "completed": "completed",
+            "need_help": "need help",
+            "failed": "failed"
+        }
+    },
     "work_item_badge": {
         "loading": "Loading…",
         "state": {

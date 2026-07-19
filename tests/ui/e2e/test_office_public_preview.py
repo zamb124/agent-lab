@@ -48,7 +48,7 @@ async def test_office_public_link_preview(
         namespace=namespace,
         title_prefix="public",
     )
-    binding_id = await office_api_upload_txt(
+    file_id = await office_api_upload_txt(
         office_client_http,
         auth_headers_system,
         namespace=namespace,
@@ -59,7 +59,7 @@ async def test_office_public_link_preview(
     token = await office_api_enable_binding_public_link(
         office_client_http,
         auth_headers_system,
-        binding_id,
+        file_id,
         namespace=namespace,
     )
 
@@ -95,4 +95,4 @@ async def test_office_public_link_preview(
         label_en="Invalid link rejected",
     )
 
-    _ = binding_id
+    _ = file_id

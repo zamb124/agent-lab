@@ -3,14 +3,14 @@
  *
  * Оператор видит тот же разговор сессии, что и пользователь.
  * Источник истины — durable `ExecutionState.messages` (REST snapshot).
- * Live — A2A `tasks/resubscribe` на `a2a_task_id` (тот же Redis stream, что user chat).
+ * Live — A2A `SubscribeToTask` на `a2a_task_id` (тот же Redis stream, что user chat).
  * Takeover ask: POST `/hitl/{id}/conversation/messages` (+ file_ids).
  * Single_reply Send: POST worktracker complete (resolution_text + resolution_files).
  */
 
 import {
     a2aEndpointUrl,
-    buildA2aResubscribeBody,
+    buildA2aSubscribeToTaskBody,
     consumeA2aStream,
 } from './a2a-stream.js';
 import { buildWorkItemFileCreateSpecJson } from '../../utils/file-create-spec.js';
@@ -218,7 +218,7 @@ export class OperatorConversationTransport {
                     await consumeA2aStream(
                         {
                             url: a2aEndpointUrl(target),
-                            body: buildA2aResubscribeBody(this._a2aTaskId),
+                            body: buildA2aSubscribeToTaskBody(this._a2aTaskId),
                             headers,
                             credentials: this._credentials,
                             signal: abort.signal,

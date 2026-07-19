@@ -1232,6 +1232,7 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
             "prompt_history": [],
             "ui_events_pending": [],
             "llm_context_memory_cursor": {},
+            "agent_plan": None,
             "content": None,
             "response": None,
             "pending_reasoning": None,

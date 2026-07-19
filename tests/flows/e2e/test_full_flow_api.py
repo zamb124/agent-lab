@@ -171,7 +171,7 @@ class TestE2EFlowCreationViaAPI:
         )
         assert exec_response.status_code == 200
         exec_data = exec_response.json()
-        assert get_task_state(exec_data) == "completed"
+        assert get_task_state(exec_data) == "TASK_STATE_COMPLETED"
         assert "E2E Test Company" in get_task_response(exec_data)
 
 
@@ -295,7 +295,7 @@ class TestE2EInterruptInCodeNode:
         )
         assert response.status_code == 200
         data = response.json()
-        assert get_task_state(data) == "input-required"
+        assert get_task_state(data) == "TASK_STATE_INPUT_REQUIRED"
         assert "Как вас зовут" in get_task_response(data)
 
 
@@ -343,7 +343,7 @@ class TestE2EInterruptInCodeNodeV2:
         )
         assert r1.status_code == 200
         d1 = r1.json()
-        assert get_task_state(d1) == "input-required", f"Expected input-required, got: {d1}"
+        assert get_task_state(d1) == "TASK_STATE_INPUT_REQUIRED", f"Expected input-required, got: {d1}"
         assert "Как вас зовут" in get_task_response(d1)
         r2 = await client.post(
             "/flows/api/v1/tasks/submit",
@@ -351,7 +351,7 @@ class TestE2EInterruptInCodeNodeV2:
         )
         assert r2.status_code == 200
         d2 = r2.json()
-        assert get_task_state(d2) == "completed", f"Expected completed, got: {d2}"
+        assert get_task_state(d2) == "TASK_STATE_COMPLETED", f"Expected completed, got: {d2}"
         assert "Привет, Иван" in get_task_response(d2)
 
 
@@ -562,7 +562,7 @@ class TestE2EMultipleInterruptScenarios:
         )
         assert r1.status_code == 200
         d1 = r1.json()
-        assert get_task_state(d1) == "input-required"
+        assert get_task_state(d1) == "TASK_STATE_INPUT_REQUIRED"
         assert "номер заказа" in get_task_response(d1)
         r2 = await client.post(
             "/flows/api/v1/tasks/submit",
@@ -574,7 +574,7 @@ class TestE2EMultipleInterruptScenarios:
         )
         assert r2.status_code == 200
         d2 = r2.json()
-        assert get_task_state(d2) == "completed"
+        assert get_task_state(d2) == "TASK_STATE_COMPLETED"
         assert "ORD-12345" in get_task_response(d2)
 
     @pytest.mark.asyncio
@@ -591,7 +591,7 @@ class TestE2EMultipleInterruptScenarios:
         )
         assert r1.status_code == 200
         d1 = r1.json()
-        assert get_task_state(d1) == "input-required"
+        assert get_task_state(d1) == "TASK_STATE_INPUT_REQUIRED"
         assert "проблему" in get_task_response(d1)
         r2 = await client.post(
             "/flows/api/v1/tasks/submit",
@@ -603,7 +603,7 @@ class TestE2EMultipleInterruptScenarios:
         )
         assert r2.status_code == 200
         d2 = r2.json()
-        assert get_task_state(d2) == "completed"
+        assert get_task_state(d2) == "TASK_STATE_COMPLETED"
         assert "Не работает кнопка" in get_task_response(d2)
 
     @pytest.mark.asyncio
@@ -619,7 +619,7 @@ class TestE2EMultipleInterruptScenarios:
         )
         assert response.status_code == 200
         data = response.json()
-        assert get_task_state(data) == "completed"
+        assert get_task_state(data) == "TASK_STATE_COMPLETED"
         assert "Добро пожаловать" in get_task_response(data)
 
 
@@ -736,7 +736,7 @@ class TestE2EFullScenario:
         )
         assert r1.status_code == 200
         d1 = r1.json()
-        assert get_task_state(d1) == "input-required"
+        assert get_task_state(d1) == "TASK_STATE_INPUT_REQUIRED"
         assert "E2E тест" in get_task_response(d1)
         assert "Что вы хотите" in get_task_response(d1)
         r2 = await client.post(
@@ -745,5 +745,5 @@ class TestE2EFullScenario:
         )
         assert r2.status_code == 200
         d2 = r2.json()
-        assert get_task_state(d2) == "completed"
+        assert get_task_state(d2) == "TASK_STATE_COMPLETED"
         assert "2+2=4" in get_task_response(d2)

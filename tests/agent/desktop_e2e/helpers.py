@@ -10,7 +10,12 @@ from pathlib import Path
 from httpx import AsyncClient
 from playwright.async_api import Browser, Page, expect
 
-from tests.agent._helpers import AGENT_API_PREFIX, create_pairing_via_http
+from tests.agent._helpers import (
+    AGENT_API_PREFIX,
+    company_id_from_auth_token,
+    create_pairing_via_http,
+    ensure_company_public_flows,
+)
 from tests.agent.desktop_e2e.electron_launcher import HumanitecDesktopProcess
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -170,6 +175,8 @@ async def ensure_humanitec_paired_and_llm_ready(
     agent_frontend_http_client: AsyncClient,
     auth_token: str,
 ) -> None:
+    # Device JWT → company namespace only; GET /llm/v1/models 503 без public flow lara.
+    await ensure_company_public_flows(company_id_from_auth_token(auth_token))
     composer = page.locator("[data-humanitec-chat-composer]")
     if await composer.count() > 0:
         credentials = desktop.read_credentials()

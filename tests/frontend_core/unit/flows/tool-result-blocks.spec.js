@@ -15,9 +15,8 @@ describe('flows-chat tool result blocks', () => {
                     url: '/frontend/api/v1/files/download/file-docx-1',
                 },
                 document: {
-                    binding_id: 'binding-docx-1',
                     file_id: 'file-docx-1',
-                    editor_url: '/documents/embed/edit/binding-docx-1?namespace=system',
+                    editor_url: '/documents/embed/edit/file-docx-1?namespace=system',
                     namespace: 'system',
                 },
             }),
@@ -31,22 +30,19 @@ describe('flows-chat tool result blocks', () => {
             file_size: undefined,
             url: '/frontend/api/v1/files/download/file-docx-1',
             preview_url: undefined,
-            editor_url: '/documents/embed/edit/binding-docx-1?namespace=system',
-            binding_id: 'binding-docx-1',
+            editor_url: '/documents/embed/edit/file-docx-1?namespace=system',
             catalog_id: undefined,
             document_type: undefined,
             namespace: 'system',
             document: {
-                binding_id: 'binding-docx-1',
                 file_id: 'file-docx-1',
-                editor_url: '/documents/embed/edit/binding-docx-1?namespace=system',
+                editor_url: '/documents/embed/edit/file-docx-1?namespace=system',
                 namespace: 'system',
             },
             capabilities: {
                 document: {
-                    binding_id: 'binding-docx-1',
                     file_id: 'file-docx-1',
-                    editor_url: '/documents/embed/edit/binding-docx-1?namespace=system',
+                    editor_url: '/documents/embed/edit/file-docx-1?namespace=system',
                     namespace: 'system',
                 },
             },
@@ -118,6 +114,27 @@ describe('flows-chat tool result blocks', () => {
         }
     });
 
+    it('keeps agent_plan_write blocks type=agent_plan', () => {
+        const plan = {
+            agent_plan_id: 'plan-1',
+            title: null,
+            steps: [
+                { step_id: '1', title: 'Find docs', status: 'completed' },
+                { step_id: '2', title: 'Read', status: 'in_progress' },
+            ],
+        };
+        const blocks = blocksFromToolResult({
+            id: 'tc-plan',
+            name: 'agent_plan_write',
+            result: JSON.stringify({
+                agent_plan_id: 'plan-1',
+                plan,
+                blocks: [{ type: 'agent_plan', plan }],
+            }),
+        });
+        expect(blocks).toEqual([{ type: 'agent_plan', plan }]);
+    });
+
     it('maps export_viz files[] to file_card when blocks are absent', () => {
         const blocks = blocksFromToolResult({
             id: 'tc-export-viz',
@@ -144,7 +161,6 @@ describe('flows-chat tool result blocks', () => {
             url: '/frontend/api/v1/files/download/file-svg-1',
             preview_url: undefined,
             editor_url: '',
-            binding_id: undefined,
             catalog_id: undefined,
             document_type: undefined,
             namespace: undefined,

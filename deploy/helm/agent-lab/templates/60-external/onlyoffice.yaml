@@ -6,7 +6,7 @@ metadata:
   name: onlyoffice-theme
   namespace: {{ .Values.namespace }}
 data:
-  theme-humanitec-light.json: |-
+  theme-platform-docs-light.json: |-
 {{ .Files.Get "files/onlyoffice-theme.json" | indent 4 }}
 {{- if .Values.onlyoffice.ai.enabled }}
 ---
@@ -90,8 +90,8 @@ spec:
               containerPort: 80
           volumeMounts:
             - name: theme
-              mountPath: /var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-humanitec-light.json
-              subPath: theme-humanitec-light.json
+              mountPath: /var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-platform-docs-light.json
+              subPath: theme-platform-docs-light.json
               readOnly: true
 {{- if .Values.onlyoffice.ai.enabled }}
             - name: onlyoffice-ai

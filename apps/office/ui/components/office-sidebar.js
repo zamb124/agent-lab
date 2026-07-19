@@ -298,12 +298,12 @@ export class OfficeSidebar extends PlatformElement {
     }
 
     _onMoveToCatalog(e) {
-        const bindingId = e.detail && e.detail.bindingId;
+        const fileId = e.detail && e.detail.fileId;
         const catalogId = e.detail && e.detail.catalogId;
-        if (typeof bindingId !== 'string' || typeof catalogId !== 'string') {
+        if (typeof fileId !== 'string' || typeof catalogId !== 'string') {
             return;
         }
-        this._move.run({ bindingId, catalogId });
+        this._move.run({ fileId, catalogId });
     }
 
     async _onCatalogAction(e) {

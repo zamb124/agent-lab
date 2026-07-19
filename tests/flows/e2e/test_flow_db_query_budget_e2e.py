@@ -29,8 +29,8 @@ def _msg(text_value: str, context_id: str) -> dict[str, Any]:
     return {
         "messageId": str(uuid.uuid4()),
         "contextId": context_id,
-        "role": "user",
-        "parts": [{"kind": "text", "text": text_value}],
+        "role": "ROLE_USER",
+        "parts": [{"text": text_value}],
     }
 
 
@@ -97,7 +97,7 @@ async def _execute_flow_once(client, flow_id: str, context_id: str) -> dict[str,
         json={
             "jsonrpc": "2.0",
             "id": f"db-budget-{uuid.uuid4().hex}",
-            "method": "message/send",
+            "method": "SendMessage",
             "params": {"message": _msg("run parallel llm flow", context_id)},
         },
     )
@@ -129,7 +129,7 @@ async def test_parallel_llm_flow_db_query_budget(client, container, mock_llm_red
     )
     try:
         task = await _execute_flow_once(client, flow_id, context_id)
-        assert task["status"]["state"] == "completed"
+        assert task["status"]["state"] == "TASK_STATE_COMPLETED"
 
         persisted_state = await container.workflow_runtime.get_state(session_id)
         assert persisted_state is not None

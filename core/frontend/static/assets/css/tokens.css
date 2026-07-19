@@ -701,6 +701,35 @@
     --documents-action-primary-hover: #5678dc;
     --documents-action-primary-border: rgba(98, 132, 232, 0.45);
 
+    /* Paper Stage (document editor shell around OnlyOffice) */
+    --documents-stage-ambient: radial-gradient(
+        120% 80% at 50% -10%,
+        rgba(168, 199, 250, 0.22) 0%,
+        transparent 55%
+    ),
+    radial-gradient(
+        90% 60% at 100% 100%,
+        rgba(174, 203, 250, 0.12) 0%,
+        transparent 50%
+    ),
+    #1a1d24;
+    --documents-stage-bar-bg: rgba(26, 29, 36, 0.72);
+    --documents-stage-bar-border: rgba(255, 255, 255, 0.08);
+    --documents-stage-chip-bg: rgba(255, 255, 255, 0.08);
+    --documents-stage-chip-dirty: rgba(251, 188, 4, 0.18);
+    --documents-stage-chip-dirty-text: #fdd663;
+    --documents-stage-host-bg: #f0f4f9;
+    --documents-stage-paper: #ffffff;
+    --documents-stage-host-radius: 12px;
+    --documents-stage-host-shadow: 0 1px 2px rgba(0, 0, 0, 0.24),
+        0 12px 40px rgba(0, 0, 0, 0.28);
+    --documents-stage-skeleton: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.04) 0%,
+        rgba(255, 255, 255, 0.1) 50%,
+        rgba(255, 255, 255, 0.04) 100%
+    );
+
     /* Shimmer эффект для загрузки */
     --shimmer-gradient: linear-gradient(
         90deg,
@@ -1143,6 +1172,34 @@
     --documents-explorer-toolbar-bg: rgba(255, 255, 255, 0.85);
     --documents-empty-bg: rgba(238, 248, 252, 0.6);
     --documents-empty-border: rgba(100, 170, 215, 0.45);
+
+    --documents-stage-ambient: radial-gradient(
+        120% 80% at 50% -10%,
+        rgba(168, 199, 250, 0.55) 0%,
+        transparent 55%
+    ),
+    radial-gradient(
+        90% 60% at 100% 100%,
+        rgba(232, 240, 254, 0.9) 0%,
+        transparent 50%
+    ),
+    #f0f4f9;
+    --documents-stage-bar-bg: rgba(255, 255, 255, 0.82);
+    --documents-stage-bar-border: rgba(60, 64, 67, 0.1);
+    --documents-stage-chip-bg: rgba(60, 64, 67, 0.06);
+    --documents-stage-chip-dirty: rgba(251, 188, 4, 0.22);
+    --documents-stage-chip-dirty-text: #b06000;
+    --documents-stage-host-bg: #f0f4f9;
+    --documents-stage-paper: #ffffff;
+    --documents-stage-host-radius: 12px;
+    --documents-stage-host-shadow: 0 1px 2px rgba(60, 64, 67, 0.08),
+        0 12px 32px rgba(60, 64, 67, 0.12);
+    --documents-stage-skeleton: linear-gradient(
+        90deg,
+        rgba(60, 64, 67, 0.04) 0%,
+        rgba(60, 64, 67, 0.1) 50%,
+        rgba(60, 64, 67, 0.04) 100%
+    );
 }
 
 /* ========== Палитра сервиса Office / Documents (layout-only, theme-agnostic) ========== */

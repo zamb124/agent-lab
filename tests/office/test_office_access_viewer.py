@@ -11,14 +11,14 @@ import pytest
 from apps.office.config import get_office_settings
 from tests.office.access_helpers import (
     create_private_catalog,
-    enable_binding_link,
+    enable_document_link,
     extract_query_token,
     parse_download_url,
     parse_text_save_url,
     parse_text_stream_url,
     public_open,
-    upload_json_binding,
-    upload_txt_binding,
+    upload_json_document,
+    upload_txt_document,
 )
 
 pytestmark = [pytest.mark.timeout(120)]
@@ -33,14 +33,14 @@ async def test_public_open_download_url_returns_file_bytes(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"download-{unique_id}",
         content=UPLOAD_CONTENT,
     )
-    token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
     open_body = await public_open(office_client, token)
     download_url = parse_download_url(open_body)
 
@@ -56,17 +56,17 @@ async def test_public_open_view_permission_stream_without_save_url(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_json_binding(
+    file_id = await upload_json_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"view-stream-{unique_id}",
         content=UPLOAD_CONTENT,
     )
-    token, _body = await enable_binding_link(
+    token, _body = await enable_document_link(
         office_client,
         auth_headers_system,
-        binding_id,
+        file_id,
         link_permission="view",
     )
     open_body = await public_open(office_client, token)
@@ -88,23 +88,23 @@ async def test_public_open_view_permission_viewer_save_forbidden(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_json_binding(
+    file_id = await upload_json_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"view-save-{unique_id}",
     )
-    token, _body = await enable_binding_link(
+    token, _body = await enable_document_link(
         office_client,
         auth_headers_system,
-        binding_id,
+        file_id,
         link_permission="edit",
     )
     open_body = await public_open(office_client, token)
     save_url = parse_text_save_url(open_body)
 
     downgrade = await office_client.patch(
-        f"/documents/api/v1/documents/{binding_id}/access",
+        f"/documents/api/v1/documents/{file_id}/access",
         headers=auth_headers_system,
         json={"link_permission": "view"},
     )
@@ -122,17 +122,17 @@ async def test_public_open_edit_permission_viewer_save_updates_content(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_json_binding(
+    file_id = await upload_json_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"edit-save-{unique_id}",
         content=b"before-content",
     )
-    token, _body = await enable_binding_link(
+    token, _body = await enable_document_link(
         office_client,
         auth_headers_system,
-        binding_id,
+        file_id,
         link_permission="edit",
     )
     open_body = await public_open(office_client, token)
@@ -171,18 +171,18 @@ async def test_viewer_stream_old_token_after_rotate_forbidden(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_json_binding(
+    file_id = await upload_json_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"rotate-stream-{unique_id}",
     )
-    token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
     open_body = await public_open(office_client, token)
     old_stream_url = parse_text_stream_url(open_body)
 
     rotate = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/access/link/rotate",
+        f"/documents/api/v1/documents/{file_id}/access/link/rotate",
         headers=auth_headers_system,
     )
     assert rotate.status_code == 200
@@ -198,13 +198,13 @@ async def test_viewer_frame_returns_html_with_stream_url(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_json_binding(
+    file_id = await upload_json_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"frame-{unique_id}",
     )
-    token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
     open_body = await public_open(office_client, token)
     stream_url = parse_text_stream_url(open_body)
     stream_token = extract_query_token(stream_url)
@@ -224,13 +224,13 @@ async def test_viewer_stream_tampered_file_id_forbidden(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_json_binding(
+    file_id = await upload_json_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"tamper-{unique_id}",
     )
-    token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
     open_body = await public_open(office_client, token)
     stream_url = parse_text_stream_url(open_body)
     stream_token = extract_query_token(stream_url)
@@ -256,19 +256,19 @@ async def test_office_download_after_soft_delete_binding_still_allowed_regressio
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"dl-delete-{unique_id}",
         content=UPLOAD_CONTENT,
     )
-    token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
     open_body = await public_open(office_client, token)
     download_url = parse_download_url(open_body)
 
     delete_response = await office_client.delete(
-        f"/documents/api/v1/documents/{binding_id}",
+        f"/documents/api/v1/documents/{file_id}",
         headers=auth_headers_system,
     )
     assert delete_response.status_code == 204
@@ -285,19 +285,19 @@ async def test_office_download_still_works_after_link_disabled_regression(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    binding_id = await upload_txt_binding(
+    file_id = await upload_txt_document(
         office_client,
         auth_headers_system,
         catalog_id=catalog_id,
         title=f"dl-disabled-{unique_id}",
         content=UPLOAD_CONTENT,
     )
-    token, _body = await enable_binding_link(office_client, auth_headers_system, binding_id)
+    token, _body = await enable_document_link(office_client, auth_headers_system, file_id)
     open_body = await public_open(office_client, token)
     download_url = parse_download_url(open_body)
 
     disable = await office_client.patch(
-        f"/documents/api/v1/documents/{binding_id}/access",
+        f"/documents/api/v1/documents/{file_id}/access",
         headers=auth_headers_system,
         json={"link_enabled": False},
     )

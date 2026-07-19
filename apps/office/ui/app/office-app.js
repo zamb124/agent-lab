@@ -10,11 +10,11 @@
  * Маршруты:
  *   /documents                                   → documents_list
  *   /documents/catalogs                          → redirect → documents_list (legacy)
- *   /documents/edit/:bindingId                   → document_editor
- *   /documents/embed/edit/:bindingId             → document_editor_embed
+ *   /documents/edit/:fileId                      → document_editor
+ *   /documents/embed/edit/:fileId                → document_editor_embed
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 
@@ -104,8 +104,8 @@ const OFFICE_ROUTES = [
     { key: 'platform_services',  path: 'services',           parent: 'documents_list', titleKey: 'routes.platform_services' },
     { key: 'documents_catalogs', path: 'catalogs',           parent: 'documents_list', titleKey: 'routes.documents_catalogs' },
     { key: 'documents_public_preview', path: 'p/:token', titleKey: 'routes.documents_public_preview' },
-    { key: 'document_editor',    path: 'edit/:bindingId',    parent: 'documents_list', titleKey: 'routes.document_editor' },
-    { key: 'document_editor_embed', path: 'embed/edit/:bindingId', titleKey: 'routes.document_editor' },
+    { key: 'document_editor',    path: 'edit/:fileId',    parent: 'documents_list', titleKey: 'routes.document_editor' },
+    { key: 'document_editor_embed', path: 'embed/edit/:fileId', titleKey: 'routes.document_editor' },
 ];
 
 /**
@@ -282,13 +282,13 @@ export class OfficeApp extends PlatformApp {
             case 'document_editor':
                 editorMode = true;
                 content = html`<office-document-editor-page
-                    .bindingId=${params.bindingId}
+                    .fileId=${params.fileId}
                 ></office-document-editor-page>`;
                 break;
             case 'document_editor_embed':
                 editorMode = true;
                 content = html`<office-document-editor-page
-                    .bindingId=${params.bindingId}
+                    .fileId=${params.fileId}
                     ?embedded=${true}
                 ></office-document-editor-page>`;
                 return html`
@@ -315,7 +315,9 @@ export class OfficeApp extends PlatformApp {
         const islandContentNoScroll = editorMode || explorerFullBleed;
         const mainBleed = editorMode || explorerFullBleed;
         return html`
-            <div class="sidebar"><office-sidebar></office-sidebar></div>
+            ${editorMode
+                ? nothing
+                : html`<div class="sidebar"><office-sidebar></office-sidebar></div>`}
             <div class="main ${mainBleed ? 'main--bleed' : ''}">
                 <platform-island
                     padding=${islandContentNoScroll ? 'none' : 'md'}

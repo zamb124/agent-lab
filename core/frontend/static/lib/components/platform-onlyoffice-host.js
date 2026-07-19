@@ -101,7 +101,7 @@ let _ooEmbedCounter = 0;
 export class PlatformOnlyOfficeHost extends PlatformElement {
     static properties = {
         config: { type: Object },
-        bindingId: { type: String, attribute: 'binding-id' },
+        fileId: { type: String, attribute: 'file-id' },
         suspended: { type: Boolean, reflect: true },
         _initializing: { state: true },
     };
@@ -129,7 +129,8 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                 min-height: 0;
                 width: 100%;
                 height: 100%;
-                background: #e8eaed;
+                background: var(--documents-stage-host-bg, #f0f4f9);
+                border-radius: var(--documents-stage-host-radius, 0);
                 overflow: hidden;
             }
             .editor-loading-overlay {
@@ -137,12 +138,46 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                 inset: 0;
                 z-index: 50;
                 display: flex;
-                align-items: center;
-                justify-content: center;
-                background: rgba(232, 234, 237, 0.85);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
+                flex-direction: column;
+                align-items: stretch;
+                justify-content: flex-start;
+                gap: 0.75rem;
+                padding: 2.5rem 2rem;
+                background: var(--documents-stage-host-bg, #f0f4f9);
                 pointer-events: none;
+                transition: opacity 220ms ease;
+            }
+            .editor-loading-overlay .paper-line {
+                height: 0.75rem;
+                border-radius: 999px;
+                background: var(--documents-stage-skeleton, linear-gradient(90deg, #eee, #f5f5f5, #eee));
+                background-size: 200% 100%;
+                animation: oo-paper-shimmer 1.2s ease-in-out infinite;
+            }
+            .editor-loading-overlay .paper-line.w60 { width: 60%; }
+            .editor-loading-overlay .paper-line.w80 { width: 80%; }
+            .editor-loading-overlay .paper-line.w45 { width: 45%; }
+            .editor-loading-overlay .paper-sheet {
+                flex: 1;
+                margin-top: 0.75rem;
+                border-radius: 4px;
+                background: var(--documents-stage-paper, #fff);
+                box-shadow: var(--documents-stage-host-shadow, none);
+                position: relative;
+                overflow: hidden;
+            }
+            .editor-loading-overlay .paper-sheet::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: var(--documents-stage-skeleton, linear-gradient(90deg, #eee, #f5f5f5, #eee));
+                background-size: 200% 100%;
+                animation: oo-paper-shimmer 1.2s ease-in-out infinite;
+                opacity: 0.55;
+            }
+            @keyframes oo-paper-shimmer {
+                0% { background-position: 100% 0; }
+                100% { background-position: -100% 0; }
             }
             .oo-doc-root {
                 flex: 1;
@@ -159,7 +194,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
     constructor() {
         super();
         this.config = null;
-        this.bindingId = '';
+        this.fileId = '';
         this.suspended = false;
         this._initializing = false;
         this._docEditor = null;
@@ -225,20 +260,20 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
     }
 
     _emitDocumentState(dirty) {
-        const bindingId = typeof this.bindingId === 'string' && this.bindingId.length > 0
-            ? this.bindingId
+        const fileId = typeof this.fileId === 'string' && this.fileId.length > 0
+            ? this.fileId
             : (typeof this.config?.document?.key === 'string' ? this.config.document.key : '');
-        if (!bindingId) {
+        if (!fileId) {
             return;
         }
-        this.emit('document-state', { bindingId, dirty: Boolean(dirty) });
+        this.emit('document-state', { fileId, dirty: Boolean(dirty) });
         if (typeof window === 'undefined' || window.parent === window) {
             return;
         }
         window.parent.postMessage(
             {
                 type: 'platform.office.document-state',
-                bindingId,
+                fileId,
                 dirty: Boolean(dirty),
                 sentAt: Date.now(),
             },
@@ -628,7 +663,12 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                 )}
                 ${this._initializing
                     ? html`<div class="editor-loading-overlay" role="status" aria-live="polite">
-                            <slot name="loading">…</slot>
+                            <slot name="loading">
+                                <div class="paper-line w60"></div>
+                                <div class="paper-line w80"></div>
+                                <div class="paper-line w45"></div>
+                                <div class="paper-sheet"></div>
+                            </slot>
                         </div>`
                     : nothing}
             </div>

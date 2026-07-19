@@ -96,7 +96,7 @@ AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API
 2. Оператор:
    - **Доступ:** claim/complete требуют членства в `WorkQueue` задачи. Демо-очередь `example_hitl` при `ensure_example_hitl_queue` получает owner/admin компании как members (иначе UI скрывает «Ответить и завершить», claim → «Нет доступа к очереди»).
    - **`single_reply`:** ответ через embedded `<platform-chat profile="operator_handoff">` (полный composer, в т.ч. attach); Send = `complete` + closing reply durable-append + Emitter в `stream:{a2a_task_id}`.
-   - **`takeover`:** ask через тот же embedded chat → REST `/flows/api/v1/hitl/{work_item_id}/conversation/messages` (+ `file_ids`); live — `tasks/resubscribe`. Close — отдельная кнопка Complete.
+   - **`takeover`:** ask через тот же embedded chat → REST `/flows/api/v1/hitl/{work_item_id}/conversation/messages` (+ `file_ids`); live — `SubscribeToTask`. Close — отдельная кнопка Complete.
    - Блок **«Активность»** (`WorkItemComment`) — только внутренние заметки команды; покупатель их не видит.
 3. На первом терминале ядро диспатчит `completed`-хук; flows-endpoint делает closing append при необходимости и возобновляет flow (`process_flow_task(is_resume=True)`, `content=resolution.text`). Маршрутизация по `state.current_nodes`/`interrupt_path`.
 

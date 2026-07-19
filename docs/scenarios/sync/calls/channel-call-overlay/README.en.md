@@ -4,8 +4,8 @@ In a topic channel the user clicks «Call in this channel»; after the server re
 
 ## Step 1. Topic channel opened
 
-![Topic channel opened](channel-call-overlay--01-otkryt-topic-kanal.png)
+![Topic channel opened](channel-call-overlay--01-topic-channel-opened.png)
 
 ## Step 2. Call overlay is displayed
 
-![Call overlay is displayed](channel-call-overlay--02-otobrazhaetsya-overley-zvonka.png)
+![Call overlay is displayed](channel-call-overlay--02-call-overlay-is-displayed.png)

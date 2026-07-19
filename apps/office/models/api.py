@@ -18,10 +18,9 @@ OfficeDocumentRagIndexStatus: TypeAlias = Literal["ready", "pending", "failed", 
 
 
 class OfficeDocumentItem(BaseModel):
-    binding_id: str
+    file_id: str
     catalog_id: str
     title: str
-    file_id: str
     file_category: str
     onlyoffice_document_type: str | None = None
     file_availability: Literal["available", "missing"] = "available"
@@ -47,7 +46,6 @@ class OfficeDocumentsRagIndexStatusesResponse(BaseModel):
 
 
 class OfficeDocumentCreateResponse(BaseModel):
-    binding_id: str
     file_id: str
     catalog_id: str
     file_category: str | None = None
@@ -63,7 +61,6 @@ class OfficeDocumentFromFileRequest(BaseModel):
 
 
 class OfficeDocumentEditorSessionResponse(BaseModel):
-    binding_id: str
     file_id: str
     catalog_id: str
     title: str
@@ -86,7 +83,6 @@ class OfficeFileEditorSyncResponse(BaseModel):
 
 
 class OfficeDocumentMutationResponse(BaseModel):
-    binding_id: str
     file_id: str
     checksum: str | None = None
     file_size: int
@@ -134,7 +130,7 @@ class OfficeDocumentRenameRequest(BaseModel):
 
 
 class OfficeDocumentRenameResponse(BaseModel):
-    binding_id: str
+    file_id: str
     title: str
 
 
@@ -154,7 +150,7 @@ class OfficeDocumentShareCreateRequest(BaseModel):
 
 class OfficeDocumentShareItem(BaseModel):
     share_id: str
-    binding_id: str
+    file_id: str
     permission: str
     share_url: str
     expires_at: datetime | None = None
@@ -166,7 +162,7 @@ class OfficeDocumentShareListResponse(BaseModel):
 
 
 class OfficeDocumentShareResolveResponse(BaseModel):
-    binding_id: str
+    file_id: str
     title: str
     permission: str
     file_category: str
@@ -174,7 +170,7 @@ class OfficeDocumentShareResolveResponse(BaseModel):
 
 
 class OfficeDocumentPreviewResponse(BaseModel):
-    binding_id: str
+    file_id: str
     preview_url: str | None = None
     editor_mode: Literal["view"] = "view"
 
@@ -207,13 +203,13 @@ class OfficeDocumentSearchResponse(BaseModel):
 
 
 class OfficeDocumentAiSummaryResponse(BaseModel):
-    binding_id: str
+    file_id: str
     summary: str
     enabled: bool
 
 
 class OfficeDocumentMetadataResponse(BaseModel):
-    binding_id: str
+    file_id: str
     classification_label: str | None = None
     retention_days: int | None = None
 
@@ -234,10 +230,9 @@ class OnlyOfficeDownloadTokenClaims(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     typ: Literal["office_dl"]
-    binding_kind: Literal["document", "file"]
+    viewer_scope: Literal["catalog", "file"]
     file_id: str
     company_id: str
-    binding_id: str
     iat: int
     exp: int
 
@@ -246,22 +241,17 @@ class OnlyOfficeCallbackContextClaims(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     typ: Literal["office_cb"]
-    binding_kind: Literal["document", "file"]
-    binding_id: str
+    viewer_scope: Literal["catalog", "file"]
+    file_id: str
     company_id: str
     iat: int
     exp: int
     namespace: str | None = None
-    file_id: str | None = None
 
     @model_validator(mode="after")
-    def required_binding_fields(self) -> Self:
-        if self.binding_kind == "document":
-            if self.namespace is None or self.namespace == "":
-                raise ValueError("namespace обязателен для document callback-токена")
-            return self
-        if self.file_id is None or self.file_id == "":
-            raise ValueError("file_id обязателен для file callback-токена")
+    def namespace_required_for_catalog_scope(self) -> Self:
+        if self.viewer_scope == "catalog" and (self.namespace is None or self.namespace == ""):
+            raise ValueError("namespace обязателен для catalog callback-токена")
         return self
 
 
@@ -354,7 +344,6 @@ class OfficeCatalogMemberItem(BaseModel):
 
 class OfficeCatalogRagIndexBindingItem(BaseModel):
     file_id: str
-    binding_id: str
     title: str
     file_category: str
 
@@ -419,7 +408,6 @@ class OfficeCatalogSemanticSearchRequest(RAGNamespaceSearchRequest):
 
 
 class OfficeCatalogSemanticSearchHit(BaseModel):
-    binding_id: str
     file_id: str
     catalog_id: str
     catalog_title: str
@@ -475,11 +463,9 @@ class OfficePublicResolveResponse(BaseModel):
     link_permission: OfficeLinkPermission
     file_id: str | None = None
     catalog_id: str | None = None
-    binding_id: str | None = None
 
 
 class OfficePublicCatalogItem(BaseModel):
-    binding_id: str
     title: str
     file_id: str
     file_category: str

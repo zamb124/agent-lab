@@ -98,11 +98,11 @@ export class OfficeCatalogSemanticSearchResults extends PlatformElement {
         if (!item || typeof item !== 'object') {
             return;
         }
-        const bindingId = typeof item.binding_id === 'string' ? item.binding_id : '';
-        if (bindingId.length === 0) {
-            throw new Error('office-catalog-semantic-search-results: binding_id required');
+        const fileId = typeof item.file_id === 'string' ? item.file_id : '';
+        if (fileId.length === 0) {
+            throw new Error('office-catalog-semantic-search-results: file_id required');
         }
-        this.emit('result-open', { bindingId });
+        this.emit('result-open', { fileId });
     }
 
     _formatScore(score) {

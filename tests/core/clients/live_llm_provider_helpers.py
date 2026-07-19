@@ -10,7 +10,10 @@ from typing import cast
 
 import httpx
 import pytest
-from a2a.types import Message, Part, Role, TextPart
+from a2a.types import Message, Part
+from a2a.types.a2a_pb2 import (
+    ROLE_USER,
+)
 
 from apps.flows.src.services.llm_models_service import LLMModelsService
 from core.ai.free_pool import (
@@ -131,8 +134,8 @@ def disable_testing_mode() -> Generator[None]:
 def smoke_message(text: str) -> Message:
     return Message(
         message_id=str(uuid.uuid4()),
-        role=Role.user,
-        parts=[Part(root=TextPart(text=text))],
+        role=ROLE_USER,
+        parts=[Part(text=text)],
     )
 
 

@@ -51,7 +51,7 @@ def _policy(
 def test_mode_off_returns_messages_without_context_blocks() -> None:
     messages: list[JsonObject] = [
         require_json_object({"role": "system", "content": "static instruction"}),
-        require_json_object({"role": "user", "content": "hello"}),
+        require_json_object({"role": "ROLE_USER", "content": "hello"}),
     ]
     compiled = _compiler().compile(
         LLMContextCompileRequest(
@@ -78,7 +78,7 @@ def test_mode_off_raises_when_messages_exceed_budget() -> None:
     with pytest.raises(LLMContextBudgetError, match="mode=off"):
         _compiler().compile(
             LLMContextCompileRequest(
-                messages=[{"role": "user", "content": "one two three four five six"}],
+                messages=[{"role": "ROLE_USER", "content": "one two three four five six"}],
                 policy=_policy(mode="off", max_input_tokens=10),
             )
         )
@@ -88,7 +88,7 @@ def test_tools_schema_can_exhaust_available_budget() -> None:
     with pytest.raises(LLMContextBudgetError, match="reserves"):
         _compiler().compile(
             LLMContextCompileRequest(
-                messages=[{"role": "user", "content": "current"}],
+                messages=[{"role": "ROLE_USER", "content": "current"}],
                 policy=_policy(max_input_tokens=40),
                 tools_schema_tokens=36,
             )
@@ -106,15 +106,15 @@ def test_active_window_keeps_last_message_when_tail_exceeds_window() -> None:
     compiled = _compiler().compile(
         LLMContextCompileRequest(
             messages=[
-                {"role": "user", "content": "one two"},
+                {"role": "ROLE_USER", "content": "one two"},
                 {"role": "assistant", "content": "three four"},
-                {"role": "user", "content": "five six"},
+                {"role": "ROLE_USER", "content": "five six"},
             ],
             policy=_policy(active_window_tokens=5),
         )
     )
 
-    assert compiled.messages == [{"role": "user", "content": "five six"}]
+    assert compiled.messages == [{"role": "ROLE_USER", "content": "five six"}]
     assert compiled.usage.active_message_tokens == 3
 
 
@@ -123,9 +123,9 @@ def test_system_prefix_is_kept_outside_active_window() -> None:
         LLMContextCompileRequest(
             messages=[
                 {"role": "system", "content": "rules stay"},
-                {"role": "user", "content": "one two"},
+                {"role": "ROLE_USER", "content": "one two"},
                 {"role": "assistant", "content": "three four"},
-                {"role": "user", "content": "five"},
+                {"role": "ROLE_USER", "content": "five"},
             ],
             policy=_policy(active_window_tokens=3),
         )
@@ -133,7 +133,7 @@ def test_system_prefix_is_kept_outside_active_window() -> None:
 
     assert compiled.messages == [
         {"role": "system", "content": "rules stay"},
-        {"role": "user", "content": "five"},
+        {"role": "ROLE_USER", "content": "five"},
     ]
 
 
@@ -143,7 +143,7 @@ def test_system_prefix_over_budget_raises() -> None:
             LLMContextCompileRequest(
                 messages=[
                     {"role": "system", "content": "one two three"},
-                    {"role": "user", "content": "current"},
+                    {"role": "ROLE_USER", "content": "current"},
                 ],
                 policy=_policy(max_input_tokens=8, active_window_tokens=10),
             )
@@ -154,9 +154,9 @@ def test_active_window_also_stops_at_global_available_budget() -> None:
     compiled = _compiler().compile(
         LLMContextCompileRequest(
             messages=[
-                {"role": "user", "content": "one two"},
+                {"role": "ROLE_USER", "content": "one two"},
                 {"role": "assistant", "content": "three four"},
-                {"role": "user", "content": "five"},
+                {"role": "ROLE_USER", "content": "five"},
             ],
             policy=_policy(max_input_tokens=12, active_window_tokens=100),
         )
@@ -164,7 +164,7 @@ def test_active_window_also_stops_at_global_available_budget() -> None:
 
     assert compiled.messages == [
         {"role": "assistant", "content": "three four"},
-        {"role": "user", "content": "five"},
+        {"role": "ROLE_USER", "content": "five"},
     ]
     assert compiled.usage.active_message_tokens == 5
 
@@ -214,7 +214,7 @@ def test_compiler_dedupes_blocks_orders_sections_and_respects_scope_budgets() ->
 
     compiled = _compiler().compile(
         LLMContextCompileRequest(
-            messages=[{"role": "user", "content": "current"}],
+            messages=[{"role": "ROLE_USER", "content": "current"}],
             candidate_blocks=blocks,
             policy=_policy(memory_tokens=3, rag_tokens=3),
         )
@@ -242,7 +242,7 @@ def test_compiler_dedupes_blocks_orders_sections_and_respects_scope_budgets() ->
 def test_compiler_outputs_selected_memory_blocks_chronologically() -> None:
     compiled = _compiler().compile(
         LLMContextCompileRequest(
-            messages=[{"role": "user", "content": "current"}],
+            messages=[{"role": "ROLE_USER", "content": "current"}],
             candidate_blocks=[
                 LLMContextBlock(
                     kind="memory",
@@ -291,7 +291,7 @@ def test_compiler_outputs_selected_memory_blocks_chronologically() -> None:
 def test_compiler_packs_memory_budget_chronologically_after_retrieval() -> None:
     compiled = _compiler().compile(
         LLMContextCompileRequest(
-            messages=[{"role": "user", "content": "current"}],
+            messages=[{"role": "ROLE_USER", "content": "current"}],
             candidate_blocks=[
                 LLMContextBlock(
                     kind="memory",
@@ -329,7 +329,7 @@ def test_compiler_packs_memory_budget_chronologically_after_retrieval() -> None:
 def test_skill_block_packs_into_remaining_without_scope_cap() -> None:
     compiled = _compiler().compile(
         LLMContextCompileRequest(
-            messages=[{"role": "user", "content": "current"}],
+            messages=[{"role": "ROLE_USER", "content": "current"}],
             candidate_blocks=[
                 LLMContextBlock(
                     kind="memory",
@@ -359,7 +359,7 @@ def test_skill_block_packs_into_remaining_without_scope_cap() -> None:
 def test_block_explicit_token_count_is_authoritative() -> None:
     compiled = _compiler().compile(
         LLMContextCompileRequest(
-            messages=[{"role": "user", "content": "current"}],
+            messages=[{"role": "ROLE_USER", "content": "current"}],
             candidate_blocks=[
                 LLMContextBlock(
                     kind="memory",
@@ -380,7 +380,7 @@ def test_block_explicit_token_count_is_authoritative() -> None:
 def test_cache_provider_hints_ignore_non_system_blocks() -> None:
     compiled = _compiler().compile(
         LLMContextCompileRequest(
-            messages=[{"role": "user", "content": "current"}],
+            messages=[{"role": "ROLE_USER", "content": "current"}],
             candidate_blocks=[
                 LLMContextBlock(
                     kind="custom",
@@ -409,7 +409,7 @@ def test_cache_provider_hints_include_system_prefix_in_hash() -> None:
         LLMContextCompileRequest(
             messages=[
                 {"role": "system", "content": "first rules"},
-                {"role": "user", "content": "current"},
+                {"role": "ROLE_USER", "content": "current"},
             ],
             candidate_blocks=[block],
             policy=_policy(),
@@ -419,7 +419,7 @@ def test_cache_provider_hints_include_system_prefix_in_hash() -> None:
         LLMContextCompileRequest(
             messages=[
                 {"role": "system", "content": "second rules"},
-                {"role": "user", "content": "current"},
+                {"role": "ROLE_USER", "content": "current"},
             ],
             candidate_blocks=[block],
             policy=_policy(),
@@ -439,7 +439,7 @@ def test_cache_provider_hints_work_with_system_prefix_only() -> None:
         LLMContextCompileRequest(
             messages=[
                 {"role": "system", "content": "stable rules"},
-                {"role": "user", "content": "current"},
+                {"role": "ROLE_USER", "content": "current"},
             ],
             policy=_policy(),
         )
@@ -455,7 +455,7 @@ def test_cache_provider_hints_disabled_by_policy() -> None:
         LLMContextCompileRequest(
             messages=[
                 {"role": "system", "content": "stable rules"},
-                {"role": "user", "content": "current"},
+                {"role": "ROLE_USER", "content": "current"},
             ],
             candidate_blocks=[
                 LLMContextBlock(
@@ -484,7 +484,7 @@ def test_compiler_filters_disabled_sources_unless_required() -> None:
 
     compiled = _compiler().compile(
         LLMContextCompileRequest(
-            messages=[{"role": "user", "content": "current"}],
+            messages=[{"role": "ROLE_USER", "content": "current"}],
             candidate_blocks=[
                 LLMContextBlock(
                     kind="memory",
@@ -521,7 +521,7 @@ def test_required_block_over_budget_raises() -> None:
     with pytest.raises(LLMContextBudgetError, match="Required"):
         _compiler().compile(
             LLMContextCompileRequest(
-                messages=[{"role": "user", "content": "current"}],
+                messages=[{"role": "ROLE_USER", "content": "current"}],
                 candidate_blocks=[
                     LLMContextBlock(
                         kind="memory",
@@ -540,7 +540,7 @@ def test_last_message_over_budget_raises() -> None:
     with pytest.raises(LLMContextBudgetError, match="Last LLM message"):
         _compiler().compile(
             LLMContextCompileRequest(
-                messages=[{"role": "user", "content": "one two three four five six seven"}],
+                messages=[{"role": "ROLE_USER", "content": "one two three four five six seven"}],
                 policy=_policy(max_input_tokens=10, active_window_tokens=10),
             )
         )
@@ -550,8 +550,8 @@ def test_model_context_length_clamps_policy_budget() -> None:
     compiled = _compiler().compile(
         LLMContextCompileRequest(
             messages=[
-                {"role": "user", "content": "old one two three four five six seven"},
-                {"role": "user", "content": "current"},
+                {"role": "ROLE_USER", "content": "old one two three four five six seven"},
+                {"role": "ROLE_USER", "content": "current"},
             ],
             policy=_policy(max_input_tokens=100, active_window_tokens=100),
             model_context_length=12,
@@ -561,7 +561,7 @@ def test_model_context_length_clamps_policy_budget() -> None:
     assert compiled.usage.max_input_tokens == 12
     assert compiled.usage.policy_max_input_tokens == 100
     assert compiled.usage.model_context_length == 12
-    assert compiled.messages == [{"role": "user", "content": "current"}]
+    assert compiled.messages == [{"role": "ROLE_USER", "content": "current"}]
 
 
 def test_tool_result_compaction_keeps_large_tool_result_inside_budget() -> None:
@@ -611,7 +611,7 @@ def test_min_score_drops_low_memory_and_rag_results() -> None:
 
     compiled = _compiler().compile(
         LLMContextCompileRequest(
-            messages=[{"role": "user", "content": "current"}],
+            messages=[{"role": "ROLE_USER", "content": "current"}],
             candidate_blocks=[
                 LLMContextBlock(
                     kind="memory",

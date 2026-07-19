@@ -127,9 +127,8 @@ async def _set_context_from_office_ai_claims(
 ) -> None:
     metadata: JsonObject = {
         "office_ai": True,
-        "binding_id": claims.binding_id,
         "file_id": claims.file_id,
-        "binding_kind": claims.binding_kind,
+        "viewer_scope": claims.viewer_scope,
     }
     await _set_context_for_company_user(
         container,

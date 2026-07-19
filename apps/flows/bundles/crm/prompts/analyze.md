@@ -30,12 +30,12 @@
 
 {for entity_type in entity_types}
 - **`{entity_type.type}`**: {entity_type.prompt}
-{if entity_type.fields}
+{?entity_type.fields|
   Поля `attributes` для этого типа:
   {for field in entity_type.fields}
-  - `{field.name}` ({field.label}){if field.required} [обязательное]{endif}{if field.type} [{field.type}]{endif}{if field.description}: {field.description}{endif}{if field.values} Допустимые значения: {field.values}{endif}
+  - `{field.name}` ({field.label}){?field.required| [обязательное]}{?field.type| [{field.type}]}{?field.description|: {field.description}}{?field.values| Допустимые значения: {field.values}}
   {endfor}
-{endif}
+}
 {endfor}
 
 ## РАЗРЕШЁННЫЕ ИДЕНТИФИКАТОРЫ СВЯЗЕЙ
@@ -66,7 +66,7 @@
 3. **Запрещено** добавлять `relationship_type`, которого нет в списке разрешённых связей.
 4. **Запрещено** ссылаться в связи на тип или имя, для которых нет строки в `note`/`entities`.
 
-{if known_entities}
+{?known_entities|
 ## KNOWN ENTITIES (существующие сущности)
 
 Эти сущности **УЖЕ существуют** в системе. Правила работы с ними:
@@ -76,9 +76,9 @@
 - В `relationships` можно создавать связи **к и от** known entities, указывая их `name` и `type` как `source_name`/`source_type` или `target_name`/`target_type`.
 
 {for ke in known_entities}
-- **{ke.type}**: `{ke.name}` (entity_id: `{ke.entity_id}`){if ke.description} — {ke.description}{endif}
+- **{ke.type}**: `{ke.name}` (entity_id: `{ke.entity_id}`){?ke.description| — {ke.description}}
 {endfor}
-{endif}
+}
 
 ## КАЧЕСТВО
 

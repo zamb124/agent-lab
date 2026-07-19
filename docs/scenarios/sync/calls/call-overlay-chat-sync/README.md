@@ -4,12 +4,12 @@
 
 ## Шаг 1. Сообщение из основного чата отправлено
 
-![Сообщение из основного чата отправлено](call-overlay-chat-sync--01-soobshchenie-iz-osnovnogo-chata-otpravleno.png)
+![Сообщение из основного чата отправлено](call-overlay-chat-sync--01-message-sent-from-the-main-chat.png)
 
 ## Шаг 2. Чат в оверлее принимает и отправляет сообщения
 
-![Чат в оверлее принимает и отправляет сообщения](call-overlay-chat-sync--02-chat-v-overlee-prinimaet-i-otpravlyaet-soobshcheniya.png)
+![Чат в оверлее принимает и отправляет сообщения](call-overlay-chat-sync--02-call-overlay-chat-accepts-and-sends-messages.png)
 
 ## Шаг 3. Сообщение из оверлея видно в основном чате канала
 
-![Сообщение из оверлея видно в основном чате канала](call-overlay-chat-sync--03-soobshchenie-iz-overleya-vidno-v-osnovnom-chate-kanala.png)
+![Сообщение из оверлея видно в основном чате канала](call-overlay-chat-sync--03-message-from-the-overlay-is-visible-in-the-main-channel-chat.png)

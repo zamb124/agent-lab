@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from core.documents.viewer.models import DocumentViewerHandlerId
+from core.documents.viewer.models import DocumentViewerHandlerId, OfficeViewerScope
 from core.files.models import FileRecord
 
 OfficeViewerLinkPermission = Literal["view", "edit"]
@@ -14,8 +14,7 @@ OfficeViewerLinkPermission = Literal["view", "edit"]
 @dataclass(frozen=True)
 class ViewerOpenContext:
     handler_id: DocumentViewerHandlerId
-    binding_id: str
-    binding_kind: str
+    viewer_scope: OfficeViewerScope
     file_record: FileRecord
     title: str
     file_category: str

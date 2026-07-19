@@ -4,16 +4,16 @@
 
 ## Шаг 1. Канал с двумя участниками открыт
 
-![Канал с двумя участниками открыт](mention-from-popup--01-kanal-s-dvumya-uchastnikami-otkryt.png)
+![Канал с двумя участниками открыт](mention-from-popup--01-channel-with-two-members-opened.png)
 
 ## Шаг 2. Попап со списком участников
 
-![Попап со списком участников](mention-from-popup--02-popap-so-spiskom-uchastnikov.png)
+![Попап со списком участников](mention-from-popup--02-popup-with-member-list.png)
 
 ## Шаг 3. Выбран участник, текст дописан
 
-![Выбран участник, текст дописан](mention-from-popup--03-vybran-uchastnik-tekst-dopisan.png)
+![Выбран участник, текст дописан](mention-from-popup--03-member-selected-text-appended.png)
 
 ## Шаг 4. Сообщение с упоминанием в ленте
 
-![Сообщение с упоминанием в ленте](mention-from-popup--04-soobshchenie-s-upominaniem-v-lente.png)
+![Сообщение с упоминанием в ленте](mention-from-popup--04-message-with-mention-in-the-feed.png)

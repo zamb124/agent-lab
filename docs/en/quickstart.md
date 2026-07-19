@@ -58,17 +58,18 @@ Interactive calls use `POST` against the agent URL with a JSON-RPC body.
     ```bash
     curl -X POST "${PLATFORM_BASE_URL}" \
       -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
+      -H "A2A-Version: 1.0" \
       -H "Content-Type: application/json" \
       -d '{
         "jsonrpc": "2.0",
         "id": "1",
-        "method": "message/send",
+        "method": "SendMessage",
         "params": {
           "message": {
             "messageId": "msg-1",
-            "role": "user",
+            "role": "ROLE_USER",
             "parts": [
-              {"kind": "text", "text": "Help me prepare a short project status"}
+              {"text": "Help me prepare a short project status"}
             ]
           }
         }
@@ -81,13 +82,13 @@ Interactive calls use `POST` against the agent URL with a JSON-RPC body.
     {
       "jsonrpc": "2.0",
       "id": "1",
-      "method": "message/send",
+      "method": "SendMessage",
       "params": {
         "message": {
           "messageId": "msg-1",
-          "role": "user",
+          "role": "ROLE_USER",
           "parts": [
-            { "kind": "text", "text": "Help me prepare a short project status" }
+            { "text": "Help me prepare a short project status" }
           ]
         }
       }
@@ -96,22 +97,23 @@ Interactive calls use `POST` against the agent URL with a JSON-RPC body.
 
 ## 4. Stream Responses
 
-For streaming responses, switch the method to `message/stream`. The response is delivered as Server-Sent Events.
+For streaming responses, switch the method to `SendStreamingMessage`. The response is delivered as Server-Sent Events (`statusUpdate` / `artifactUpdate`).
 
 ```bash
 curl -N -X POST "${PLATFORM_BASE_URL}" \
   -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
+  -H "A2A-Version: 1.0" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": "stream-1",
-    "method": "message/stream",
+    "method": "SendStreamingMessage",
     "params": {
       "message": {
         "messageId": "msg-stream-1",
-        "role": "user",
+        "role": "ROLE_USER",
         "parts": [
-          {"kind": "text", "text": "Tell me the next steps for launching the agent"}
+          {"text": "Tell me the next steps for launching the agent"}
         ]
       }
     }

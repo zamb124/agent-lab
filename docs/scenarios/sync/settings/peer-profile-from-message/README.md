@@ -4,8 +4,12 @@
 
 ## Шаг 1. В канал добавлен второй участник
 
-![В канал добавлен второй участник](peer-profile-from-message--01-v-kanal-dobavlen-vtoroy-uchastnik.png)
+![В канал добавлен второй участник](peer-profile-from-message--01-second-member-added-to-the-channel.png)
 
 ## Шаг 2. Сообщение от второго участника отправлено через API
 
-![Сообщение от второго участника отправлено через API](peer-profile-from-message--02-soobshchenie-ot-vtorogo-uchastnika-otpravleno-cherez-api.png)
+![Сообщение от второго участника отправлено через API](peer-profile-from-message--02-message-from-the-second-member-sent-via-api.png)
+
+## Шаг 3. Открыта модалка профиля отправителя
+
+![Открыта модалка профиля отправителя](peer-profile-from-message--03-sender-profile-modal-opened.png)

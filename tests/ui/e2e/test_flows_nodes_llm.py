@@ -55,6 +55,7 @@ _ORDER_SCHEMA_SNIPPET = '"order_id"'
         "**Result:** the Green Garden Assistant gets a calculator from the library, and "
         "a test run shows the tool call."
     ),
+    timeout_seconds=120,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e

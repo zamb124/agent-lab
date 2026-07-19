@@ -59,9 +59,9 @@ class OfficeBindingMember(Base):
 
     __tablename__: str = "office_binding_members"
 
-    binding_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("office_document_bindings.binding_id", ondelete="CASCADE"),
+    file_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("office_document_bindings.file_id", ondelete="CASCADE"),
         primary_key=True,
     )
     user_id: Mapped[str] = mapped_column(String(100), primary_key=True)
@@ -91,11 +91,15 @@ class OfficeCatalogMember(Base):
 
 
 class OfficeDocumentBinding(Base):
-    """Привязка файла Office (S3 / FileRecord) к компании и namespace."""
+    """Привязка файла Office (S3 / FileRecord) к компании и namespace.
+
+    `file_id` — первичный ключ: у файла может быть не более одной привязки в каталоге
+    документов (глобально, вне зависимости от company/namespace).
+    """
 
     __tablename__: str = "office_document_bindings"
 
-    binding_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    file_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     namespace: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
     catalog_id: Mapped[str] = mapped_column(
@@ -104,7 +108,6 @@ class OfficeDocumentBinding(Base):
         nullable=False,
         index=True,
     )
-    file_id: Mapped[str] = mapped_column(String(128), nullable=False)
     file_category: Mapped[str] = mapped_column(String(32), nullable=False)
     onlyoffice_document_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -128,6 +131,9 @@ class OfficeDocumentBinding(Base):
     __table_args__: tuple[Index, ...] = (
         Index("ix_office_bindings_company_namespace_created", "company_id", "namespace", "created_at"),
         Index("ix_office_bindings_deleted_at", "company_id", "namespace", "deleted_at"),
+        # Полный unique для консистентности ORM-схемы; фактический constraint в БД —
+        # партиальный (WHERE deleted_at IS NULL), создаётся миграцией office_0013,
+        # чтобы soft-deleted привязка не блокировала повторное создание по тому же file_id.
         Index("uq_office_bindings_company_namespace_file", "company_id", "namespace", "file_id", unique=True),
     )
 
@@ -138,9 +144,9 @@ class OfficeDocumentShare(Base):
     __tablename__: str = "office_document_shares"
 
     share_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    binding_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("office_document_bindings.binding_id", ondelete="CASCADE"),
+    file_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("office_document_bindings.file_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -157,18 +163,23 @@ class OfficeDocumentShare(Base):
 
 
 class OfficeDocumentRevision(Base):
-    """Снимок версии документа."""
+    """Снимок версии документа.
+
+    `file_id` — родительская привязка (FK на `office_document_bindings.file_id`);
+    `revision_file_id` — снимок содержимого (S3 / `FileRecord.file_id`) на момент
+    ревизии, без FK (перекрёстная ссылка на shared-БД файлов).
+    """
 
     __tablename__: str = "office_document_revisions"
 
     revision_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    binding_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("office_document_bindings.binding_id", ondelete="CASCADE"),
+    file_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("office_document_bindings.file_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    file_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    revision_file_id: Mapped[str] = mapped_column(String(128), nullable=False)
     revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
     created_by_user_id: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -178,7 +189,7 @@ class OfficeDocumentRevision(Base):
     )
 
     __table_args__: tuple[Index, ...] = (
-        Index("ix_office_revisions_binding_number", "binding_id", "revision_number"),
+        Index("ix_office_revisions_file_number", "file_id", "revision_number"),
     )
 
 
@@ -188,9 +199,9 @@ class OfficeDocumentEvent(Base):
     __tablename__: str = "office_document_events"
 
     event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    binding_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("office_document_bindings.binding_id", ondelete="CASCADE"),
+    file_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("office_document_bindings.file_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

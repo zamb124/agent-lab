@@ -151,7 +151,7 @@ async def _upload_searchable_csv(
     unique_id: str,
     *,
     title_suffix: str,
-) -> tuple[str, str, str]:
+) -> tuple[str, str]:
     needle = f"office-rag-needle-{unique_id}-{title_suffix}"
     content = f"topic,content\nsearchable,{needle}\n".encode()
     response = await office_client.post(
@@ -162,7 +162,9 @@ async def _upload_searchable_csv(
     )
     assert response.status_code == 200
     body = response.json()
-    return body["binding_id"], body["file_id"], needle
+    file_id = body["file_id"]
+    assert isinstance(file_id, str) and file_id
+    return file_id, needle
 
 
 async def _search_catalog_namespace(
@@ -284,7 +286,7 @@ async def test_documents_rag_index_statuses_batch_endpoint(
         f"rag-statuses-batch-{unique_id}",
     )
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
-    _binding_id, file_id, _needle = await _upload_searchable_csv(
+    file_id, _needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
@@ -327,7 +329,7 @@ async def test_list_documents_includes_rag_index_status(
         auth_headers_system,
         f"rag-list-status-{unique_id}",
     )
-    binding_id, file_id, _needle = await _upload_searchable_csv(
+    file_id, _needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
@@ -342,7 +344,7 @@ async def test_list_documents_includes_rag_index_status(
     assert list_before.status_code == 200
     items_before = list_before.json()["items"]
     assert len(items_before) == 1
-    assert items_before[0]["binding_id"] == binding_id
+    assert items_before[0]["file_id"] == file_id
     assert items_before[0]["rag_index_status"] is None
 
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
@@ -445,7 +447,7 @@ async def test_upload_indexes_document_to_completed_and_searchable(
     )
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
 
-    _binding_id, file_id, needle = await _upload_searchable_csv(
+    file_id, needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
@@ -492,7 +494,7 @@ async def test_upload_skips_index_when_catalog_rag_disabled(
         auth_headers_system,
         f"rag-skipped-{unique_id}",
     )
-    _binding_id, file_id, needle = await _upload_searchable_csv(
+    file_id, needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
@@ -595,7 +597,7 @@ async def test_soft_delete_unindexes_document(
         f"rag-soft-del-{unique_id}",
     )
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
-    binding_id, file_id, needle = await _upload_searchable_csv(
+    file_id, needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
@@ -610,7 +612,7 @@ async def test_soft_delete_unindexes_document(
     )
 
     delete_response = await office_client.delete(
-        f"/documents/api/v1/documents/{binding_id}",
+        f"/documents/api/v1/documents/{file_id}",
         headers=auth_headers_system,
     )
     assert delete_response.status_code == 204
@@ -655,7 +657,7 @@ async def test_restore_reindexes_document(
         f"rag-restore-{unique_id}",
     )
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
-    binding_id, file_id, needle = await _upload_searchable_csv(
+    file_id, needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
@@ -670,13 +672,13 @@ async def test_restore_reindexes_document(
     )
 
     delete_response = await office_client.delete(
-        f"/documents/api/v1/documents/{binding_id}",
+        f"/documents/api/v1/documents/{file_id}",
         headers=auth_headers_system,
     )
     assert delete_response.status_code == 204
 
     restore_response = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/restore",
+        f"/documents/api/v1/documents/{file_id}/restore",
         headers=auth_headers_system,
     )
     assert restore_response.status_code == 200
@@ -713,7 +715,7 @@ async def test_permanent_delete_unindexes_document(
         f"rag-perm-del-{unique_id}",
     )
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
-    binding_id, file_id, needle = await _upload_searchable_csv(
+    file_id, needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
@@ -728,13 +730,13 @@ async def test_permanent_delete_unindexes_document(
     )
 
     soft_delete = await office_client.delete(
-        f"/documents/api/v1/documents/{binding_id}",
+        f"/documents/api/v1/documents/{file_id}",
         headers=auth_headers_system,
     )
     assert soft_delete.status_code == 204
 
     permanent_delete = await office_client.delete(
-        f"/documents/api/v1/documents/{binding_id}/permanent",
+        f"/documents/api/v1/documents/{file_id}/permanent",
         headers=auth_headers_system,
     )
     assert permanent_delete.status_code == 204
@@ -778,7 +780,7 @@ async def test_move_between_enabled_catalogs_reindexes_in_target_namespace(
     await _enable_rag_index(office_client, source_catalog_id, auth_headers_system)
     await _enable_rag_index(office_client, target_catalog_id, auth_headers_system)
 
-    binding_id, file_id, needle = await _upload_searchable_csv(
+    file_id, needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         source_catalog_id,
@@ -793,7 +795,7 @@ async def test_move_between_enabled_catalogs_reindexes_in_target_namespace(
     )
 
     move_response = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/move",
+        f"/documents/api/v1/documents/{file_id}/move",
         headers=auth_headers_system,
         json={"catalog_id": target_catalog_id},
     )
@@ -846,7 +848,7 @@ async def test_move_to_disabled_catalog_unindexes_only(
     )
     await _enable_rag_index(office_client, enabled_catalog_id, auth_headers_system)
 
-    binding_id, file_id, needle = await _upload_searchable_csv(
+    file_id, needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         enabled_catalog_id,
@@ -861,7 +863,7 @@ async def test_move_to_disabled_catalog_unindexes_only(
     )
 
     move_response = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/move",
+        f"/documents/api/v1/documents/{file_id}/move",
         headers=auth_headers_system,
         json={"catalog_id": disabled_catalog_id},
     )
@@ -926,7 +928,7 @@ async def test_copy_to_enabled_catalog_indexes_new_file(
     )
     await _enable_rag_index(office_client, target_catalog_id, auth_headers_system)
 
-    binding_id, source_file_id, needle = await _upload_searchable_csv(
+    source_file_id, needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         source_catalog_id,
@@ -935,7 +937,7 @@ async def test_copy_to_enabled_catalog_indexes_new_file(
     )
 
     copy_response = await office_client.post(
-        f"/documents/api/v1/documents/{binding_id}/copy",
+        f"/documents/api/v1/documents/{source_file_id}/copy",
         headers=auth_headers_system,
         json={"catalog_id": target_catalog_id, "title": f"Copy {unique_id}"},
     )
@@ -977,7 +979,7 @@ async def test_disable_removes_rag_namespace_and_preserves_files(
         f"rag-disable-{unique_id}",
     )
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
-    _binding_id, file_id, _needle = await _upload_searchable_csv(
+    file_id, _needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
@@ -1025,7 +1027,7 @@ async def test_delete_catalog_disables_rag_namespace(
         f"rag-del-cat-{unique_id}",
     )
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
-    _binding_id, file_id, _needle = await _upload_searchable_csv(
+    file_id, _needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
@@ -1041,13 +1043,13 @@ async def test_delete_catalog_disables_rag_namespace(
     rag_namespace_id = _rag_namespace_id(catalog_id)
 
     soft_delete = await office_client.delete(
-        f"/documents/api/v1/documents/{_binding_id}",
+        f"/documents/api/v1/documents/{file_id}",
         headers=auth_headers_system,
     )
     assert soft_delete.status_code == 204
 
     permanent_delete = await office_client.delete(
-        f"/documents/api/v1/documents/{_binding_id}/permanent",
+        f"/documents/api/v1/documents/{file_id}/permanent",
         headers=auth_headers_system,
     )
     assert permanent_delete.status_code == 204
@@ -1083,14 +1085,14 @@ async def test_rebuild_reindexes_all_bindings(
     )
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
 
-    _binding_a, file_a, needle_a = await _upload_searchable_csv(
+    file_a, needle_a = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
         unique_id,
         title_suffix="rebuild-a",
     )
-    _binding_b, file_b, needle_b = await _upload_searchable_csv(
+    file_b, needle_b = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
@@ -1178,7 +1180,7 @@ async def test_signature_sidecar_skipped_from_catalog_rag_index(
     )
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
 
-    _binding_csv, file_csv, _needle = await _upload_searchable_csv(
+    file_csv, _needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         catalog_id,
@@ -1283,14 +1285,14 @@ async def test_onlyoffice_callback_save_reindexes_document(
         },
     )
     assert create_response.status_code == 200
-    binding_id = create_response.json()["binding_id"]
+    file_id = create_response.json()["file_id"]
 
     new_body = f"replaced content with {needle}".encode()
     office_saved_file_http["set_body"](new_body)
 
     integ = get_office_settings().office
     ctx_tok = encode_callback_context_token(
-        binding_id=binding_id,
+        file_id=file_id,
         company_id="system",
         namespace="default",
         secret=integ.jwt_secret,
@@ -1545,7 +1547,7 @@ async def test_nested_catalog_semantic_search_respects_include_subcatalogs(
     await _enable_rag_index(office_client, parent_catalog_id, auth_headers_system)
     await _enable_rag_index(office_client, child_catalog_id, auth_headers_system)
 
-    _binding_id, file_id, needle = await _upload_searchable_csv(
+    file_id, needle = await _upload_searchable_csv(
         office_client,
         auth_headers_system,
         child_catalog_id,
@@ -1585,6 +1587,6 @@ async def test_nested_catalog_semantic_search_respects_include_subcatalogs(
     assert child_catalog_id in subtree_search.catalog_ids
     matching_items = [item for item in subtree_search.items if item.file_id == file_id]
     assert len(matching_items) == 1
-    assert matching_items[0].binding_id
+    assert matching_items[0].file_id
     assert matching_items[0].snippet
     assert matching_items[0].catalog_id == child_catalog_id

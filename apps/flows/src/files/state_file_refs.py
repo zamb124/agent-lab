@@ -30,7 +30,6 @@ def file_document_capability(raw: JsonObject, namespace: str) -> FileDocumentCap
         raise ValueError("editor_url must be a non-empty string")
     return FileDocumentCapability.model_validate(
         {
-            "binding_id": _require_non_empty_str(raw, "binding_id"),
             "file_id": _require_non_empty_str(raw, "file_id"),
             "catalog_id": _require_non_empty_str(raw, "catalog_id"),
             "document_type": _document_type_from_office_payload(raw),

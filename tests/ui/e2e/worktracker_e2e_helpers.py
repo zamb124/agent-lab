@@ -28,10 +28,13 @@ def worktracker_api_origin(origin: str) -> str:
 
 
 def _worktracker_client(origin: str, auth_token: str) -> httpx.AsyncClient:
+    from tests.ui.e2e_worker import ui_e2e_scope_headers
+
     api_origin = worktracker_api_origin(origin)
     return httpx.AsyncClient(
         base_url=api_origin,
         cookies={"auth_token": auth_token},
+        headers=ui_e2e_scope_headers(),
         timeout=_WORKTRACKER_HTTP_TIMEOUT_SECONDS,
     )
 
@@ -363,6 +366,8 @@ async def worktracker_hitl_embedded_chat(editor: Locator) -> Locator:
 async def worktracker_hitl_chat_wait_text(
     editor: Locator,
     text_pattern: re.Pattern[str] | str,
+    *,
+    timeout_s: float = 120.0,
 ) -> None:
     chat = await worktracker_hitl_embedded_chat(editor)
     pattern = (
@@ -371,7 +376,7 @@ async def worktracker_hitl_chat_wait_text(
         else re.compile(re.escape(text_pattern), re.I)
     )
     source = pattern.pattern
-    deadline = time.monotonic() + 120.0
+    deadline = time.monotonic() + timeout_s
     last_bubble_count = 0
     last_bubble_texts: list[str] = []
     while time.monotonic() < deadline:
@@ -408,7 +413,7 @@ async def worktracker_hitl_chat_wait_text(
                 return
         await asyncio.sleep(0.5)
     raise AssertionError(
-        f"embedded HITL chat did not show text matching {source!r} within 120s "
+        f"embedded HITL chat did not show text matching {source!r} within {timeout_s}s "
         f"(last bubble count={last_bubble_count}, texts={last_bubble_texts!r})"
     )
 
@@ -421,9 +426,8 @@ async def worktracker_hitl_chat_send(editor: Locator, text: str) -> None:
     send_btn = chat.locator("flows-chat-input button.send-btn:not(.muted)").first
     await expect(send_btn).to_be_enabled(timeout=10_000)
     await send_btn.click()
-    await expect(chat.get_by_text(re.compile(re.escape(text.strip()), re.I)).first).to_be_visible(
-        timeout=60_000,
-    )
+    # Текст в shadow DOM flows-chat-message — не get_by_text по light DOM.
+    await worktracker_hitl_chat_wait_text(editor, text.strip(), timeout_s=60.0)
 
 
 async def worktracker_hitl_single_reply_complete(editor: Locator, text: str) -> None:

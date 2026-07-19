@@ -4,6 +4,8 @@
 
 import pytest
 
+from tests.flows._a2a_v1 import A2A_HEADERS
+
 from apps.flows.src.utils import extract_json_from_response
 
 
@@ -57,21 +59,22 @@ class TestA2AArtifacts:
     """Тесты артефактов в A2A ответе."""
 
     async def test_message_send_returns_artifact_for_json(self, client, mock_llm_with_queue, sync_tools, unique_id: str):
-        """message/send возвращает artifact когда ответ содержит JSON."""
+        """SendMessage возвращает artifact когда ответ содержит JSON."""
         # Мок ответ с JSON
         json_response = '```json\n{"document_type": "other", "fields": {}}\n```'
         mock_llm_with_queue([{"type": "text", "content": json_response}])
 
         response = await client.post(
             "/flows/api/v1/example_react",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": unique_id,
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": unique_id,
-                        "role": "user",
+                        "role": "ROLE_USER",
                         "parts": [{"text": "Проанализируй документ"}],
                     }
                 },
@@ -95,34 +98,31 @@ class TestA2AArtifacts:
         assert len(artifact["parts"]) > 0
 
         part = artifact["parts"][0]
-        assert part["kind"] == "data"
         assert "data" in part
         assert "res" in part["data"]
 
         # Когда есть artifacts, status.message НЕ дублирует ответ
         assert result["status"].get("message") is None
 
-        # Должен быть timestamp
-        assert "timestamp" in result["status"]
-
         # taskId должен быть в user message
         assert result["history"][0].get("taskId") is not None
 
     async def test_message_send_no_artifact_for_plain_text(self, client, mock_llm_with_queue, sync_tools, unique_id: str):
-        """message/send не возвращает artifact для простого текста."""
+        """SendMessage не возвращает artifact для простого текста."""
         # Мок ответ без JSON
         mock_llm_with_queue([{"type": "text", "content": "Просто текстовый ответ без JSON"}])
 
         response = await client.post(
             "/flows/api/v1/example_react",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": unique_id,
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": unique_id,
-                        "role": "user",
+                        "role": "ROLE_USER",
                         "parts": [{"text": "Привет"}],
                     }
                 },

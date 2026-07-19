@@ -1,0 +1,46 @@
+"""A2A Protocol 1.0 JSON-RPC method names (PascalCase)."""
+
+from __future__ import annotations
+
+SEND_MESSAGE = "SendMessage"
+SEND_STREAMING_MESSAGE = "SendStreamingMessage"
+GET_TASK = "GetTask"
+LIST_TASKS = "ListTasks"
+CANCEL_TASK = "CancelTask"
+SUBSCRIBE_TO_TASK = "SubscribeToTask"
+CREATE_TASK_PUSH_NOTIFICATION_CONFIG = "CreateTaskPushNotificationConfig"
+GET_TASK_PUSH_NOTIFICATION_CONFIG = "GetTaskPushNotificationConfig"
+LIST_TASK_PUSH_NOTIFICATION_CONFIGS = "ListTaskPushNotificationConfigs"
+DELETE_TASK_PUSH_NOTIFICATION_CONFIG = "DeleteTaskPushNotificationConfig"
+GET_EXTENDED_AGENT_CARD = "GetExtendedAgentCard"
+
+A2A_METHODS: frozenset[str] = frozenset(
+    {
+        SEND_MESSAGE,
+        SEND_STREAMING_MESSAGE,
+        GET_TASK,
+        LIST_TASKS,
+        CANCEL_TASK,
+        SUBSCRIBE_TO_TASK,
+        CREATE_TASK_PUSH_NOTIFICATION_CONFIG,
+        GET_TASK_PUSH_NOTIFICATION_CONFIG,
+        LIST_TASK_PUSH_NOTIFICATION_CONFIGS,
+        DELETE_TASK_PUSH_NOTIFICATION_CONFIG,
+        GET_EXTENDED_AGENT_CARD,
+    }
+)
+
+__all__ = [
+    "SEND_MESSAGE",
+    "SEND_STREAMING_MESSAGE",
+    "GET_TASK",
+    "LIST_TASKS",
+    "CANCEL_TASK",
+    "SUBSCRIBE_TO_TASK",
+    "CREATE_TASK_PUSH_NOTIFICATION_CONFIG",
+    "GET_TASK_PUSH_NOTIFICATION_CONFIG",
+    "LIST_TASK_PUSH_NOTIFICATION_CONFIGS",
+    "DELETE_TASK_PUSH_NOTIFICATION_CONFIG",
+    "GET_EXTENDED_AGENT_CARD",
+    "A2A_METHODS",
+]

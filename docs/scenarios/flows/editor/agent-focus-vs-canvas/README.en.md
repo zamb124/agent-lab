@@ -8,7 +8,7 @@
 
 ## Step 1. Open the agent in Studio mode
 
-For a single answer-node agent, Studio opens by default: prompt, model, Skills and tools, advanced. A focused screen without the graph canvas.
+For a single answer-node agent, switch to Studio: prompt, model, Skills and tools, advanced. A focused screen without the graph canvas.
 
 ![Open the agent in Studio mode](agent-focus-vs-canvas--01-studio-opened.png)
 

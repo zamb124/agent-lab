@@ -8,96 +8,80 @@ import asyncio
 import uuid
 
 import pytest
+from a2a.helpers.proto_helpers import new_text_part
 from a2a.types import (
     Artifact,
     Message,
     Part,
-    Role,
     TaskArtifactUpdateEvent,
-    TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
-from a2a.utils.message import new_agent_text_message
+from a2a.types.a2a_pb2 import (
+    ROLE_AGENT,
+    TASK_STATE_CANCELED,
+    TASK_STATE_COMPLETED,
+    TASK_STATE_FAILED,
+    TASK_STATE_INPUT_REQUIRED,
+    TASK_STATE_SUBMITTED,
+    TASK_STATE_WORKING,
+)
 
 from apps.flows.config import get_settings
 from apps.flows.src.streaming import Emitter, EventSubscriber, InMemoryEmitter
-from apps.flows.src.streaming.subscriber import TERMINAL_TASK_STATES, is_final_event
+from apps.flows.src.streaming.subscriber import is_final_event
+from core.a2a import TERMINAL_A2A_TASK_STATES, mapping_from_struct, struct_from_mapping
 from core.clients.redis_client import RedisClient
 from core.state import ExecutionState
+
+
+def _status_event(
+    *,
+    state: int,
+    context_id: str = "ctx",
+    task_id: str = "task",
+    metadata: dict[str, object] | None = None,
+    message: Message | None = None,
+) -> TaskStatusUpdateEvent:
+    status = TaskStatus(state=state)
+    if message is not None:
+        status.message.CopyFrom(message)
+    event = TaskStatusUpdateEvent(
+        context_id=context_id,
+        task_id=task_id,
+        status=status,
+    )
+    if metadata:
+        event.metadata.CopyFrom(struct_from_mapping(metadata))
+    return event
 
 
 class TestIsFinalEvent:
     """Тесты для is_final_event()."""
 
-    def test_completed_final_is_final(self):
-        """state=completed + final=True -> финальное событие."""
-        event = TaskStatusUpdateEvent(
-            contextId="ctx",
-            taskId="task",
-            status=TaskStatus(state=TaskState.completed),
-            final=True,
-        )
-        assert is_final_event(event) is True
+    def test_completed_is_final(self):
+        """TASK_STATE_COMPLETED -> финальное событие."""
+        assert is_final_event(_status_event(state=TASK_STATE_COMPLETED)) is True
 
-    def test_failed_final_is_final(self):
-        """state=failed + final=True -> финальное событие."""
-        event = TaskStatusUpdateEvent(
-            contextId="ctx",
-            taskId="task",
-            status=TaskStatus(state=TaskState.failed),
-            final=True,
-        )
-        assert is_final_event(event) is True
+    def test_failed_is_final(self):
+        """TASK_STATE_FAILED -> финальное событие."""
+        assert is_final_event(_status_event(state=TASK_STATE_FAILED)) is True
 
-    def test_input_required_final_is_final(self):
-        """state=input-required + final=True -> финальное событие."""
-        event = TaskStatusUpdateEvent(
-            contextId="ctx",
-            taskId="task",
-            status=TaskStatus(state=TaskState.input_required),
-            final=True,
-        )
-        assert is_final_event(event) is True
+    def test_input_required_is_final(self):
+        """TASK_STATE_INPUT_REQUIRED -> финальное событие."""
+        assert is_final_event(_status_event(state=TASK_STATE_INPUT_REQUIRED)) is True
 
-    def test_canceled_final_is_final(self):
-        """state=canceled + final=True -> финальное событие."""
-        event = TaskStatusUpdateEvent(
-            contextId="ctx",
-            taskId="task",
-            status=TaskStatus(state=TaskState.canceled),
-            final=True,
-        )
-        assert is_final_event(event) is True
+    def test_canceled_is_final(self):
+        """TASK_STATE_CANCELED -> финальное событие."""
+        assert is_final_event(_status_event(state=TASK_STATE_CANCELED)) is True
 
-    def test_working_final_is_not_final(self):
-        """state=working + final=True -> НЕ финальное событие.
-
-        Это ключевой тест! При tool_call LLM эмитит working+final=True,
-        но агент продолжает работу после выполнения tool.
-        """
-        event = TaskStatusUpdateEvent(
-            contextId="ctx",
-            taskId="task",
-            status=TaskStatus(state=TaskState.working),
-            final=True,
-        )
-        assert is_final_event(event) is False
-
-    def test_working_not_final_is_not_final(self):
-        """state=working + final=False -> НЕ финальное событие."""
-        event = TaskStatusUpdateEvent(
-            contextId="ctx",
-            taskId="task",
-            status=TaskStatus(state=TaskState.working),
-            final=False,
-        )
-        assert is_final_event(event) is False
+    def test_working_is_not_final(self):
+        """TASK_STATE_WORKING -> НЕ финальное (tool_call / ping)."""
+        assert is_final_event(_status_event(state=TASK_STATE_WORKING)) is False
 
     @pytest.mark.asyncio
     async def test_ping_event_is_working_non_final(self):
-        """Heartbeat идет как обычный A2A status-update working и не закрывает stream."""
+        """Heartbeat идет как statusUpdate WORKING и не закрывает stream."""
         state = ExecutionState.create(
             task_id="task-ping",
             context_id="ctx-ping",
@@ -111,53 +95,39 @@ class TestIsFinalEvent:
         assert len(emitter.events) == 1
         event = emitter.events[0]
         assert isinstance(event, TaskStatusUpdateEvent)
-        assert event.status.state == TaskState.working
-        assert event.final is False
-        assert event.metadata["platform_ping"] is True
-        assert event.metadata["sequence"] == 7
-        assert is_final_event(event) is False
-
-    def test_completed_not_final_is_not_final(self):
-        """state=completed + final=False -> НЕ финальное событие."""
-        event = TaskStatusUpdateEvent(
-            contextId="ctx",
-            taskId="task",
-            status=TaskStatus(state=TaskState.completed),
-            final=False,
-        )
+        assert event.status.state == TASK_STATE_WORKING
+        meta = mapping_from_struct(event.metadata)
+        assert meta["platform_ping"] is True
+        assert meta["sequence"] == 7
         assert is_final_event(event) is False
 
     def test_artifact_update_is_not_final(self):
         """TaskArtifactUpdateEvent никогда не финальное."""
         artifact = Artifact(
-            artifactId="test-id",
-            parts=[Part(root=TextPart(text="test"))],
+            artifact_id="test-id",
+            parts=[Part(text="test")],
         )
         event = TaskArtifactUpdateEvent(
-            contextId="ctx",
-            taskId="task",
+            context_id="ctx",
+            task_id="task",
             artifact=artifact,
             append=True,
-            last_chunk=True,  # last_chunk НЕ означает финал stream!
+            last_chunk=True,
         )
         assert is_final_event(event) is False
 
     def test_terminal_states_constant(self):
         """Проверяем что все терминальные состояния учтены."""
-        assert "completed" in TERMINAL_TASK_STATES
-        assert "failed" in TERMINAL_TASK_STATES
-        assert "canceled" in TERMINAL_TASK_STATES
-        assert "input-required" in TERMINAL_TASK_STATES
-        assert "working" not in TERMINAL_TASK_STATES
-        assert "submitted" not in TERMINAL_TASK_STATES
+        assert TASK_STATE_COMPLETED in TERMINAL_A2A_TASK_STATES
+        assert TASK_STATE_FAILED in TERMINAL_A2A_TASK_STATES
+        assert TASK_STATE_CANCELED in TERMINAL_A2A_TASK_STATES
+        assert TASK_STATE_WORKING not in TERMINAL_A2A_TASK_STATES
+        assert TASK_STATE_SUBMITTED not in TERMINAL_A2A_TASK_STATES
 
-    def test_agent_handoff_input_required_final_even_when_event_not_final(self):
-        """Handoff pause: collect останавливается, хотя emit_interrupt ставит final=False."""
-        event = TaskStatusUpdateEvent(
-            contextId="ctx",
-            taskId="task",
-            status=TaskStatus(state=TaskState.input_required),
-            final=False,
+    def test_agent_handoff_input_required_is_final(self):
+        """Handoff pause: collect останавливается на input-required + handoff metadata."""
+        event = _status_event(
+            state=TASK_STATE_INPUT_REQUIRED,
             metadata={
                 "platform_handoff_continue": True,
                 "platform_interrupt": {
@@ -168,12 +138,9 @@ class TestIsFinalEvent:
         assert is_final_event(event) is True
 
     def test_operator_task_input_required_is_final(self):
-        """HITL operator_task: подписчик message/stream закрывается; дальше live resubscribe."""
-        event = TaskStatusUpdateEvent(
-            contextId="ctx",
-            taskId="task",
-            status=TaskStatus(state=TaskState.input_required),
-            final=True,
+        """HITL operator_task: подписчик SendStreamingMessage закрывается."""
+        event = _status_event(
+            state=TASK_STATE_INPUT_REQUIRED,
             metadata={
                 "platform_interrupt": {
                     "body": {"kind": "operator_task"},
@@ -184,11 +151,8 @@ class TestIsFinalEvent:
 
     def test_operator_task_input_required_final_even_when_legacy_continue_flag(self):
         """Legacy platform_handoff_continue на operator_task всё равно final (resubscribe)."""
-        event = TaskStatusUpdateEvent(
-            contextId="ctx",
-            taskId="task",
-            status=TaskStatus(state=TaskState.input_required),
-            final=False,
+        event = _status_event(
+            state=TASK_STATE_INPUT_REQUIRED,
             metadata={
                 "platform_handoff_continue": True,
                 "platform_interrupt": {
@@ -210,16 +174,16 @@ class TestStreamingWithToolCalls:
         return RedisClient(settings.database.redis_url)
 
     @pytest.mark.asyncio
-    async def test_subscriber_continues_after_working_final(self, redis_client):
+    async def test_subscriber_continues_after_working(self, redis_client):
         """
-        Подписчик НЕ прекращает подписку при working+final=True.
+        Подписчик НЕ прекращает подписку при WORKING.
 
         Сценарий:
-        1. LLM решает вызвать tool -> working + final=True
+        1. LLM решает вызвать tool -> WORKING
         2. Tool выполняется
-        3. LLM отвечает -> completed + final=True
+        3. LLM отвечает -> COMPLETED
 
-        Подписчик должен дождаться completed, а не прекратить на working.
+        Подписчик должен дождаться COMPLETED, а не прекратить на WORKING.
         """
         await redis_client.connect()
 
@@ -230,7 +194,7 @@ class TestStreamingWithToolCalls:
             task_id=task_id,
             context_id=context_id,
             user_id="test-user",
-            session_id=f"test-agent:{context_id}"
+            session_id=f"test-agent:{context_id}",
         )
         emitter = Emitter(redis_client, state)
         subscriber = EventSubscriber(redis_client)
@@ -246,70 +210,77 @@ class TestStreamingWithToolCalls:
             await ready_event.wait()
             await asyncio.sleep(0.05)
 
-            # 1. Промежуточное событие: tool call (working + final=True)
             tool_call_msg = Message(
                 message_id=str(uuid.uuid4()),
-                role=Role.agent,
-                parts=[Part(root=TextPart(text="Calling tool..."))],
-                metadata={"tool_calls": [{"id": "call_1", "name": "calculator"}]},
+                role=ROLE_AGENT,
+                parts=[new_text_part("Calling tool...")],
             )
-            await emitter.emit(TaskStatusUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
-                status=TaskStatus(state=TaskState.working, message=tool_call_msg),
-                final=True,  # Раньше это прекращало подписку!
-            ))
+            tool_call_msg.metadata.CopyFrom(
+                struct_from_mapping({"tool_calls": [{"id": "call_1", "name": "calculator"}]})
+            )
+            await emitter.emit(
+                _status_event(
+                    state=TASK_STATE_WORKING,
+                    context_id=context_id,
+                    task_id=task_id,
+                    message=tool_call_msg,
+                )
+            )
 
-            # 2. Текстовые чанки от LLM
             artifact1 = Artifact(
-                artifactId="art1",
-                parts=[Part(root=TextPart(text="Result: "))],
+                artifact_id="art1",
+                parts=[Part(text="Result: ")],
             )
-            await emitter.emit(TaskArtifactUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
-                artifact=artifact1,
-                append=True,
-                last_chunk=False,
-            ))
+            await emitter.emit(
+                TaskArtifactUpdateEvent(
+                    context_id=context_id,
+                    task_id=task_id,
+                    artifact=artifact1,
+                    append=True,
+                    last_chunk=False,
+                )
+            )
 
             artifact2 = Artifact(
-                artifactId="art2",
-                parts=[Part(root=TextPart(text="42"))],
+                artifact_id="art2",
+                parts=[Part(text="42")],
             )
-            await emitter.emit(TaskArtifactUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
-                artifact=artifact2,
-                append=True,
-                last_chunk=True,
-            ))
+            await emitter.emit(
+                TaskArtifactUpdateEvent(
+                    context_id=context_id,
+                    task_id=task_id,
+                    artifact=artifact2,
+                    append=True,
+                    last_chunk=True,
+                )
+            )
 
-            # 3. Финальное событие (completed + final=True)
-            await emitter.emit(TaskStatusUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
-                status=TaskStatus(state=TaskState.completed, message=new_agent_text_message("Done")),
-                final=True,
-            ))
+            done_msg = Message(
+                message_id=str(uuid.uuid4()),
+                role=ROLE_AGENT,
+                parts=[Part(text="Done")],
+            )
+            await emitter.emit(
+                _status_event(
+                    state=TASK_STATE_COMPLETED,
+                    context_id=context_id,
+                    task_id=task_id,
+                    message=done_msg,
+                )
+            )
 
         try:
             await asyncio.gather(collect(), emit_sequence())
 
-            # Проверяем что получили ВСЕ события, а не только первое
             assert len(collected_events) == 4
 
-            # Первое - working (tool call)
             assert isinstance(collected_events[0], TaskStatusUpdateEvent)
-            assert collected_events[0].status.state == TaskState.working
+            assert collected_events[0].status.state == TASK_STATE_WORKING
 
-            # Второе и третье - artifact updates
             assert isinstance(collected_events[1], TaskArtifactUpdateEvent)
             assert isinstance(collected_events[2], TaskArtifactUpdateEvent)
 
-            # Последнее - completed (финальное)
             assert isinstance(collected_events[3], TaskStatusUpdateEvent)
-            assert collected_events[3].status.state == TaskState.completed
-            assert collected_events[3].final is True
+            assert collected_events[3].status.state == TASK_STATE_COMPLETED
         finally:
             await redis_client.close()

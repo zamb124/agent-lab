@@ -1,37 +1,38 @@
 """
-A2AChannel - реализация A2A протокола.
-
-Полная поддержка A2A спецификации через a2a-sdk.
+A2AChannel — реализация A2A Protocol 1.0 (protobuf / a2a-sdk 1.x).
 """
+
+from __future__ import annotations
 
 import asyncio
 import json
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
 from typing import override
 
+from a2a.helpers.proto_helpers import get_message_text, new_data_part, new_text_part
 from a2a.types import (
-    AgentCard,
     Artifact,
-    DataPart,
-    DeleteTaskPushNotificationConfigParams,
-    GetTaskPushNotificationConfigParams,
-    ListTaskPushNotificationConfigParams,
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
+    ListTasksRequest,
+    ListTasksResponse,
     Message,
-    MessageSendParams,
     Part,
+    Role,
+    SendMessageRequest,
+    SubscribeToTaskRequest,
     Task,
     TaskArtifactUpdateEvent,
-    TaskIdParams,
     TaskPushNotificationConfig,
-    TaskQueryParams,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
-from a2a.utils.message import get_message_text, new_agent_text_message
 
 from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.channels.base import BaseChannel
@@ -42,6 +43,7 @@ from apps.flows.src.files import (
     format_a2a_files_content,
     transcribe_incoming_audio_files,
 )
+from apps.flows.src.files.ssrf_fetch import fetch_public_url_bytes
 from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.streaming.base import StreamEvent
@@ -49,8 +51,15 @@ from apps.flows.src.streaming.subscriber import EventSubscriber
 from apps.flows.src.utils import extract_json_from_response
 from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
+from core.a2a import (
+    get_part_text,
+    is_terminal_a2a_task_state,
+    make_task_status,
+    mapping_from_struct,
+    part_has_text,
+)
 from core.config.testing import is_testing
-from core.context import set_current_channel
+from core.context import require_context, set_current_channel
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.file_ref import FileRef, file_id_from_download_url
 from core.files.registry import default_retention_for_source
@@ -63,42 +72,45 @@ from core.tasks.push_notifications import (
     list_push_configs,
     set_push_config,
 )
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject
 from core.worktracker.models import build_conversation_ref
 
 logger = get_logger(__name__)
 
 
-def _task_needs_live_resubscribe_tail(task: Task) -> bool:
+def _task_needs_live_subscribe_tail(task: Task) -> bool:
     """True — после snapshot нужен live Redis tail (задача ещё не terminal)."""
-    state = task.status.state
-    if state in (
-        TaskState.completed,
-        TaskState.failed,
-        TaskState.canceled,
-        TaskState.rejected,
-    ):
-        return False
-    return True
+    if not task.HasField("status"):
+        return True
+    return not is_terminal_a2a_task_state(task.status.state)
 
 
 def _text_part(text: str) -> Part:
-    return Part(root=TextPart(text=text))
+    return new_text_part(text)
 
 
 def _data_part(data: JsonObject) -> Part:
-    return Part(root=DataPart(data=data))
+    return new_data_part(data)
 
 
 def _part_text(part: Part) -> str | None:
-    root = part.root
-    return root.text if isinstance(root, TextPart) else None
-
-
-def _message_metadata(params: MessageSendParams) -> JsonObject | None:
-    if params.metadata is None:
+    if not part_has_text(part):
         return None
-    return require_json_object(params.metadata, "a2a.message.metadata")
+    return get_part_text(part)
+
+
+def _agent_text_message(text: str) -> Message:
+    return Message(
+        message_id=str(uuid.uuid4()),
+        role=Role.ROLE_AGENT,
+        parts=[_text_part(text)],
+    )
+
+
+def _message_metadata(params: SendMessageRequest) -> JsonObject | None:
+    if not params.HasField("metadata"):
+        return None
+    return mapping_from_struct(params.metadata)
 
 
 def _branch_id_from_message_metadata(metadata: JsonObject | None) -> str:
@@ -112,18 +124,11 @@ def _branch_id_from_message_metadata(metadata: JsonObject | None) -> str:
     return branch.strip()
 
 
-def _is_async_message_send(metadata: JsonObject | None) -> bool:
-    """Совместимый async-режим для A2A message/send без ожидания финального результата."""
-    if not metadata:
+def _should_return_immediately(params: SendMessageRequest) -> bool:
+    """A2A 1.0: SendMessageConfiguration.return_immediately (default false = blocking)."""
+    if not params.HasField("configuration"):
         return False
-    for key in ("execution_mode", "mode"):
-        raw = metadata.get(key)
-        if raw is None:
-            continue
-        if not isinstance(raw, str):
-            raise ValueError(f"a2a.message.metadata.{key} must be a string")
-        return raw.strip().lower() in {"async", "background"}
-    return False
+    return bool(params.configuration.return_immediately)
 
 
 async def _build_task_from_events(
@@ -134,13 +139,7 @@ async def _build_task_from_events(
     flow_id: str,
     container: FlowRuntimeContainer | None = None,
 ) -> Task:
-    """
-    Строит Task из накопленных событий.
-
-    Извлекает artifacts, status, response из событий и формирует Task по A2A SDK.
-    Разделяет артефакты по именам (response vs reasoning).
-    Загружает существующую историю из state для multi-turn сценариев.
-    """
+    """Строит Task из накопленных A2A 1.0 событий."""
     artifacts_dict: dict[str, Artifact] = {}
     final_status: TaskStatus | None = None
     response_parts: list[str] = []
@@ -148,7 +147,7 @@ async def _build_task_from_events(
 
     for event in events:
         if isinstance(event, TaskArtifactUpdateEvent):
-            if event.artifact:
+            if event.HasField("artifact"):
                 artifact_name = event.artifact.name or "response"
                 for part in event.artifact.parts:
                     text = _part_text(part)
@@ -165,13 +164,18 @@ async def _build_task_from_events(
                                 response_parts = [text]
         else:
             task_state = event.status.state
-            if task_state == TaskState.input_required:
+            if task_state == TaskState.TASK_STATE_INPUT_REQUIRED:
                 final_status = event.status
-            elif event.final:
+            elif is_terminal_a2a_task_state(task_state):
                 final_status = event.status
 
     response_text = "".join(response_parts)
-    if not response_text and final_status and final_status.message and final_status.message.parts:
+    if (
+        not response_text
+        and final_status is not None
+        and final_status.HasField("message")
+        and final_status.message.parts
+    ):
         status_message_parts: list[str] = []
         for part in final_status.message.parts:
             text = _part_text(part)
@@ -187,12 +191,8 @@ async def _build_task_from_events(
             parts=[_text_part(reasoning_text)],
         )
 
-    # Проверяем есть ли JSON в ответе
     json_data = extract_json_from_response(response_text)
 
-    # Создаем response artifact:
-    # 1. Для JSON данных - как DataPart (всегда создаем если найден JSON)
-    # 2. Для текстовых ответов - только если есть reasoning (чтобы разделить reasoning и response)
     if json_data is not None:
         artifacts_dict["response"] = Artifact(
             artifact_id=str(uuid.uuid4()),
@@ -209,21 +209,19 @@ async def _build_task_from_events(
     artifacts = list(artifacts_dict.values())
 
     if final_status is None:
-        final_status = TaskStatus(
-            state=TaskState.completed,
-            message=new_agent_text_message(response_text) if response_text else None,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+        raise ValueError(
+            f"A2A stream for task {task_id!r} ended without a terminal TaskStatusUpdateEvent"
         )
 
-    # Загружаем существующую историю из state для multi-turn сценариев
     session_id = f"{flow_id}:{context_id}"
     existing_history: list[Message] = []
     if container is not None:
         state = await container.workflow_runtime.get_state(session_id)
-        existing_history = state.messages if state else []
+        existing_history = list(state.messages) if state else []
 
-    # Устанавливаем task_id в input_message для истории
-    history_message = input_message.model_copy(update={"task_id": task_id})
+    history_message = Message()
+    history_message.CopyFrom(input_message)
+    history_message.task_id = task_id
 
     for msg in existing_history:
         if not msg.task_id:
@@ -231,50 +229,48 @@ async def _build_task_from_events(
 
     history: list[Message] = [*existing_history, history_message]
 
-    if response_text and final_status.state == TaskState.completed:
-        agent_message = new_agent_text_message(response_text)
+    if response_text and final_status.state == TaskState.TASK_STATE_COMPLETED:
+        agent_message = _agent_text_message(response_text)
         agent_message.task_id = task_id
         history.append(agent_message)
-    elif final_status.state == TaskState.input_required and final_status.message:
-        agent_message = final_status.message
+    elif (
+        final_status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+        and final_status.HasField("message")
+    ):
+        agent_message = Message()
+        agent_message.CopyFrom(final_status.message)
         if not agent_message.task_id:
-            agent_message = agent_message.model_copy(update={"task_id": task_id})
+            agent_message.task_id = task_id
         history.append(agent_message)
 
-    # Когда есть artifacts (response/reasoning), не дублируем ответ в status.message.
-    # Сохраняем message для input_required (вопрос), failed/canceled (текст ошибки для клиента).
     if (
         artifacts
-        and final_status.message
+        and final_status.HasField("message")
         and final_status.state
         not in (
-            TaskState.input_required,
-            TaskState.failed,
-            TaskState.canceled,
+            TaskState.TASK_STATE_INPUT_REQUIRED,
+            TaskState.TASK_STATE_FAILED,
+            TaskState.TASK_STATE_CANCELED,
         )
     ):
-        timestamp = final_status.timestamp or datetime.now(timezone.utc).isoformat()
-        final_status = TaskStatus(
-            state=final_status.state,
-            timestamp=timestamp,
-            message=None,
-        )
+        cleared = make_task_status(final_status.state)
+        if final_status.HasField("timestamp"):
+            cleared.timestamp.CopyFrom(final_status.timestamp)
+        final_status = cleared
 
-    return Task(
+    task = Task(
         id=task_id,
         context_id=context_id,
         status=final_status,
-        artifacts=artifacts if artifacts else None,
-        history=history,
     )
+    if artifacts:
+        task.artifacts.extend(artifacts)
+    task.history.extend(history)
+    return task
 
 
 class A2AChannel(BaseChannel):
-    """
-    A2A канал коммуникации.
-
-    Полная реализация A2A протокола через a2a-sdk.
-    """
+    """A2A канал коммуникации (Protocol 1.0)."""
 
     name: str = "a2a"
 
@@ -285,11 +281,6 @@ class A2AChannel(BaseChannel):
         buttons: list[str] | None = None,
         attachments: list[JsonObject] | None = None,
     ) -> None:
-        """
-        Отправляет сообщение пользователю через A2A.
-
-        В A2A это делается через emit событий в Redis Pub/Sub.
-        """
         _ = buttons, attachments
         if not self.context:
             logger.warning("Cannot send_to_user: no context available")
@@ -317,11 +308,6 @@ class A2AChannel(BaseChannel):
         self,
         prepared: PreparedTaskParams,
     ) -> AsyncGenerator[TaskStatusUpdateEvent, None]:
-        """A2A Section 3.4.3: продолжение диалога при input-required с operator takeover.
-
-        Маршрутизирует текст пользователя в dialog_log без запуска flow.
-        Возвращает status-update input-required (задача остаётся в ожидании оператора).
-        """
         if self.context is None or self.context.active_company is None:
             raise ValueError("A2A takeover reply requires active_company in context")
         company_id = self.context.active_company.company_id
@@ -356,15 +342,14 @@ class A2AChannel(BaseChannel):
         yield TaskStatusUpdateEvent(
             task_id=prepared.task_id,
             context_id=prepared.context_id,
-            status=TaskStatus(
-                state=TaskState.input_required,
-                message=new_agent_text_message(prepared.content),
+            status=make_task_status(
+                TaskState.TASK_STATE_INPUT_REQUIRED,
+                message=_agent_text_message(prepared.content),
             ),
-            final=True,
         )
 
     async def _persist_incoming_a2a_files(self, message: Message) -> tuple[list[FileRef], str]:
-        """Байты FileWithBytes -> S3 + FileRecord; FileWithUri -> canonical url в state."""
+        """Part.raw → S3; Part.url platform download → file_id; external url → SSRF-safe fetch."""
         incoming = extract_incoming_a2a_files(message)
         if not incoming:
             return [], ""
@@ -377,75 +362,63 @@ class A2AChannel(BaseChannel):
         company_id = self.context.active_company.company_id
         files_data: list[FileRef] = []
 
-        context_id = message.context_id
-        if not isinstance(context_id, str) or not context_id.strip():
-            raise ValueError("A2A FileWithBytes требует message.context_id для FLOW_SESSION")
-        session_id = f"{self.flow_id}:{context_id.strip()}"
+        context_id = message.context_id.strip()
+        if not context_id:
+            raise ValueError("A2A Part.raw/url требует message.context_id для FLOW_SESSION")
+        session_id = f"{self.flow_id}:{context_id}"
 
         for inc in incoming:
-            if inc.data is not None:
-                if not inc.content_type or not inc.content_type.strip():
-                    raise ValueError("FileWithBytes.content_type обязателен для state.files")
-                spec = FileCreateSpec(
-                    source_kind=FileSourceKind.FLOW_SESSION,
-                    source_ref=FileSourceRef(
-                        session_id=session_id,
-                        flow_id=self.flow_id,
-                    ),
-                    retention=default_retention_for_source(FileSourceKind.FLOW_SESSION),
-                    post_create=FilePostCreate(is_public=False),
-                )
-                record = await self.container.files_service.create(
-                    spec=spec,
-                    data=inc.data,
-                    original_name=inc.original_name,
-                    content_type=inc.content_type.strip(),
-                )
-                item = FileRef.from_record(record)
-                files_data.append(item)
-            else:
+            data = inc.data
+            content_type = inc.content_type
+            if data is None:
                 if not inc.uri:
-                    raise ValueError("FileWithUri без uri")
-                if not inc.content_type or not inc.content_type.strip():
-                    raise ValueError("FileWithUri.content_type обязателен для state.files")
+                    raise ValueError("Part.url без uri")
                 linked_file_id = file_id_from_download_url(inc.uri)
                 if linked_file_id:
                     record = await self.container.files_service.get_optional(linked_file_id)
                     if record is None:
-                        raise ValueError(f"FileWithUri с неизвестным file_id: {linked_file_id}")
+                        raise ValueError(f"Part.url с неизвестным file_id: {linked_file_id}")
                     if record.company_id != company_id:
-                        raise ValueError("FileWithUri file_id не принадлежит активной компании")
-                    item = FileRef(
-                        file_id=record.file_id,
-                        original_name=record.original_name,
-                        url=record.download_url if record.download_url is not None else inc.uri,
-                        content_type=record.content_type,
-                        file_size=record.file_size,
-                        checksum=record.checksum,
-                        is_public=record.is_public,
+                        raise ValueError("Part.url file_id не принадлежит активной компании")
+                    files_data.append(
+                        FileRef(
+                            file_id=record.file_id,
+                            original_name=record.original_name,
+                            url=record.download_url if record.download_url is not None else inc.uri,
+                            content_type=record.content_type,
+                            file_size=record.file_size,
+                            checksum=record.checksum,
+                            is_public=record.is_public,
+                        )
                     )
-                else:
-                    item = FileRef(
-                        original_name=inc.original_name,
-                        url=inc.uri,
-                        content_type=inc.content_type.strip(),
-                        file_size=inc.file_size,
-                    )
-                files_data.append(item)
+                    continue
+                # External URL: SSRF-safe fetch in channel persist path.
+                data, fetched_ct = await fetch_public_url_bytes(inc.uri)
+                if content_type is None or not content_type.strip():
+                    content_type = fetched_ct
+
+            if not content_type or not content_type.strip():
+                raise ValueError("Part.raw/url content_type (media_type) обязателен для state.files")
+            spec = FileCreateSpec(
+                source_kind=FileSourceKind.FLOW_SESSION,
+                source_ref=FileSourceRef(
+                    session_id=session_id,
+                    flow_id=self.flow_id,
+                ),
+                retention=default_retention_for_source(FileSourceKind.FLOW_SESSION),
+                post_create=FilePostCreate(is_public=False),
+            )
+            record = await self.container.files_service.create(
+                spec=spec,
+                data=data,
+                original_name=inc.original_name,
+                content_type=content_type.strip(),
+            )
+            files_data.append(FileRef.from_record(record))
 
         return files_data, format_a2a_files_content(files_data)
 
-    async def _transcribe_incoming_audio(
-        self, files_data: list[FileRef]
-    ) -> str:
-        """
-        Авто-STT для входящих audio-вложений (`audio/*` по mime/расширению).
-
-        Единая точка для A2A SDK/CLI, embed-chat и нашего чата: все они идут
-        через `_persist_incoming_a2a_files`, поэтому транскрипция делается
-        один раз тут. Провайдер STT и модель резолвит `voice_resolver`
-        (override → company → deployment-default).
-        """
+    async def _transcribe_incoming_audio(self, files_data: list[FileRef]) -> str:
         if not self.context or not self.context.active_company:
             raise ValueError(
                 "Авто-STT входящих audio-вложений требует active_company в контексте запроса"
@@ -457,9 +430,8 @@ class A2AChannel(BaseChannel):
         )
 
     async def _prepare_a2a_params(
-        self, params: MessageSendParams, metadata: JsonObject | None = None
+        self, params: SendMessageRequest, metadata: JsonObject | None = None
     ) -> PreparedTaskParams:
-        """Подготовка параметров специфичных для A2A."""
         message = params.message
         content = get_message_text(message)
 
@@ -473,31 +445,37 @@ class A2AChannel(BaseChannel):
 
         prepared = await self._prepare_task_params(
             content=content,
-            context_id=message.context_id,
-            task_id=message.task_id,
+            context_id=message.context_id or None,
+            task_id=message.task_id or None,
             message=message,
             metadata=metadata if metadata is not None else _message_metadata(params),
             files_data=files_data,
         )
-
         return prepared
+
+    async def _register_push_from_send_configuration(
+        self,
+        params: SendMessageRequest,
+        *,
+        task_id: str,
+    ) -> None:
+        """A2A 1.0: configuration.task_push_notification_config до старта task."""
+        if not params.HasField("configuration"):
+            return
+        configuration = params.configuration
+        if not configuration.HasField("task_push_notification_config"):
+            return
+        push_cfg = TaskPushNotificationConfig()
+        push_cfg.CopyFrom(configuration.task_push_notification_config)
+        push_cfg.task_id = task_id
+        if not push_cfg.url.strip():
+            raise ValueError("SendMessageConfiguration.task_push_notification_config.url is required")
+        _ = await set_push_config(push_cfg)
 
     @override
     async def on_message_send(
-        self, params: MessageSendParams, context: ChannelRequestContext = None
+        self, params: SendMessageRequest, context: ChannelRequestContext = None
     ) -> Task | Message:
-        """
-        По умолчанию совместимый синхронный режим: кикает task и собирает события через collect().
-        Если metadata.execution_mode == "async", возвращает submitted Task сразу; результат
-        забирается через tasks/get по task_id или context_id.
-
-        ВАЖНО: подписка на канал ПЕРЕД киком задачи, иначе race condition -
-        события могут быть опубликованы до подписки и потеряны.
-
-        Аргументы:
-            params: параметры сообщения
-            context: контекст с user_groups для проверки permissions
-        """
         set_current_channel(self)
 
         metadata = _message_metadata(params)
@@ -505,8 +483,8 @@ class A2AChannel(BaseChannel):
         await self.check_permissions(self._get_user_groups_from_context(context), branch_for_perm)
 
         prepared = await self._prepare_a2a_params(params, metadata)
+        await self._register_push_from_send_configuration(params, task_id=prepared.task_id)
 
-        # A2A Section 3.4.3: продолжение диалога при активном operator takeover
         if prepared.is_takeover_user_reply:
             events: list[StreamEvent] = [
                 event async for event in self._handle_takeover_user_reply(prepared)
@@ -522,34 +500,34 @@ class A2AChannel(BaseChannel):
                 container=self.container,
             )
 
-        if _is_async_message_send(metadata):
+        if _should_return_immediately(params):
             await self.create_task(prepared)
-            return Task(
+            task = Task(
                 id=prepared.task_id,
                 context_id=prepared.context_id,
-                status=TaskStatus(
-                    state=TaskState.submitted,
-                    message=new_agent_text_message("Task submitted"),
+                status=make_task_status(
+                    TaskState.TASK_STATE_SUBMITTED,
+                    message=_agent_text_message("Task submitted"),
                 ),
-                history=[prepared.message] if prepared.message is not None else None,
             )
+            if prepared.message is not None:
+                task.history.append(prepared.message)
+            return task
 
-        # В testing flows/integration и sandbox cold start могут занимать >30с до первого события.
         timeout = 120.0 if is_testing() else 300.0
-
         subscriber = EventSubscriber(self.container.redis_client)
         ready_event = asyncio.Event()
 
-        async def collect_with_subscription():
-            return await subscriber.collect(prepared.task_id, timeout=timeout, ready_event=ready_event)
+        async def collect_with_subscription() -> list[StreamEvent]:
+            return await subscriber.collect(
+                prepared.task_id, timeout=timeout, ready_event=ready_event
+            )
 
         collect_task = asyncio.create_task(collect_with_subscription())
-
         _ = await ready_event.wait()
 
         logger.debug(f"[A2A] Subscribed to stream:{prepared.task_id}, kicking task")
         await self.create_task(prepared)
-
         events = await collect_task
 
         logger.debug(f"[A2A] Collected {len(events)} events for task {prepared.task_id}")
@@ -567,21 +545,8 @@ class A2AChannel(BaseChannel):
 
     @override
     async def on_message_stream(
-        self, params: MessageSendParams, context: ChannelRequestContext = None
+        self, params: SendMessageRequest, context: ChannelRequestContext = None
     ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
-        """
-        Streaming выполнение — генерирует события по мере генерации через Redis Pub/Sub.
-
-        ВАЖНО: подписка на канал ПЕРЕД киком задачи, иначе race condition.
-
-        A2A input-required, продолжение диалога (Section 3.4.3):
-        при активном operator takeover реплика пользователя маршрутизируется в dialog_log
-        без запуска flow; SSE отдаёт единственный status-update input-required.
-
-        Аргументы:
-            params: параметры сообщения
-            context: контекст с user_groups для проверки прав доступа
-        """
         set_current_channel(self)
 
         metadata = _message_metadata(params)
@@ -589,19 +554,21 @@ class A2AChannel(BaseChannel):
         await self.check_permissions(self._get_user_groups_from_context(context), branch_for_perm)
 
         prepared = await self._prepare_a2a_params(params, metadata)
+        await self._register_push_from_send_configuration(params, task_id=prepared.task_id)
 
-        # A2A Section 3.4.3: продолжение диалога при активном operator takeover
         if prepared.is_takeover_user_reply:
             async for event in self._handle_takeover_user_reply(prepared):
                 yield event
             return
 
-        logger.info(f"[on_message_stream] Prepared task_id={prepared.task_id}, subscribing to Redis...")
+        logger.info(
+            f"[on_message_stream] Prepared task_id={prepared.task_id}, subscribing to Redis..."
+        )
         subscriber = EventSubscriber(self.container.redis_client)
         event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         ready_event = asyncio.Event()
 
-        async def collect_events():
+        async def collect_events() -> None:
             async for event in subscriber.subscribe(prepared.task_id, ready_event=ready_event):
                 await event_queue.put(event)
             await event_queue.put(None)
@@ -624,22 +591,23 @@ class A2AChannel(BaseChannel):
 
     @override
     async def on_get_task(
-        self, params: TaskQueryParams, context: ChannelRequestContext = None
+        self, params: GetTaskRequest, context: ChannelRequestContext = None
     ) -> Task | None:
-        """Получение задачи по ID."""
         _ = context
         task = await self._get_task_from_state(params.id)
-
-        if task and params.history_length and task.history:
-            task.history = task.history[-params.history_length :]
-
+        if task is None:
+            return None
+        if params.history_length and task.history:
+            # protobuf repeated: truncate in place via slice copy
+            kept = list(task.history)[-params.history_length :]
+            del task.history[:]
+            task.history.extend(kept)
         return task
 
     @override
     async def on_cancel_task(
-        self, params: TaskIdParams, context: ChannelRequestContext = None
+        self, params: CancelTaskRequest, context: ChannelRequestContext = None
     ) -> Task | None:
-        """Отмена задачи. Ставит Redis-ключ для остановки воркера на следующем такте."""
         _ = context
         logger.info(f"Cancel task: {params.id}")
 
@@ -662,40 +630,97 @@ class A2AChannel(BaseChannel):
         return task
 
     @override
-    async def on_resubscribe_to_task(
-        self, params: TaskIdParams, context: ChannelRequestContext = None
+    async def on_subscribe_to_task(
+        self, params: SubscribeToTaskRequest, context: ChannelRequestContext = None
     ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
-        """Snapshot Task + живой tail Redis `stream:{task_id}` до финального события.
-
-        Нужен для HITL: после `input-required` (operator_task) исходный
-        `message/stream` обрывается вместе с worker'ом; user и operator
-        переподписываются сюда и получают mid-dialog / resume события.
-        """
+        """Snapshot Task + живой tail Redis `stream:{task_id}` до финального события."""
         _ = context
         set_current_channel(self)
-        task = await self.on_get_task(TaskQueryParams(id=params.id))
+        task = await self.on_get_task(GetTaskRequest(id=params.id))
         if task is None:
             return
         yield task
-        if not _task_needs_live_resubscribe_tail(task):
+        if not _task_needs_live_subscribe_tail(task):
             return
 
-        timeout = 120.0 if is_testing() else float(get_flows_settings().default_flow_timeout_seconds)
+        timeout = (
+            120.0 if is_testing() else float(get_flows_settings().default_flow_timeout_seconds)
+        )
         subscriber = EventSubscriber(self.container.redis_client)
         logger.info(
-            "a2a.resubscribe.live_tail",
+            "a2a.subscribe.live_tail",
             task_id=task.id,
-            task_state=task.status.state.value if task.status and task.status.state else None,
+            task_state=task.status.state if task.HasField("status") else None,
             timeout_seconds=timeout,
         )
         async for event in subscriber.subscribe(task.id, timeout=timeout):
             yield event
 
     @override
-    async def on_set_task_push_notification_config(
+    async def on_list_tasks(
+        self, params: ListTasksRequest, context: ChannelRequestContext = None
+    ) -> ListTasksResponse:
+        """ListTasks: сессии flow, видимые текущему user/company (search_sessions)."""
+        _ = context
+        ctx = require_context()
+        user_id = ctx.user.user_id
+        if not user_id:
+            raise ValueError("ListTasks requires authenticated user")
+
+        offset = 0
+        if params.page_token.strip():
+            try:
+                offset = int(params.page_token.strip())
+            except ValueError as exc:
+                raise ValueError("Invalid ListTasks page_token") from exc
+            if offset < 0:
+                raise ValueError("page_token must be >= 0")
+
+        page_size = params.page_size if params.page_size > 0 else 50
+        if page_size > 200:
+            page_size = 200
+
+        sessions, total = await self.container.workflow_runtime.search_sessions(
+            user_id=user_id,
+            flow_id=self.flow_id,
+            limit=page_size,
+            offset=offset,
+        )
+
+        # next_page_token REQUIRED в A2A 1.0 (пустая строка = конец списка)
+        response = ListTasksResponse(
+            page_size=page_size,
+            total_size=total,
+            next_page_token="",
+        )
+        for session in sessions:
+            context_id = session.context_id
+            if not context_id:
+                continue
+            if params.context_id and context_id != params.context_id:
+                continue
+            task = await self._get_task_from_state(context_id)
+            if task is None:
+                continue
+            if params.status and task.HasField("status") and task.status.state != params.status:
+                continue
+            if not params.include_artifacts and task.artifacts:
+                del task.artifacts[:]
+            if params.history_length and task.history:
+                kept = list(task.history)[-params.history_length :]
+                del task.history[:]
+                task.history.extend(kept)
+            response.tasks.append(task)
+
+        next_offset = offset + page_size
+        if next_offset < total:
+            response.next_page_token = str(next_offset)
+        return response
+
+    @override
+    async def on_create_task_push_notification_config(
         self, params: TaskPushNotificationConfig, context: ChannelRequestContext = None
     ) -> TaskPushNotificationConfig:
-        """Установка конфигурации push notification."""
         _ = context
         config = await set_push_config(params)
         logger.info(f"Set push notification config for task: {params.task_id}")
@@ -704,46 +729,37 @@ class A2AChannel(BaseChannel):
     @override
     async def on_get_task_push_notification_config(
         self,
-        params: GetTaskPushNotificationConfigParams,
+        params: GetTaskPushNotificationConfigRequest,
         context: ChannelRequestContext = None,
     ) -> TaskPushNotificationConfig | None:
-        """Получение конфигурации push notification."""
         _ = context
         config = await get_push_config(params)
-        logger.info(f"Get push notification config for task: {params.id}")
+        logger.info(f"Get push notification config for task: {params.task_id}")
         return config
 
     @override
-    async def on_list_task_push_notification_config(
+    async def on_list_task_push_notification_configs(
         self,
-        params: ListTaskPushNotificationConfigParams,
+        params: ListTaskPushNotificationConfigsRequest,
         context: ChannelRequestContext = None,
-    ) -> list[TaskPushNotificationConfig]:
-        """Список конфигураций push notification."""
+    ) -> ListTaskPushNotificationConfigsResponse:
         _ = context
-        configs = await list_push_configs(params)
-        logger.info(f"List push notification configs for task: {params.id}, found: {len(configs)}")
-        return configs
+        result = await list_push_configs(params)
+        logger.info(
+            "List push notification configs for task: %s, found: %s",
+            params.task_id,
+            len(result.configs),
+        )
+        return result
 
     @override
     async def on_delete_task_push_notification_config(
         self,
-        params: DeleteTaskPushNotificationConfigParams,
+        params: DeleteTaskPushNotificationConfigRequest,
         context: ChannelRequestContext = None,
     ) -> None:
-        """Удаление конфигурации push notification."""
         _ = context
         await delete_push_config(params)
         logger.info(
-            f"Deleted push notification config: {params.push_notification_config_id} for task: {params.id}"
+            f"Deleted push notification config: {params.id} for task: {params.task_id}"
         )
-
-    @override
-    async def on_get_authenticated_extended_card(
-        self,
-        params: JsonObject,
-        context: ChannelRequestContext = None,
-    ) -> AgentCard | None:
-        """Получение расширенной карточки агента."""
-        _ = params, context
-        return None

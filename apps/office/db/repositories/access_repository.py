@@ -74,9 +74,9 @@ class OfficeAccessRepository:
             await session.refresh(row)
             return row
 
-    async def set_binding_link(
+    async def set_document_link(
         self,
-        binding_id: str,
+        file_id: str,
         *,
         link_enabled: bool,
         link_token_hash: str | None,
@@ -85,7 +85,7 @@ class OfficeAccessRepository:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding).where(
-                    OfficeDocumentBinding.binding_id == binding_id,
+                    OfficeDocumentBinding.file_id == file_id,
                     OfficeDocumentBinding.deleted_at.is_(None),
                 )
             )
@@ -100,20 +100,20 @@ class OfficeAccessRepository:
             await session.refresh(row)
             return row
 
-    async def list_binding_members(self, binding_id: str) -> list[OfficeBindingMember]:
+    async def list_document_members(self, file_id: str) -> list[OfficeBindingMember]:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeBindingMember).where(
-                    OfficeBindingMember.binding_id == binding_id,
+                    OfficeBindingMember.file_id == file_id,
                 )
             )
             return list(result.scalars().all())
 
-    async def add_binding_member(self, binding_id: str, user_id: str) -> OfficeBindingMember:
+    async def add_document_member(self, file_id: str, user_id: str) -> OfficeBindingMember:
         async with self._db.session() as session:
             existing = await session.execute(
                 select(OfficeBindingMember).where(
-                    OfficeBindingMember.binding_id == binding_id,
+                    OfficeBindingMember.file_id == file_id,
                     OfficeBindingMember.user_id == user_id,
                 )
             )
@@ -121,7 +121,7 @@ class OfficeAccessRepository:
             if found is not None:
                 return found
             row = OfficeBindingMember(
-                binding_id=binding_id,
+                file_id=file_id,
                 user_id=user_id,
                 created_at=datetime.now(timezone.utc),
             )
@@ -130,11 +130,11 @@ class OfficeAccessRepository:
             await session.refresh(row)
             return row
 
-    async def remove_binding_member(self, binding_id: str, user_id: str) -> bool:
+    async def remove_document_member(self, file_id: str, user_id: str) -> bool:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeBindingMember).where(
-                    OfficeBindingMember.binding_id == binding_id,
+                    OfficeBindingMember.file_id == file_id,
                     OfficeBindingMember.user_id == user_id,
                 )
             )
@@ -145,21 +145,21 @@ class OfficeAccessRepository:
             await session.commit()
             return True
 
-    async def user_is_binding_member(self, binding_id: str, user_id: str) -> bool:
+    async def user_is_document_member(self, file_id: str, user_id: str) -> bool:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeBindingMember).where(
-                    OfficeBindingMember.binding_id == binding_id,
+                    OfficeBindingMember.file_id == file_id,
                     OfficeBindingMember.user_id == user_id,
                 )
             )
             return result.scalar_one_or_none() is not None
 
-    async def clear_binding_members(self, binding_id: str) -> None:
+    async def clear_document_members(self, file_id: str) -> None:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeBindingMember).where(
-                    OfficeBindingMember.binding_id == binding_id,
+                    OfficeBindingMember.file_id == file_id,
                 )
             )
             rows = list(result.scalars().all())

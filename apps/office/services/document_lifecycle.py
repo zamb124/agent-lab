@@ -28,8 +28,8 @@ async def binding_to_item(
 ) -> OfficeDocumentItem:
     resolved_rag_status: OfficeDocumentRagIndexStatus | None = rag_index_status
     if resolve_rag_index_status:
-        status_by_binding = await _rag_index_status_by_binding(container, [row])
-        resolved_rag_status = status_by_binding.get(row.binding_id)
+        status_by_file_id = await _rag_index_status_by_file_id(container, [row])
+        resolved_rag_status = status_by_file_id.get(row.file_id)
     author = users_by_id.get(row.created_by_user_id) if users_by_id else None
     if author is None:
         loaded = await container.user_repository.get(row.created_by_user_id)
@@ -45,16 +45,14 @@ async def binding_to_item(
     if file_record is None:
         logger.warning(
             "office.binding_file_missing",
-            binding_id=row.binding_id,
             file_id=row.file_id,
             catalog_id=row.catalog_id,
             company_id=row.company_id,
         )
         return OfficeDocumentItem(
-            binding_id=row.binding_id,
+            file_id=row.file_id,
             catalog_id=row.catalog_id,
             title=row.title,
-            file_id=row.file_id,
             file_category=row.file_category,
             onlyoffice_document_type=row.onlyoffice_document_type,
             file_availability="missing",
@@ -73,10 +71,9 @@ async def binding_to_item(
         source_kind=FileSourceKind.OFFICE_DOCUMENT,
     )
     return OfficeDocumentItem(
-        binding_id=row.binding_id,
+        file_id=row.file_id,
         catalog_id=row.catalog_id,
         title=row.title,
-        file_id=row.file_id,
         file_category=row.file_category,
         onlyoffice_document_type=row.onlyoffice_document_type,
         file_availability="available",
@@ -91,11 +88,14 @@ async def binding_to_item(
     )
 
 
-async def _rag_index_status_by_binding(
+async def _rag_index_status_by_file_id(
     container: OfficeContainer,
     rows: list[OfficeDocumentBinding],
 ) -> dict[str, OfficeDocumentRagIndexStatus | None]:
-    """Per-binding RAG status: null если каталог без индекса; иначе ready/pending/failed/absent."""
+    """Per-file RAG status: null если каталог без индекса; иначе ready/pending/failed/absent.
+
+    ``absent`` — только non-indexable категории; indexable без status-row → ``pending``.
+    """
     if not rows:
         return {}
     context = get_context()
@@ -119,8 +119,8 @@ async def _rag_index_status_by_binding(
         if catalog is not None and catalog.rag_index_enabled:
             enabled_catalog_ids.add(catalog_id)
 
-    status_by_binding: dict[str, OfficeDocumentRagIndexStatus | None] = {
-        row.binding_id: None for row in rows
+    status_by_file_id: dict[str, OfficeDocumentRagIndexStatus | None] = {
+        row.file_id: None for row in rows
     }
     indexable_rows: list[OfficeDocumentBinding] = []
     for row in rows:
@@ -134,19 +134,22 @@ async def _rag_index_status_by_binding(
                 document_name=document_name,
             )
         ):
-            status_by_binding[row.binding_id] = "absent"
+            status_by_file_id[row.file_id] = "absent"
             continue
         indexable_rows.append(row)
 
     if not indexable_rows:
-        return status_by_binding
+        return status_by_file_id
 
     buckets = await container.catalog_rag_index_service.batch_status_buckets(
         [row.file_id for row in indexable_rows],
     )
     for row in indexable_rows:
-        status_by_binding[row.binding_id] = buckets[row.file_id]
-    return status_by_binding
+        # Indexable file in enabled catalog: no RAG status row yet means queued/pending,
+        # not "absent" (absent is for non-indexable categories only).
+        bucket = buckets[row.file_id]
+        status_by_file_id[row.file_id] = "pending" if bucket == "absent" else bucket
+    return status_by_file_id
 
 
 async def bindings_to_items(
@@ -159,7 +162,7 @@ async def bindings_to_items(
         loaded = await container.user_repository.get(uid)
         if loaded is not None:
             users_by_id[uid] = loaded
-    rag_status_by_binding = await _rag_index_status_by_binding(container, rows)
+    rag_status_by_file_id = await _rag_index_status_by_file_id(container, rows)
     items: list[OfficeDocumentItem] = []
     for row in rows:
         items.append(
@@ -167,7 +170,7 @@ async def bindings_to_items(
                 container,
                 row,
                 users_by_id,
-                rag_index_status=rag_status_by_binding.get(row.binding_id),
+                rag_index_status=rag_status_by_file_id.get(row.file_id),
                 resolve_rag_index_status=False,
             )
         )
@@ -177,7 +180,7 @@ async def bindings_to_items(
 async def record_document_event(
     container: OfficeContainer,
     *,
-    binding_id: str,
+    file_id: str,
     company_id: str,
     event_type: str,
     user_id: str,
@@ -185,7 +188,7 @@ async def record_document_event(
 ) -> None:
     event_payload: JsonObject = payload if payload is not None else {}
     _ = await container.document_event_repository.append(
-        binding_id=binding_id,
+        file_id=file_id,
         company_id=company_id,
         event_type=event_type,
         user_id=user_id,

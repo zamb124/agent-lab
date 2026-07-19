@@ -3,8 +3,8 @@
  *
  * Единственная фабрика A2A вне `<platform-chat>`: сам чат (send/cancel/reducer)
  * живёт в едином chat runtime `@platform/lib/chat/runtime/*` внутри компонента.
- * Консоль шлёт произвольный JSON-RPC body (`message/stream` | `message/send` |
- * async submit + `tasks/get` polling) и собирает полный request/response
+ * Консоль шлёт произвольный JSON-RPC body (`SendStreamingMessage` | `SendMessage` |
+ * async submit + `GetTask` polling) и собирает полный request/response
  * exchange для отображения разработчику.
  *
  * Источник правды для бекенда — `_handle_streaming` в `apps/flows/src/api/a2a.py`.
@@ -13,9 +13,10 @@
 import { createAsyncOp, HttpError, httpRequest } from '@platform/lib/events/index.js';
 import {
     extractA2aTextFromParts as _extractA2aTextFromParts,
-    isA2aTerminalState as _isTerminalState,
+    isA2aStreamBoundaryState as _isStreamBoundaryState,
     resolveA2aContextId as _resolveStreamContextId,
     resolveA2aTaskId as _resolveStreamTaskId,
+    unwrapA2aStreamResult as _unwrapA2aStreamResult,
 } from '@platform/lib/chat/a2a-chat-runtime.js';
 import { consumeA2aStream } from '@platform/lib/chat/runtime/a2a-stream.js';
 
@@ -73,8 +74,13 @@ function _collectConsoleFrame(frame, stream) {
         stream.contextId = nextContextId;
     }
 
-    if (result.kind === 'artifact-update') {
-        const artifact = result.artifact;
+    const unwrapped = _unwrapA2aStreamResult(result);
+    if (!unwrapped) {
+        return;
+    }
+
+    if (unwrapped.frameKind === 'artifactUpdate') {
+        const artifact = unwrapped.event.artifact;
         if (artifact && typeof artifact === 'object') {
             const text = _extractA2aTextFromParts(artifact.parts);
             const dataText = _partsDataText(artifact.parts);
@@ -88,12 +94,12 @@ function _collectConsoleFrame(frame, stream) {
         }
     }
 
-    if (result.kind === 'message') {
-        _appendConsoleResultText(stream.responseChunks, _extractA2aTextFromParts(result.parts));
+    if (unwrapped.frameKind === 'message') {
+        _appendConsoleResultText(stream.responseChunks, _extractA2aTextFromParts(unwrapped.event.parts));
     }
 
-    if (result.kind === 'status-update' && result.status && typeof result.status === 'object') {
-        const status = result.status;
+    if (unwrapped.frameKind === 'statusUpdate' && unwrapped.event.status && typeof unwrapped.event.status === 'object') {
+        const status = unwrapped.event.status;
         if (typeof status.state === 'string') {
             stream.terminalState = status.state;
         }
@@ -103,7 +109,7 @@ function _collectConsoleFrame(frame, stream) {
                 _extractA2aTextFromParts(status.message.parts),
             );
         }
-        if (_isTerminalState(stream.terminalState, result.final === true)) {
+        if (_isStreamBoundaryState(stream.terminalState)) {
             stream.terminal = true;
         }
     }
@@ -134,25 +140,21 @@ function _consoleModeFromPayload(payload, body) {
         }
         throw new Error('flows/api_console_run: mode must be stream, sync or async');
     }
-    if (_isConsoleObject(body) && body.method === 'message/stream') {
+    if (_isConsoleObject(body) && body.method === 'SendStreamingMessage') {
         return 'stream';
     }
-    if (_isConsoleObject(body) && body.method === 'message/send') {
+    if (_isConsoleObject(body) && body.method === 'SendMessage') {
         const params = _isConsoleObject(body.params) ? body.params : null;
-        const metadata = params && _isConsoleObject(params.metadata) ? params.metadata : null;
-        const rawExecutionMode =
-            metadata && typeof metadata.execution_mode === 'string'
-                ? metadata.execution_mode
-                : metadata && typeof metadata.mode === 'string'
-                  ? metadata.mode
-                  : '';
-        const executionMode = rawExecutionMode.trim().toLowerCase();
-        if (executionMode === 'async' || executionMode === 'background') {
+        const configuration =
+            params && _isConsoleObject(params.configuration) ? params.configuration : null;
+        if (configuration && configuration.returnImmediately === true) {
             return 'async';
         }
         return 'sync';
     }
-    throw new Error('flows/api_console_run: body.method must be message/stream or message/send');
+    throw new Error(
+        'flows/api_console_run: body.method must be SendStreamingMessage or SendMessage',
+    );
 }
 
 function _taskIdFromTask(task) {
@@ -265,11 +267,11 @@ function _consoleSleep(ms) {
     });
 }
 
-function _tasksGetConsoleBody(taskId) {
+function _getTaskConsoleBody(taskId) {
     return {
         jsonrpc: '2.0',
         id: `get_${Date.now()}`,
-        method: 'tasks/get',
+        method: 'GetTask',
         params: { id: taskId, historyLength: 20 },
     };
 }
@@ -288,6 +290,7 @@ function _consoleRequestEnvelope(flowId, body, mode) {
         headers: {
             Accept: _consoleAcceptForMode(mode),
             'Content-Type': 'application/json',
+            'A2A-Version': '1.0',
         },
         credentials: 'same-origin',
         body,
@@ -341,7 +344,7 @@ async function _pollConsoleAsyncTask(flowId, submittedResult) {
         if (attempt > 0) {
             await _consoleSleep(500);
         }
-        const pollBody = _tasksGetConsoleBody(taskId);
+        const pollBody = _getTaskConsoleBody(taskId);
         const pollRequest = _consoleRequestEnvelope(flowId, pollBody, 'sync');
         const pollEnvelope = await httpRequest({ ...pollRequest, returnMeta: true });
         const pollResponse = _consoleResponseEnvelope(pollEnvelope, 'json');
@@ -366,7 +369,7 @@ async function _pollConsoleAsyncTask(flowId, submittedResult) {
             submittedResult.request,
             submittedResult.response,
         );
-        if (_isTerminalState(latest.terminal_state, true)) {
+        if (_isStreamBoundaryState(latest.terminal_state)) {
             return {
                 ...latest,
                 submitted_task: submittedResult.raw,

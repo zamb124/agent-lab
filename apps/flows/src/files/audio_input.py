@@ -3,8 +3,8 @@
 
 Применяется в одной точке `_persist_incoming_a2a_files` канала A2A: покрывает
 все способы входа во flow (A2A SDK/CLI, embed-chat виджет, наш чат, sync
-takeover), потому что embed/chat ходят через те же `/flows/api/v1/.../message/send`
-и `/.../message/stream` эндпоинты, что и публичный A2A API.
+takeover), потому что embed/chat ходят через те же `/flows/api/v1/...` JSON-RPC
+методы `SendMessage` / `SendStreamingMessage`, что и публичный A2A API.
 
 Контракт:
 - На входе — список item-ов формата state.files (`original_name`, `url`,

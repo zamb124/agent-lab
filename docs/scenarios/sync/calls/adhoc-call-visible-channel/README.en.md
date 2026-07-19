@@ -4,8 +4,8 @@ The «Create Sync» button creates a meeting channel with a readable name (date 
 
 ## Step 1. Ad-hoc meeting created a visible channel named by date and time
 
-![Ad-hoc meeting created a visible channel named by date and time](adhoc-call-visible-channel--01-ad-hoc-vstrecha-sozdala-vidimyy-kanal-s-imenem-po-date-vremeni.png)
+![Ad-hoc meeting created a visible channel named by date and time](adhoc-call-visible-channel--01-ad-hoc-meeting-created-a-visible-channel-named-by-date-and-time.png)
 
 ## Step 2. After switching channels, ad-hoc channel messages are preserved
 
-![After switching channels, ad-hoc channel messages are preserved](adhoc-call-visible-channel--02-posle-pereklyucheniya-kanalov-soobshcheniya-ad-hoc-kanala.png)
+![After switching channels, ad-hoc channel messages are preserved](adhoc-call-visible-channel--02-after-switching-channels-ad-hoc-channel-messages-are-preserved.png)

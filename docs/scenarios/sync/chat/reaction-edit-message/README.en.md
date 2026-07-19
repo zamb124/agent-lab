@@ -4,12 +4,12 @@ A message is sent from the UI; a reaction is added via API; after reload the rea
 
 ## Step 1. Message sent
 
-![Message sent](reaction-edit-message--01-soobshchenie-otpravleno.png)
+![Message sent](reaction-edit-message--01-message-sent.png)
 
 ## Step 2. Reaction added
 
-![Reaction added](reaction-edit-message--02-postavlena-reaktsiya.png)
+![Reaction added](reaction-edit-message--02-reaction-added.png)
 
 ## Step 3. Message text changed
 
-![Message text changed](reaction-edit-message--03-tekst-soobshcheniya-izmenyon.png)
+![Message text changed](reaction-edit-message--03-message-text-changed.png)

@@ -14,8 +14,7 @@ from core.files.models import FileRecord
 
 class ViewerOpenContext(Protocol):
     handler_id: DocumentViewerHandlerId
-    binding_id: str
-    binding_kind: str
+    viewer_scope: str
     file_record: FileRecord
     title: str
     file_category: str

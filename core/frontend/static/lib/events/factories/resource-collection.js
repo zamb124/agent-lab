@@ -451,14 +451,15 @@ export function createResourceCollection(options) {
                         const mergedItems = [];
                         let total = 0;
                         for (;;) {
+                            const pageQuery = { ...baseQuery, ...payload, limit: pageLimit, offset: off };
                             const pageData = await _doRequest({
                                 commandType: events.LIST_REQUESTED,
                                 succeeded: events.LIST_LOADED,
                                 failed: events.LIST_FAILED,
-                                wsPayload: payload,
+                                wsPayload: pageQuery,
                                 method: 'GET',
                                 url: baseUrl,
-                                httpQuery: { ...baseQuery, limit: pageLimit, offset: off },
+                                httpQuery: pageQuery,
                                 op: 'list',
                                 headersPayload: payload,
                             }, event, ctx);
@@ -481,14 +482,15 @@ export function createResourceCollection(options) {
                         ctx.dispatch(events.LIST_LOADED, { items: mergedItems, total }, { causation_id: event.id, source: _transportSource() });
                         return;
                     }
+                    const singleQuery = listQuery(payload);
                     data = await _doRequest({
                         commandType: events.LIST_REQUESTED,
                         succeeded: events.LIST_LOADED,
                         failed: events.LIST_FAILED,
-                        wsPayload: payload,
+                        wsPayload: { ...singleQuery, ...payload },
                         method: 'GET',
                         url: baseUrl,
-                        httpQuery: listQuery(payload),
+                        httpQuery: singleQuery,
                         op: 'list',
                         headersPayload: payload,
                     }, event, ctx);

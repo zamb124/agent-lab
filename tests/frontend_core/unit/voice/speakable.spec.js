@@ -4,7 +4,7 @@
  * Тесты проверяют:
  *  - whitelist имён артефактов;
  *  - negative-override через `metadata.speak === false`;
- *  - выборку только TextPart из `artifact.parts`;
+ *  - выборку только text parts из `artifact.parts`;
  *  - склейку всех text-частей через `extractSpeakableText`.
  *
  * Пары с Python: при любом расхождении whitelist ломается CI-проверка
@@ -50,20 +50,20 @@ describe('isSpeakableArtifact', () => {
         expect(isSpeakableArtifact({ name: '', parts: [] })).toBe(false);
     });
 
-    it('пустое имя и непустой TextPart — как response (стрим без name)', () => {
+    it('пустое имя и непустой text part — как response (стрим без name)', () => {
         expect(
             isSpeakableArtifact({
-                parts: [{ root: { kind: 'text', text: 'Привет' } }],
+                parts: [{ text: 'Привет' }],
             })
         ).toBe(true);
         expect(
             isSpeakableArtifact({
-                parts: [{ root: { kind: 'data', data: {} } }],
+                parts: [{ data: {} }],
             })
         ).toBe(false);
         expect(
             isSpeakableArtifact({
-                parts: [{ root: { kind: 'text', text: 'x' } }],
+                parts: [{ text: 'x' }],
                 metadata: { speak: false },
             })
         ).toBe(false);
@@ -103,23 +103,23 @@ describe('isSpeakableArtifact', () => {
 });
 
 describe('iterSpeakableTextParts', () => {
-    it('возвращает только TextPart.text', () => {
+    it('возвращает только text parts', () => {
         const parts = iterSpeakableTextParts({
             name: 'response',
             parts: [
-                { root: { kind: 'text', text: 'Привет, ' } },
-                { root: { kind: 'text', text: 'мир!' } },
-                { root: { kind: 'data', data: { x: 1 } } },
-                { root: { kind: 'file', file: { uri: 'f://1' } } },
+                { text: 'Привет, ' },
+                { text: 'мир!' },
+                { data: { x: 1 } },
+                { url: 'f://1', filename: 'f', mediaType: 'application/octet-stream' },
             ],
         });
         expect(parts).toEqual(['Привет, ', 'мир!']);
     });
 
-    it('поддерживает part без .root (flat form)', () => {
+    it('поддерживает A2A 1.0 part без kind (flat text)', () => {
         const parts = iterSpeakableTextParts({
             name: 'response',
-            parts: [{ kind: 'text', text: 'one' }, { kind: 'text', text: 'two' }],
+            parts: [{ text: 'one' }, { text: 'two' }],
         });
         expect(parts).toEqual(['one', 'two']);
     });
@@ -128,7 +128,7 @@ describe('iterSpeakableTextParts', () => {
         expect(
             iterSpeakableTextParts({
                 name: 'thinking',
-                parts: [{ root: { kind: 'text', text: 'x' } }],
+                parts: [{ text: 'x' }],
             })
         ).toEqual([]);
     });
@@ -137,8 +137,8 @@ describe('iterSpeakableTextParts', () => {
         const parts = iterSpeakableTextParts({
             name: 'response',
             parts: [
-                { root: { kind: 'text', text: '' } },
-                { root: { kind: 'text', text: 'non-empty' } },
+                { text: '' },
+                { text: 'non-empty' },
             ],
         });
         expect(parts).toEqual(['non-empty']);
@@ -152,8 +152,8 @@ describe('iterSpeakableTextParts', () => {
                 42,
                 'строка',
                 { root: null },
-                { root: { kind: 'text', text: null } },
-                { root: { kind: 'text', text: 'ok' } },
+                { text: null },
+                { text: 'ok' },
             ],
         });
         expect(parts).toEqual(['ok']);
@@ -161,13 +161,13 @@ describe('iterSpeakableTextParts', () => {
 });
 
 describe('extractSpeakableText', () => {
-    it('склеивает все TextPart speakable артефакта', () => {
+    it('склеивает все text parts speakable артефакта', () => {
         const ev = {
             artifact: {
                 name: 'response',
                 parts: [
-                    { root: { kind: 'text', text: 'Привет, ' } },
-                    { root: { kind: 'text', text: 'друг.' } },
+                    { text: 'Привет, ' },
+                    { text: 'друг.' },
                 ],
             },
         };
@@ -178,7 +178,7 @@ describe('extractSpeakableText', () => {
         const ev = {
             artifact: {
                 name: 'reasoning',
-                parts: [{ root: { kind: 'text', text: 'Внутреннее размышление.' } }],
+                parts: [{ text: 'Внутреннее размышление.' }],
             },
         };
         expect(extractSpeakableText(ev)).toBeNull();
@@ -188,7 +188,7 @@ describe('extractSpeakableText', () => {
         const ev = {
             artifact: {
                 name: 'thinking',
-                parts: [{ root: { kind: 'text', text: 'hidden' } }],
+                parts: [{ text: 'hidden' }],
             },
         };
         expect(extractSpeakableText(ev)).toBeNull();
@@ -198,7 +198,7 @@ describe('extractSpeakableText', () => {
         const ev = {
             artifact: {
                 name: 'response',
-                parts: [{ root: { kind: 'text', text: 'wont-speak' } }],
+                parts: [{ text: 'wont-speak' }],
                 metadata: { speak: false },
             },
         };
@@ -215,18 +215,18 @@ describe('extractSpeakableText', () => {
         const ev = {
             artifact: {
                 name: 'response',
-                parts: [{ root: { kind: 'data', data: {} } }],
+                parts: [{ data: {} }],
             },
         };
         expect(extractSpeakableText(ev)).toBeNull();
     });
 
-    it('склеивает TextPart при отсутствии name (стрим)', () => {
+    it('склеивает text parts при отсутствии name (стрим)', () => {
         const ev = {
             artifact: {
                 parts: [
-                    { root: { kind: 'text', text: 'Один' } },
-                    { root: { kind: 'text', text: ' два' } },
+                    { text: 'Один' },
+                    { text: ' два' },
                 ],
             },
         };

@@ -12,15 +12,15 @@ KEY_PREFIX = "office:oo_cb:"
 TTL_SECONDS = 300
 
 
-def callback_dedupe_redis_key(binding_id: str, status: int, url: str) -> str:
-    payload = f"{binding_id}\n{status}\n{url}".encode()
+def callback_dedupe_redis_key(file_id: str, status: int, url: str) -> str:
+    payload = f"{file_id}\n{status}\n{url}".encode()
     digest = hashlib.sha256(payload).hexdigest()
     return f"{KEY_PREFIX}{digest}"
 
 
 async def try_claim_onlyoffice_callback(
     redis_url: str,
-    binding_id: str,
+    file_id: str,
     status: int,
     url: str,
 ) -> bool:
@@ -31,7 +31,7 @@ async def try_claim_onlyoffice_callback(
     """
     if not redis_url or not redis_url.strip():
         raise ValueError("database.redis_url обязателен для OnlyOffice callback")
-    key = callback_dedupe_redis_key(binding_id, status, url)
+    key = callback_dedupe_redis_key(file_id, status, url)
     client = RedisClient(redis_url)
     try:
         await client.connect()

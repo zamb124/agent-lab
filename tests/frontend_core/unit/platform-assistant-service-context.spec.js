@@ -51,18 +51,19 @@ describe('service platform assistant contexts', () => {
         });
         expect(buildOfficeAssistantContext(
             'document_editor',
-            { bindingId: 'binding-route' },
+            { fileId: 'file-route' },
             {
                 activeCatalogId: 'catalog-1',
-                selectedBindingId: 'binding-state',
-                items: [{ title: 'not exposed' }],
+                selectedFileId: 'file-state',
+                items: [{ title: 'not exposed', file_id: 'file-route', onlyoffice_document_type: 'word' }],
             },
         )).toEqual({
             service: 'office',
             route_key: 'document_editor',
             screen: 'document_editor',
-            binding_id: 'binding-route',
+            file_id: 'file-route',
             catalog_id: 'catalog-1',
+            document_type: 'word',
         });
     });
 

@@ -123,7 +123,7 @@ class TestHandoffMultiCycleA2A:
 
         first = await _send_message(client, parent_fid, context_id, "start cycle 1")
         first_data = first.json()
-        assert first_data["result"]["status"]["state"] == "input-required"
+        assert first_data["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         child_before = await container.workflow_runtime.get_state(child_session)
         assert child_before is not None
@@ -198,7 +198,7 @@ class TestHandoffMultiCycleA2A:
 
         first = await _send_message(client, parent_fid, context_id, "route to a")
         task_id = first.json()["result"]["id"]
-        assert first.json()["result"]["status"]["state"] == "input-required"
+        assert first.json()["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         second = await _send_message(
             client, parent_fid, context_id, "complete a then b", task_id=task_id
@@ -251,7 +251,7 @@ class TestHandoffMultiCycleA2A:
 
         first = await _send_message(client, parent_fid, context_id, "cycle 1 start")
         task_id = first.json()["result"]["id"]
-        assert first.json()["result"]["status"]["state"] == "input-required"
+        assert first.json()["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         child_before = await container.workflow_runtime.get_state(child_session)
         assert child_before is not None

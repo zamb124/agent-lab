@@ -2,7 +2,7 @@
 Тесты работы с файлами через A2A API.
 
 Проверяет:
-- FilePart извлекается в память, персистится в S3 на API (file_id + url в state)
+- Part.raw/url извлекается в память, персистится в S3 на API (file_id + url в state)
 - В content сообщения добавляются [FILE]...[/FILE] теги
 """
 
@@ -11,6 +11,8 @@ import uuid
 from typing import Any, Dict
 
 import pytest
+
+from tests.flows._a2a_v1 import A2A_HEADERS
 
 from apps.flows.src.container import get_container
 from core.context import Context, clear_context, set_context
@@ -30,17 +32,14 @@ def _msg_with_file(
     context_id = context_id or str(uuid.uuid4())
     return {
         "messageId": str(uuid.uuid4()),
-        "role": "user",
+        "role": "ROLE_USER",
         "contextId": context_id,
         "parts": [
-            {"kind": "text", "text": text},
+            {"text": text},
             {
-                "kind": "file",
-                "file": {
-                    "bytes": base64.b64encode(file_bytes).decode("utf-8"),
-                    "name": file_name,
-                    "mimeType": mime_type,
-                },
+                "raw": base64.b64encode(file_bytes).decode("utf-8"),
+                "filename": file_name,
+                "mediaType": mime_type,
             },
         ],
     }
@@ -86,7 +85,7 @@ class TestA2AFilesHandling:
     @pytest.mark.asyncio
     async def test_file_saved_and_in_state(self, client, flow_id, mock_llm_with_queue, sync_tools):
         """
-        Проверяет что файл из FilePart:
+        Проверяет что файл из Part.raw/url:
         1. Персистится (S3 + FileRecord), в state — file_id и url
         2. Запись в БД файлов находится по file_id
         """
@@ -97,10 +96,11 @@ class TestA2AFilesHandling:
 
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "test-file-1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": _msg_with_file(
                         text="Process this file",
@@ -146,7 +146,7 @@ class TestA2AFilesHandling:
         sync_tools,
         auth_headers_system,
     ):
-        """FileWithUri из chat upload остаётся тем же FileRecord, без повторной записи bytes."""
+        """Part.url из chat upload остаётся тем же FileRecord, без повторной записи bytes."""
         mock_llm_with_queue([{"type": "text", "content": "I received your linked file"}])
 
         upload = await frontend_client.post(
@@ -167,21 +167,18 @@ class TestA2AFilesHandling:
             json={
                 "jsonrpc": "2.0",
                 "id": "test-file-uri-1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": str(uuid.uuid4()),
-                        "role": "user",
+                        "role": "ROLE_USER",
                         "contextId": context_id,
                         "parts": [
-                            {"kind": "text", "text": "Use this uploaded file"},
+                            {"text": "Use this uploaded file"},
                             {
-                                "kind": "file",
-                                "file": {
-                                    "uri": uri,
-                                    "name": "ignored-client-name.csv",
-                                    "mimeType": "text/csv",
-                                },
+                                "url": uri,
+                                "filename": "ignored-client-name.csv",
+                                "mediaType": "text/csv",
                             },
                         ],
                     }
@@ -225,10 +222,11 @@ class TestA2AFilesHandling:
 
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "test-file-2",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": _msg_with_image(
                         text="Analyze this image",
@@ -268,35 +266,30 @@ class TestA2AFilesHandling:
 
         message = {
             "messageId": str(uuid.uuid4()),
-            "role": "user",
+            "role": "ROLE_USER",
             "contextId": context_id,
             "parts": [
-                {"kind": "text", "text": "Process these files"},
+                {"text": "Process these files"},
                 {
-                    "kind": "file",
-                    "file": {
-                        "bytes": base64.b64encode(file1_content).decode("utf-8"),
-                        "name": "file1.txt",
-                        "mimeType": "text/plain",
-                    },
+                    "raw": base64.b64encode(file1_content).decode("utf-8"),
+                    "filename": "file1.txt",
+                    "mediaType": "text/plain",
                 },
                 {
-                    "kind": "file",
-                    "file": {
-                        "bytes": base64.b64encode(file2_content).decode("utf-8"),
-                        "name": "file2.txt",
-                        "mimeType": "text/plain",
-                    },
+                    "raw": base64.b64encode(file2_content).decode("utf-8"),
+                    "filename": "file2.txt",
+                    "mediaType": "text/plain",
                 },
             ],
         }
 
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "test-file-3",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {"message": message},
             },
         )
@@ -331,16 +324,17 @@ class TestA2AFilesHandling:
 
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": "test-no-file",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": str(uuid.uuid4()),
-                        "role": "user",
+                        "role": "ROLE_USER",
                         "contextId": context_id,
-                        "parts": [{"kind": "text", "text": "Hello without files"}],
+                        "parts": [{"text": "Hello without files"}],
                     }
                 },
             },
@@ -363,25 +357,22 @@ class TestIncomingA2aFilesUnit:
     """Unit-тесты извлечения и форматирования A2A-вложений без диска."""
 
     def test_extract_incoming_bytes_in_memory(self):
-        """FileWithBytes декодируется в память, без записи файла."""
-        from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
+        """Part.raw декодируется в память, без записи файла."""
+        from a2a.types import Message, Part
+        from a2a.types.a2a_pb2 import ROLE_USER
 
         from apps.flows.src.files.handler import extract_incoming_a2a_files
 
         file_content = b"Test binary content"
         message = Message(
             message_id=str(uuid.uuid4()),
-            role=Role.user,
+            role=ROLE_USER,
             parts=[
-                Part(root=TextPart(text="Hello")),
+                Part(text="Hello"),
                 Part(
-                    root=FilePart(
-                        file=FileWithBytes(
-                            bytes=base64.b64encode(file_content).decode("utf-8"),
-                            name="test.bin",
-                            mime_type="application/octet-stream",
-                        )
-                    )
+                    raw=file_content,
+                    filename="test.bin",
+                    media_type="application/octet-stream",
                 ),
             ],
         )

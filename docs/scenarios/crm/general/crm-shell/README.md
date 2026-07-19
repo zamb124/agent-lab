@@ -4,8 +4,8 @@
 
 ## Шаг 1. SPA NetWorkle открыт
 
-![SPA NetWorkle открыт](crm-shell--01-spa-networkle-otkryt.png)
+![SPA NetWorkle открыт](crm-shell--01-networkle-spa-opened.png)
 
 ## Шаг 2. Оболочка NetWorkle видна
 
-![Оболочка NetWorkle видна](crm-shell--02-obolochka-networkle-vidna.png)
+![Оболочка NetWorkle видна](crm-shell--02-the-networkle-shell-is-visible.png)

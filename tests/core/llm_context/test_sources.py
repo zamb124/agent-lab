@@ -32,7 +32,7 @@ class MemoryContextSource:
 
 def _request() -> LLMContextSourceRequest:
     return LLMContextSourceRequest(
-        messages=[{"role": "user", "content": "hello"}],
+        messages=[{"role": "ROLE_USER", "content": "hello"}],
         query="hello",
     )
 

@@ -1,16 +1,15 @@
 """Клиент генерации изображений через platform LLM capability."""
 
-import base64
 import re
-import uuid
 from typing import TYPE_CHECKING, Protocol
 
-from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
-from a2a.utils.message import get_message_text
+from a2a.helpers.proto_helpers import get_message_text
+from a2a.types import Message, Part, Role
 
 from core.ai.providers import AICapability
 from core.ai.resolver import resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
+from core.clients.llm.messages import build_a2a_message
 from core.config import get_settings
 from core.files.models import FileRecord
 from core.files.s3_client import S3ClientFactory
@@ -82,7 +81,7 @@ class NanoBananaClient:
         parts: list[Part] = []
 
         if is_editing and reference_file_ids:
-            parts.append(Part(root=TextPart(text="""CRITICAL: PHOTO EDITING TASK - ABSOLUTE PROHIBITION ON GENERATION
+            parts.append(Part(text="""CRITICAL: PHOTO EDITING TASK - ABSOLUTE PROHIBITION ON GENERATION
 
 **YOU ARE FORBIDDEN FROM:**
 - Generating a NEW person (different face, body, identity, gender)
@@ -92,7 +91,7 @@ class NanoBananaClient:
 **YOU MUST:**
 - EDIT the EXISTING BASE IMAGE (Image #1) ONLY
 - PRESERVE the EXACT person, face, body, pose, background
-- ADD the product to the EXISTING person in the BASE IMAGE""")))
+- ADD the product to the EXISTING person in the BASE IMAGE"""))
 
         if reference_file_ids:
             logger.info(f"Добавляем {len(reference_file_ids)} референсных изображений")
@@ -114,32 +113,33 @@ class NanoBananaClient:
                     await s3_client.close()
 
                 if file_bytes:
-                    base64_data = base64.b64encode(file_bytes).decode('utf-8')
-
                     if is_editing and idx == 0:
-                        parts.append(Part(root=TextPart(text="""BASE IMAGE TO EDIT (Image #1) - DO NOT GENERATE NEW IMAGE
+                        parts.append(Part(text="""BASE IMAGE TO EDIT (Image #1) - DO NOT GENERATE NEW IMAGE
 
-**THIS IS THE EXISTING PHOTOGRAPH - YOU MUST EDIT IT, NOT REPLACE IT**""")))
+**THIS IS THE EXISTING PHOTOGRAPH - YOU MUST EDIT IT, NOT REPLACE IT**"""))
 
-                    parts.append(Part(root=FilePart(file=FileWithBytes(
-                        bytes=base64_data,
-                        mime_type=file_record.content_type,
-                        name=file_id,
-                    ))))
+                    parts.append(
+                        Part(
+                            raw=file_bytes,
+                            media_type=file_record.content_type,
+                            filename=file_id,
+                        )
+                    )
 
                     logger.info(f"Добавлено изображение {file_id} (индекс {idx})")
 
-        parts.append(Part(root=TextPart(text=prompt)))
+        parts.append(Part(text=prompt))
 
         llm = self._create_image_generation_client()
 
-        response = await llm.chat([
-            Message(
-                message_id=str(uuid.uuid4()),
-                role=Role.user,
-                parts=parts,
-            )
-        ])
+        response = await llm.chat(
+            [
+                build_a2a_message(
+                    role=Role.ROLE_USER,
+                    parts=parts,
+                )
+            ]
+        )
 
         file_pattern: re.Pattern[str] = re.compile(r"file_([a-f0-9]{12})")
         file_ids: list[str] = []

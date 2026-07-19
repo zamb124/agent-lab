@@ -152,12 +152,12 @@ class TestLlmNodeTracing:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"msg_{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Посчитай 2 + 2"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Посчитай 2 + 2"}],
                     },
                 },
             },
@@ -251,12 +251,12 @@ class TestLlmNodeTracing:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"int_msg_{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Помоги мне"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Помоги мне"}],
                     },
                 },
             },
@@ -325,12 +325,12 @@ class TestLlmNodeTracing:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"sub_msg_{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Собери информацию от пользователя"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Собери информацию от пользователя"}],
                     },
                 },
             },
@@ -396,12 +396,12 @@ class TestGraphFlowTracing:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"order_msg_{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Где мой заказ номер 12345?"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Где мой заказ номер 12345?"}],
                     },
                 },
             },
@@ -474,12 +474,12 @@ class TestGraphFlowTracing:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"compl_msg_{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Хочу подать жалобу на качество обслуживания"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Хочу подать жалобу на качество обслуживания"}],
                     },
                 },
             },
@@ -543,12 +543,12 @@ class TestGraphFlowTracing:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"gen_msg_{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Какой у вас режим работы?"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Какой у вас режим работы?"}],
                     },
                 },
             },
@@ -620,12 +620,12 @@ class TestSpanAttributes:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"attrs_msg_{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Test"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Test"}],
                     },
                 },
             },
@@ -694,12 +694,12 @@ class TestSpanHierarchy:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"hier_msg_{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Посчитай 1+1"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Посчитай 1+1"}],
                     },
                 },
             },
@@ -767,12 +767,12 @@ class TestTracingAPI:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"api_msg_{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "API test"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "API test"}],
                     },
                 },
             },
@@ -828,12 +828,12 @@ class TestTracingAPI:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"flow_api_msg_{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Agent API test"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Agent API test"}],
                     },
                 },
             },
@@ -880,12 +880,12 @@ class TestTracingAPI:
             json={
                 "jsonrpc": "2.0",
                 "id": "1",
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": f"search_api_msg_{unique_id}",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Search API test"}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Search API test"}],
                     },
                 },
             },

@@ -10,7 +10,7 @@ from typing import List
 import pytest
 import pytest_asyncio
 from a2a.types import Message
-from a2a.utils.message import get_message_text
+from a2a.helpers.proto_helpers import get_message_text
 
 from apps.flows.src.models.flow_config import SimpleEdgeCondition
 
@@ -21,13 +21,19 @@ def msg_role(msg) -> str:
         metadata = msg.get("metadata") or {}
         if metadata.get("tool_call_id"):
             return "tool"
-        role = msg.get("role", "user")
-        return role.value if hasattr(role, "value") else str(role)
+        role = msg.get("role", "ROLE_USER")
+        role_str = role.value if hasattr(role, "value") else str(role)
+        if role_str == "ROLE_USER":
+            return "user"
+        return role_str
 
     metadata = msg.metadata if hasattr(msg, "metadata") else None
     if metadata and metadata.get("tool_call_id"):
         return "tool"
-    return msg.role.value if hasattr(msg.role, "value") else str(msg.role)
+    role_str = msg.role.value if hasattr(msg.role, "value") else str(msg.role)
+    if role_str == "ROLE_USER":
+        return "user"
+    return role_str
 
 
 def msg_text(msg) -> str:
@@ -38,9 +44,9 @@ def msg_text(msg) -> str:
         parts = msg.get("parts", [])
         for part in parts:
             if isinstance(part, dict):
-                root = part.get("root", part)
-                if isinstance(root, dict) and "text" in root:
-                    return root["text"]
+                text = part.get("text")
+                if isinstance(text, str):
+                    return text
         return ""
     return get_message_text(msg)
 

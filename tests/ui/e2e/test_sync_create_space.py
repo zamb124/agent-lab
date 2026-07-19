@@ -8,6 +8,7 @@ import pytest
 from playwright.async_api import Page, expect
 
 from tests.ui.e2e.sync_e2e_helpers import (
+    sync_e2e_expect_ws_open,
     sync_e2e_seed_namespace,
     sync_e2e_select_namespace,
 )
@@ -29,10 +30,10 @@ from tests.ui.scenario_doc import ScenarioRecorder
         "The user opens Sync and selects an existing platform namespace "
         "from the sidebar selector."
     ),
+    timeout_seconds=30,
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(120)
 async def test_user_creates_space_with_name_and_description(
     scenario: ScenarioRecorder,
     sync_ui: AppUI,
@@ -43,6 +44,7 @@ async def test_user_creates_space_with_name_and_description(
 
     await sync_ui.open(ui_page_system)
     await sync_ui.expect_shell(ui_page_system)
+    await sync_e2e_expect_ws_open(ui_page_system)
     await scenario.step(
         "Открыт Sync со списком всех пространств",
         ui_page_system,
@@ -56,7 +58,7 @@ async def test_user_creates_space_with_name_and_description(
                 r"Нет каналов в выбранных пространствах|No channels in selected spaces"
             )
         )
-    ).to_be_visible(timeout=30_000)
+    ).to_be_visible(timeout=10_000)
     await scenario.step(
         "Пространство выбрано в сайдбаре",
         ui_page_system,

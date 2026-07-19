@@ -308,10 +308,10 @@ export class OfficeExplorerTree extends PlatformElement {
         e.preventDefault();
         e.stopPropagation();
         this._dropTargetCatalogId = '';
-        const bindingId = e.dataTransfer && e.dataTransfer.getData('application/x-office-binding-id');
-        if (typeof bindingId !== 'string' || bindingId.length === 0) return;
+        const fileId = e.dataTransfer && e.dataTransfer.getData('application/x-office-file-id');
+        if (typeof fileId !== 'string' || fileId.length === 0) return;
         this.emit('move-to-catalog', {
-            bindingId,
+            fileId,
             catalogId: catalog.catalog_id,
         });
     }
@@ -353,7 +353,7 @@ export class OfficeExplorerTree extends PlatformElement {
                                 <platform-icon name="search" size="12"></platform-icon>
                             </span>
                         ` : null}
-                        <span class="count">${catalog.file_count}</span>
+                        <span class="count">${typeof catalog.file_count === 'number' ? catalog.file_count : 0}</span>
                     </button>
                     <div class="row-actions">
                         <button

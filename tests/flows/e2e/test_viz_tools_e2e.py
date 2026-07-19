@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import pytest
 
+from core.a2a import mapping_from_struct
 from core.viz.models import VIZ_CONTENT_TYPE, parse_viz_document_bytes
 from tests.office.access_helpers import parse_viz_stream_url
 
@@ -59,13 +60,13 @@ async def _send_text(
         json={
             "jsonrpc": "2.0",
             "id": f"test-{uuid.uuid4().hex}",
-            "method": "message/send",
+            "method": "SendMessage",
             "params": {
                 "message": {
                     "messageId": str(uuid.uuid4()),
-                    "role": "user",
+                    "role": "ROLE_USER",
                     "contextId": context_id,
-                    "parts": [{"kind": "text", "text": text}],
+                    "parts": [{"text": text}],
                 }
             },
         },
@@ -73,7 +74,7 @@ async def _send_text(
     assert response.status_code == 200, response.text
     data = response.json()
     task = data.get("result", {})
-    assert task.get("status", {}).get("state") == "completed", data
+    assert task.get("status", {}).get("state") == "TASK_STATE_COMPLETED", data
     return data
 
 
@@ -335,7 +336,23 @@ async def test_agent_create_viz_rejects_invalid_args(
             if parsed is not None and parsed.get("success") is False:
                 failed = parsed
                 break
-        assert failed is not None
+        if failed is None:
+            messages = getattr(state, "messages", None) or []
+            for message in messages:
+                metadata = getattr(message, "metadata", None)
+                if metadata is not None and hasattr(message, "HasField") and message.HasField("metadata"):
+                    meta = mapping_from_struct(message.metadata)
+                    if "tool_call_id" not in meta:
+                        continue
+                    text_parts = []
+                    for part in message.parts:
+                        if getattr(part, "text", None):
+                            text_parts.append(part.text)
+                    parsed = _json_object_from_tool_result("".join(text_parts))
+                    if parsed is not None and parsed.get("success") is False:
+                        failed = parsed
+                        break
+        assert failed is not None, f"tool_results={_tool_results(state)!r}"
         assert "error" in failed
     finally:
         await flows_client_http.delete(f"/flows/api/v1/flows/{flow_id}", headers=headers)

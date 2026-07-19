@@ -64,7 +64,7 @@ async def test_office_mobile_documents_workflow(
         namespace=namespace,
         title_prefix="mobile",
     )
-    binding_id = await office_api_create_empty_document(
+    file_id = await office_api_create_empty_document(
         office_ui.origin,
         auth_token_system,
         namespace=namespace,
@@ -81,9 +81,19 @@ async def test_office_mobile_documents_workflow(
     )
 
     await office_e2e_select_catalog_mobile(ui_page_system, f"mobile-{unique_id}")
-    row = ui_page_system.locator("platform-file-row, platform-file-card").filter(has_text=doc_title).first
-    await expect(row).to_be_visible(timeout=45_000)
-    await row.dblclick()
+    row = ui_page_system.locator(
+        f'platform-file-row[file-name="{doc_title}"], platform-file-card[file-name="{doc_title}"]'
+    ).first
+    await expect(row).to_be_attached(timeout=45_000)
+    # На узком viewport строка таблицы может быть в DOM, но вне layout visibility.
+    await row.evaluate(
+        """
+        (el) => {
+            el.scrollIntoView({ block: 'center', inline: 'nearest' });
+            el.dispatchEvent(new CustomEvent('activate', { bubbles: true, composed: true }));
+        }
+        """
+    )
     await office_e2e_expect_editor_loaded(ui_page_system)
     await expect(bottom_nav).to_be_hidden(timeout=15_000)
     await scenario.step(
@@ -92,4 +102,4 @@ async def test_office_mobile_documents_workflow(
         label_en="Editor hides bottom nav",
     )
 
-    _ = binding_id
+    _ = file_id

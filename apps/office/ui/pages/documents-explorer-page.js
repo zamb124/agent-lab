@@ -100,7 +100,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._lastLoadKey = '';
         this._documents.clearFilter(null);
         this._documents.setSearchQuery({ searchQuery: '' });
-        this._documents.clearBindingSelection(null);
+        this._documents.clearFileSelection(null);
         this._catalogs.load();
     }
 
@@ -346,8 +346,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         if (this._catalogs.loading) return;
         if (explorerView === 'recent' || explorerView === 'starred') {
             const ids = explorerView === 'recent'
-                ? this._documents.state.recentBindingIds
-                : this._documents.state.starredBindingIds;
+                ? this._documents.state.recentFileIds
+                : this._documents.state.starredFileIds;
             const key = `${explorerView}|${(ids || []).join(',')}|${this._documents.state.searchQuery}`;
             if (key === this._lastLoadKey) return;
             this._lastLoadKey = key;
@@ -381,14 +381,14 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         let docs = state.items;
         if (state.explorerView === 'recent') {
             const order = new Map(
-                (state.recentBindingIds || []).map((id, index) => [id, index]),
+                (state.recentFileIds || []).map((id, index) => [id, index]),
             );
-            docs = docs.filter((doc) => order.has(doc.binding_id));
-            docs.sort((a, b) => order.get(a.binding_id) - order.get(b.binding_id));
+            docs = docs.filter((doc) => order.has(doc.file_id));
+            docs.sort((a, b) => order.get(a.file_id) - order.get(b.file_id));
         }
         if (state.explorerView === 'starred') {
-            const starred = new Set(state.starredBindingIds || []);
-            docs = docs.filter((doc) => starred.has(doc.binding_id));
+            const starred = new Set(state.starredFileIds || []);
+            docs = docs.filter((doc) => starred.has(doc.file_id));
         }
         return docs;
     }
@@ -409,7 +409,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._documents.setActiveCatalog({ catalogId });
         this._documents.setFilterCatalogs({ catalogIds: [catalogId] });
         this._documents.setCatalogExpanded({ catalogId, expanded: true });
-        this._documents.clearBindingSelection(null);
+        this._documents.clearFileSelection(null);
         this._lastLoadKey = '';
         this._maybeReloadDocs();
     }
@@ -499,9 +499,9 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     }
 
     _onSemanticResultOpen(e) {
-        const bindingId = e.detail && typeof e.detail.bindingId === 'string' ? e.detail.bindingId : '';
-        if (bindingId.length === 0) return;
-        this._onOpenDocument(bindingId);
+        const fileId = e.detail && typeof e.detail.fileId === 'string' ? e.detail.fileId : '';
+        if (fileId.length === 0) return;
+        this._onOpenDocument(fileId);
     }
 
     _onViewChange(e) {
@@ -550,7 +550,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     _onFileDragStart(e, doc) {
         if (!e.dataTransfer) return;
-        e.dataTransfer.setData('application/x-office-binding-id', doc.binding_id);
+        e.dataTransfer.setData('application/x-office-file-id', doc.file_id);
         e.dataTransfer.effectAllowed = 'move';
     }
 
@@ -575,27 +575,27 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         }
     }
 
-    _docByBindingId(bindingId) {
-        const fromList = this._documents.state.items.find((d) => d.binding_id === bindingId);
+    _docByFileId(fileId) {
+        const fromList = this._documents.state.items.find((d) => d.file_id === fileId);
         if (fromList) return fromList;
         if (this._documents.state.explorerView === 'deleted' && this._deleted.lastResult) {
             const deletedItems = this._deleted.lastResult.items;
             if (Array.isArray(deletedItems)) {
-                return deletedItems.find((d) => d.binding_id === bindingId);
+                return deletedItems.find((d) => d.file_id === fileId);
             }
         }
         return undefined;
     }
 
-    _onOpenDocument(bindingId) {
-        if (typeof bindingId !== 'string' || bindingId.length === 0) return;
-        const doc = this._docByBindingId(bindingId);
+    _onOpenDocument(fileId) {
+        if (typeof fileId !== 'string' || fileId.length === 0) return;
+        const doc = this._docByFileId(fileId);
         if (doc && doc.file_availability === 'missing') {
             this.toast(this.t('list.fileMissingOpenBlocked'), { variant: 'warning' });
             return;
         }
-        this._documents.recordRecentOpen({ bindingId });
-        this.navigate('document_editor', { bindingId });
+        this._documents.recordRecentOpen({ fileId });
+        this.navigate('document_editor', { fileId });
     }
 
     _isFileMissing(doc) {
@@ -609,30 +609,30 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         return this.t(`list.docType.${doc.file_category}`);
     }
 
-    _onSelectDocument(bindingId) {
-        this._documents.setSelectedBinding({ bindingId });
+    _onSelectDocument(fileId) {
+        this._documents.setSelectedFile({ fileId });
     }
 
     _onRowSelectToggle(e) {
-        const bindingId = e.detail && e.detail.itemKey;
-        if (typeof bindingId !== 'string') return;
-        this._documents.toggleBindingSelection({ bindingId });
+        const fileId = e.detail && e.detail.itemKey;
+        if (typeof fileId !== 'string') return;
+        this._documents.toggleFileSelection({ fileId });
     }
 
     _onSelectAllToggle(e) {
         const selected = e.detail && e.detail.selected === true;
         if (selected) {
-            const ids = this._documents.state.items.map((d) => d.binding_id);
-            this._documents.setBindingSelection({ bindingIds: ids });
+            const ids = this._documents.state.items.map((d) => d.file_id);
+            this._documents.setFileSelection({ fileIds: ids });
         } else {
-            this._documents.clearBindingSelection(null);
+            this._documents.clearFileSelection(null);
         }
     }
 
     async _onRenameDocument(doc) {
         if (!doc) return;
         this.openModal('office.document_rename', {
-            bindingId: doc.binding_id,
+            fileId: doc.file_id,
             currentTitle: doc.title,
             catalogIds: [doc.catalog_id],
         });
@@ -655,28 +655,28 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         );
         if (ok !== true) return;
         if (isDeletedView) {
-            this._permanentDelete.run({ bindingId: doc.binding_id });
+            this._permanentDelete.run({ fileId: doc.file_id });
         } else {
             this._remove.run({
-                bindingId: doc.binding_id,
+                fileId: doc.file_id,
                 catalogIds: [doc.catalog_id],
             });
         }
-        if (this._documents.state.selectedBindingId === doc.binding_id) {
-            this._documents.setSelectedBinding({ bindingId: null });
+        if (this._documents.state.selectedFileId === doc.file_id) {
+            this._documents.setSelectedFile({ fileId: null });
         }
     }
 
     async _onRestoreDocument(doc) {
         if (!doc) return;
-        this._restore.run({ bindingId: doc.binding_id });
+        this._restore.run({ fileId: doc.file_id });
     }
 
     async _onShareDocument(doc) {
         if (!doc) return;
         this.openModal('office.access', {
             resourceKind: 'binding',
-            resourceId: doc.binding_id,
+            resourceId: doc.file_id,
             resourceTitle: doc.title,
         });
     }
@@ -693,7 +693,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     _onFileAction(e, doc) {
         const action = e.detail && e.detail.action;
         if (action === 'open') {
-            this._onOpenDocument(doc.binding_id);
+            this._onOpenDocument(doc.file_id);
         } else if (action === 'rename') {
             this._onRenameDocument(doc);
         } else if (action === 'delete') {
@@ -744,22 +744,22 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     }
 
     _selectedDocument() {
-        const id = this._documents.state.selectedBindingId;
+        const id = this._documents.state.selectedFileId;
         if (typeof id !== 'string' || id.length === 0) return null;
-        return this._docByBindingId(id);
+        return this._docByFileId(id);
     }
 
     _onDetailsAction(e) {
         const action = e.detail && e.detail.action;
         const doc = this._selectedDocument();
         if (doc) {
-            if (action === 'open') this._onOpenDocument(doc.binding_id);
+            if (action === 'open') this._onOpenDocument(doc.file_id);
             if (action === 'rename' && !this._isFileMissing(doc)) this._onRenameDocument(doc);
             if (action === 'delete') this._onDeleteDocument(doc);
             if (action === 'restore') this._onRestoreDocument(doc);
             if (action === 'share' && !this._isFileMissing(doc)) this._onShareDocument(doc);
             if (action === 'toggle-starred') {
-                this._documents.toggleStarred({ bindingId: doc.binding_id });
+                this._documents.toggleStarred({ fileId: doc.file_id });
             }
             if (action === 'create-work-item') {
                 this.toast(this.t('links.createWorkItem'), { variant: 'info' });
@@ -822,8 +822,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     _renderList(docs) {
         const state = this._documents.state;
-        const selectedIds = new Set(Array.isArray(state.selectedBindingIds) ? state.selectedBindingIds : []);
-        const allSelected = docs.length > 0 && docs.every((d) => selectedIds.has(d.binding_id));
+        const selectedIds = new Set(Array.isArray(state.selectedFileIds) ? state.selectedFileIds : []);
+        const allSelected = docs.length > 0 && docs.every((d) => selectedIds.has(d.file_id));
         const childCatalogs = this._childCatalogsAtCurrentLevel();
         return html`
             ${this._renderSubcatalogRows(childCatalogs)}
@@ -837,9 +837,9 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                 @sort-change=${this._onSortChange}
                 @select-all-toggle=${this._onSelectAllToggle}
             >
-                ${repeat(docs, (doc) => doc.binding_id, (doc) => html`
+                ${repeat(docs, (doc) => doc.file_id, (doc) => html`
                     <platform-file-row
-                        item-key=${doc.binding_id}
+                        item-key=${doc.file_id}
                         file-name=${doc.title}
                         file-size=${doc.file_size}
                         date-label=${this._formatDate(doc.updated_at)}
@@ -848,12 +848,12 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         author-user-id=${doc.created_by_user_id}
                         index-status=${typeof doc.rag_index_status === 'string' ? doc.rag_index_status : ''}
                         index-status-label=${this._ragIndexStatusLabel(doc.rag_index_status)}
-                        ?selected=${state.selectedBindingId === doc.binding_id || selectedIds.has(doc.binding_id)}
+                        ?selected=${state.selectedFileId === doc.file_id || selectedIds.has(doc.file_id)}
                         selectable
                         ?draggable=${!this._isFileMissing(doc)}
                         @row-dragstart=${(e) => this._onFileDragStart(e.detail.nativeEvent, doc)}
-                        @open=${() => this._onSelectDocument(doc.binding_id)}
-                        @activate=${() => this._onOpenDocument(doc.binding_id)}
+                        @open=${() => this._onSelectDocument(doc.file_id)}
+                        @activate=${() => this._onOpenDocument(doc.file_id)}
                         @select-toggle=${this._onRowSelectToggle}
                     >
                         <office-file-actions-menu
@@ -871,9 +871,9 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         const state = this._documents.state;
         return html`
             <div class="grid" aria-label=${this.t('list.cardsAria')}>
-                ${repeat(docs, (doc) => doc.binding_id, (doc) => html`
+                ${repeat(docs, (doc) => doc.file_id, (doc) => html`
                     <platform-file-card
-                        item-key=${doc.binding_id}
+                        item-key=${doc.file_id}
                         file-name=${doc.title}
                         file-size=${doc.file_size}
                         date-label=${this._formatDate(doc.updated_at)}
@@ -881,9 +881,9 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         type-label=${this._docTypeLabel(doc)}
                         index-status=${typeof doc.rag_index_status === 'string' ? doc.rag_index_status : ''}
                         index-status-label=${this._ragIndexStatusLabel(doc.rag_index_status)}
-                        ?selected=${state.selectedBindingId === doc.binding_id}
-                        @open=${() => this._onSelectDocument(doc.binding_id)}
-                        @activate=${() => this._onOpenDocument(doc.binding_id)}
+                        ?selected=${state.selectedFileId === doc.file_id}
+                        @open=${() => this._onSelectDocument(doc.file_id)}
+                        @activate=${() => this._onOpenDocument(doc.file_id)}
                     >
                         <office-file-actions-menu
                             slot="actions"
@@ -956,14 +956,14 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     async _bulkDelete() {
         const state = this._documents.state;
-        const ids = Array.isArray(state.selectedBindingIds) ? state.selectedBindingIds : [];
-        for (const bindingId of ids) {
-            const doc = this._docByBindingId(bindingId);
+        const ids = Array.isArray(state.selectedFileIds) ? state.selectedFileIds : [];
+        for (const fileId of ids) {
+            const doc = this._docByFileId(fileId);
             if (doc) {
                 await this._onDeleteDocument(doc);
             }
         }
-        this._documents.clearBindingSelection(null);
+        this._documents.clearFileSelection(null);
     }
 
     render() {
@@ -977,7 +977,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             : (this._documents.busy && docs.length === 0);
         const actionsDisabled = this._actionsDisabled();
         const selectedDoc = this._selectedDocument();
-        const selectedCount = Array.isArray(state.selectedBindingIds) ? state.selectedBindingIds.length : 0;
+        const selectedCount = Array.isArray(state.selectedFileIds) ? state.selectedFileIds.length : 0;
         const activeCatalog = this._catalogById(this._activeCatalogId());
         const breadcrumbs = this._buildBreadcrumbs();
         const childCatalogs = this._childCatalogsAtCurrentLevel();
@@ -1059,8 +1059,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                                     catalog-title=${this._activeCatalogTitle()}
                                     subcatalog-count=${subcatalogCount}
                                     explorer-view=${state.explorerView}
-                                    ?starred=${selectedDoc && (state.starredBindingIds || []).includes(selectedDoc.binding_id)}
-                                    @close=${() => this._documents.setSelectedBinding({ bindingId: null })}
+                                    ?starred=${selectedDoc && (state.starredFileIds || []).includes(selectedDoc.file_id)}
+                                    @close=${() => this._documents.setSelectedFile({ fileId: null })}
                                     @action=${this._onDetailsAction}
                                 ></office-file-details-panel>
                             </div>

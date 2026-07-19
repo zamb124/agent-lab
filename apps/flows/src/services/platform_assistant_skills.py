@@ -47,6 +47,7 @@ PLATFORM_ASSISTANT_SEED_SKILL_IDS: tuple[str, ...] = (
     "crm-notes",
     "crm-entities",
     "work-tracking",
+    "agent-planning",
     "flows-editor",
     "flows-node-edit",
     "code-node",

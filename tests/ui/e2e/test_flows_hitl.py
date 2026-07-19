@@ -53,6 +53,7 @@ _ = os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
 @pytest.mark.scenario(
     service="flows",
     tag="nodes",
+    timeout_seconds=60,
     doc_slug="escalate-to-operator",
     title="Передаём сложный случай оператору",
     description=(
@@ -176,6 +177,7 @@ async def test_flows_escalate_to_operator(
 @pytest.mark.scenario(
     service="flows",
     tag="nodes",
+    timeout_seconds=60,
     doc_slug="agent-decides-to-escalate",
     title="Агент сам зовёт оператора",
     description=(
@@ -305,6 +307,7 @@ async def test_flows_agent_decides_to_escalate(
 @pytest.mark.scenario(
     service="flows",
     tag="execution",
+    timeout_seconds=60,
     doc_slug="customer-waits-for-operator",
     title="Что видит покупатель, пока ждёт оператора",
     description=(
@@ -434,6 +437,7 @@ async def test_flows_customer_waits_for_operator(
 @pytest.mark.scenario(
     service="flows",
     tag="nodes",
+    timeout_seconds=60,
     doc_slug="agent-logs-background-task",
     title="Агент ставит фоновую задачу команде",
     description=(
@@ -549,7 +553,15 @@ async def test_flows_agent_logs_background_task(
         raise AssertionError(f"Background task {task_title!r} not found in worktracker")
     background_work_item_id = str(matched[0]["work_item_id"])
     await worktracker_open_inbox(page, worktracker_ui)
-    await expect(page.get_by_text(task_title, exact=False).first).to_be_visible(timeout=30_000)
+    # Фоновая задача — в queue inbox (не «Assigned to you»). Ждём карточку / deep-link.
+    title_loc = page.locator("worktracker-inbox-page").get_by_text(task_title, exact=False).first
+    try:
+        await expect(title_loc).to_be_visible(timeout=20_000)
+    except AssertionError:
+        await worktracker_open_task_page(page, worktracker_ui, background_work_item_id)
+        await expect(page.get_by_text(task_title, exact=False).first).to_be_visible(timeout=15_000)
+        await worktracker_open_inbox(page, worktracker_ui)
+        await expect(title_loc).to_be_visible(timeout=30_000)
     await scenario.step(
         "Откройте входящие задач команды",
         page,
@@ -591,6 +603,7 @@ async def test_flows_agent_logs_background_task(
 @pytest.mark.scenario(
     service="flows",
     tag="execution",
+    timeout_seconds=60,
     doc_slug="trace-operator-handoff",
     title="Смотрим передачу оператору в истории выполнения",
     description=(

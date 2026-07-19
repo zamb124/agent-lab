@@ -12,6 +12,7 @@ from tests.ui.e2e.sync_e2e_helpers import (
     sync_api_find_message_id_with_text,
     sync_api_react_to_message,
     sync_e2e_create_topic_channel_and_open,
+    sync_e2e_dismiss_pwa_install_banner,
     sync_e2e_open_with_namespace,
     sync_sidebar_channel_nav,
 )
@@ -225,6 +226,7 @@ async def test_user_deletes_own_message(
         label_en="Message to delete in the feed",
     )
 
+    await sync_e2e_dismiss_pwa_install_banner(ui_page_system)
     await _open_message_context_menu(ui_page_system, bubble)
     await _click_context_item(ui_page_system, "Удалить", "Delete")
     await expect(bubble).to_be_hidden(timeout=30_000)

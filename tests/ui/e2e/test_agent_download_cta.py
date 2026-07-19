@@ -39,7 +39,9 @@ async def test_landing_hero_agent_download_link(
     await expect(download_link).to_be_visible(timeout=30_000)
     await expect(
         download_link.filter(
-            has_text=re.compile(r"Скачать HumanitecAgent|Download HumanitecAgent")
+            has_text=re.compile(
+                r"Скачать (?:LinnexAgent|HumanitecAgent)|Download (?:LinnexAgent|HumanitecAgent)"
+            )
         )
     ).to_be_visible(timeout=30_000)
     await scenario.step(
@@ -66,7 +68,9 @@ async def test_flows_home_agent_download_link(
     await expect(download_link).to_be_visible(timeout=30_000)
     await expect(
         download_link.filter(
-            has_text=re.compile(r"Скачать HumanitecAgent|Download HumanitecAgent")
+            has_text=re.compile(
+                r"Скачать (?:LinnexAgent|HumanitecAgent)|Download (?:LinnexAgent|HumanitecAgent)"
+            )
         )
     ).to_be_visible(timeout=30_000)
     href = await download_link.get_attribute("href")

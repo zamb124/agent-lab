@@ -10,7 +10,7 @@ from core.types import JsonObject
 
 DocumentViewerHandlerId = Literal["onlyoffice", "media", "image", "text", "binary", "viz"]
 MediaViewerKind = Literal["audio", "video"]
-OfficeViewerBindingKind = Literal["document", "file"]
+OfficeViewerScope = Literal["catalog", "file"]
 VizViewerEngine = Literal["echarts", "mermaid"]
 VizViewerKind = Literal["chart", "flowchart", "gantt", "sequence", "timeline"]
 
@@ -69,7 +69,6 @@ class VizOpenPayload(BaseModel):
 
 class DocumentOpenConfigResponse(BaseModel):
     handler: DocumentViewerHandlerId
-    binding_id: str
     file_id: str
     title: str
     original_name: str
@@ -109,8 +108,7 @@ class OfficeViewerStreamTokenClaims(BaseModel):
 
     typ: Literal["office_view"]
     handler: DocumentViewerHandlerId
-    binding_kind: OfficeViewerBindingKind
-    binding_id: str
+    viewer_scope: OfficeViewerScope
     file_id: str
     company_id: str
     content_type: str
@@ -124,8 +122,7 @@ class OfficeViewerSaveTokenClaims(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     typ: Literal["office_view_save"]
-    binding_kind: OfficeViewerBindingKind
-    binding_id: str
+    viewer_scope: OfficeViewerScope
     file_id: str
     company_id: str
     public_link_token_hash: str | None = None

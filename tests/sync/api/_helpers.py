@@ -21,11 +21,17 @@ from core.models.identity_models import Company, Namespace, User
 
 
 @contextmanager
-def _temporary_company_context(company_id: str) -> Iterator[None]:
-    """Поднимает минимальный Context с `active_company.company_id` для записи в KV.
+def _temporary_company_context(
+    company_id: str,
+    *,
+    subdomain: str | None = None,
+) -> Iterator[None]:
+    """Поднимает минимальный Context с `active_company` для записи в KV.
 
-    `subdomain` намеренно None — ключ строится через
-    `company_identifier = subdomain or company_id` (см. `BaseRepository`).
+    Префикс storage: ``company:{subdomain or company_id}:`` (см. `BaseRepository`).
+    Если у компании в БД задан subdomain (UI E2E ``ui-gwN``), его нужно передать —
+    иначе seed уйдёт в ключ ``company:{company_id}:``, а runtime читает
+    ``company:{subdomain}:``.
     """
     previous = get_context()
     company = Company(
@@ -33,6 +39,7 @@ def _temporary_company_context(company_id: str) -> Iterator[None]:
         name=f"sync test {company_id}",
         owner_user_id="seed_owner",
         members={},
+        subdomain=subdomain,
     )
     user = User(
         user_id="seed_owner",
@@ -58,12 +65,24 @@ def _temporary_company_context(company_id: str) -> Iterator[None]:
             set_context(previous)
 
 
-async def seed_namespace_via_repo(company_id: str, name: str) -> str:
+async def seed_namespace_via_repo(
+    company_id: str,
+    name: str,
+    *,
+    subdomain: str | None = None,
+) -> str:
     """Создаёт namespace в shared `NamespaceRepository` для тестовой компании."""
+    from apps.frontend.container import get_frontend_container
     from apps.sync.container import get_sync_container
 
+    resolved_subdomain = subdomain
+    if resolved_subdomain is None:
+        company = await get_frontend_container().company_repository.get(company_id)
+        if company is not None and company.subdomain is not None and company.subdomain.strip() != "":
+            resolved_subdomain = company.subdomain
+
     container = get_sync_container()
-    with _temporary_company_context(company_id):
+    with _temporary_company_context(company_id, subdomain=resolved_subdomain):
         await container.namespace_repository.set(
             Namespace(
                 name=name,

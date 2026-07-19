@@ -66,8 +66,8 @@ export function markdownSummary(data) {
     `| Metric | avg | p90 | p95 | p99 | max |`,
     `| --- | ---: | ---: | ---: | ---: | ---: |`,
     metricRow(data, "http_req_duration", "HTTP request"),
-    metricRow(data, "stress_a2a_submit_ms", "message/send submit"),
-    metricRow(data, "stress_a2a_poll_ms", "tasks/get poll"),
+    metricRow(data, "stress_a2a_submit_ms", "SendMessage submit"),
+    metricRow(data, "stress_a2a_poll_ms", "GetTask poll"),
     metricRow(data, "stress_a2a_task_total_ms", "submit -> terminal task"),
     ``,
   ];

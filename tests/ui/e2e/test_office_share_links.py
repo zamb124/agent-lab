@@ -50,7 +50,7 @@ async def test_office_share_catalog_and_document(
         namespace=namespace,
         title_prefix="share",
     )
-    binding_id = await office_api_upload_txt(
+    file_id = await office_api_upload_txt(
         office_client_http,
         auth_headers_system,
         namespace=namespace,
@@ -74,10 +74,18 @@ async def test_office_share_catalog_and_document(
         label_en="Catalog access modal",
     )
 
-    link_switch = access_modal.locator("platform-switch").last
-    if not await link_switch.get_attribute("checked"):
+    link_switch = access_modal.locator(".switch-row").filter(
+        has_text=re.compile(r"Любой по ссылке|Anyone with the link")
+    ).locator("platform-switch").first
+    await expect(link_switch).to_be_visible(timeout=15_000)
+    switch_control = link_switch.get_by_role("switch")
+    if await switch_control.get_attribute("aria-checked") != "true":
         await link_switch.click()
-    await access_modal.get_by_role("button", name="Сохранить").click()
+    rotate_btn = access_modal.get_by_role(
+        "button", name=re.compile(r"Обновить ссылку|Rotate link")
+    ).first
+    await expect(rotate_btn).to_be_visible(timeout=15_000)
+    await access_modal.get_by_role("button", name=re.compile(r"Сохранить|Save")).click()
     await expect(access_modal).to_be_hidden(timeout=45_000)
     await scenario.step(
         "Публичная ссылка включена",
@@ -88,21 +96,31 @@ async def test_office_share_catalog_and_document(
     await office_e2e_catalog_context_action(ui_page_system, catalog_title, "Доступ", "Access")
     access_modal = ui_page_system.locator("office-access-modal")
     await expect(access_modal).to_be_visible(timeout=30_000)
-    rotate_btn = access_modal.locator("button.btn-secondary").filter(
-        has_text=re.compile(r"Обновить|Refresh|Rotate")
+    rotate_btn = access_modal.get_by_role(
+        "button", name=re.compile(r"Обновить ссылку|Rotate link")
     ).first
     await expect(rotate_btn).to_be_visible(timeout=30_000)
-    await rotate_btn.click()
-    await expect(access_modal.locator(".link-url")).to_be_visible(timeout=60_000)
+    link_url = access_modal.locator(".link-url")
+    for _attempt in range(3):
+        await rotate_btn.click()
+        try:
+            await expect(link_url).to_be_visible(timeout=20_000)
+            break
+        except AssertionError:
+            if _attempt == 2:
+                raise
+            await ui_page_system.wait_for_timeout(500)
 
-    await access_modal.locator("button.btn-secondary").filter(has_text="Скопировать").click()
+    await access_modal.get_by_role(
+        "button", name=re.compile(r"Скопировать ссылку|Copy link|Copy share link")
+    ).click()
     await scenario.step(
         "Ссылка скопирована",
         ui_page_system,
         label_en="Link copied",
     )
 
-    await access_modal.locator("button.btn-secondary").filter(has_text="Обновить").click()
+    await rotate_btn.click()
     await expect(access_modal.locator(".link-url")).to_be_visible(timeout=30_000)
     await scenario.step(
         "Ссылка обновлена",
@@ -110,8 +128,11 @@ async def test_office_share_catalog_and_document(
         label_en="Link rotated",
     )
 
-    await access_modal.locator("platform-switch").last.click()
-    await access_modal.get_by_role("button", name="Сохранить").click()
+    link_switch = access_modal.locator(".switch-row").filter(
+        has_text=re.compile(r"Любой по ссылке|Anyone with the link|ссылке", re.I)
+    ).locator("platform-switch").first
+    await link_switch.get_by_role("switch").click()
+    await access_modal.get_by_role("button", name=re.compile(r"Сохранить|Save")).click()
     await expect(access_modal).to_be_hidden(timeout=45_000)
     await scenario.step(
         "Публичная ссылка отключена",
@@ -130,4 +151,4 @@ async def test_office_share_catalog_and_document(
         label_en="Document-level access",
     )
 
-    _ = binding_id
+    _ = file_id

@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "statusUpdate": {
+      "taskId": "task-001",
+      "contextId": "ctx-001",
+      "status": {
+        "state": "TASK_STATE_WORKING"
+      },
+      "final": false
+    }
+  }
+}

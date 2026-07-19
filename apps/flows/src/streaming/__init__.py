@@ -7,7 +7,7 @@
 """
 
 from .base import BaseEmitter, BaseSubscriber, StreamEvent
-from .emitter import Emitter, RedisEmitter
+from .emitter import Emitter
 from .memory import InMemoryEmitter, InMemorySubscriber
 from .speakable import (
     SPEAK_FLAG_KEY,
@@ -23,7 +23,6 @@ __all__ = [
     "BaseSubscriber",
     "StreamEvent",
     "Emitter",
-    "RedisEmitter",
     "InMemoryEmitter",
     "InMemorySubscriber",
     "EventSubscriber",

@@ -8,4 +8,4 @@
 
 ## Шаг 2. Floating-карточка download page видна на лендинге
 
-![Floating-карточка download page видна на лендинге](landing-hero-download-link--02-floating-kartochka-download-page-vidna-na-lendinge.png)
+![Floating-карточка download page видна на лендинге](landing-hero-download-link--02-the-floating-download-card-is-visible-on-the-landing-page.png)

@@ -15,7 +15,7 @@ from apps.office.dependencies import ContainerDep
 from apps.office.services.viewer_frame import render_viewer_frame_html
 from apps.office.services.viewer_handlers._urls import viewer_save_url, viewer_stream_url
 from apps.office.services.viewer_handlers.text_handler import TEXT_MAX_EDIT_BYTES
-from apps.office.services.viewer_service import browser_public_base_url, file_viewer_binding_id
+from apps.office.services.viewer_service import browser_public_base_url
 from core.clients.onlyoffice import OnlyOfficeJwtError
 from core.documents.viewer.jwt import decode_viewer_save_token, decode_viewer_stream_token
 from core.documents.viewer.models import OfficeViewerSaveTokenClaims, OfficeViewerStreamTokenClaims
@@ -91,8 +91,7 @@ async def viewer_frame(
     stream_url = viewer_stream_url(
         base_url=base,
         handler=claims.handler,
-        binding_kind=claims.binding_kind,
-        binding_id=claims.binding_id,
+        viewer_scope=claims.viewer_scope,
         file_id=claims.file_id,
         company_id=claims.company_id,
         content_type=claims.content_type,
@@ -105,8 +104,7 @@ async def viewer_frame(
     if claims.handler == "text" and claims.edit_mode:
         save_url = viewer_save_url(
             base_url=base,
-            binding_kind=claims.binding_kind,
-            binding_id=claims.binding_id,
+            viewer_scope=claims.viewer_scope,
             file_id=claims.file_id,
             company_id=claims.company_id,
             secret=integ.jwt_secret,
@@ -179,7 +177,7 @@ async def _authorize_viewer_claims(
         )
         if binding_row is None:
             raise HTTPException(status_code=403, detail="Доступ запрещён")
-        if binding_row.binding_id != claims.binding_id or binding_row.file_id != claims.file_id:
+        if binding_row.file_id != claims.file_id:
             raise HTTPException(status_code=403, detail="Доступ запрещён")
         if binding_row.company_id != claims.company_id:
             raise HTTPException(status_code=403, detail="Доступ запрещён")
@@ -187,16 +185,14 @@ async def _authorize_viewer_claims(
             raise HTTPException(status_code=403, detail="Сохранение запрещено")
         return
 
-    if claims.binding_kind == "document":
-        binding_row = await container.document_binding_repository.get_by_binding_and_company(
-            claims.binding_id,
+    if claims.viewer_scope == "catalog":
+        binding_row = await container.document_binding_repository.get_by_file_and_company(
+            claims.file_id,
             claims.company_id,
         )
-        if binding_row is None or binding_row.file_id != claims.file_id:
+        if binding_row is None:
             raise HTTPException(status_code=403, detail="Доступ запрещён")
         return
-    if claims.binding_kind == "file":
-        if claims.binding_id != file_viewer_binding_id(claims.file_id):
-            raise HTTPException(status_code=403, detail="Доступ запрещён")
+    if claims.viewer_scope == "file":
         return
     raise HTTPException(status_code=403, detail="Доступ запрещён")

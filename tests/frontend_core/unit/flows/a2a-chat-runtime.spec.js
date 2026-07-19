@@ -8,21 +8,21 @@ describe('flows-chat A2A runtime', () => {
     it('maps artifact chunks to task_started, content, reasoning and terminal events', () => {
         const first = mapA2aResultToChatRuntimeEvents(
             {
-                kind: 'artifact-update',
-                taskId: 't1',
-                contextId: 'ctx1',
-                artifact: {
-                    name: 'reasoning',
-                    metadata: {
-                        author: {
-                            kind: 'subagent',
-                            flow_id: 'returns_agent',
-                            node_id: 'answer',
+                artifactUpdate: {
+                    taskId: 't1',
+                    contextId: 'ctx1',
+                    artifact: {
+                        name: 'reasoning',
+                        metadata: {
+                            author: {
+                                kind: 'subagent',
+                                flow_id: 'returns_agent',
+                                node_id: 'answer',
+                            },
                         },
+                        parts: [{ text: 'thinking' }],
                     },
-                    parts: [{ kind: 'text', text: 'thinking' }],
                 },
-                final: false,
             },
             { contextId: 'ctx1', currentTaskId: null, taskPrimed: false },
         );
@@ -39,23 +39,23 @@ describe('flows-chat A2A runtime', () => {
 
         const done = mapA2aResultToChatRuntimeEvents(
             {
-                kind: 'status-update',
-                taskId: 't1',
-                contextId: 'ctx1',
-                status: {
-                    state: 'completed',
-                    message: {
-                        metadata: {
-                            author: {
-                                kind: 'subagent',
-                                flow_id: 'returns_agent',
-                                node_id: 'answer',
+                statusUpdate: {
+                    taskId: 't1',
+                    contextId: 'ctx1',
+                    status: {
+                        state: 'TASK_STATE_COMPLETED',
+                        message: {
+                            metadata: {
+                                author: {
+                                    kind: 'subagent',
+                                    flow_id: 'returns_agent',
+                                    node_id: 'answer',
+                                },
                             },
+                            parts: [{ text: 'final answer' }],
                         },
-                        parts: [{ kind: 'text', text: 'final answer' }],
                     },
                 },
-                final: true,
             },
             { contextId: 'ctx1', currentTaskId: 't1', taskPrimed: first.taskPrimed },
         );
@@ -81,31 +81,30 @@ describe('flows-chat A2A runtime', () => {
     it('maps tool metadata and ui events without embed-specific state patches', () => {
         const mapped = mapA2aResultToChatRuntimeEvents(
             {
-                kind: 'artifact-update',
-                taskId: 't2',
-                contextId: 'ctx2',
-                artifact: {
-                    name: 'ui_event',
-                    message: {
-                        metadata: {
-                            tool_calls: [{ id: 'c1', name: 'lookup' }],
-                            tool_result: { id: 'c1', result: 'ok' },
-                        },
-                        parts: [],
-                    },
-                    parts: [
-                        {
-                            kind: 'data',
-                            data: {
-                                id: 'ev1',
-                                type: 'files.created',
-                                payload: { file_id: 'f1' },
-                                timestamp: '2026-05-23T00:00:00Z',
+                artifactUpdate: {
+                    taskId: 't2',
+                    contextId: 'ctx2',
+                    artifact: {
+                        name: 'ui_event',
+                        message: {
+                            metadata: {
+                                tool_calls: [{ id: 'c1', name: 'lookup' }],
+                                tool_result: { id: 'c1', result: 'ok' },
                             },
+                            parts: [],
                         },
-                    ],
+                        parts: [
+                            {
+                                data: {
+                                    id: 'ev1',
+                                    type: 'files.created',
+                                    payload: { file_id: 'f1' },
+                                    timestamp: '2026-05-23T00:00:00Z',
+                                },
+                            },
+                        ],
+                    },
                 },
-                final: false,
             },
             { contextId: 'ctx2', currentTaskId: null, taskPrimed: false },
         );
@@ -123,7 +122,7 @@ describe('flows-chat A2A runtime', () => {
 
     it('normalizes input-required interrupt details for all chat hosts', () => {
         const details = inputRequiredFieldsFromA2a(
-            { parts: [{ kind: 'text', text: 'Authorize please' }] },
+            { parts: [{ text: 'Authorize please' }] },
             {
                 platform_interrupt: {
                     body: {
@@ -146,29 +145,29 @@ describe('flows-chat A2A runtime', () => {
         });
     });
 
-    it('treats non-final handoff input-required as the terminal stream boundary', () => {
+    it('treats handoff input-required as the terminal stream boundary without final', () => {
         const mapped = mapA2aResultToChatRuntimeEvents(
             {
-                kind: 'status-update',
-                taskId: 'task-handoff',
-                contextId: 'ctx-handoff',
-                status: {
-                    state: 'input-required',
-                    message: {
-                        metadata: {
-                            platform_handoff_continue: true,
-                            platform_interrupt: {
-                                body: {
-                                    kind: 'handoff',
-                                    target_flow_id: 'returns_agent',
-                                    target_name: 'Returns Agent',
+                statusUpdate: {
+                    taskId: 'task-handoff',
+                    contextId: 'ctx-handoff',
+                    status: {
+                        state: 'TASK_STATE_INPUT_REQUIRED',
+                        message: {
+                            metadata: {
+                                platform_handoff_continue: true,
+                                platform_interrupt: {
+                                    body: {
+                                        kind: 'handoff',
+                                        target_flow_id: 'returns_agent',
+                                        target_name: 'Returns Agent',
+                                    },
                                 },
                             },
+                            parts: [{ text: 'Передаю управление' }],
                         },
-                        parts: [{ kind: 'text', text: 'Передаю управление' }],
                     },
                 },
-                final: false,
             },
             { contextId: 'ctx-handoff', currentTaskId: null, taskPrimed: false },
         );
@@ -178,5 +177,27 @@ describe('flows-chat A2A runtime', () => {
             'task_started',
             'input_required',
         ]);
+    });
+
+    it('keeps parent conversation context when handoff child emits child context_id', () => {
+        const mapped = mapA2aResultToChatRuntimeEvents(
+            {
+                artifactUpdate: {
+                    taskId: 'task-child-turn',
+                    contextId: 'ctx-parent:handoff:returns_agent',
+                    artifact: {
+                        name: 'response',
+                        parts: [{ text: 'Я Агент возвратов. Заказ GG-1042 найден.' }],
+                    },
+                },
+            },
+            { contextId: 'ctx-parent', currentTaskId: null, taskPrimed: false },
+        );
+
+        const started = mapped.events.find((event) => event.type === 'task_started');
+        const chunk = mapped.events.find((event) => event.type === 'content_chunk');
+        expect(started?.payload?.context_id).toBe('ctx-parent');
+        expect(chunk?.payload?.context_id).toBe('ctx-parent');
+        expect(chunk?.payload?.text).toContain('GG-1042');
     });
 });

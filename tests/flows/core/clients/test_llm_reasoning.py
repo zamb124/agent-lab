@@ -6,30 +6,38 @@ import json
 import uuid
 
 import pytest
+from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
     Artifact,
     Message,
     Part,
-    Role,
     TaskArtifactUpdateEvent,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
-from a2a.utils.message import get_message_text, new_agent_text_message
+from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER, TASK_STATE_FAILED, Role
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.channels.a2a import _build_task_from_events
+from core.a2a import get_part_text, make_task_status, part_has_text
 from core.clients.llm import MockLLM, setup_mock_responses
 
 
-def _msg(text: str, role: Role = Role.user) -> Message:
+def _msg(text: str, role: Role = ROLE_USER) -> Message:
     """Создаёт A2A Message для тестов."""
     return Message(
-        messageId=str(uuid.uuid4()),
+        message_id=str(uuid.uuid4()),
         role=role,
-        parts=[Part(root=TextPart(text=text))],
+        parts=[Part(text=text)],
+    )
+
+
+def _completed_status(task_id: str, context_id: str) -> TaskStatusUpdateEvent:
+    return TaskStatusUpdateEvent(
+        context_id=context_id,
+        task_id=task_id,
+        status=make_task_status(TaskState.TASK_STATE_COMPLETED),
     )
 
 
@@ -45,37 +53,38 @@ class TestReasoningArtifactsInBuildTask:
 
         events = [
             TaskArtifactUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
+                context_id=context_id,
+                task_id=task_id,
                 artifact=Artifact(
-                    artifactId=str(uuid.uuid4()),
+                    artifact_id=str(uuid.uuid4()),
                     name="reasoning",
-                    parts=[Part(root=TextPart(text="Step 1: "))]
+                    parts=[Part(text="Step 1: ")]
                 ),
                 append=True,
                 last_chunk=False,
             ),
             TaskArtifactUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
+                context_id=context_id,
+                task_id=task_id,
                 artifact=Artifact(
-                    artifactId=str(uuid.uuid4()),
+                    artifact_id=str(uuid.uuid4()),
                     name="reasoning",
-                    parts=[Part(root=TextPart(text="analyzing..."))]
+                    parts=[Part(text="analyzing...")]
                 ),
                 append=True,
                 last_chunk=False,
             ),
             TaskArtifactUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
+                context_id=context_id,
+                task_id=task_id,
                 artifact=Artifact(
-                    artifactId=str(uuid.uuid4()),
-                    parts=[Part(root=TextPart(text="Response text"))]
+                    artifact_id=str(uuid.uuid4()),
+                    parts=[Part(text="Response text")]
                 ),
                 append=True,
                 last_chunk=False,
             ),
+            _completed_status(task_id, context_id),
         ]
 
         task = await _build_task_from_events(events, task_id, context_id, input_message, flow_id="test_flow")
@@ -89,10 +98,10 @@ class TestReasoningArtifactsInBuildTask:
         assert reasoning_artifact is not None
         assert response_artifact is not None
 
-        reasoning_text = "".join(p.root.text for p in reasoning_artifact.parts if hasattr(p.root, "text"))
+        reasoning_text = "".join(get_part_text(p) for p in reasoning_artifact.parts if part_has_text(p))
         assert reasoning_text == "Step 1: analyzing..."
 
-        response_text = "".join(p.root.text for p in response_artifact.parts if hasattr(p.root, "text"))
+        response_text = "".join(get_part_text(p) for p in response_artifact.parts if part_has_text(p))
         assert response_text == "Response text"
 
     @pytest.mark.asyncio
@@ -104,16 +113,17 @@ class TestReasoningArtifactsInBuildTask:
 
         events = [
             TaskArtifactUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
+                context_id=context_id,
+                task_id=task_id,
                 artifact=Artifact(
-                    artifactId=str(uuid.uuid4()),
+                    artifact_id=str(uuid.uuid4()),
                     name="reasoning",
-                    parts=[Part(root=TextPart(text="Thinking..."))]
+                    parts=[Part(text="Thinking...")]
                 ),
                 append=True,
                 last_chunk=True,
             ),
+            _completed_status(task_id, context_id),
         ]
 
         task = await _build_task_from_events(events, task_id, context_id, input_message, flow_id="test_flow")
@@ -124,7 +134,7 @@ class TestReasoningArtifactsInBuildTask:
         reasoning_artifact = task.artifacts[0]
         assert reasoning_artifact.name == "reasoning"
 
-        reasoning_text = "".join(p.root.text for p in reasoning_artifact.parts if hasattr(p.root, "text"))
+        reasoning_text = "".join(get_part_text(p) for p in reasoning_artifact.parts if part_has_text(p))
         assert reasoning_text == "Thinking..."
 
     @pytest.mark.asyncio
@@ -136,30 +146,29 @@ class TestReasoningArtifactsInBuildTask:
 
         events = [
             TaskArtifactUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
+                context_id=context_id,
+                task_id=task_id,
                 artifact=Artifact(
-                    artifactId=str(uuid.uuid4()),
+                    artifact_id=str(uuid.uuid4()),
                     name="reasoning",
-                    parts=[Part(root=TextPart(text="partial stream"))],
+                    parts=[Part(text="partial stream")],
                 ),
                 append=True,
                 last_chunk=False,
             ),
             TaskStatusUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
+                context_id=context_id,
+                task_id=task_id,
                 status=TaskStatus(
-                    state=TaskState.failed,
-                    message=new_agent_text_message("httpx.ReadTimeout"),
+                    state=TASK_STATE_FAILED,
+                    message=Message(message_id="msg", role=ROLE_AGENT, parts=[Part(text="httpx.ReadTimeout")]),
                 ),
-                final=True,
             ),
         ]
 
         task = await _build_task_from_events(events, task_id, context_id, input_message, flow_id="test_flow")
 
-        assert task.status.state == TaskState.failed
+        assert task.status.state == TASK_STATE_FAILED
         assert task.status.message is not None
         assert "ReadTimeout" in get_message_text(task.status.message)
 
@@ -194,7 +203,7 @@ class TestMockLLMReasoning:
             e
             for e in events
             if isinstance(e, TaskArtifactUpdateEvent)
-            and (e.artifact.name is None or e.artifact.name == "response")
+            and e.artifact.name != "reasoning"
         ]
 
         assert len(reasoning_events) > 0, "Должны быть reasoning артефакты"
@@ -203,8 +212,8 @@ class TestMockLLMReasoning:
         reasoning_text = ""
         for event in reasoning_events:
             for part in event.artifact.parts:
-                if hasattr(part.root, "text"):
-                    reasoning_text += part.root.text
+                if part_has_text(part):
+                    reasoning_text += get_part_text(part)
 
         assert "Step 1: thinking..." in reasoning_text
         assert "Step 2: analyzing..." in reasoning_text
@@ -212,8 +221,8 @@ class TestMockLLMReasoning:
         response_text = ""
         for event in response_events:
             for part in event.artifact.parts:
-                if hasattr(part.root, "text"):
-                    response_text += part.root.text
+                if part_has_text(part):
+                    response_text += get_part_text(part)
 
         assert response_text == "Response text"
 
@@ -246,8 +255,8 @@ class TestMockLLMReasoning:
         reasoning_text = ""
         for event in reasoning_events:
             for part in event.artifact.parts:
-                if hasattr(part.root, "text"):
-                    reasoning_text += part.root.text
+                if part_has_text(part):
+                    reasoning_text += get_part_text(part)
 
         assert reasoning_text == "Just reasoning"
 
@@ -279,8 +288,8 @@ class TestMockLLMReasoning:
         reasoning_text = ""
         for event in reasoning_events:
             for part in event.artifact.parts:
-                if hasattr(part.root, "text"):
-                    reasoning_text += part.root.text
+                if part_has_text(part):
+                    reasoning_text += get_part_text(part)
 
         assert reasoning_text == "Reasoning text"
 
@@ -306,7 +315,7 @@ class TestMockLLMReasoning:
         )
 
         out = await mock.chat(
-            [{"role": "user", "content": "сделай run"}],
+            [{"role": "ROLE_USER", "content": "сделай run"}],
             response_model=_Gen,
         )
         assert out.code == body["code"]

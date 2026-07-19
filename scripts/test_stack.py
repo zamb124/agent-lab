@@ -354,6 +354,13 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
         workers=1,
         readiness_timeout=120.0,
     ),
+    TaskiqWorkerService(
+        name="idle_worker",
+        worker_module="apps.idle_worker.worker:worker_app",
+        stream_name="idle",
+        workers=1,
+        readiness_timeout=120.0,
+    ),
     )
 
 
