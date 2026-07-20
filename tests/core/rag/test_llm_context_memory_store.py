@@ -12,7 +12,7 @@ from core.llm_context import (
     LLMContextMemoryEpisode,
     LLMContextMemoryRecallRequest,
 )
-from core.models.identity_models import Namespace
+from core.models.identity_models import Namespace, NamespaceKind
 from core.rag.llm_context_memory_store import (
     RAGLLMContextMemoryStore,
     _clamp_score,
@@ -45,13 +45,26 @@ class FakeNamespaceService:
     async def get(self, namespace_id: str) -> Namespace | None:
         if not self.exists:
             return None
-        return Namespace(name=namespace_id, company_id="system")
+        return Namespace(
+            name=namespace_id,
+            company_id="system",
+            kind=NamespaceKind.TECHNICAL,
+        )
 
     async def get_or_create(
-        self, namespace_id: str, *, description: str | None = None
+        self,
+        namespace_id: str,
+        *,
+        description: str | None = None,
+        kind: NamespaceKind | None = None,
     ) -> Namespace:
         _ = description
-        namespace = Namespace(name=namespace_id, company_id="system")
+        resolved_kind = kind if kind is not None else NamespaceKind.TECHNICAL
+        namespace = Namespace(
+            name=namespace_id,
+            company_id="system",
+            kind=resolved_kind,
+        )
         self.exists = True
         self.created.append(namespace)
         return namespace

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from apps.sync.dependencies import ContainerDep
 from apps.sync.realtime.context import require_current_user
 from core.logging import get_logger
-from core.models.identity_models import NamespaceSyncSettings
+from core.models.identity_models import NamespaceKind, NamespaceSyncSettings
 from core.pagination import OffsetPage
 
 logger = get_logger(__name__)
@@ -55,11 +55,12 @@ async def list_namespaces(
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[SyncNamespaceResponse]:
-    """Список namespace текущей компании (источник — shared `NamespaceRepository`)."""
+    """Список company_workspace namespace (personal/technical исключены)."""
     namespace_service = container.namespace_service
+    workspace_kinds = frozenset({NamespaceKind.COMPANY_WORKSPACE})
     namespaces, total = await asyncio.gather(
-        namespace_service.list(limit=limit, offset=offset),
-        namespace_service.count(),
+        namespace_service.list_company_workspaces(limit=limit, offset=offset),
+        namespace_service.count(kinds=workspace_kinds),
     )
     return OffsetPage[SyncNamespaceResponse](
         items=[

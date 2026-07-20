@@ -4187,17 +4187,15 @@ export class PlatformCalendarModal extends PlatformModal {
                                     <platform-icon name="plus" size="16"></platform-icon>
                                 </button>
                                 ${this._renderIntegrationsMenuBlock(v, compact)}
-                                ${!compact ? html`
-                                    <button
-                                        class="btn-icon"
-                                        type="button"
-                                        @click=${() => this.close()}
-                                        title=${v('modal.close')}
-                                        aria-label=${v('modal.close')}
-                                    >
-                                        <platform-icon name="close" size="16"></platform-icon>
-                                    </button>
-                                ` : nothing}
+                                <button
+                                    class="btn-icon"
+                                    type="button"
+                                    @click=${() => this.close()}
+                                    title=${v('modal.close')}
+                                    aria-label=${v('modal.close')}
+                                >
+                                    <platform-icon name="close" size="16"></platform-icon>
+                                </button>
                             </div>
                         </div>
                         <div class="calendar-panel ${this._view === 'day' ? 'calendar-panel--day' : ''}">

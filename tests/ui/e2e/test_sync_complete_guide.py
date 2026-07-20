@@ -17,6 +17,7 @@ from tests.ui.e2e.sync_e2e_helpers import (
     sync_e2e_dismiss_pwa_install_banner,
     sync_e2e_expect_company_member_loaded,
     sync_e2e_expect_ws_open,
+    sync_e2e_open_sync_defaults,
     sync_e2e_open_with_namespace,
     sync_sidebar_channel_nav,
     sync_sidebar_channel_settings_gear,
@@ -122,54 +123,50 @@ async def test_sync_complete_service_guide(
     )
     await sync_e2e_expect_ws_open(ui_page_system)
     await scenario.step(
-        "Открыт Sync в выбранном пространстве",
+        "Открыт Sync со списком чатов компании",
         ui_page_system,
-        label_en="Sync opened in the selected space",
+        label_en="Sync opened with the company chat list",
         details=(
             "На первом экране важно проверить три зоны интерфейса:\n\n"
             "- слева находится список чатов, поиск и переключатель области поиска;\n"
-            "- сверху у списка выбранное пространство, карандаш настроек и кнопка встречи;\n"
-            "- в центре показаны карточки каналов выбранного пространства.\n\n"
-            "Пространство в Sync — это платформенный namespace. Оно общее для сервисов "
-            "платформы, а Sync хранит в нём только свои настройки: авто-расшифровку "
-            "голосовых и режим «речь звонка в ленту»."
+            "- сверху у списка кнопка настроек Sync (шестерёнка) и кнопка встречи;\n"
+            "- в центре показаны карточки каналов, к которым у вас есть доступ.\n\n"
+            "В Sync нет переключателя пространства: видны все чаты по membership. "
+            "Дефолты транскрипции хранятся в company workspace ``default``."
         ),
         details_en=(
             "On the first screen, check three interface areas:\n\n"
             "- on the left are the chat list, search, and search scope switch;\n"
-            "- above the list are the selected space, settings pencil, and meeting button;\n"
-            "- in the center are channel cards for the selected space.\n\n"
-            "A Sync space is a platform namespace. It is shared across platform services, "
-            "and Sync stores only its own settings there: auto-transcription of voice messages "
-            "and the «speech from calls into the feed» mode."
+            "- above the list are the Sync settings gear and the meeting button;\n"
+            "- in the center are channel cards you have access to.\n\n"
+            "Sync has no namespace switcher: you see all chats by membership. "
+            "Transcription defaults live on the company workspace ``default``."
         ),
     )
 
-    await ui_page_system.locator("platform-sidebar-namespace-select button.btn-edit").click()
-    namespace_modal = ui_page_system.locator("sync-namespace-modal")
-    await expect(namespace_modal).to_be_visible(timeout=8_000)
+    namespace_modal = await sync_e2e_open_sync_defaults(ui_page_system)
     await scenario.step(
-        "Открыты Sync-настройки пространства",
+        "Открыты Sync-настройки компании",
         ui_page_system,
-        label_en="Sync space settings opened",
+        label_en="Company Sync defaults opened",
         details=(
-            "Карандаш рядом с пространством не создаёт и не переименовывает namespace. "
-            "Он открывает именно Sync-настройки выбранного пространства.\n\n"
+            "Шестерёнка в шапке списка чатов открывает Sync-настройки company workspace "
+            "``default`` (не создаёт и не переключает namespace).\n\n"
             "- «Авто-транскрипция голосовых» включает STT для новых голосовых сообщений "
-            "в каналах этого пространства.\n"
+            "в каналах компании по умолчанию.\n"
             "- «Речь звонка в ленту» публикует сегменты речи участников звонка в ленту "
             "канала, когда backend и LiveKit egress настроены.\n\n"
-            "Эти значения работают как дефолты пространства; у конкретного канала их "
+            "Эти значения — дефолты компании; у конкретного канала их "
             "можно переопределить в настройках канала."
         ),
         details_en=(
-            "The pencil next to the space does not create or rename the namespace. "
-            "It opens Sync settings for the selected space.\n\n"
+            "The gear in the chat list header opens Sync settings for the company "
+            "workspace ``default`` (it does not create or switch namespaces).\n\n"
             "- «Auto-transcribe voice messages» enables STT for new voice messages "
-            "in channels of this space.\n"
+            "in company channels by default.\n"
             "- «Speech from calls into the feed» publishes speech segments from call participants "
             "into the channel feed when the backend and LiveKit egress are configured.\n\n"
-            "These values act as space defaults; a specific channel can override them "
+            "These values act as company defaults; a specific channel can override them "
             "in channel settings."
         ),
     )

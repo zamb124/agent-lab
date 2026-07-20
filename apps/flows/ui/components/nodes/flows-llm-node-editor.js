@@ -2,7 +2,7 @@
  * flows-llm-node-editor — редактор llm_node.
  *
  * Секции стеком:
- *   1. Промпт (core `<prompt-editor>` с подсветкой `{var}`, `{?opt}`,
+ *   1. Промпт (core `<platform-markdown-editor>` с подсветкой `{var}`, `{?opt}`,
  *      `{var|default}`, `{for ... endfor}`, `@var:`, `@state:`, hover-tooltip
  *      со значением переменной из `flowVariables`, автокомплитом по `{` и
  *      `@var:`, режимами Preview / Split / Fullscreen).
@@ -30,7 +30,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
-import '@platform/lib/components/prompt-editor.js';
+import '@platform/lib/components/platform-markdown-editor.js';
 import '../common/flows-code-language-icon.js';
 import '../editors/flows-llm-config-editor.js';
 import '@platform/lib/components/platform-json-editor.js';
@@ -220,7 +220,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 min-height: 0;
                 height: 100%;
             }
-            :host([focusMode]) .stack.focus-prompt prompt-editor {
+            :host([focusMode]) .stack.focus-prompt platform-markdown-editor {
                 flex: 1;
                 min-height: 0;
                 height: 100%;
@@ -497,6 +497,31 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     _onPromptChange(e) {
         const value = typeof e.detail?.value === 'string' ? e.detail.value : '';
         this._emitPatch({ prompt: value });
+    }
+
+    _onNameChange(e) {
+        const value = typeof e.detail?.value === 'string' ? e.detail.value.trim() : '';
+        if (value.length === 0) {
+            this.requestUpdate();
+            return;
+        }
+        this._emitPatch({ name: value });
+    }
+
+    _renderNameField() {
+        const name = typeof this.nodeConfig?.name === 'string' ? this.nodeConfig.name : '';
+        return html`
+            <platform-field
+                type="string"
+                mode="edit"
+                pill-density="compact"
+                .label=${this.t('base_node_editor.name')}
+                .hint=${this.t('base_node_editor.name_hint')}
+                .placeholder=${this.t('base_node_editor.name_placeholder')}
+                .value=${name}
+                @change=${this._onNameChange}
+            ></platform-field>
+        `;
     }
 
     _onLlmConfigChange(e) {
@@ -1079,6 +1104,9 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         }
         this.openModal('flows.embedded_tool_config', {
             toolRef: raw,
+            nodeId: '',
+            onSaved: null,
+            focusMode: false,
             flowId: this.flowId,
             branchId: this.branchId,
             onSave: (updated) => {
@@ -1161,14 +1189,16 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             previewExecutionState: this.previewExecutionState,
         });
         return html`
-            <prompt-editor
+            <platform-markdown-editor
                 .value=${prompt}
+                .enableVariables=${true}
                 .variables=${variableContext.values}
                 .variableCatalog=${variableContext.catalog}
-                label=${this.t('llm_node_editor.section_prompt')}
+                .label=${this.t('llm_node_editor.section_prompt')}
                 .hint=${this.t('llm_node_editor.prompt_help')}
+                .minHeight=${this.focusMode === true ? 420 : 240}
                 @change=${this._onPromptChange}
-            ></prompt-editor>
+            ></platform-markdown-editor>
         `;
     }
 
@@ -1525,6 +1555,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         if (section === 'prompt') {
             return html`
                 <div slot="settings" class="stack focus-stage focus-prompt">
+                    ${this._renderNameField()}
                     ${this._renderPromptSection()}
                 </div>
             `;

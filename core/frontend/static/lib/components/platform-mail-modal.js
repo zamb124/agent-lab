@@ -18,6 +18,7 @@ import './platform-palette-color-picker.js';
 import { sanitizeMarkdownEditorHtml } from './platform-markdown-editor.js';
 import { flowsChatMarkdownToHtml } from '../chat/markdown.js';
 import { registerModalKind } from '../utils/modal-registry.js';
+import { platformConfirm } from './platform-confirm-modal.js';
 import { MAIL_EVENTS } from '../events/reducers/mail.js';
 import { CALENDAR_EVENTS } from '../events/reducers/calendar.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
@@ -124,9 +125,11 @@ export class PlatformMailModal extends PlatformModal {
 
     static properties = {
         ...PlatformModal.properties,
+        openSettings: { type: Boolean },
         _adminDraft: { state: true },
         _createLocalPart: { state: true },
         _createUserId: { state: true },
+        _assignDrafts: { state: true },
         _mobilePane: { state: true },
         _composeOpen: { state: true },
         _composeExpanded: { state: true },
@@ -136,6 +139,8 @@ export class PlatformMailModal extends PlatformModal {
         _composeResizing: { state: true },
         _listQuery: { state: true },
         _expandedThreadIds: { state: true },
+        _createKind: { state: true },
+        _memberDraftUserId: { state: true },
     };
 
     static styles = [
@@ -649,18 +654,26 @@ export class PlatformMailModal extends PlatformModal {
                 border: none;
                 border-radius: var(--radius-sm, 6px);
                 background: transparent;
-                color: var(--text-tertiary);
+                color: var(--text-secondary);
                 cursor: pointer;
+                flex-shrink: 0;
             }
-            .thread-expand:hover {
+            .thread-expand:hover,
+            .msg-row.active .thread-expand {
                 background: color-mix(in srgb, var(--accent) 10%, transparent);
                 color: var(--text-primary);
+            }
+            .thread-expand platform-icon {
+                transition: transform 0.15s ease;
+            }
+            .thread-expand[aria-expanded='true'] platform-icon {
+                transform: rotate(180deg);
             }
             .thread-preview {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
-                padding: 0 var(--space-4) var(--space-3) 58px;
+                padding: var(--space-3) var(--space-4) var(--space-3) 58px;
             }
             .thread-preview-loading {
                 display: flex;
@@ -747,7 +760,7 @@ export class PlatformMailModal extends PlatformModal {
                 display: flex;
                 flex-wrap: wrap;
                 gap: var(--space-2);
-                align-items: baseline;
+                align-items: center;
                 margin-bottom: 6px;
             }
             .chat-bubble-from {
@@ -758,6 +771,14 @@ export class PlatformMailModal extends PlatformModal {
             .chat-bubble-time {
                 font-size: 0.75rem;
                 color: var(--text-tertiary);
+            }
+            .chat-bubble-reply {
+                margin-left: auto;
+                flex-shrink: 0;
+            }
+            .chat-bubble-row.mine .chat-bubble-reply {
+                margin-left: 0;
+                margin-right: auto;
             }
             .chat-bubble .thread-body-text {
                 padding: 0;
@@ -886,17 +907,20 @@ export class PlatformMailModal extends PlatformModal {
             .inline-att-row {
                 display: flex;
                 align-items: center;
-                gap: var(--space-2);
+                gap: var(--space-3);
                 width: var(--mail-attachment-tile, 200px);
                 flex: 0 0 var(--mail-attachment-tile, 200px);
                 min-width: 0;
                 max-width: 100%;
-                min-height: 52px;
+                min-height: 56px;
                 box-sizing: border-box;
-                padding: var(--space-1) var(--space-2);
+                padding: var(--space-2);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
                 background: var(--glass-tint-subtle);
+            }
+            .inline-att-row > platform-icon {
+                flex-shrink: 0;
             }
             .inline-att-meta {
                 flex: 1 1 auto;
@@ -1135,38 +1159,127 @@ export class PlatformMailModal extends PlatformModal {
                 overflow: auto;
             }
             .settings-panel {
-                width: min(720px, 100%);
+                width: min(760px, 100%);
                 background: var(--bg-elevated);
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-lg);
-                padding: var(--space-5);
+                padding: 0;
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-4);
+                gap: 0;
                 height: fit-content;
+                max-height: calc(100% - var(--space-4));
                 box-shadow: var(--glass-shadow-medium);
+                overflow: hidden;
+            }
+            .settings-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                padding: var(--space-4) var(--space-5);
+                border-bottom: 1px solid var(--border-subtle);
+                position: sticky;
+                top: 0;
+                background: var(--bg-elevated);
+                z-index: 1;
+            }
+            .settings-header-title {
+                font-weight: 700;
+                font-size: 1.05rem;
+            }
+            .settings-body {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-5);
+                padding: var(--space-5);
+                overflow: auto;
+            }
+            .settings-hint {
+                font-size: 0.85rem;
+                color: var(--text-secondary);
+                line-height: 1.4;
             }
             .settings-section {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
+                padding-top: var(--space-2);
+                border-top: 1px solid var(--border-subtle);
+            }
+            .settings-section:first-child {
+                border-top: none;
+                padding-top: 0;
+            }
+            .settings-section-title {
+                font-weight: 700;
             }
             .settings-row {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) auto;
+                display: flex;
+                flex-direction: column;
                 gap: var(--space-3);
-                align-items: center;
                 padding: var(--space-3) 0;
                 border-bottom: 1px solid var(--border-subtle);
             }
+            .settings-row-main {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-3);
+                align-items: center;
+                justify-content: space-between;
+            }
+            .settings-row-meta {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                align-items: center;
+                min-width: 0;
+            }
+            .settings-row-form {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                gap: var(--space-2);
+                align-items: end;
+            }
             .binding-email {
                 font-weight: 600;
+                word-break: break-all;
+            }
+            .binding-unassigned {
+                font-size: 0.85rem;
+                color: var(--text-tertiary);
             }
             .binding-actions {
                 display: flex;
                 gap: var(--space-2);
                 flex-wrap: wrap;
                 justify-content: flex-end;
+                align-items: center;
+            }
+            .settings-create-card {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                padding: var(--space-3);
+                border: 1px dashed var(--border-subtle);
+                border-radius: var(--radius-md);
+                background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
+            }
+            .btn-icon {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 36px;
+                height: 36px;
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-secondary);
+                cursor: pointer;
+            }
+            .btn-icon:hover {
+                background: var(--bg-hover);
+                color: var(--text-primary);
             }
             .header-actions {
                 display: flex;
@@ -1178,25 +1291,55 @@ export class PlatformMailModal extends PlatformModal {
                 display: block;
             }
             @media (max-width: 767px) {
+                /* Как calendar: rail слева + контент; folders-nav скрыт. */
                 .mail-shell {
-                    grid-template-columns: 1fr;
+                    grid-template-columns: var(--mail-rail-width, 64px) minmax(0, 1fr);
                 }
-                platform-mail-calendar-rail,
-                .mail-nav,
-                .mail-list {
+                .mail-nav {
+                    display: none !important;
+                }
+                .mail-list,
+                .mail-thread {
+                    width: auto;
+                    min-width: 0;
                     border-right: none;
                 }
                 .thread-back {
                     display: inline-flex;
                 }
-                .mail-shell[data-pane='list'] .mail-nav,
+                .shortcuts-hint,
+                .reply-bar {
+                    display: none;
+                }
+                .chat-bubble-row {
+                    max-width: 92%;
+                }
                 .mail-shell[data-pane='list'] .mail-thread,
-                .mail-shell[data-pane='thread'] platform-mail-calendar-rail,
-                .mail-shell[data-pane='thread'] .mail-nav,
                 .mail-shell[data-pane='thread'] .mail-list,
                 .mail-shell[data-pane='nav'] .mail-list,
                 .mail-shell[data-pane='nav'] .mail-thread {
                     display: none;
+                }
+                .compose,
+                .compose[data-expanded='true'] {
+                    inset: 0 !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100vw !important;
+                    height: 100dvh !important;
+                    max-width: 100vw !important;
+                    max-height: 100dvh !important;
+                    border-radius: 0 !important;
+                    min-width: 0;
+                    min-height: 0;
+                }
+                .compose-header {
+                    cursor: default;
+                    touch-action: auto;
+                    padding-top: max(var(--space-3), env(safe-area-inset-top, 0px));
+                }
+                .compose-resize-handle {
+                    display: none !important;
                 }
             }
         `,
@@ -1206,6 +1349,7 @@ export class PlatformMailModal extends PlatformModal {
         super();
         this.size = 'full';
         this._isFullscreen = true;
+        this.openSettings = false;
         this._mailSelect = this.select((s) => s.mail);
         this._calendarSelect = this.select((s) => s.calendar);
         this._authSelect = this.select((s) => s.auth);
@@ -1214,6 +1358,7 @@ export class PlatformMailModal extends PlatformModal {
         this._adminDraft = null;
         this._createLocalPart = '';
         this._createUserId = '';
+        this._assignDrafts = {};
         this._mobilePane = 'list';
         this._composeOpen = false;
         this._composeExpanded = false;
@@ -1225,6 +1370,10 @@ export class PlatformMailModal extends PlatformModal {
         this._composeResizeState = null;
         this._listQuery = '';
         this._expandedThreadIds = [];
+        this._createKind = 'user';
+        this._memberDraftUserId = '';
+        this._searchDebounceTimer = null;
+        this._draftSaveTimer = null;
         this._onMailKeydown = (event) => this._handleMailKeydown(event);
         this._boundComposePointerMove = (event) => this._onComposePointerMove(event);
         this._boundComposePointerUp = (event) => this._onComposePointerUp(event);
@@ -1241,6 +1390,30 @@ export class PlatformMailModal extends PlatformModal {
         this.useEvent(MAIL_EVENTS.BINDING_CREATE_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.BINDING_PATCH_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.BINDING_DELETE_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.DEFAULT_SET_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.MESSAGE_TRASH_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.MESSAGE_ARCHIVE_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.MESSAGE_DELETE_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.MESSAGE_STAR_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.SYNC_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.DRAFT_SAVE_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.BINDING_CREATED, () => {
+            this.toast('toast_binding_created', { type: 'success' });
+        });
+        this.useEvent(MAIL_EVENTS.COMPANY_BINDINGS_LOADED, () => {
+            const mail = this._mailSelect.value;
+            for (const binding of mail.companyBindings) {
+                if (binding.kind === 'role') {
+                    this._ensureRoleMembersLoaded(binding.mailbox_binding_id);
+                }
+            }
+        });
+        this.useEvent(MAIL_EVENTS.BINDING_DELETED, () => {
+            this.toast('toast_binding_deleted', { type: 'success' });
+        });
+        this.useEvent(MAIL_EVENTS.DEFAULT_SET, () => {
+            this.toast('toast_default_set', { type: 'success' });
+        });
         this.useEvent(MAIL_EVENTS.MESSAGE_SENT, () => {
             this._closeCompose();
             this.toast('toast_sent', { type: 'success' });
@@ -1292,6 +1465,9 @@ export class PlatformMailModal extends PlatformModal {
             include_sources: null,
             limit: 50,
         });
+        if (this.openSettings === true) {
+            this._openSettings();
+        }
     }
 
     _isCompanyAdmin() {
@@ -1653,13 +1829,21 @@ export class PlatformMailModal extends PlatformModal {
             this._startCompose();
             return;
         }
+        this._openReplyAllForMessage(message);
+    }
+
+    _openReplyAllForMessage(message) {
+        if (!message) {
+            throw new Error('platform-mail-modal: message required for reply-all');
+        }
         const own = this._ownEmails();
         const from = parseMailAddress(message.from_address);
         const recipients = [];
         if (from.email && !own.has(from.email.toLowerCase())) {
             recipients.push(from.email);
         }
-        for (const addr of message.to_addresses) {
+        const toAddresses = Array.isArray(message.to_addresses) ? message.to_addresses : [];
+        for (const addr of toAddresses) {
             const parsed = parseMailAddress(addr);
             if (parsed.email && !own.has(parsed.email.toLowerCase()) && !recipients.includes(parsed.email)) {
                 recipients.push(parsed.email);
@@ -1727,20 +1911,140 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _filteredMessages(mail) {
-        const query = this._listQuery.trim().toLowerCase();
-        if (!query) return mail.messages;
-        return mail.messages.filter((msg) => {
-            const hay = [
-                typeof msg.from_address === 'string' ? msg.from_address : '',
-                typeof msg.subject === 'string' ? msg.subject : '',
-                typeof msg.snippet === 'string' ? msg.snippet : '',
-            ].join(' ').toLowerCase();
-            return hay.includes(query);
-        });
+        return Array.isArray(mail.messages) ? mail.messages : [];
     }
 
     _filteredThreads(mail) {
         return groupMailThreads(this._filteredMessages(mail));
+    }
+
+    _onListSearchInput(event) {
+        const value = event.target && typeof event.target.value === 'string'
+            ? event.target.value
+            : '';
+        this._listQuery = value;
+        if (this._searchDebounceTimer != null) {
+            clearTimeout(this._searchDebounceTimer);
+        }
+        this._searchDebounceTimer = setTimeout(() => {
+            this._searchDebounceTimer = null;
+            this._runServerSearch();
+        }, 300);
+    }
+
+    _runServerSearch() {
+        const mail = this._mailSelect.value;
+        if (!mail.activeMailboxBindingId || !mail.folder) return;
+        const q = this._listQuery.trim();
+        if (!q) {
+            this.dispatch(MAIL_EVENTS.MESSAGES_LOAD_REQUESTED, {
+                mailbox_binding_id: mail.activeMailboxBindingId,
+                folder: mail.folder,
+            });
+            return;
+        }
+        this.dispatch(MAIL_EVENTS.MESSAGES_SEARCH_REQUESTED, {
+            mailbox_binding_id: mail.activeMailboxBindingId,
+            folder: mail.folder,
+            q,
+        });
+    }
+
+    _loadMoreMessages() {
+        const mail = this._mailSelect.value;
+        if (!mail.activeMailboxBindingId || !mail.folder || !mail.messagesNextCursor) return;
+        this.dispatch(MAIL_EVENTS.MESSAGES_LOAD_MORE_REQUESTED, {
+            mailbox_binding_id: mail.activeMailboxBindingId,
+            folder: mail.folder,
+            cursor: mail.messagesNextCursor,
+        });
+    }
+
+    _selectedActionPayload() {
+        const mail = this._mailSelect.value;
+        const uid = mail.selectedUid;
+        if (typeof uid !== 'string' || uid.length === 0) return null;
+        if (!mail.activeMailboxBindingId || !mail.folder) return null;
+        return {
+            mailbox_binding_id: mail.activeMailboxBindingId,
+            folder: mail.folder,
+            uid,
+        };
+    }
+
+    _trashSelected() {
+        const payload = this._selectedActionPayload();
+        if (!payload) return;
+        this.dispatch(MAIL_EVENTS.MESSAGE_TRASH_REQUESTED, payload);
+        this._mobilePane = 'list';
+    }
+
+    _archiveSelected() {
+        const payload = this._selectedActionPayload();
+        if (!payload) return;
+        this.dispatch(MAIL_EVENTS.MESSAGE_ARCHIVE_REQUESTED, payload);
+        this._mobilePane = 'list';
+    }
+
+    _deleteSelectedForever() {
+        const payload = this._selectedActionPayload();
+        if (!payload) return;
+        this.dispatch(MAIL_EVENTS.MESSAGE_DELETE_REQUESTED, payload);
+        this._mobilePane = 'list';
+    }
+
+    _toggleStarSelected() {
+        const mail = this._mailSelect.value;
+        const payload = this._selectedActionPayload();
+        if (!payload) return;
+        const current = mail.selectedMessage && mail.selectedMessage.flagged === true;
+        const listItem = mail.messages.find((item) => item.uid === payload.uid);
+        const flagged = !(current || (listItem && listItem.flagged === true));
+        this.dispatch(MAIL_EVENTS.MESSAGE_STAR_REQUESTED, { ...payload, flagged });
+    }
+
+    _scheduleDraftSave() {
+        const mail = this._mailSelect.value;
+        if (!mail.activeMailboxBindingId || !this._composeOpen) return;
+        if (this._draftSaveTimer != null) {
+            clearTimeout(this._draftSaveTimer);
+        }
+        this._draftSaveTimer = setTimeout(() => {
+            this._draftSaveTimer = null;
+            this._saveDraftNow();
+        }, 800);
+    }
+
+    _saveDraftNow() {
+        const mail = this._mailSelect.value;
+        if (!mail.activeMailboxBindingId) return;
+        const toAddresses = parseToList(mail.compose.to);
+        this.dispatch(MAIL_EVENTS.DRAFT_SAVE_REQUESTED, {
+            mailbox_binding_id: mail.activeMailboxBindingId,
+            subject: mail.compose.subject,
+            body_text: mail.compose.body,
+            body_html: typeof mail.compose.body_html === 'string' && mail.compose.body_html.trim()
+                ? mail.compose.body_html
+                : null,
+            to_addresses: toAddresses,
+            uid: mail.draftUid,
+            in_reply_to: mail.compose.in_reply_to,
+            references: mail.compose.references,
+        });
+    }
+
+    _openDraftFromMessage(message) {
+        if (!message) return;
+        this.dispatch(MAIL_EVENTS.COMPOSE_DRAFT_SET, {
+            to: Array.isArray(message.to_addresses) ? message.to_addresses.join(', ') : '',
+            subject: typeof message.subject === 'string' ? message.subject : '',
+            body: typeof message.body_text === 'string' ? message.body_text : '',
+            body_html: typeof message.body_html === 'string' ? message.body_html : '',
+            in_reply_to: message.in_reply_to || null,
+            references: message.references || null,
+            attachments: [],
+        });
+        this._showComposePanel();
     }
 
     _toggleThreadExpand(thread, event) {
@@ -1768,6 +2072,17 @@ export class PlatformMailModal extends PlatformModal {
             throw new Error('platform-mail-modal: thread required');
         }
         this._closeCompose();
+        const mail = this._mailSelect.value;
+        const folderMeta = mail.folders.find((folder) => folder.name === mail.folder);
+        if (folderMeta && folderMeta.role === 'drafts') {
+            this._openDraftFromMessage(thread.latest);
+            this.dispatch(MAIL_EVENTS.THREAD_SELECT, {
+                uid: thread.latest.uid,
+                thread_id: thread.threadId,
+            });
+            this._mobilePane = 'thread';
+            return;
+        }
         this.dispatch(MAIL_EVENTS.THREAD_SELECT, {
             uid: thread.latest.uid,
             thread_id: thread.threadId,
@@ -1857,14 +2172,33 @@ export class PlatformMailModal extends PlatformModal {
         if (key === 'u' || key === 'U') {
             event.preventDefault();
             this._markSelectedUnseen();
+            return;
+        }
+        if (key === 'e' || key === 'E') {
+            event.preventDefault();
+            this._archiveSelected();
+            return;
+        }
+        if (key === '#' || key === 'Delete' || key === 'Backspace') {
+            event.preventDefault();
+            this._trashSelected();
+            return;
+        }
+        if (key === 's' || key === 'S') {
+            event.preventDefault();
+            this._toggleStarSelected();
         }
     }
 
     _refreshMessages() {
         const mail = this._mailSelect.value;
         if (!mail.activeMailboxBindingId || !mail.folder) return;
-        this.dispatch(MAIL_EVENTS.FOLDERS_LOAD_REQUESTED, {
+        this.dispatch(MAIL_EVENTS.SYNC_REQUESTED, {
             mailbox_binding_id: mail.activeMailboxBindingId,
+        });
+        this.dispatch(MAIL_EVENTS.MESSAGES_LOAD_REQUESTED, {
+            mailbox_binding_id: mail.activeMailboxBindingId,
+            folder: mail.folder,
         });
     }
 
@@ -1932,6 +2266,9 @@ export class PlatformMailModal extends PlatformModal {
     _closeSettings() {
         this.dispatch(MAIL_EVENTS.ADMIN_MODE_SET, { open: false });
         this._adminDraft = null;
+        this._assignDrafts = {};
+        this._createLocalPart = '';
+        this._createUserId = '';
     }
 
     _saveConnection() {
@@ -1948,16 +2285,96 @@ export class PlatformMailModal extends PlatformModal {
         });
     }
 
+    _memberOptions() {
+        return this._teamSelect.value.members.map((m) => ({
+            value: m.user_id,
+            label: m.name || m.user_id,
+        }));
+    }
+
+    _assignDraftFor(binding) {
+        const draft = this._assignDrafts[binding.mailbox_binding_id];
+        if (typeof draft === 'string' && draft.length > 0) return draft;
+        if (typeof binding.user_id === 'string' && binding.user_id.length > 0) {
+            return binding.user_id;
+        }
+        return '';
+    }
+
+    _setAssignDraft(mailboxBindingId, userId) {
+        this._assignDrafts = {
+            ...this._assignDrafts,
+            [mailboxBindingId]: userId,
+        };
+    }
+
     _createBinding() {
-        if (!this._createLocalPart.trim() || !this._createUserId.trim()) return;
+        const localPart = this._createLocalPart.trim().toLowerCase();
+        const kind = this._createKind === 'role' ? 'role' : 'user';
+        if (!localPart) {
+            this.toast('create_binding_required', { type: 'warning' });
+            return;
+        }
+        if (kind === 'user') {
+            const userId = this._createUserId.trim();
+            if (!userId) {
+                this.toast('create_binding_required', { type: 'warning' });
+                return;
+            }
+            this.dispatch(MAIL_EVENTS.BINDING_CREATE_REQUESTED, {
+                kind: 'user',
+                user_id: userId,
+                local_part: localPart,
+                provision: true,
+                sync_enabled: true,
+            });
+        } else {
+            this.dispatch(MAIL_EVENTS.BINDING_CREATE_REQUESTED, {
+                kind: 'role',
+                user_id: null,
+                local_part: localPart,
+                provision: true,
+                sync_enabled: true,
+            });
+        }
+        this._createLocalPart = '';
+        this._createUserId = '';
+        this._createKind = 'user';
+    }
+
+    _assignCompanyBinding(binding) {
+        const userId = this._assignDraftFor(binding).trim();
+        if (!userId) {
+            this.toast('assign_user_required', { type: 'warning' });
+            return;
+        }
+        if (binding.user_id === userId && binding.kind === 'user') {
+            return;
+        }
         this.dispatch(MAIL_EVENTS.BINDING_CREATE_REQUESTED, {
             kind: 'user',
-            user_id: this._createUserId.trim(),
-            local_part: this._createLocalPart.trim().toLowerCase(),
+            user_id: userId,
+            local_part: binding.local_part,
             provision: true,
             sync_enabled: true,
         });
-        this._createLocalPart = '';
+    }
+
+    async _confirmUnbind(binding) {
+        const ok = await platformConfirm(
+            this.t('unbind_confirm_message', { email: binding.email_address }),
+            {
+                title: this.t('unbind_confirm_title'),
+                variant: 'danger',
+                confirmVariant: 'danger',
+                confirmText: this.t('unbind_confirm'),
+                cancelText: this.t('unbind_cancel'),
+            },
+        );
+        if (!ok) return;
+        this.dispatch(MAIL_EVENTS.BINDING_DELETE_REQUESTED, {
+            mailbox_binding_id: binding.mailbox_binding_id,
+        });
     }
 
     _sendReply() {
@@ -1995,6 +2412,7 @@ export class PlatformMailModal extends PlatformModal {
             body: typeof detail.textValue === 'string' ? detail.textValue : '',
             body_html: typeof detail.htmlValue === 'string' ? detail.htmlValue : '',
         });
+        this._scheduleDraftSave();
     }
 
     _onEditorAttachmentsChange(event) {
@@ -2064,7 +2482,7 @@ export class PlatformMailModal extends PlatformModal {
                 <platform-icon
                     file-icon
                     name=${resolveFileIconKey(filename, contentType)}
-                    size="20"
+                    size="32"
                 ></platform-icon>
                 <div class="inline-att-meta">
                     <div class="inline-att-name">${filename}</div>
@@ -2300,6 +2718,15 @@ export class PlatformMailModal extends PlatformModal {
                             >
                                 <platform-icon name="refresh" size="16"></platform-icon>
                             </platform-button>
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="compact"
+                                .ariaLabel=${this.t('modal_close')}
+                                @click=${() => this.close()}
+                            >
+                                <platform-icon name="close" size="16"></platform-icon>
+                            </platform-button>
                         </div>
                     </div>
                     <input
@@ -2308,10 +2735,13 @@ export class PlatformMailModal extends PlatformModal {
                         data-canon="search-as-you-type"
                         .value=${this._listQuery}
                         placeholder=${this.t('search_placeholder')}
-                        @input=${(e) => { this._listQuery = e.target.value; }}
+                        @input=${(e) => this._onListSearchInput(e)}
                     />
                 </div>
                 <div class="mail-list-body">
+                    ${mail.needsSync && !mail.loading
+                        ? html`<div class="empty">${this.t('needs_sync_hint')}</div>`
+                        : nothing}
                     ${mail.loading
                         ? html`
                             <div class="pane-loading">
@@ -2372,15 +2802,13 @@ export class PlatformMailModal extends PlatformModal {
                                                 <button
                                                     class="thread-expand"
                                                     type="button"
+                                                    aria-expanded=${isExpanded ? 'true' : 'false'}
                                                     .ariaLabel=${isExpanded
                                                         ? this.t('hide_thread_preview')
                                                         : this.t('show_thread_preview')}
                                                     @click=${(event) => this._toggleThreadExpand(thread, event)}
                                                 >
-                                                    <platform-icon
-                                                        name=${isExpanded ? 'chevron-up' : 'chevron-down'}
-                                                        size="14"
-                                                    ></platform-icon>
+                                                    <platform-icon name="chevron-down" size="14"></platform-icon>
                                                 </button>
                                             ` : nothing}
                                             ${attachCount > 0 ? html`
@@ -2408,6 +2836,15 @@ export class PlatformMailModal extends PlatformModal {
                             </div>
                         `;
                     })
+                        : nothing}
+                    ${!mail.loading && mail.messagesHasMore
+                        ? html`
+                            <div style="padding: var(--space-3); display: flex; justify-content: center;">
+                                <platform-button variant="ghost" @click=${() => this._loadMoreMessages()}>
+                                    ${this.t('load_more')}
+                                </platform-button>
+                            </div>
+                        `
                         : nothing}
                 </div>
             </section>
@@ -2437,6 +2874,19 @@ export class PlatformMailModal extends PlatformModal {
                         ${timeLabel.length > 0
                             ? html`<span class="chat-bubble-time">${timeLabel}</span>`
                             : nothing}
+                        <platform-button
+                            class="chat-bubble-reply"
+                            variant="ghost"
+                            icon-only
+                            density="compact"
+                            .ariaLabel=${this.t('reply_all')}
+                            @click=${(event) => {
+                                event.stopPropagation();
+                                this._openReplyAllForMessage(message);
+                            }}
+                        >
+                            <platform-icon name="reply" size="14"></platform-icon>
+                        </platform-button>
                     </div>
                     ${this._renderMessageBody(bodyText)}
                     ${this._renderThreadAttachments(attachments)}
@@ -2485,6 +2935,42 @@ export class PlatformMailModal extends PlatformModal {
                                 @click=${() => this._markSelectedUnseen()}
                             >
                                 ${this.t('mark_unread')}
+                            </platform-button>
+                        ` : nothing}
+                        ${hasThread ? html`
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="compact"
+                                .ariaLabel=${this.t('action_star')}
+                                @click=${() => this._toggleStarSelected()}
+                            >
+                                <platform-icon name="star" size="16"></platform-icon>
+                            </platform-button>
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="compact"
+                                .ariaLabel=${this.t('action_archive')}
+                                @click=${() => this._archiveSelected()}
+                            >
+                                <platform-icon name="folder" size="16"></platform-icon>
+                            </platform-button>
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="compact"
+                                .ariaLabel=${this.t('action_trash')}
+                                @click=${() => this._trashSelected()}
+                            >
+                                <platform-icon name="trash" size="16"></platform-icon>
+                            </platform-button>
+                            <platform-button
+                                variant="ghost"
+                                density="compact"
+                                @click=${() => this._deleteSelectedForever()}
+                            >
+                                ${this.t('action_delete_forever')}
                             </platform-button>
                         ` : nothing}
                     </div>
@@ -2615,6 +3101,8 @@ export class PlatformMailModal extends PlatformModal {
                             </label>
                         </div>
                         <platform-markdown-editor
+                            variant="compose"
+                            view-mode="wysiwyg"
                             .htmlValue=${typeof mail.compose.body_html === 'string' && mail.compose.body_html.length > 0
                                 ? mail.compose.body_html
                                 : (mail.compose.body || '')}
@@ -2646,19 +3134,157 @@ export class PlatformMailModal extends PlatformModal {
         `;
     }
 
-    _renderBindingColorRow(binding) {
+    _renderMyBindingRow(binding) {
+        const isRole = binding.kind === 'role';
         return html`
             <div class="settings-row">
-                <div>
-                    <div class="binding-email">${binding.email_address}</div>
-                    ${binding.is_default ? html`<span class="att-badge">${this.t('default_badge')}</span>` : nothing}
+                <div class="settings-row-main">
+                    <div class="settings-row-meta">
+                        <div class="binding-email">${binding.email_address}</div>
+                        ${isRole
+                            ? html`<span class="att-badge">${this.t('binding_kind_role')}</span>`
+                            : nothing}
+                        ${binding.is_default
+                            ? html`<span class="att-badge">${this.t('default_badge')}</span>`
+                            : nothing}
+                    </div>
+                    <div class="binding-actions">
+                        <platform-palette-color-picker
+                            .value=${binding.calendar_color || 'default'}
+                            @change=${(e) => this._patchBindingColor(binding.mailbox_binding_id, e.detail.value)}
+                        ></platform-palette-color-picker>
+                        ${!isRole && !binding.is_default ? html`
+                            <platform-button
+                                variant="ghost"
+                                @click=${() => this.dispatch(MAIL_EVENTS.DEFAULT_SET_REQUESTED, {
+                                    mailbox_binding_id: binding.mailbox_binding_id,
+                                })}
+                            >${this.t('set_default')}</platform-button>
+                        ` : nothing}
+                    </div>
                 </div>
-                <div class="binding-actions">
-                    <platform-palette-color-picker
-                        .value=${binding.calendar_color || 'default'}
-                        @change=${(e) => this._patchBindingColor(binding.mailbox_binding_id, e.detail.value)}
-                    ></platform-palette-color-picker>
+            </div>
+        `;
+    }
+
+    _ensureRoleMembersLoaded(mailboxBindingId) {
+        const mail = this._mailSelect.value;
+        if (mail.bindingMembers && Array.isArray(mail.bindingMembers[mailboxBindingId])) {
+            return;
+        }
+        this.dispatch(MAIL_EVENTS.BINDING_MEMBERS_LOAD_REQUESTED, {
+            mailbox_binding_id: mailboxBindingId,
+        });
+    }
+
+    _renderRoleMembers(binding, memberOptions) {
+        const mail = this._mailSelect.value;
+        const members = (
+            mail.bindingMembers && Array.isArray(mail.bindingMembers[binding.mailbox_binding_id])
+        )
+            ? mail.bindingMembers[binding.mailbox_binding_id]
+            : [];
+        return html`
+            <div class="settings-row-form">
+                <div class="settings-hint">${this.t('role_members_hint')}</div>
+                ${members.map((member) => html`
+                    <div class="settings-row-main">
+                        <platform-user-chip user-id=${member.user_id} size="sm"></platform-user-chip>
+                        <platform-button
+                            variant="ghost"
+                            @click=${() => this.dispatch(MAIL_EVENTS.BINDING_MEMBER_REMOVE_REQUESTED, {
+                                mailbox_binding_id: binding.mailbox_binding_id,
+                                user_id: member.user_id,
+                            })}
+                        >${this.t('role_member_remove')}</platform-button>
+                    </div>
+                `)}
+                <platform-field
+                    type="enum"
+                    .label=${this.t('role_member_add')}
+                    .value=${this._memberDraftUserId}
+                    .config=${{ values: memberOptions }}
+                    mode="edit"
+                    @change=${(e) => { this._memberDraftUserId = e.detail.value; }}
+                ></platform-field>
+                <platform-button
+                    variant="secondary"
+                    @click=${() => {
+                        const userId = this._memberDraftUserId.trim();
+                        if (!userId) {
+                            this.toast('assign_user_required', { type: 'warning' });
+                            return;
+                        }
+                        this.dispatch(MAIL_EVENTS.BINDING_MEMBER_ADD_REQUESTED, {
+                            mailbox_binding_id: binding.mailbox_binding_id,
+                            user_id: userId,
+                            role: 'member',
+                        });
+                        this._memberDraftUserId = '';
+                    }}
+                >${this.t('role_member_add')}</platform-button>
+            </div>
+        `;
+    }
+
+    _renderCompanyBindingRow(binding, memberOptions) {
+        const isRole = binding.kind === 'role';
+        const assigned = typeof binding.user_id === 'string' && binding.user_id.length > 0;
+        const assignLabel = assigned ? this.t('reassign_binding') : this.t('assign_binding');
+        return html`
+            <div class="settings-row">
+                <div class="settings-row-main">
+                    <div class="settings-row-meta">
+                        <div class="binding-email">${binding.email_address}</div>
+                        ${isRole
+                            ? html`<span class="att-badge">${this.t('binding_kind_role')}</span>`
+                            : nothing}
+                        ${!isRole && assigned
+                            ? html`<platform-user-chip user-id=${binding.user_id} size="sm"></platform-user-chip>`
+                            : (!isRole
+                                ? html`<span class="binding-unassigned">${this.t('binding_unassigned')}</span>`
+                                : nothing)}
+                        ${binding.is_default && assigned
+                            ? html`<span class="att-badge">${this.t('default_badge')}</span>`
+                            : nothing}
+                    </div>
+                    <div class="binding-actions">
+                        <platform-palette-color-picker
+                            .value=${binding.calendar_color || 'default'}
+                            @change=${(e) => this._patchBindingColor(binding.mailbox_binding_id, e.detail.value)}
+                        ></platform-palette-color-picker>
+                        ${assigned && !binding.is_default && !isRole ? html`
+                            <platform-button
+                                variant="ghost"
+                                @click=${() => this.dispatch(MAIL_EVENTS.DEFAULT_SET_REQUESTED, {
+                                    mailbox_binding_id: binding.mailbox_binding_id,
+                                })}
+                            >${this.t('set_default_for_user')}</platform-button>
+                        ` : nothing}
+                        <platform-button
+                            variant="danger"
+                            @click=${() => { void this._confirmUnbind(binding); }}
+                        >${this.t('unbind')}</platform-button>
+                    </div>
                 </div>
+                ${isRole
+                    ? this._renderRoleMembers(binding, memberOptions)
+                    : html`
+                        <div class="settings-row-form">
+                            <platform-field
+                                type="enum"
+                                .label=${this.t('assign_user')}
+                                .value=${this._assignDraftFor(binding)}
+                                .config=${{ values: memberOptions }}
+                                mode="edit"
+                                @change=${(e) => this._setAssignDraft(binding.mailbox_binding_id, e.detail.value)}
+                            ></platform-field>
+                            <platform-button
+                                variant="secondary"
+                                @click=${() => this._assignCompanyBinding(binding)}
+                            >${assignLabel}</platform-button>
+                        </div>
+                    `}
             </div>
         `;
     }
@@ -2666,90 +3292,101 @@ export class PlatformMailModal extends PlatformModal {
     _renderSettings(mail) {
         if (!mail.adminMode || !this._adminDraft) return nothing;
         const isAdmin = this._isCompanyAdmin();
-        const members = this._teamSelect.value.members;
-        const memberOptions = members.map((m) => ({
-            value: m.user_id,
-            label: m.name || m.user_id,
-        }));
+        const memberOptions = this._memberOptions();
         return html`
             <div class="settings-overlay">
                 <div class="settings-panel">
-                    <div class="mail-list-header">
-                        <strong>${this.t('settings_title')}</strong>
-                        <platform-button variant="ghost" @click=${() => this._closeSettings()}>
-                            ${this.t('settings_close')}
-                        </platform-button>
+                    <div class="settings-header">
+                        <div class="settings-header-title">${this.t('settings_title')}</div>
+                        <button
+                            type="button"
+                            class="btn-icon"
+                            @click=${() => this._closeSettings()}
+                            title=${this.t('settings_close')}
+                            aria-label=${this.t('settings_close')}
+                        >
+                            <platform-icon name="close" size="16"></platform-icon>
+                        </button>
                     </div>
-                    <section class="settings-section">
-                        <strong>${this.t('mailbox_colors_title')}</strong>
-                        ${mail.bindings.length === 0
-                            ? html`<div class="empty">${this.t('bindings_empty')}</div>`
-                            : mail.bindings.map((binding) => this._renderBindingColorRow(binding))}
-                    </section>
-                    ${isAdmin ? html`
-                    <section class="settings-section">
-                        <strong>${this.t('connection_title')}</strong>
-                        ${mail.connection === null && !this._adminDraft.mail_domain
-                            ? html`<div class="empty">${this.t('connection_missing')}</div>`
-                            : nothing}
-                        <platform-field type="string" .label=${this.t('connection_domain')} .value=${this._adminDraft.mail_domain}
-                            mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, mail_domain: e.detail.value }; }}></platform-field>
-                        <platform-field type="enum" .label=${this.t('connection_provider')} .value=${this._adminDraft.provider}
-                            .config=${{ values: [
-                                { value: 'ispmanager', label: this.t('provider_ispmanager') },
-                                { value: 'generic_imap_smtp', label: this.t('provider_generic') },
-                            ] }}
-                            mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, provider: e.detail.value }; }}></platform-field>
-                        <platform-field type="string" .label=${this.t('connection_imap')} .value=${this._adminDraft.imap_host}
-                            mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, imap_host: e.detail.value }; }}></platform-field>
-                        <platform-field type="integer" .label=${this.t('connection_imap_port')} .value=${this._adminDraft.imap_port}
-                            mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, imap_port: e.detail.value }; }}></platform-field>
-                        <platform-field type="string" .label=${this.t('connection_smtp')} .value=${this._adminDraft.smtp_host}
-                            mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, smtp_host: e.detail.value }; }}></platform-field>
-                        <platform-field type="integer" .label=${this.t('connection_smtp_port')} .value=${this._adminDraft.smtp_port}
-                            mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, smtp_port: e.detail.value }; }}></platform-field>
-                        <div class="header-actions">
-                            <platform-button variant="primary" @click=${() => this._saveConnection()}>${this.t('connection_save')}</platform-button>
-                            <platform-button variant="secondary" @click=${() => this.dispatch(MAIL_EVENTS.HEALTHCHECK_REQUESTED, null)}>${this.t('healthcheck')}</platform-button>
-                        </div>
-                    </section>
-                    <section class="settings-section">
-                        <strong>${this.t('bindings_title')}</strong>
-                        ${mail.companyBindings.length === 0
-                            ? html`<div class="empty">${this.t('bindings_empty')}</div>`
-                            : mail.companyBindings.map((binding) => html`
-                                <div class="settings-row">
-                                    <div>
-                                        <div class="binding-email">${binding.email_address}</div>
-                                        ${binding.user_id
-                                            ? html`<platform-user-chip user-id=${binding.user_id} size="sm"></platform-user-chip>`
-                                            : nothing}
-                                        ${binding.is_default ? html`<span class="att-badge">${this.t('default_badge')}</span>` : nothing}
-                                        <platform-palette-color-picker
-                                            .value=${binding.calendar_color || 'default'}
-                                            @change=${(e) => this._patchBindingColor(binding.mailbox_binding_id, e.detail.value)}
-                                        ></platform-palette-color-picker>
-                                    </div>
-                                    <div class="binding-actions">
-                                        ${binding.user_id ? html`
-                                            <platform-button variant="ghost" @click=${() => this.dispatch(MAIL_EVENTS.DEFAULT_SET_REQUESTED, {
-                                                mailbox_binding_id: binding.mailbox_binding_id,
-                                            })}>${this.t('set_default')}</platform-button>
-                                        ` : nothing}
-                                        <platform-button variant="danger" @click=${() => this.dispatch(MAIL_EVENTS.BINDING_DELETE_REQUESTED, {
-                                            mailbox_binding_id: binding.mailbox_binding_id,
-                                        })}>${this.t('unbind')}</platform-button>
-                                    </div>
+                    <div class="settings-body">
+                        <div class="settings-hint">${this.t('settings_reading_hint')}</div>
+                        <section class="settings-section">
+                            <div class="settings-section-title">${this.t('my_bindings_title')}</div>
+                            <div class="settings-hint">${this.t('my_bindings_hint')}</div>
+                            ${mail.bindings.length === 0
+                                ? html`<div class="empty">${this.t('my_bindings_empty')}</div>`
+                                : mail.bindings.map((binding) => this._renderMyBindingRow(binding))}
+                        </section>
+                        ${isAdmin ? html`
+                            <section class="settings-section">
+                                <div class="settings-section-title">${this.t('company_bindings_title')}</div>
+                                <div class="settings-hint">${this.t('company_bindings_hint')}</div>
+                                ${mail.companyBindings.length === 0
+                                    ? html`<div class="empty">${this.t('bindings_empty')}</div>`
+                                    : mail.companyBindings.map((binding) => this._renderCompanyBindingRow(binding, memberOptions))}
+                                <div class="settings-create-card">
+                                    <div class="settings-section-title">${this.t('create_binding_title')}</div>
+                                    <platform-field
+                                        type="enum"
+                                        .label=${this.t('binding_kind_label')}
+                                        .value=${this._createKind}
+                                        .config=${{ values: [
+                                            { value: 'user', label: this.t('binding_kind_user') },
+                                            { value: 'role', label: this.t('binding_kind_role') },
+                                        ] }}
+                                        mode="edit"
+                                        @change=${(e) => { this._createKind = e.detail.value; }}
+                                    ></platform-field>
+                                    <platform-field
+                                        type="string"
+                                        .label=${this.t('local_part')}
+                                        .value=${this._createLocalPart}
+                                        mode="edit"
+                                        @change=${(e) => { this._createLocalPart = e.detail.value; }}
+                                    ></platform-field>
+                                    ${this._createKind === 'role' ? nothing : html`
+                                        <platform-field
+                                            type="enum"
+                                            .label=${this.t('assign_user')}
+                                            .value=${this._createUserId}
+                                            .config=${{ values: memberOptions }}
+                                            mode="edit"
+                                            @change=${(e) => { this._createUserId = e.detail.value; }}
+                                        ></platform-field>
+                                    `}
+                                    <platform-button variant="accent" @click=${() => this._createBinding()}>
+                                        ${this.t('create_binding')}
+                                    </platform-button>
                                 </div>
-                            `)}
-                        <platform-field type="string" .label=${this.t('local_part')} .value=${this._createLocalPart}
-                            mode="edit" @change=${(e) => { this._createLocalPart = e.detail.value; }}></platform-field>
-                        <platform-field type="enum" .label=${this.t('assign_user')} .value=${this._createUserId}
-                            .config=${{ values: memberOptions }}
-                            mode="edit" @change=${(e) => { this._createUserId = e.detail.value; }}></platform-field>
-                        <platform-button variant="accent" @click=${() => this._createBinding()}>${this.t('create_binding')}</platform-button>
-                    </section>
-                    ` : nothing}
+                            </section>
+                            <section class="settings-section">
+                                <div class="settings-section-title">${this.t('connection_title')}</div>
+                                ${mail.connection === null && !this._adminDraft.mail_domain
+                                    ? html`<div class="empty">${this.t('connection_missing')}</div>`
+                                    : nothing}
+                                <platform-field type="string" .label=${this.t('connection_domain')} .value=${this._adminDraft.mail_domain}
+                                    mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, mail_domain: e.detail.value }; }}></platform-field>
+                                <platform-field type="enum" .label=${this.t('connection_provider')} .value=${this._adminDraft.provider}
+                                    .config=${{ values: [
+                                        { value: 'ispmanager', label: this.t('provider_ispmanager') },
+                                        { value: 'generic_imap_smtp', label: this.t('provider_generic') },
+                                    ] }}
+                                    mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, provider: e.detail.value }; }}></platform-field>
+                                <platform-field type="string" .label=${this.t('connection_imap')} .value=${this._adminDraft.imap_host}
+                                    mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, imap_host: e.detail.value }; }}></platform-field>
+                                <platform-field type="integer" .label=${this.t('connection_imap_port')} .value=${this._adminDraft.imap_port}
+                                    mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, imap_port: e.detail.value }; }}></platform-field>
+                                <platform-field type="string" .label=${this.t('connection_smtp')} .value=${this._adminDraft.smtp_host}
+                                    mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, smtp_host: e.detail.value }; }}></platform-field>
+                                <platform-field type="integer" .label=${this.t('connection_smtp_port')} .value=${this._adminDraft.smtp_port}
+                                    mode="edit" @change=${(e) => { this._adminDraft = { ...this._adminDraft, smtp_port: e.detail.value }; }}></platform-field>
+                                <div class="header-actions">
+                                    <platform-button variant="primary" @click=${() => this._saveConnection()}>${this.t('connection_save')}</platform-button>
+                                    <platform-button variant="secondary" @click=${() => this.dispatch(MAIL_EVENTS.HEALTHCHECK_REQUESTED, null)}>${this.t('healthcheck')}</platform-button>
+                                </div>
+                            </section>
+                        ` : nothing}
+                    </div>
                 </div>
             </div>
         `;

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
 import pytest
@@ -11,12 +12,16 @@ from core.mail.models import (
     InboundMailMessage,
     MailboxBindingCreatePayload,
     MailboxBindingKind,
+    MailboxSecret,
     MailProvider,
     MailSyncErrorKind,
 )
 from core.mail.repositories import MailboxSyncCursorRepository
 from core.mail.service import MailService
+from core.models.identity_models import Company, User
 from tests.core.mail.fakes import RecordingMailServerPort
+
+MailMemberSeed = Callable[..., Awaitable[tuple[Company, User]]]
 
 
 @pytest.mark.asyncio
@@ -24,10 +29,12 @@ async def test_sync_user_inbox_bootstrap_then_incremental_notify_payload(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
     mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
+    mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
     company_id = f"mailsync_{unique_id}"
     user_id = f"user_{unique_id}"
+    _ = await mail_member_context(company_id=company_id, user_id=user_id)
     _ = await mail_service.upsert_connection(
         CompanyMailConnectionUpsertPayload(
             mail_domain=f"{unique_id}.example.com",
@@ -58,12 +65,14 @@ async def test_sync_user_inbox_bootstrap_then_incremental_notify_payload(
             message_id="<old@example.com>",
             subject="Old",
             from_address="a@example.com",
+            body_text="Old body",
         ),
         InboundMailMessage(
             uid="11",
             message_id="<also-old@example.com>",
             subject="Also old",
             from_address="b@example.com",
+            body_text="Also old body",
         ),
     ]
 
@@ -74,6 +83,10 @@ async def test_sync_user_inbox_bootstrap_then_incremental_notify_payload(
     assert cursor is not None
     assert cursor.uidvalidity == 42
     assert cursor.last_uid == 11
+    sent_cursor = await mailbox_sync_cursor_repository.get(
+        binding.mailbox_binding_id, folder="Sent"
+    )
+    assert sent_cursor is not None
 
     recording_mail_port.inbox.append(
         InboundMailMessage(
@@ -81,6 +94,7 @@ async def test_sync_user_inbox_bootstrap_then_incremental_notify_payload(
             message_id="<new@example.com>",
             subject="New mail",
             from_address="c@example.com",
+            body_text="New body text",
         )
     )
     second = await mail_service.sync_user_inbox(binding, max_new_messages=20)
@@ -99,10 +113,12 @@ async def test_sync_user_inbox_uidvalidity_reset_no_notify(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
     mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
+    mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
     company_id = f"mailsyncv_{unique_id}"
     user_id = f"user_{unique_id}"
+    _ = await mail_member_context(company_id=company_id, user_id=user_id)
     _ = await mail_service.upsert_connection(
         CompanyMailConnectionUpsertPayload(
             mail_domain=f"{unique_id}.v.example.com",
@@ -128,14 +144,29 @@ async def test_sync_user_inbox_uidvalidity_reset_no_notify(
     )
     recording_mail_port.uidvalidity = 1
     recording_mail_port.inbox = [
-        InboundMailMessage(uid="5", subject="x", from_address="a@example.com"),
+        InboundMailMessage(
+            uid="5",
+            subject="x",
+            from_address="a@example.com",
+            body_text="x",
+        ),
     ]
     _ = await mail_service.sync_user_inbox(binding, max_new_messages=20)
 
     recording_mail_port.uidvalidity = 99
     recording_mail_port.inbox = [
-        InboundMailMessage(uid="1", subject="reset", from_address="a@example.com"),
-        InboundMailMessage(uid="2", subject="reset2", from_address="a@example.com"),
+        InboundMailMessage(
+            uid="1",
+            subject="reset",
+            from_address="a@example.com",
+            body_text="reset",
+        ),
+        InboundMailMessage(
+            uid="2",
+            subject="reset2",
+            from_address="a@example.com",
+            body_text="reset2",
+        ),
     ]
     result = await mail_service.sync_user_inbox(binding, max_new_messages=20)
     assert result.bootstrap is True
@@ -150,8 +181,6 @@ async def test_sync_user_inbox_uidvalidity_reset_no_notify(
 async def test_recording_port_fetch_uids_since_bootstrap_empty_messages(
     recording_mail_port: RecordingMailServerPort,
 ) -> None:
-    from core.mail.models import MailboxSecret
-
     recording_mail_port.uidvalidity = 7
     recording_mail_port.inbox = [
         InboundMailMessage(uid="3", subject="a", from_address="a@example.com"),
@@ -172,13 +201,84 @@ async def test_recording_port_fetch_uids_since_bootstrap_empty_messages(
 
 
 @pytest.mark.asyncio
+async def test_sync_sent_folder_incremental_does_not_notify(
+    mail_service: MailService,
+    recording_mail_port: RecordingMailServerPort,
+    mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
+    mail_member_context: MailMemberSeed,
+    unique_id: str,
+) -> None:
+    company_id = f"mailsent_{unique_id}"
+    user_id = f"user_{unique_id}"
+    _ = await mail_member_context(company_id=company_id, user_id=user_id)
+    _ = await mail_service.upsert_connection(
+        CompanyMailConnectionUpsertPayload(
+            mail_domain=f"{unique_id}.sent.example.com",
+            provider=MailProvider.GENERIC_IMAP_SMTP,
+            imap_host="imap.example.com",
+            imap_port=993,
+            smtp_host="smtp.example.com",
+            smtp_port=465,
+            use_ssl=True,
+        ),
+        company_id=company_id,
+    )
+    binding = await mail_service.bind_mailbox(
+        MailboxBindingCreatePayload(
+            kind=MailboxBindingKind.USER,
+            user_id=user_id,
+            local_part=f"s{unique_id[:8]}",
+            password="test-pass-1",
+            provision=False,
+            sync_enabled=True,
+        ),
+        company_id=company_id,
+    )
+    recording_mail_port.uidvalidity = 3
+    recording_mail_port.mailbox_messages["Sent"] = [
+        InboundMailMessage(
+            uid="1",
+            subject="sent-old",
+            from_address="me@example.com",
+            body_text="sent old",
+        ),
+    ]
+    first = await mail_service.sync_user_inbox(binding, max_new_messages=20)
+    assert first.bootstrap is True
+    sent_cursor = await mailbox_sync_cursor_repository.get(
+        binding.mailbox_binding_id, folder="Sent"
+    )
+    assert sent_cursor is not None
+    assert sent_cursor.last_uid == 1
+
+    recording_mail_port.mailbox_messages["Sent"].append(
+        InboundMailMessage(
+            uid="2",
+            subject="sent-new",
+            from_address="me@example.com",
+            body_text="sent new",
+        ),
+    )
+    second = await mail_service.sync_user_inbox(binding, max_new_messages=20)
+    assert second.bootstrap is False
+    assert second.new_messages == []
+    sent_cursor2 = await mailbox_sync_cursor_repository.get(
+        binding.mailbox_binding_id, folder="Sent"
+    )
+    assert sent_cursor2 is not None
+    assert sent_cursor2.last_uid == 2
+
+
+@pytest.mark.asyncio
 async def test_record_sync_failure_sets_auth_kind(
     mail_service: MailService,
     mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
+    mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
     company_id = f"mailfail_{unique_id}"
     user_id = f"user_{unique_id}"
+    _ = await mail_member_context(company_id=company_id, user_id=user_id)
     _ = await mail_service.upsert_connection(
         CompanyMailConnectionUpsertPayload(
             mail_domain=f"{unique_id}.fail.example.com",

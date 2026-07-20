@@ -30,6 +30,7 @@ import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { TRIGGER_TYPES } from '../constants/trigger-types.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { MAIL_EVENTS } from '@platform/lib/events/reducers/mail.js';
 
 const TRIGGER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 
@@ -293,6 +294,32 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 gap: var(--space-1);
                 align-items: center;
             }
+            .email-stack {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+            .email-cta {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                padding: var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-subtle);
+                background: var(--glass-tint-subtle);
+            }
+            .email-cta-text {
+                margin: 0;
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                line-height: 1.45;
+            }
+            .email-filter-hint {
+                margin: 0;
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                line-height: 1.4;
+            }
         `,
     ];
 
@@ -322,12 +349,30 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this._reregisterOp = this.useOp('flows/trigger_reregister');
         this._editor = this.useOp('flows/editor');
         this._flowsCat = this.useResource('flows/flows', { autoload: false });
+        this._mailSelect = this.select((s) => s.mail);
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.useEvent(MAIL_EVENTS.BINDINGS_LOADED, () => {
+            if (this._type === 'email') {
+                this._maybeAutofillMailboxBinding();
+            }
+        });
+        this.useEvent(MAIL_EVENTS.BINDING_CREATED, () => {
+            if (this._type === 'email') {
+                this._ensureMailLoaded();
+            }
+        });
     }
 
     updated(changed) {
         super.updated?.(changed);
         if (changed.has('flowId') && this.flowId) {
             this._ensureFlowForBranches();
+        }
+        if (this._type === 'email') {
+            this._maybeAutofillMailboxBinding();
         }
         if (this._hydrated) return;
         if (changed.has('trigger') || changed.has('flowId')) {
@@ -399,6 +444,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 this._branchId = 'default';
             }
             this._config = { ...t.config };
+            if (t.type === 'email') {
+                this._config = this._normalizeEmailConfig(this._config);
+                this._ensureMailLoaded();
+            }
             const mapping = Object.keys(t.output_mapping).length > 0 ? t.output_mapping : t.input_mapping;
             this._outputMapping = Object.entries(mapping).map(([state, payload]) => ({ state, payload }));
             this._outputActions = t.output_actions.map((a) => ({
@@ -834,84 +883,148 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     }
 
     _renderEmailConfig() {
+        const mail = this._mailSelect.value;
+        const bindings = Array.isArray(mail.bindings) ? mail.bindings : [];
+        const connection = mail.connection;
         const c = this._config;
-        const provider = typeof c.provider === 'string' && c.provider.length > 0 ? c.provider : 'imap';
-        const providerEnumConfig = {
-            values: [
-                { value: 'imap', label: this.t('trigger_editor_modal.provider_imap') },
-                { value: 'mailgun', label: this.t('trigger_editor_modal.provider_mailgun') },
-            ],
+        const selectedId = typeof c.mailbox_binding_id === 'string' ? c.mailbox_binding_id : '';
+        const subjectContains = typeof c.subject_contains === 'string' ? c.subject_contains : '';
+        const allowedSenders = Array.isArray(c.allowed_senders)
+            ? c.allowed_senders.filter((item) => typeof item === 'string').join(', ')
+            : '';
+        const mailboxEnumConfig = {
+            values: bindings.map((binding) => ({
+                value: binding.mailbox_binding_id,
+                label: binding.is_default
+                    ? `${binding.email_address} (${this.t('trigger_editor_modal.mailbox_default_badge')})`
+                    : binding.email_address,
+            })),
         };
+
+        if (bindings.length === 0) {
+            const noConnection = connection === null;
+            return html`
+                <div class="config-section">
+                    <div class="config-section-title">${this.t('trigger_editor_modal.section_email')}</div>
+                    <div class="email-cta">
+                        <p class="email-cta-text">
+                            ${noConnection
+                                ? this.t('trigger_editor_modal.email_cta_no_connection')
+                                : this.t('trigger_editor_modal.email_cta_no_mailbox')}
+                        </p>
+                        <platform-button variant="primary" @click=${() => this._openMailSettings()}>
+                            ${noConnection
+                                ? this.t('trigger_editor_modal.email_cta_connect')
+                                : this.t('trigger_editor_modal.email_cta_setup_mailbox')}
+                        </platform-button>
+                    </div>
+                </div>
+            `;
+        }
+
         return html`
             <div class="config-section">
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_email')}</div>
-                <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_provider')}</label>
+                <div class="email-stack">
                     <platform-field
                         type="enum"
                         mode="edit"
-                        .value=${provider}
-                        .config=${providerEnumConfig}
+                        .label=${this.t('trigger_editor_modal.field_mailbox')}
+                        .hint=${this.t('trigger_editor_modal.hint_mailbox')}
+                        .value=${selectedId}
+                        .config=${mailboxEnumConfig}
                         @change=${(e) => {
                             const v = e.detail.value;
                             if (typeof v !== 'string') {
-                                throw new TypeError('flows-trigger-editor-modal: provider expects string detail.value');
+                                throw new TypeError('flows-trigger-editor-modal: mailbox_binding_id expects string');
                             }
-                            this._setConfig('provider', v);
+                            this._setConfig('mailbox_binding_id', v);
                         }}
                     ></platform-field>
-                </div>
-                <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_imap_host')}</label>
+                    <platform-button variant="ghost" @click=${() => this._openMailSettings()}>
+                        ${this.t('trigger_editor_modal.email_open_settings')}
+                    </platform-button>
+                    <div class="config-section-title">${this.t('trigger_editor_modal.section_email_filter')}</div>
+                    <p class="email-filter-hint">${this.t('trigger_editor_modal.hint_email_filter')}</p>
                     <platform-field
                         type="string"
                         mode="edit"
-                        .value=${asString(c.imap_host)}
-                        placeholder=${this.t('trigger_editor_modal.field_imap_host_placeholder')}
+                        .label=${this.t('trigger_editor_modal.field_allowed_senders')}
+                        .placeholder=${this.t('trigger_editor_modal.field_allowed_senders_placeholder')}
+                        .value=${allowedSenders}
                         @change=${(e) => {
                             const v = e.detail.value;
                             if (typeof v !== 'string') {
-                                throw new TypeError('flows-trigger-editor-modal: imap_host expects string detail.value');
+                                throw new TypeError('flows-trigger-editor-modal: allowed_senders expects string');
                             }
-                            this._setConfig('imap_host', v);
+                            this._setConfigList('allowed_senders', v, 'string');
                         }}
                     ></platform-field>
-                </div>
-                <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_imap_user')}</label>
                     <platform-field
                         type="string"
                         mode="edit"
-                        .value=${asString(c.imap_user)}
-                        placeholder=${this.t('trigger_editor_modal.field_imap_user_placeholder')}
+                        .label=${this.t('trigger_editor_modal.field_subject_contains')}
+                        .placeholder=${this.t('trigger_editor_modal.field_subject_contains_placeholder')}
+                        .value=${subjectContains}
                         @change=${(e) => {
                             const v = e.detail.value;
                             if (typeof v !== 'string') {
-                                throw new TypeError('flows-trigger-editor-modal: imap_user expects string detail.value');
+                                throw new TypeError('flows-trigger-editor-modal: subject_contains expects string');
                             }
-                            this._setConfig('imap_user', v);
-                        }}
-                    ></platform-field>
-                </div>
-                <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_imap_password')}</label>
-                    <platform-field
-                        type="string"
-                        mode="edit"
-                        input-type="password"
-                        .value=${asString(c.imap_password)}
-                        placeholder=${this.t('trigger_editor_modal.field_imap_password_placeholder')}
-                        @change=${(e) => {
-                            const v = e.detail.value;
-                            if (typeof v !== 'string') {
-                                throw new TypeError('flows-trigger-editor-modal: imap_password expects string detail.value');
-                            }
-                            this._setConfig('imap_password', v);
+                            this._setConfig('subject_contains', v);
                         }}
                     ></platform-field>
                 </div>
             </div>
         `;
+    }
+
+    _ensureMailLoaded() {
+        this.dispatch(MAIL_EVENTS.BINDINGS_LOAD_REQUESTED, null);
+        this.dispatch(MAIL_EVENTS.CONNECTION_LOAD_REQUESTED, null);
+    }
+
+    _openMailSettings() {
+        this.openModal('platform.mail', { openSettings: true });
+    }
+
+    _normalizeEmailConfig(config) {
+        const src = isPlainObject(config) ? config : {};
+        const mailboxBindingId = typeof src.mailbox_binding_id === 'string'
+            ? src.mailbox_binding_id
+            : '';
+        const allowedSenders = Array.isArray(src.allowed_senders)
+            ? src.allowed_senders.filter((item) => typeof item === 'string')
+            : [];
+        const subjectContains = typeof src.subject_contains === 'string'
+            ? src.subject_contains
+            : '';
+        return {
+            mailbox_binding_id: mailboxBindingId,
+            allowed_senders: allowedSenders,
+            subject_contains: subjectContains,
+        };
+    }
+
+    _maybeAutofillMailboxBinding() {
+        const mail = this._mailSelect.value;
+        const bindings = Array.isArray(mail.bindings) ? mail.bindings : [];
+        if (bindings.length === 0) return;
+        const current = this._config.mailbox_binding_id;
+        if (typeof current === 'string' && current.length > 0) {
+            if (bindings.some((b) => b.mailbox_binding_id === current)) {
+                return;
+            }
+        }
+        const preferred = bindings.find((b) => b.is_default === true);
+        const next = preferred || bindings[0];
+        if (!next || typeof next.mailbox_binding_id !== 'string') {
+            return;
+        }
+        this._config = {
+            ...this._normalizeEmailConfig(this._config),
+            mailbox_binding_id: next.mailbox_binding_id,
+        };
     }
 
     _renderRedisConfig() {
@@ -1305,6 +1418,11 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 this._outputActions = [defaultTelegramOutputAction(this._triggerId)];
             }
         }
+        if (typeId === 'email') {
+            this._config = this._normalizeEmailConfig(this._config);
+            this._ensureMailLoaded();
+            this._maybeAutofillMailboxBinding();
+        }
         this.isDirty = true;
     }
 
@@ -1412,6 +1530,12 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         if (!this._branchId.trim()) {
             return { branch_id: this.t('trigger_editor_modal.error_branch_required') };
         }
+        if (this._type === 'email') {
+            const mailboxId = this._config.mailbox_binding_id;
+            if (typeof mailboxId !== 'string' || mailboxId.trim().length === 0) {
+                return { config: this.t('trigger_editor_modal.error_mailbox_required') };
+            }
+        }
         return {};
     }
 
@@ -1452,7 +1576,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             name: this._name.trim(),
             type: this._type,
             enabled: this._enabled,
-            config: this._config,
+            config: this._type === 'email' ? this._normalizeEmailConfig(this._config) : this._config,
             output_mapping: outputMapping,
             output_actions: outputActions,
             post_flow_output_enabled: postFlow,

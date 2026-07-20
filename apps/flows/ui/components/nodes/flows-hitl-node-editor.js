@@ -15,7 +15,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
-import '@platform/lib/components/prompt-editor.js';
+import '@platform/lib/components/platform-markdown-editor.js';
 import { asObject } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsHitlNodeEditor extends PlatformElement {
@@ -178,12 +178,15 @@ export class FlowsHitlNodeEditor extends PlatformElement {
                         ></platform-field>
                     </div>
                     <div class="field">
-                        <prompt-editor
+                        <platform-markdown-editor
+                            compact
                             .value=${userMessage}
+                            .enableVariables=${true}
                             .variables=${this.flowVariables && typeof this.flowVariables === 'object' ? this.flowVariables : {}}
-                            label=${this.t('hitl_node_editor.user_message')}
+                            .label=${this.t('hitl_node_editor.user_message')}
+                            .minHeight=${160}
                             @change=${this._onUserMessage}
-                        ></prompt-editor>
+                        ></platform-markdown-editor>
                     </div>
                 </div>
             </flows-base-node-editor>

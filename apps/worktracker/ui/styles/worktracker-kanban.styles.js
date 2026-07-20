@@ -56,8 +56,8 @@ export const worktrackerKanbanStyles = css`
     .wt-kanban-column-body {
         display: flex;
         flex-direction: column;
-        gap: var(--space-2);
-        padding: var(--space-2);
+        gap: var(--space-3);
+        padding: var(--space-3);
         overflow-y: auto;
         flex: 1;
         min-height: 0;

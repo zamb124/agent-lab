@@ -55,3 +55,4 @@ import './modals/sync-call-overlay-modal.js';
 import './modals/sync-forward-modal.js';
 
 export { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
+export { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';

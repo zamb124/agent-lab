@@ -727,6 +727,15 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
         this._emitPatch({ description: v });
     }
+
+    _onName(e) {
+        const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value.trim() : '';
+        if (v.length === 0) {
+            this.requestUpdate();
+            return;
+        }
+        this._emitPatch({ name: v });
+    }
     _onTags(e) {
         this._emitPatch({ tags: this._stringArrayFromChangeDetail(e, 'flows-base-node-editor:tags') });
     }
@@ -1160,6 +1169,17 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         .label=${idLabel}
                         .hint=${this.t('base_node_editor.node_id_hint')}
                         .value=${this.nodeId}
+                    ></platform-field>
+                </div>
+                <div class="field">
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        .label=${this.t('base_node_editor.name')}
+                        .hint=${this.t('base_node_editor.name_hint')}
+                        .placeholder=${this.t('base_node_editor.name_placeholder')}
+                        .value=${typeof cfg?.name === 'string' ? cfg.name : ''}
+                        @change=${this._onName}
                     ></platform-field>
                 </div>
                 <div class="field">

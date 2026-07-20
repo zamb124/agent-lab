@@ -50,13 +50,16 @@ export const worktrackerSurfacesStyles = css`
         display: flex;
         flex-direction: column;
         min-width: 0;
-        gap: var(--space-2);
+        gap: var(--space-3);
     }
     .wt-section-title {
-        font-size: var(--text-sm);
+        font-size: var(--text-xs);
         font-weight: var(--font-semibold);
-        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-tertiary);
         margin: 0;
+        padding: 0 var(--space-1);
     }
     .wt-divider {
         border: none;

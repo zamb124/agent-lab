@@ -690,6 +690,63 @@ export const evaluationMonitorObservationCaseCreateOp = createAsyncOp({
     },
 });
 
+export const evaluationRubricsListOp = createAsyncOp({
+    name: 'flows/evaluation_rubrics_list',
+    silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/rubrics' },
+    request: async ({ payload }) => {
+        const data = requireRecord(payload, 'evaluationRubricsListOp');
+        const flowId = requireStringField(data, 'flow_id', 'evaluationRubricsListOp');
+        return httpRequest({
+            method: 'GET',
+            url: buildQuery(`${API_ROOT}/rubrics`, [['flow_id', flowId]]),
+        });
+    },
+});
+
+export const evaluationRubricCreateOp = createAsyncOp({
+    name: 'flows/evaluation_rubric_create',
+    silent: true,
+    restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/rubrics' },
+    request: async ({ payload }) => {
+        const data = requireRecord(payload, 'evaluationRubricCreateOp');
+        return httpRequest({
+            method: 'POST',
+            url: `${API_ROOT}/rubrics`,
+            body: requireBody(data, 'evaluationRubricCreateOp'),
+        });
+    },
+});
+
+export const evaluationRubricVersionsListOp = createAsyncOp({
+    name: 'flows/evaluation_rubric_versions_list',
+    silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/rubrics/{rubric_id}/versions' },
+    request: async ({ payload }) => {
+        const data = requireRecord(payload, 'evaluationRubricVersionsListOp');
+        const rubricId = requireStringField(data, 'rubric_id', 'evaluationRubricVersionsListOp');
+        return httpRequest({
+            method: 'GET',
+            url: `${API_ROOT}/rubrics/${encoded(rubricId)}/versions`,
+        });
+    },
+});
+
+export const evaluationRubricVersionCreateOp = createAsyncOp({
+    name: 'flows/evaluation_rubric_version_create',
+    silent: true,
+    restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/rubrics/{rubric_id}/versions' },
+    request: async ({ payload }) => {
+        const data = requireRecord(payload, 'evaluationRubricVersionCreateOp');
+        const rubricId = requireStringField(data, 'rubric_id', 'evaluationRubricVersionCreateOp');
+        return httpRequest({
+            method: 'POST',
+            url: `${API_ROOT}/rubrics/${encoded(rubricId)}/versions`,
+            body: requireBody(data, 'evaluationRubricVersionCreateOp'),
+        });
+    },
+});
+
 export function requireEvaluationItems(result, label) {
     return listItems(result, label);
 }

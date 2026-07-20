@@ -16,6 +16,7 @@ import { CoreAuthEvents } from '@platform/lib/events/effects/auth.effect.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
+import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 
 import { apiKeysResource } from '../events/resources/api-keys.resource.js';
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
@@ -35,6 +36,10 @@ import {
     companyPronunciationRuleTestOp,
 } from '../events/resources/company-pronunciation-rules.resource.js';
 import { teamMembersResource, inviteGenerateOp } from '../events/resources/team.resource.js';
+import {
+    consoleNamespacesResource,
+    consoleNamespaceCreateForm,
+} from '../events/resources/namespaces.resource.js';
 import { embedConfigsResource, embedCodeLoadOp } from '../events/resources/embed.resource.js';
 import { landingAgentsLoadOp, landingDemoSessionOp } from '../events/resources/landing-demo.resource.js';
 import {
@@ -164,6 +169,7 @@ import '../pages/join-page.js';
 import '../pages/select-company-page.js';
 import '../pages/dashboard-page.js';
 import '../pages/team/team-page.js';
+import '../pages/namespaces/namespaces-page.js';
 import '../pages/api-keys/api-keys-page.js';
 import '../pages/company-variables/company-variables-page.js';
 import '../pages/company-voice-providers/company-voice-providers-page.js';
@@ -199,6 +205,7 @@ const FRONTEND_ROUTES = [
     { key: 'dashboard',               path: 'dashboard',                                       titleKey: 'routes.dashboard' },
     { key: 'platform_services',       path: 'services',                 parent: 'dashboard',   titleKey: 'routes.platform_services' },
     { key: 'team',                    path: 'team',                     parent: 'dashboard',   titleKey: 'routes.team' },
+    { key: 'namespaces',              path: 'namespaces',               parent: 'dashboard',   titleKey: 'routes.namespaces' },
     { key: 'api-keys',                path: 'api-keys',                 parent: 'dashboard',   titleKey: 'routes.api-keys' },
     { key: 'company-variables',       path: 'company-variables',        parent: 'dashboard',   titleKey: 'routes.company-variables' },
     { key: 'company-voice-providers', path: 'company-voice-providers',  parent: 'dashboard',   titleKey: 'routes.company-voice-providers' },
@@ -293,6 +300,8 @@ export class FrontendApp extends PlatformApp {
         companyPronunciationRuleTestOp,
         teamMembersResource,
         inviteGenerateOp,
+        consoleNamespacesResource,
+        consoleNamespaceCreateForm,
         embedConfigsResource,
         embedCodeLoadOp,
         landingAgentsLoadOp,
@@ -384,6 +393,7 @@ export class FrontendApp extends PlatformApp {
         publicBlogListOp,
         publicBlogPostOp,
         platformFileCreateOp,
+        platformVoiceDictationOp,
     ];
 
     constructor() {
@@ -721,6 +731,7 @@ export class FrontendApp extends PlatformApp {
             case 'dashboard':         content = html`<dashboard-page></dashboard-page>`; break;
             case 'platform_services': content = html`<platform-services-page></platform-services-page>`; break;
             case 'team':              content = html`<frontend-team-page></frontend-team-page>`; break;
+            case 'namespaces':        content = html`<frontend-namespaces-page></frontend-namespaces-page>`; break;
             case 'api-keys':          content = html`<frontend-api-keys-page></frontend-api-keys-page>`; break;
             case 'company-variables': content = html`<frontend-company-variables-page></frontend-company-variables-page>`; break;
             case 'company-voice-providers': content = html`<frontend-company-voice-providers-page></frontend-company-voice-providers-page>`; break;

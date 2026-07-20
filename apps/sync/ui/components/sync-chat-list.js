@@ -2,26 +2,25 @@
  * sync-chat-list — единый компонент списка чатов Sync.
  *
  * Содержит:
- *   - действие «создать митинг» (adhoc call) — кнопка в строке селектора пространства;
- *   - селектор платформенного namespace + поиск + scope-переключатель (groups/direct);
+ *   - поиск + scope-переключатель (groups/direct);
+ *   - действия: adhoc call (phone-plus), STT defaults (`sync.namespace_settings` → `default`);
  *   - секция «Чаты» (`sidebar.section_chats`) с кнопкой «+» (создание канала);
  *   - объединённый список каналов и DM-партнёров через `sync-channel-row` /
  *     `sync-direct-member-row` (типизация, time, last-message, typing badge —
  *     внутри строк).
  *
+ * Namespace switcher отсутствует: Sync показывает все membership-каналы
+ * компании. Новые каналы / adhoc → company workspace `default`.
+ *
  * Используется:
  *   1. `<sync-sidebar>` (desktop / >=768px) — в слотах `header` / default
  *      `<platform-service-sidebar>`.
  *   2. `<sync-shell-page>` (mobile / <=767px) — как основной контент главной
- *      страницы `/sync`, чтобы мобильный пользователь получал ровно тот же
- *      UX, что и в боковой панели десктопа (поиск, typing, settings и т.п.).
+ *      страницы `/sync`.
  *
  * Атрибут `mode`:
- *   - `'sidebar'` (default): компактные отступы под `<platform-service-sidebar>`,
- *     заголовок секции «Чаты» с тёмным фоном (sidebarSectionStyles).
- *   - `'page'`: полноэкранный мобильный режим — отступы крупнее, шапка
- *     поднимается над списком, нет лимитов на ширину; работает в паре с
- *     платформенным top-bar'ом и нижней навигацией (mobile shell 2026).
+ *   - `'sidebar'` (default): компактные отступы под `<platform-service-sidebar>`.
+ *   - `'page'`: полноэкранный мобильный режим.
  */
 
 import { html, css } from 'lit';
@@ -30,15 +29,12 @@ import {
     sidebarNavItemStyles,
     sidebarSectionStyles,
 } from '@platform/lib/styles/shared/sidebar.styles.js';
-import {
-    setPlatformNamespaceSelection,
-    getPlatformNamespaceSidebarSelection,
-} from '@platform/lib/utils/platform-namespace.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
-import '@platform/lib/components/layout/platform-sidebar-namespace-select.js';
 import '@platform/lib/components/platform-icon.js';
 import './sync-channel-row.js';
 import './sync-direct-member-row.js';
+
+const DEFAULT_NAMESPACE = 'default';
 
 export class SyncChatList extends PlatformElement {
     static i18nNamespace = 'sync';
@@ -75,27 +71,53 @@ export class SyncChatList extends PlatformElement {
                 width: 100%;
                 box-sizing: border-box;
                 gap: var(--space-2);
-                background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.02));
-                backdrop-filter: blur(var(--glass-blur-medium));
-                -webkit-backdrop-filter: blur(var(--glass-blur-medium));
+                background: transparent;
                 padding-bottom: var(--space-2);
                 margin-bottom: var(--space-2);
                 flex-shrink: 0;
             }
 
-            /* sidebar-режим: контейнер прокрутки — .sidebar-nav снаружи, header'у
-               нужно «прилипать» к верху списка как раньше делала .sidebar-header. */
             :host([mode='sidebar']) .header {
                 position: sticky;
                 top: 0;
                 z-index: 2;
             }
 
-            /* page-режим: внутренний body имеет свой overflow, header — обычный
-               flex-child, который занимает фиксированную высоту сверху. */
             :host([mode='page']) .header {
                 padding: var(--space-3) var(--space-4) var(--space-2);
                 border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+            }
+
+            .header-actions {
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                gap: var(--space-1);
+                padding: 0 var(--space-1);
+            }
+
+            .header-action-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 36px;
+                height: 36px;
+                padding: 0;
+                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+                border-radius: var(--radius-full, 999px);
+                background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+            }
+            .header-action-btn:hover {
+                color: var(--accent);
+                border-color: var(--accent);
+                background: var(--accent-subtle, rgba(153, 166, 249, 0.16));
+            }
+            .header-action-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
             }
 
             .search-box {
@@ -195,21 +217,12 @@ export class SyncChatList extends PlatformElement {
     constructor() {
         super();
         this.mode = 'sidebar';
-        this._namespaces = this.useResource('sync/namespaces', { autoload: true });
         this._channels = this.useResource('sync/channels', { autoload: true });
         this._members = this.useResource('sync/company_members', { autoload: true });
         this._chatUi = this.useSlice('sync/chat_ui');
         this._callUi = this.useSlice('sync/call_ui');
         this._adhoc = this.useOp('sync/channel_create_adhoc_call');
         this._callInvite = this.useOp('sync/calls_invite');
-        this._authSel = this.select((s) => s.auth && s.auth.user ? s.auth.user : null);
-        this._uiNsSel = this.select((s) => s.ui.namespace);
-    }
-
-    _activeNamespace() {
-        const user = this._authSel.value;
-        if (!user || typeof user.company_id !== 'string' || user.company_id === '') return 'all';
-        return getPlatformNamespaceSidebarSelection(user.company_id);
     }
 
     _searchQuery() {
@@ -244,19 +257,11 @@ export class SyncChatList extends PlatformElement {
         return title.includes(search);
     }
 
-    _channelMatchesNamespace(channel, activeNs) {
-        if (activeNs === 'all') return true;
-        if (channel.type === 'direct') return false;
-        return typeof channel.namespace === 'string' && channel.namespace === activeNs;
-    }
-
     _unifiedChats() {
-        const activeNs = this._activeNamespace();
         const search = this._searchQuery();
         const scope = this._searchScope();
         const filtered = this._channels.items.filter((c) => (
-            this._channelMatchesNamespace(c, activeNs)
-            && this._channelMatchesSearch(c, search)
+            this._channelMatchesSearch(c, search)
             && this._channelMatchesScope(c, scope)
         ));
         return filtered.slice().sort((a, b) => {
@@ -269,7 +274,6 @@ export class SyncChatList extends PlatformElement {
 
     _membersWithoutDm() {
         if (this._searchScope() === 'groups') return [];
-        if (this._activeNamespace() !== 'all') return [];
         const directs = this._channels.items.filter((c) => c.type === 'direct');
         const dmUserIds = new Set();
         for (const dm of directs) {
@@ -283,46 +287,12 @@ export class SyncChatList extends PlatformElement {
         return members;
     }
 
-    _activeNamespaceItem() {
-        const activeNs = this._activeNamespace();
-        if (activeNs === 'all') return null;
-        return this._namespaces.items.find((ns) => ns.name === activeNs) || null;
-    }
-
-    _namespaceEnumHeaderConfig() {
-        const items = this._namespaces.items;
-        if (!Array.isArray(items)) {
-            throw new Error('SyncChatList._namespaceEnumHeaderConfig: items must be an array');
-        }
-        const values = [{ value: '', label: this.t('sidebar.all_namespaces') }];
-        for (const ns of items) {
-            if (!ns || typeof ns.name !== 'string' || ns.name.length === 0) {
-                throw new Error('SyncChatList._namespaceEnumHeaderConfig: invalid namespace item');
-            }
-            values.push({ value: ns.name, label: ns.name });
-        }
-        return { values };
-    }
-
-    _onNamespaceChange(e) {
-        const user = this._authSel.value;
-        if (!user || typeof user.company_id !== 'string' || user.company_id === '') {
-            throw new Error('SyncChatList: cannot change namespace without active company_id');
-        }
-        const raw = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
-        setPlatformNamespaceSelection(user.company_id, raw === '' ? null : raw);
-    }
-
-    _onEditActiveNamespace() {
-        const ns = this._activeNamespaceItem();
-        if (!ns) return;
-        this.openModal('sync.namespace_settings', { name: ns.name });
+    _onOpenNamespaceSettings() {
+        this.openModal('sync.namespace_settings', { name: DEFAULT_NAMESPACE });
     }
 
     _onCreateChannel() {
-        const ns = this._activeNamespaceItem();
-        const namespace = ns ? ns.name : null;
-        this.openModal('sync.channel_create', { namespace });
+        this.openModal('sync.channel_create', { namespace: DEFAULT_NAMESPACE });
     }
 
     /**
@@ -353,10 +323,11 @@ export class SyncChatList extends PlatformElement {
         const dateStr = now.toLocaleDateString();
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const name = this.t('chat_view.adhoc_meet_channel_name', { date: dateStr, time: timeStr });
-        const ns = this._activeNamespaceItem();
-        const payload = { name, type: 'group' };
-        if (ns !== null) payload.namespace = ns.name;
-        const result = await this._adhoc.run(payload);
+        const result = await this._adhoc.run({
+            name,
+            type: 'group',
+            namespace: DEFAULT_NAMESPACE,
+        });
         const channelId = result && typeof result.channel_id === 'string' ? result.channel_id : null;
         if (channelId === null) return;
         this.navigate('channel', { channelId });
@@ -384,29 +355,25 @@ export class SyncChatList extends PlatformElement {
     }
 
     renderHeader() {
-        const activeNs = this._activeNamespace();
-        const selectValue = activeNs === 'all' ? '' : activeNs;
         const search = this._chatUi.value && typeof this._chatUi.value.sidebarSearchQuery === 'string'
             ? this._chatUi.value.sidebarSearchQuery
             : '';
         const scope = this._searchScope();
         return html`
             <div class="header">
-                <platform-sidebar-namespace-select
-                    .label=${this.t('sidebar.namespace_label')}
-                    .value=${selectValue}
-                    .config=${this._namespaceEnumHeaderConfig()}
-                    ?show-edit=${selectValue !== '' && this._activeNamespaceItem() !== null}
-                    ?show-add=${false}
-                    edit-icon="settings"
-                    edit-title=${this.t('sidebar.edit_namespace_tooltip')}
-                    @change=${this._onNamespaceChange}
-                    @edit-request=${this._onEditActiveNamespace}
-                >
+                <div class="header-actions">
                     <button
                         type="button"
-                        slot="trailing"
-                        class="platform-namespace-trailing-action-btn"
+                        class="header-action-btn"
+                        @click=${this._onOpenNamespaceSettings}
+                        title=${this.t('sidebar.sync_defaults_tooltip')}
+                        aria-label=${this.t('sidebar.sync_defaults_aria')}
+                    >
+                        <platform-icon name="settings" size="16"></platform-icon>
+                    </button>
+                    <button
+                        type="button"
+                        class="header-action-btn"
                         @click=${this._onAdhocCall}
                         ?disabled=${this._adhoc.busy || this._callInvite.busy}
                         title=${this.t('sidebar.create_sync_title')}
@@ -414,7 +381,7 @@ export class SyncChatList extends PlatformElement {
                     >
                         <platform-icon name="phone-plus" size="16"></platform-icon>
                     </button>
-                </platform-sidebar-namespace-select>
+                </div>
                 <div class="search-box">
                     <platform-icon name="search" size="14"></platform-icon>
                     <input
@@ -457,7 +424,6 @@ export class SyncChatList extends PlatformElement {
         const chats = this._unifiedChats();
         const members = this._membersWithoutDm();
         const empty = chats.length === 0 && members.length === 0;
-        const activeNs = this._activeNamespace();
         return html`
             <div class="body">
                 <div class="section">
@@ -480,11 +446,7 @@ export class SyncChatList extends PlatformElement {
                             <div class="section-subheader">${this.t('sidebar.subheader_start_dm')}</div>
                             ${members.map((m) => html`<sync-direct-member-row .member=${m}></sync-direct-member-row>`)}
                         ` : ''}
-                        ${empty ? html`<div class="empty-row">${
-                            activeNs !== 'all'
-                                ? this.t('sidebar.no_channels_in_namespace')
-                                : this.t('sidebar.no_chats_yet')
-                        }</div>` : ''}
+                        ${empty ? html`<div class="empty-row">${this.t('sidebar.no_chats_yet')}</div>` : ''}
                     </div>
                 </div>
             </div>

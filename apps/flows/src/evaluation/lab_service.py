@@ -141,14 +141,20 @@ from apps.flows.src.models.evaluation_lab import (
 )
 from apps.flows.src.models.node_config import NodeConfig
 from apps.flows.src.registry.nodes import NodeRegistry
+from apps.flows.src.runtime.effective_llm_config import (
+    EffectiveLLMConfig,
+    llm_capability_from_node_config,
+    resolve_effective_llm_config_for_node,
+)
 from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_EVALUATION_RUN
 from core.a2a import coerce_usage_token_count, get_part_text, part_has_text
 from core.ai.providers import AICapability
 from core.ai.resolver import COST_ORIGIN_COMPANY, resolve_ai_model
-from core.ai.runtime import create_llm_client_from_ai_model
+from core.ai.runtime import create_llm_client_from_ai_model, create_llm_client_from_call_config
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
+from core.clients.llm import LLMClient, MockLLM
 from core.context import get_context, require_active_company
 from core.llm_context import LLMContextPatch
 from core.logging import get_logger
@@ -2512,6 +2518,11 @@ class EvaluationLabService:
         if check.evaluator_id in REFERENCE_BUILTIN_METRIC_IDS:
             reference = self._builtin_metric_reference(check)
         prompt = await self._builtin_metric_prompt(check, state)
+        judge_node = await self._resolve_evaluation_node_ref(
+            node_id=check.judge_node_id,
+            node=check.judge_node,
+            state=state,
+        )
         dialog_text = "\n".join(f"{message.role.upper()}: {message.content}" for message in dialog)
         message = (
             f"{prompt}\n\n"
@@ -2530,7 +2541,8 @@ class EvaluationLabService:
             tool_name=EVALUATION_BUILTIN_METRIC_TOOL_NAME,
             task_id=_new_id(),
             context_id=state.context_id,
-            llm_context=LLMContextPatch(profile="compact"),
+            node_config=judge_node,
+            state=state,
         )
         usage.add(metric.usage)
         result = EvaluationBuiltinMetricJudgeResult.model_validate(metric.arguments)
@@ -2549,7 +2561,19 @@ class EvaluationLabService:
         dialog: list[EvaluationDialogMessage],
         usage: LlmUsageAccumulator,
     ) -> CheckOutcome:
-        prompt = await self._judge_prompt(check, state)
+        judge_node = await self._resolve_evaluation_node_ref(
+            node_id=check.judge_node_id,
+            node=check.judge_node,
+            state=state,
+        )
+        prompt = self._prompt_from_node(
+            judge_node,
+            default=(
+                "You are a strict evaluator. Score the assistant response against the rubric. "
+                f"You must call the {EVALUATION_JUDGE_TOOL_NAME} tool exactly once. "
+                "Do not answer with free-form text."
+            ),
+        )
         rubric_version = await self._require_rubric_version(check.rubric_version_id)
         dialog_text = "\n".join(f"{message.role.upper()}: {message.content}" for message in dialog)
         message = (
@@ -2568,7 +2592,8 @@ class EvaluationLabService:
             tool_name=EVALUATION_JUDGE_TOOL_NAME,
             task_id=_new_id(),
             context_id=state.context_id,
-            llm_context=LLMContextPatch(profile="compact"),
+            node_config=judge_node,
+            state=state,
         )
         usage.add(judgment.usage)
         judge_result = EvaluationLlmJudgeResult.model_validate(judgment.arguments)
@@ -2608,9 +2633,10 @@ class EvaluationLabService:
         dialog_text = "\n".join(
             f"{message.role.upper()}: {message.content}" for message in dialog
         )
-        prompt = node_config.prompt
-        if prompt is None or not prompt.strip():
-            prompt = "Generate the next user message for this evaluation case."
+        prompt = self._prompt_from_node(
+            node_config,
+            default="You are the evaluation user simulator. Reply with only the next user message for this turn; the harness owns turn count.",
+        )
         result = await self._invoke_evaluation_llm(
             messages=[
                 {"role": "system", "content": prompt},
@@ -2618,7 +2644,8 @@ class EvaluationLabService:
             ],
             task_id=_new_id(),
             context_id=state.context_id,
-            llm_context=node_config.llm_context or LLMContextPatch(profile="compact"),
+            node_config=node_config,
+            state=state,
         )
         usage.add(result.usage)
         return result.content
@@ -3675,97 +3702,100 @@ class EvaluationLabService:
         input_config: EvaluationInputNode,
         state: ExecutionState,
     ) -> NodeConfig:
+        if input_config.node_id is not None:
+            return await self._resolve_flow_node(input_config.node_id, state)
         if input_config.node is not None:
             return NodeConfig.model_validate(input_config.node)
-        if input_config.node_id is None:
-            raise EvaluationLabValidationError("node input requires node_id or node")
-        return await self._resolve_flow_node(input_config.node_id, state)
+        raise EvaluationLabValidationError("node input requires node_id or node")
+
+    async def _resolve_evaluation_node_ref(
+        self,
+        *,
+        node_id: str | None,
+        node: JsonObject | None,
+        state: ExecutionState,
+    ) -> NodeConfig | None:
+        if node_id is not None:
+            return await self._resolve_flow_node(node_id, state)
+        if node is not None:
+            return NodeConfig.model_validate(node)
+        return None
+
+    def _prompt_from_node(self, node_config: NodeConfig | None, *, default: str) -> str:
+        if node_config is None:
+            return default
+        prompt = node_config.prompt
+        if prompt is None or not prompt.strip():
+            return default
+        return prompt
+
+    def _llm_context_from_node(self, node_config: NodeConfig | None) -> LLMContextPatch:
+        if node_config is not None and node_config.llm_context is not None:
+            return node_config.llm_context
+        return LLMContextPatch(profile="compact")
 
     async def _judge_prompt(
         self,
         check: EvaluationCheckLlmJudge,
         state: ExecutionState,
     ) -> str:
-        if check.judge_node is not None:
-            node_config = NodeConfig.model_validate(check.judge_node)
-            if node_config.prompt is not None and node_config.prompt.strip():
-                return node_config.prompt
-        if check.judge_node_id is not None:
-            node_config = await self._resolve_flow_node(check.judge_node_id, state)
-            if node_config.prompt is not None and node_config.prompt.strip():
-                return node_config.prompt
-        return "You are a strict evaluator. Score the assistant response against the rubric."
+        node_config = await self._resolve_evaluation_node_ref(
+            node_id=check.judge_node_id,
+            node=check.judge_node,
+            state=state,
+        )
+        return self._prompt_from_node(
+            node_config,
+            default=(
+                "You are a strict evaluator. Score the assistant response against the rubric. "
+                f"You must call the {EVALUATION_JUDGE_TOOL_NAME} tool exactly once. "
+                "Do not answer with free-form text."
+            ),
+        )
 
     async def _builtin_metric_prompt(
         self,
         check: EvaluationCheckBuiltinMetric,
         state: ExecutionState,
     ) -> str:
-        if check.judge_node is not None:
-            node_config = NodeConfig.model_validate(check.judge_node)
-            if node_config.prompt is not None and node_config.prompt.strip():
-                return node_config.prompt
-        if check.judge_node_id is not None:
-            node_config = await self._resolve_flow_node(check.judge_node_id, state)
-            if node_config.prompt is not None and node_config.prompt.strip():
-                return node_config.prompt
-        return (
-            "You are a strict built-in evaluator. Return a calibrated 0-10 score, "
-            + "a pass boolean when determinable, and concise feedback."
+        node_config = await self._resolve_evaluation_node_ref(
+            node_id=check.judge_node_id,
+            node=check.judge_node,
+            state=state,
         )
-
-    async def _judge_pairwise_with_llm(
-        self,
-        *,
-        request: EvaluationPairwiseJudgeRequest,
-        left: EvaluationCaseRun,
-        right: EvaluationCaseRun,
-        rubric_version: EvaluationRubricVersion,
-    ) -> EvaluationPairwiseLlmJudgeResult:
-        if left.context_id is None:
-            raise EvaluationLabValidationError(
-                "LLM pairwise judgment requires left case run context_id"
-            )
-        prompt = await self._pairwise_prompt(request, left)
-        message = (
-            f"{prompt}\n\n"
-            f"Rubric version ID: {rubric_version.rubric_version_id}\n"
-            f"Rubric version: {rubric_version.version}\n"
-            f"Rubric:\n{rubric_version.prompt}\n\n"
-            f"Left case run:\n{json.dumps(left.model_dump(mode='json'), ensure_ascii=False, sort_keys=True)}\n\n"
-            f"Right case run:\n{json.dumps(right.model_dump(mode='json'), ensure_ascii=False, sort_keys=True)}\n\n"
-            f"Call the {EVALUATION_PAIRWISE_TOOL_NAME} tool exactly once."
+        return self._prompt_from_node(
+            node_config,
+            default=(
+                "You are a strict built-in evaluator. Return a calibrated 0-10 score, "
+                + "a pass boolean when determinable, and concise feedback."
+            ),
         )
-        result = await self._invoke_evaluation_llm_tool(
-            messages=[{"role": "user", "content": message}],
-            tools=[self._pairwise_judge_tool()],
-            tool_name=EVALUATION_PAIRWISE_TOOL_NAME,
-            task_id=_new_id(),
-            context_id=left.context_id,
-            llm_context=LLMContextPatch(profile="compact"),
-        )
-        return EvaluationPairwiseLlmJudgeResult.model_validate(result.arguments)
 
     async def _pairwise_prompt(
         self,
         request: EvaluationPairwiseJudgeRequest,
         left: EvaluationCaseRun,
     ) -> str:
-        if request.judge_node is not None:
-            node_config = NodeConfig.model_validate(request.judge_node)
-            if node_config.prompt is not None and node_config.prompt.strip():
-                return node_config.prompt
-        if request.judge_node_id is not None:
-            flow = await self._flow_repository.get(left.flow_id)
-            if flow is None:
-                raise EvaluationLabNotFoundError(f"Flow not found: {left.flow_id}")
-            state = self._case_run_resolution_state(left, flow.version)
-            node_config = await self._resolve_flow_node(request.judge_node_id, state)
-            if node_config.prompt is not None and node_config.prompt.strip():
-                return node_config.prompt
-        return (
-            "You are a strict pairwise evaluator. Choose left, right, or tie under "
-            + "the rubric and return structured scores."
+        if request.judge_node_id is None and request.judge_node is None:
+            return (
+                "You are a strict pairwise evaluator. Choose left, right, or tie under "
+                + "the rubric and return structured scores."
+            )
+        flow = await self._flow_repository.get(left.flow_id)
+        if flow is None:
+            raise EvaluationLabNotFoundError(f"Flow not found: {left.flow_id}")
+        state = self._case_run_resolution_state(left, flow.version)
+        node_config = await self._resolve_evaluation_node_ref(
+            node_id=request.judge_node_id,
+            node=request.judge_node,
+            state=state,
+        )
+        return self._prompt_from_node(
+            node_config,
+            default=(
+                "You are a strict pairwise evaluator. Choose left, right, or tie under "
+                + "the rubric and return structured scores."
+            ),
         )
 
     def _case_run_resolution_state(
@@ -3804,6 +3834,78 @@ class EvaluationLabService:
         if node_config is not None:
             return node_config
         raise EvaluationLabNotFoundError(f"Evaluation node not found: {node_id}")
+
+    def _bind_evaluation_llm(
+        self,
+        node_config: NodeConfig | None,
+        *,
+        state: ExecutionState | None,
+    ) -> tuple[LLMClient | MockLLM, str | None, str]:
+        """Returns (client, billing_resource_name, cost_origin)."""
+        if node_config is not None:
+            capability = llm_capability_from_node_config(node_config)
+            company_resolved = resolve_ai_model(capability, include_platform_default=False)
+            if node_config.llm is not None or company_resolved is not None:
+                effective: EffectiveLLMConfig = resolve_effective_llm_config_for_node(node_config)
+                client = create_llm_client_from_call_config(
+                    effective.config,
+                    state=state,
+                    fallback_models=effective.config.fallback_models,
+                )
+                return client, effective.billing_resource_name, effective.cost_origin
+        resolved = resolve_ai_model(
+            AICapability.LLM_CHAT,
+            include_platform_default=True,
+        )
+        if resolved is None:
+            raise EvaluationLabValidationError("evaluation LLM is not available")
+        return (
+            create_llm_client_from_ai_model(resolved),
+            resolved.billing_resource_name,
+            resolved.cost_origin,
+        )
+
+    async def _judge_pairwise_with_llm(
+        self,
+        *,
+        request: EvaluationPairwiseJudgeRequest,
+        left: EvaluationCaseRun,
+        right: EvaluationCaseRun,
+        rubric_version: EvaluationRubricVersion,
+    ) -> EvaluationPairwiseLlmJudgeResult:
+        if left.context_id is None:
+            raise EvaluationLabValidationError(
+                "LLM pairwise judgment requires left case run context_id"
+            )
+        prompt = await self._pairwise_prompt(request, left)
+        flow = await self._flow_repository.get(left.flow_id)
+        if flow is None:
+            raise EvaluationLabNotFoundError(f"Flow not found: {left.flow_id}")
+        resolution_state = self._case_run_resolution_state(left, flow.version)
+        judge_node = await self._resolve_evaluation_node_ref(
+            node_id=request.judge_node_id,
+            node=request.judge_node,
+            state=resolution_state,
+        )
+        message = (
+            f"{prompt}\n\n"
+            f"Rubric version ID: {rubric_version.rubric_version_id}\n"
+            f"Rubric version: {rubric_version.version}\n"
+            f"Rubric:\n{rubric_version.prompt}\n\n"
+            f"Left case run:\n{json.dumps(left.model_dump(mode='json'), ensure_ascii=False, sort_keys=True)}\n\n"
+            f"Right case run:\n{json.dumps(right.model_dump(mode='json'), ensure_ascii=False, sort_keys=True)}\n\n"
+            f"Call the {EVALUATION_PAIRWISE_TOOL_NAME} tool exactly once."
+        )
+        result = await self._invoke_evaluation_llm_tool(
+            messages=[{"role": "user", "content": message}],
+            tools=[self._pairwise_judge_tool()],
+            tool_name=EVALUATION_PAIRWISE_TOOL_NAME,
+            task_id=_new_id(),
+            context_id=left.context_id,
+            node_config=judge_node,
+            state=resolution_state,
+        )
+        return EvaluationPairwiseLlmJudgeResult.model_validate(result.arguments)
 
     def _llm_judge_tool(self) -> JsonObject:
         return {
@@ -3881,7 +3983,9 @@ class EvaluationLabService:
         tool_name: str,
         task_id: str,
         context_id: str,
-        llm_context: LLMContextPatch,
+        node_config: NodeConfig | None = None,
+        state: ExecutionState | None = None,
+        llm_context: LLMContextPatch | None = None,
     ) -> LlmToolInvocationResult:
         actx = get_context()
         if actx is None or actx.active_company is None:
@@ -3889,13 +3993,14 @@ class EvaluationLabService:
         if not str(actx.user.user_id).strip():
             raise EvaluationLabValidationError("user context is required")
         uid = str(actx.user.user_id).strip()
-        resolved = resolve_ai_model(
-            AICapability.LLM_CHAT,
-            include_platform_default=True,
+        llm, billing_resource_name, cost_origin = self._bind_evaluation_llm(
+            node_config,
+            state=state,
         )
-        assert resolved is not None
-        llm = create_llm_client_from_ai_model(resolved)
-        if resolved.cost_origin != COST_ORIGIN_COMPANY:
+        resolved_llm_context = (
+            llm_context if llm_context is not None else self._llm_context_from_node(node_config)
+        )
+        if cost_origin != COST_ORIGIN_COMPANY:
             await get_billing_service().require_balance_for_billable_operation(
                 actx.active_company.company_id,
                 uid,
@@ -3911,7 +4016,7 @@ class EvaluationLabService:
             event_type="llm.invoke",
             operation_category="llm",
             billing_usage_type=UsageType.LLM_REQUEST.value,
-            billing_resource_name=resolved.billing_resource_name,
+            billing_resource_name=billing_resource_name,
             billing_quantity=1,
             billing_pending_settlement=True,
             extra_attributes=trace_extra,
@@ -3924,7 +4029,13 @@ class EvaluationLabService:
                 tools=tools,
                 task_id=task_id,
                 context_id=context_id,
-                llm_context=llm_context,
+                llm_context=resolved_llm_context,
+                extra_body={
+                    "tool_choice": {
+                        "type": "function",
+                        "function": {"name": tool_name},
+                    }
+                },
             ):
                 if not isinstance(event, TaskStatusUpdateEvent):
                     continue
@@ -4077,7 +4188,9 @@ class EvaluationLabService:
         messages: list[JsonObject],
         task_id: str,
         context_id: str,
-        llm_context: LLMContextPatch,
+        node_config: NodeConfig | None = None,
+        state: ExecutionState | None = None,
+        llm_context: LLMContextPatch | None = None,
     ) -> LlmTextInvocationResult:
         actx = get_context()
         if actx is None or actx.active_company is None:
@@ -4085,13 +4198,14 @@ class EvaluationLabService:
         if not str(actx.user.user_id).strip():
             raise EvaluationLabValidationError("user context is required")
         uid = str(actx.user.user_id).strip()
-        resolved = resolve_ai_model(
-            AICapability.LLM_CHAT,
-            include_platform_default=True,
+        llm, billing_resource_name, cost_origin = self._bind_evaluation_llm(
+            node_config,
+            state=state,
         )
-        assert resolved is not None
-        llm = create_llm_client_from_ai_model(resolved)
-        if resolved.cost_origin != COST_ORIGIN_COMPANY:
+        resolved_llm_context = (
+            llm_context if llm_context is not None else self._llm_context_from_node(node_config)
+        )
+        if cost_origin != COST_ORIGIN_COMPANY:
             await get_billing_service().require_balance_for_billable_operation(
                 actx.active_company.company_id,
                 uid,
@@ -4107,7 +4221,7 @@ class EvaluationLabService:
             event_type="llm.invoke",
             operation_category="llm",
             billing_usage_type=UsageType.LLM_REQUEST.value,
-            billing_resource_name=resolved.billing_resource_name,
+            billing_resource_name=billing_resource_name,
             billing_quantity=1,
             billing_pending_settlement=True,
             extra_attributes=trace_extra,
@@ -4120,7 +4234,7 @@ class EvaluationLabService:
                 tools=[],
                 task_id=task_id,
                 context_id=context_id,
-                llm_context=llm_context,
+                llm_context=resolved_llm_context,
             ):
                 if isinstance(event, TaskArtifactUpdateEvent):
                     if event.artifact.parts:

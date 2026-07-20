@@ -21,7 +21,7 @@
 
 ## Реестр `TriggerRegistry` (факт)
 
-В `apps/flows/src/container.py` в реестр добавлен **только** `TriggerType.TELEGRAM` (`TelegramTriggerHandler`). Для `webhook`, `cron`, `email`, `redis` `get_handler` возвращает `None` — при `sync_triggers` триггер получает `status=error`, `last_error` про отсутствие handler, пока не добавят handler.
+В `apps/flows/src/container.py` в реестр добавлены `TriggerType.TELEGRAM` (`TelegramTriggerHandler`) и `TriggerType.EMAIL` (`EmailTriggerHandler`). Для `webhook`, `cron`, `redis` `get_handler` возвращает `None` — при `sync_triggers` триггер получает `status=error`, `last_error` про отсутствие handler, пока не добавят handler.
 
 ## По типу триггера (`TriggerType`)
 
@@ -29,7 +29,8 @@
 |-----|--------------------|--------------------|------------|----------------------------|----------------------------|
 | `telegram` | `TelegramTriggerHandler`: `setWebhook`, `webhook_url` | `POST` Telegram webhook route — `TelegramTriggerHandler.handle` | маппинг с телом из запроса | `handle` → `TriggerExecutor` | `process_task` → `OutputActionExecutor` при включённой рассылке |
 | `webhook` | **Нет** handler в реестре (ошибка при sync) | `POST` `/flows/api/v1/triggers/webhook/{flow_id}/{trigger_id}` — см. `generic_webhook` | маппинг, без `output_actions` | когда роутер вызовет `TriggerExecutor` | `process_task` → `OutputActionExecutor` при включённой рассылке |
-| `cron` / `email` / `redis` | **Нет** handler | зависит от будущей реализации | маппинг | — | для `cron` пост-выход выключен по контракту; `email`/`redis` — как только вход завершён через `process_task` с `trigger_id` |
+| `email` | `EmailTriggerHandler`: Redis `SADD flows:email_triggers:{mailbox_binding_id}` | нет HTTP; `mail_sync_tick` → `dispatch_email_triggers_for_messages` | маппинг | dispatch → `TriggerExecutor` | `process_task` → `OutputActionExecutor` при включённой рассылке |
+| `cron` / `redis` | **Нет** handler | зависит от будущей реализации | маппинг | — | для `cron` пост-выход выключен по контракту; `redis` — как только вход завершён через `process_task` с `trigger_id` |
 
 ## Узкие места (сверка с UI)
 
@@ -38,4 +39,5 @@
 3. `output_actions.condition`: канон `apps/flows/src/triggers/output_condition.py` (не Python `eval`); см. i18n «Вывод».
 4. `generic_webhook` (`apps/flows/src/api/v1/triggers.py`): rate limit, `allowed_ips`, `secret_token` (заголовки `X-Trigger-Secret` / `X-Webhook-Secret` или query `secret`), усечённый лог ключей; исполнение flow — отдельно (пока может быть 501).
 5. Ответы list/get create/update: поля `bot_token` / `secret_token` / пароли в `config` — `(redacted)` в JSON.
+6. Email UI: platform mailbox (`mailbox_binding_id`) + optional filter; без ручного IMAP. Verify — binding принадлежит user + connection `active`.
 6. `post_flow_output_enabled` в `TriggerConfig` и `effective_output_actions_for_trigger` определяют, подставляются ли дефолтные `output_actions` в API и выполняется ли `OutputActionExecutor` после `process_task` для данного типа.

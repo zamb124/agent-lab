@@ -309,12 +309,23 @@ async def test_company_subdomains_initialized(
     auth_token_system,
     auth_token_company2,
 ) -> None:
-    """Subdomain + SubdomainRepository для system/company2 (Host routing в agent/UI E2E)."""
-    from tests.ui.subdomain_setup import ensure_ui_subdomain_mappings
-
+    """Subdomain + SubdomainRepository для system/company2 (Host routing в agent E2E)."""
     _ = auth_token_system
     _ = auth_token_company2
-    await ensure_ui_subdomain_mappings(frontend_container)
+
+    async def ensure_company_subdomain(company_id: str, slug: str) -> None:
+        company = await frontend_container.company_repository.get(company_id)
+        if company is None:
+            raise ValueError(
+                f"Компания {company_id} не найдена — сначала фикстуры auth_token_*"
+            )
+        if company.subdomain != slug:
+            company.subdomain = slug
+            await frontend_container.company_repository.set(company)
+        await frontend_container.subdomain_repository.set_mapping(slug, company_id)
+
+    await ensure_company_subdomain("system", "system")
+    await ensure_company_subdomain("company2", "company2")
 
 
 @contextmanager

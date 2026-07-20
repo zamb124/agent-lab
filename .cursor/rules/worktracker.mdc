@@ -60,7 +60,7 @@ alwaysApply: false
 - `Board` / `board_id`, `BoardColumn` / `board_column_id` (`label`, `state: WorkItemState`, `position`); `board_key` (`generic|operator|task|task:<subtype>`) для резолва доски per `(company, namespace, board_key)`.
 - `WorkItemComment` (`comment_id`, `work_item_id`, `author: WorkActor`, `role: operator|user|system|agent`, `text`, `files: list[FileRef]`, `created_at`) — takeover-диалог (`agent` — метка авторства реплики flow-сотрудника, автор всё равно `UserActor`).
 
-Файлы: канон `FileRef` (`file_id`, `original_name`, `content_type`, `file_size`, `url?`). Upload — `POST /frontend/api/v1/files/` (`platform/file_create` + `FileCreateSpec`); open — `PlatformElement.openFile` → OnlyOffice viewer (`office.mdc`, `files.mdc`). UI — `platform-file-attachments.js`. Переменные — `platform-variables-panel.js` + `VariableResolver` в `prompt-editor`.
+Файлы: канон `FileRef` (`file_id`, `original_name`, `content_type`, `file_size`, `url?`). Upload — `POST /frontend/api/v1/files/` (`platform/file_create` + `FileCreateSpec`); open — `PlatformElement.openFile` → OnlyOffice viewer (`office.mdc`, `files.mdc`). UI — `platform-file-attachments.js`. Переменные — `platform-variables-panel.js` + VariableResolver; описание задачи — `<platform-markdown-editor enable-variables variant="embed">`.
 
 ## Naming
 
@@ -121,14 +121,14 @@ AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API
 | Модуль | Классы | Назначение |
 |---|---|---|
 | `worktracker-surfaces.styles.js` | `.wt-page`, `.wt-section`, `.wt-section-title`, `.wt-empty` | страницы, секции, empty states |
-| `worktracker-list.styles.js` | `.wt-list`, `.wt-list-row` | row-cards с gap (inbox/my/queue); kebab меню карточки — portal в `document.body` |
+| `worktracker-list.styles.js` | `.wt-list`, `.wt-list-row` (+ `::slotted`) | Linear-style row-cards с gap; стили row через `::slotted` (pages кладут row в slot); kebab меню — portal в `document.body` |
 | `worktracker-inspector.styles.js` | `.wt-inspector`, `.wt-inspector-row`, `.wt-inspector-meta` | compact properties sidebar |
 | `worktracker-detail.styles.js` | `.wt-detail-main`, `.wt-activity`, `.wt-composer` | task detail page/panel |
 | `worktracker-kanban.styles.js` | `.wt-kanban`, `.wt-kanban-column`, `.wt-board-toolbar` | board kanban |
 
 Компоненты detail view: `worktracker-detail-content`, `worktracker-detail-inspector`, `worktracker-activity-thread`, `worktracker-detail-header`, `worktracker-inspector-row`, `worktracker-state-pill`, `worktracker-assignee-picker`, `worktracker-priority-picker`. Оркестратор — `work-item-detail-editor` (layouts: `page`, `panel`, `inspector-only`).
 
-Поля форм — только `platform-field` с `pill-density="dense"` / `pill-embed` в inspector; assignee в UI — `platform-user-chip`. **Описание задачи** — `<prompt-editor variant="embed">` (markdown + переменные `{var}` / `@var:` / preview/split); не `platform-field`. Локальные overrides `--field-pill-*` в `apps/worktracker/**` запрещены.
+Поля форм — только `platform-field` с `pill-density="dense"` / `pill-embed` в inspector; assignee в UI — `platform-user-chip`. **Описание задачи** — `<platform-markdown-editor variant="embed" .enableVariables=${true} .showHeader=${true} .showPreview=${false}>` (markdown + переменные `{var}` / `@var:`; label+format toolbar, без mode tabs). Boolean chrome — `.showHeader=${...}`, не `?show-header=`. Не `platform-field`. Локальные overrides `--field-pill-*` в `apps/worktracker/**` запрещены.
 
 Mobile properties на detail page — bottom sheet `worktracker.task_properties` (`worktracker-task-properties-sheet.js`).
 

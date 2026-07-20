@@ -26,6 +26,7 @@ from core.config.models import (
     CalendarSyncConfig,
     FilesConfig,
     LLMConfig,
+    MailSyncConfig,
     MCPCatalogConfig,
     PaymentProvidersConfig,
     RAGConfig,
@@ -233,6 +234,7 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
             enabled=True,
             cron="*/15 * * * *",
         )
+        mail_sync = MailSyncConfig(enabled=False)
         billing = BillingConfig()
         llm = LLMConfig()
         payment_providers = PaymentProvidersConfig()
@@ -321,6 +323,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
             enabled=True,
             cron="*/15 * * * *",
         )
+        mail_sync = MailSyncConfig(enabled=False)
         billing = BillingConfig()
         llm = LLMConfig()
         payment_providers = PaymentProvidersConfig()
@@ -365,6 +368,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
                     "schedule_task_id": schedule_task_id,
                     "schedule_id": "schedule-2",
                     "status": ScheduledTaskStatus.PENDING,
+                    "cron": "*/15 * * * *",
                     "payload": {
                         "schedule_task_id": schedule_task_id,
                         "company_id": SYSTEM_SCHEDULER_COMPANY_ID,
@@ -381,17 +385,18 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
                 exists_in_redis=True,
                 status=ScheduledTaskStatus.PENDING,
                 task_name=CALENDAR_SYNC_TASK_NAME,
-                cron="*/1 * * * *",
+                cron="*/15 * * * *",
                 kwargs={
                     "schedule_task_id": schedule_task_id,
                     "company_id": company_id,
                 },
             )
 
-        async def reconcile_payload(
+        async def reconcile_cron(
             self,
             company_id,
             schedule_task_id,
+            cron,
             payload,
             recreate_schedule=False,
         ):
@@ -402,6 +407,12 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
                     "schedule_task_id": schedule_task_id,
                     "schedule_id": "schedule-2",
                     "status": ScheduledTaskStatus.PENDING,
+                    "cron": cron,
+                    "payload": {
+                        "schedule_task_id": schedule_task_id,
+                        "company_id": company_id,
+                        **payload,
+                    },
                 },
             )()
 
@@ -435,6 +446,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
 async def test_scheduler_startup_creates_span_billing_schedule_when_enabled() -> None:
     class _FakeSettings:
         calendar_sync = CalendarSyncConfig(enabled=False, sync_meeting_reminder_enabled=False)
+        mail_sync = MailSyncConfig(enabled=False)
         billing = BillingConfig(
             span_settlement=BillingSpanSettlementConfig(
                 enabled=True,

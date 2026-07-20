@@ -27,7 +27,7 @@ from apps.crm.scheduled_task_constants import CRM_GENERATE_NAMESPACE_SUGGESTS_TA
 from apps.crm.system_templates import REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS
 from core.context import get_context
 from core.logging import get_logger
-from core.models.identity_models import Namespace, NamespaceCRMSettings
+from core.models.identity_models import Namespace, NamespaceCRMSettings, NamespaceKind
 from core.pagination import OffsetPage
 from core.scheduler.models import PlatformScheduleCreateRequest, PlatformScheduleType
 
@@ -78,6 +78,8 @@ async def _namespace_response(
         company_id=ns.company_id,
         description=ns.description,
         is_default=ns.is_default,
+        kind=ns.kind,
+        owner_user_id=ns.owner_user_id,
         crm_settings=ns.crm_settings,
         integration_badges=badges,
     )
@@ -148,11 +150,11 @@ async def list_namespaces(
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[NamespaceResponse]:
-    """Список всех namespaces текущей компании."""
+    """Список company_workspace namespaces текущей компании (picker)."""
     namespace_service = container.namespace_service
     namespaces, total = await asyncio.gather(
-        namespace_service.list(limit=limit, offset=offset),
-        namespace_service.count(),
+        namespace_service.list_company_workspaces(limit=limit, offset=offset),
+        namespace_service.count(kinds=frozenset({NamespaceKind.COMPANY_WORKSPACE})),
     )
     responses = await asyncio.gather(
         *[_namespace_response(container, ns) for ns in namespaces],

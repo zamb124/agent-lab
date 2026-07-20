@@ -787,12 +787,13 @@ async def sync_file_editor_state(
 
 @router.get("/namespaces", response_model=OffsetPage[OfficeNamespaceItem])
 async def list_namespaces(container: ContainerDep) -> OffsetPage[OfficeNamespaceItem]:
+    """Список company_workspace namespaces (picker сайдбара Documents)."""
     ctx = _require_office_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    rows = await container.namespace_service.list(limit=1000)
+    rows = await container.namespace_service.list_company_workspaces(limit=1000)
     items: list[OfficeNamespaceItem] = [
         OfficeNamespaceItem(name=ns.name.strip(), is_default=bool(ns.is_default))
         for ns in rows

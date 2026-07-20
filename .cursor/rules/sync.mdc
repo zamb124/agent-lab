@@ -173,7 +173,7 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 
 ## Namespace
 
-`GET /sync/api/v1/namespaces` — список платформенного namespace компании из shared `NamespaceRepository.list` (то же, что в CRM). Создание/удаление выполняет CRM (`POST /crm/api/v1/namespaces`, отдельной DELETE нет). Sync пишет **только** `Namespace.sync_settings` через `PUT /sync/api/v1/namespaces/{name}` (фабрики `sync/namespaces` для list + `sync/namespace_update` для PUT). UI выбирает namespace через общий `setPlatformNamespaceSelection` (синхронизирован с CRM/RAG/Office).
+Платформенный реестр — **`namespace.mdc`**. Sync list API: только `kind=company_workspace` (personal/technical не в product list). Создание/удаление registry — не Sync; Sync пишет **только** `Namespace.sync_settings` через `PUT /sync/api/v1/namespaces/{name}`. `channel.namespace` — slug company_workspace; ACL каналов = membership, не namespace. **UI Sync без namespace switcher**: список чатов = все membership-каналы; create/adhoc → `default`; STT defaults — modal `sync.namespace_settings` на `default`. Shared `setPlatformNamespaceSelection` — только CRM/Office.
 
 ## Участники компании
 
@@ -192,7 +192,7 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 
 | `modalKind` | База | Открытие |
 |---|---|---|
-| `sync.namespace_settings` | `PlatformFormModal` | sidebar — карандаш на namespace (только `Namespace.sync_settings`; создание namespace в CRM) |
+| `sync.namespace_settings` | `PlatformFormModal` | header gear в `sync-chat-list` → workspace `default` (только `Namespace.sync_settings`; создание namespace в CRM/console) |
 | `sync.channel_create` | `PlatformFormModal` | sidebar/picker «Создать канал» |
 | `sync.channel_edit` | `PlatformFormModal` | chat-header settings |
 | `sync.channel_notifications` | `PlatformFormModal` | mute |

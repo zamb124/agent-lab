@@ -69,8 +69,11 @@ from core.logging import get_logger
 from core.mail.attachment_index import MailAttachmentFileIndex
 from core.mail.repositories import (
     CompanyMailConnectionRepository,
+    MailboxBindingMemberRepository,
     MailboxBindingRepository,
+    MailboxFolderRepository,
     MailboxSyncCursorRepository,
+    MailMessageRepository,
 )
 from core.mail.service import MailService
 from core.models.billing_models import TariffPlan
@@ -473,20 +476,40 @@ class BaseContainer:
         return MailboxSyncCursorRepository(db_url=self.required_shared_db_url)
 
     @lazy
+    def mailbox_folder_repository(self) -> MailboxFolderRepository:
+        return MailboxFolderRepository(db_url=self.required_shared_db_url)
+
+    @lazy
+    def mailbox_binding_member_repository(self) -> MailboxBindingMemberRepository:
+        return MailboxBindingMemberRepository(db_url=self.required_shared_db_url)
+
+    @lazy
+    def mail_message_repository(self) -> MailMessageRepository:
+        return MailMessageRepository(db_url=self.required_shared_db_url)
+
+    @lazy
     def mail_attachment_file_index(self) -> MailAttachmentFileIndex:
         return MailAttachmentFileIndex(storage=self.shared_storage)
 
     @lazy
     def mail_service(self) -> MailService:
+        mail_sync = get_settings().mail_sync
         return MailService(
             connection_repository=self.company_mail_connection_repository,
             binding_repository=self.mailbox_binding_repository,
             sync_cursor_repository=self.mailbox_sync_cursor_repository,
+            folder_repository=self.mailbox_folder_repository,
+            message_repository=self.mail_message_repository,
+            member_repository=self.mailbox_binding_member_repository,
+            namespace_service=self.namespace_service,
+            rag_client=RagClient(http=self.service_client),
             company_repository=self.company_repository,
             user_repository=self.user_repository,
             mail_config=get_settings().mail,
             files_service=self.files_service,
             attachment_file_index=self.mail_attachment_file_index,
+            mail_sync_backfill_batch_size=mail_sync.backfill_batch_size,
+            mail_sync_reconcile_every_n=mail_sync.reconcile_every_n_syncs,
         )
 
     @lazy

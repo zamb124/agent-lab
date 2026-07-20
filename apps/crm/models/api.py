@@ -11,7 +11,7 @@ from core.types import JsonObject, JsonValue
 
 SemanticTextIndexStatus = Literal["absent", "pending_embedding", "ready"]
 
-from core.models.identity_models import NamespaceCRMSettings  # noqa: E402
+from core.models.identity_models import NamespaceCRMSettings, NamespaceKind  # noqa: E402
 
 
 class EntityCreate(BaseModel):
@@ -438,6 +438,8 @@ class NamespaceResponse(BaseModel):
     company_id: str
     description: str | None = None
     is_default: bool = False
+    kind: NamespaceKind = NamespaceKind.COMPANY_WORKSPACE
+    owner_user_id: str | None = None
     crm_settings: NamespaceCRMSettings | None = None
     integration_badges: list[NamespaceIntegrationBadge] = Field(default_factory=list)
 

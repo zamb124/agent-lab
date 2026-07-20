@@ -301,8 +301,19 @@ async def verify_trigger_draft(
                     error_message=str(e),
                 )
 
+    verify_ctx = get_context()
+    verify_company_id = (
+        verify_ctx.active_company.company_id
+        if verify_ctx is not None and verify_ctx.active_company is not None
+        else None
+    )
     ok, metadata, err_code, err_msg = await run_verify(
-        request.type, cfg, flow_id, request.trigger_id
+        request.type,
+        cfg,
+        flow_id,
+        request.trigger_id,
+        mail_service=container.mail_service,
+        company_id=verify_company_id,
     )
     return TriggerVerifyResponse(
         ok=ok,

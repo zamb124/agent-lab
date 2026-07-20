@@ -53,10 +53,11 @@ export class WorktrackerWorkItemCard extends PlatformElement {
             .shell {
                 display: flex;
                 align-items: stretch;
-                gap: var(--space-1);
+                gap: var(--space-2);
                 min-width: 0;
                 min-height: var(--worktracker-row-min-height);
-                padding: 0 var(--worktracker-row-padding-x);
+                padding: var(--worktracker-row-padding-y, var(--space-3))
+                    var(--worktracker-row-padding-x);
                 transition: background 120ms ease;
             }
             :host([variant="row"]) .shell {
@@ -65,31 +66,43 @@ export class WorktrackerWorkItemCard extends PlatformElement {
                 background: transparent;
             }
             :host([variant="card"]) .shell {
-                border: var(--worktracker-divider);
-                background: var(--bg-primary);
-                border-radius: var(--radius-md);
-                padding: var(--space-2);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--worktracker-surface-bg);
+                border-radius: var(--radius-lg);
+                padding: var(--space-3);
                 min-height: auto;
+                box-shadow: var(--glass-shadow-subtle);
+                transition:
+                    background var(--duration-fast, 120ms) ease,
+                    border-color var(--duration-fast, 120ms) ease,
+                    box-shadow var(--duration-fast, 120ms) ease;
             }
             :host([selected]) .shell {
-                background: var(--glass-tint-medium);
-                box-shadow: inset 2px 0 0 var(--work-item-state-in_progress);
+                background: transparent;
             }
             :host([variant="row"][selected]) .shell {
-                box-shadow: inset 2px 0 0 var(--work-item-state-in_progress);
+                box-shadow: none;
             }
             :host(:not([selected])) .shell:hover {
-                background: var(--glass-tint-subtle);
+                background: transparent;
             }
             :host([variant="card"]:not([selected])) .shell:hover {
                 border-color: var(--glass-border-medium);
+                box-shadow: var(--glass-shadow-medium);
+                background: var(--glass-tint-subtle);
+            }
+            :host([variant="card"][selected]) .shell {
+                background: var(--accent-subtle);
+                border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border-subtle));
+                box-shadow: inset 3px 0 0 var(--accent), var(--glass-shadow-subtle);
             }
             .body {
                 flex: 1;
                 min-width: 0;
                 cursor: pointer;
                 overflow: hidden;
-                border-radius: var(--radius-md) 0 0 var(--radius-md);
+                display: flex;
+                align-items: center;
             }
             .menu-wrap {
                 position: relative;

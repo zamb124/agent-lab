@@ -29,37 +29,13 @@ export class WorktrackerSidebar extends PlatformElement {
         css`
             :host { display: block; height: 100%; }
             .nav-item {
-                display: flex;
-                align-items: center;
-                gap: var(--space-3);
-                min-height: 36px;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                cursor: pointer;
-                background: transparent;
-                border: none;
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                transition: var(--motion-transition-interactive);
-                margin-bottom: 2px;
-                width: 100%;
-                text-align: left;
-            }
-            .nav-item:hover {
-                background: var(--glass-tint-subtle);
-                color: var(--text-primary);
-            }
-            .nav-item.active {
-                background: var(--accent-subtle);
-                color: var(--accent);
-                font-weight: var(--font-semibold);
+                margin-bottom: var(--space-1);
             }
             platform-service-sidebar[collapsed] .nav-label { display: none; }
             platform-service-sidebar[collapsed] .nav-item {
-                justify-content: center; padding: var(--space-3);
+                justify-content: center;
+                padding: var(--space-2);
             }
-            platform-service-sidebar[collapsed] .nav-item:hover { transform: none; }
             .nav-badge {
                 margin-left: auto;
                 min-width: 18px;

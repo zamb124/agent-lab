@@ -168,3 +168,26 @@ def test_worktracker_ui_static_is_public() -> None:
 
 def test_spa_fallback_path_excludes_worktracker_api() -> None:
     assert path_allows_spa_fallback("/worktracker/api/v1/work-items") is False
+
+
+def test_frontend_console_namespaces_api_requires_auth() -> None:
+    matcher = RouteMatcher()
+    for path in (
+        "/frontend/api/namespaces",
+        "/frontend/api/namespaces/me/personal",
+        "/api/namespaces",
+        "/api/namespaces/me/personal",
+    ):
+        rule = matcher.match(path)
+        assert rule is not None, path
+        assert rule.context_type == "api", path
+        assert rule.auth_required is True, path
+
+
+def test_frontend_console_namespaces_page_requires_auth() -> None:
+    matcher = RouteMatcher()
+    for path in ("/namespaces", "/frontend/namespaces"):
+        rule = matcher.match(path)
+        assert rule is not None, path
+        assert rule.context_type == "frontend", path
+        assert rule.auth_required is True, path

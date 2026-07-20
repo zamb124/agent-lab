@@ -3,7 +3,6 @@
  */
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
-import { flowsChatMarkdownToHtml } from '../chat/markdown.js';
 import './platform-json-editor.js';
 import './platform-code-editor.js';
 import './platform-markdown-editor.js';
@@ -287,16 +286,16 @@ export class PlatformDocumentTextViewer extends PlatformElement {
     }
 
     _renderMarkdownPreview() {
-        const htmlValue = flowsChatMarkdownToHtml(this._content, { streaming: false });
         return html`
             <div class="markdown-preview-shell">
                 <platform-markdown-editor
                     readonly
-                    .htmlValue=${htmlValue}
-                    .showPrimary=${false}
-                    .showAttach=${false}
-                    .showDiscard=${false}
-                    .showFormatToggle=${false}
+                    view-mode="preview"
+                    .value=${this._content}
+                    ?show-primary=${false}
+                    ?show-attach=${false}
+                    ?show-discard=${false}
+                    ?show-format-toggle=${false}
                 ></platform-markdown-editor>
             </div>
         `;

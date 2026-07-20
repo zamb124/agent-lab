@@ -46,7 +46,7 @@
 | `run-flow-chat` | chat | REWRITE | → `test-agent-in-chat` |
 | `api-console` | api | REWRITE + SPLIT | → `api-first-request` + `api-sync-async` |
 | `operate-published-flow` | operations | REWRITE | → `publish-and-operate` |
-| `evaluation-lab` | evaluation | REWRITE + SPLIT | → `eval-first-case` + `eval-run-compare` (+ опц. `eval-monitor-quality`) |
+| `evaluation-lab` | evaluation | REWRITE + SPLIT | → `eval-first-case` + `eval-run-compare` (+ `eval-case-turns-inputs`, `eval-llm-judge-score`, опц. `eval-monitor-quality`) |
 | `mcp-workflow` | general | REWRITE + RETAG | → `connect-mcp-tool` (tag `nodes`) |
 
 Инфраструктура: удалить legacy-папки `screenshots/` рядом с flat-PNG в затронутых каталогах.
@@ -151,7 +151,7 @@ Skills остаются в тегах `nodes` и `execution` (отдельный
 - Результат: агент отвечает вежливо от лица «Зелёного сада», изменения опубликованы и видны после переоткрытия.
 - Шаги: 1) открыть LLM-ноду; 2) написать промпт с подстановкой имени покупателя; 3) выбрать модель, температуру и лимит ответа; 4) опубликовать черновик; 5) изменить промпт (добавить упоминание доставки) и снова опубликовать; 6) переоткрыть агента и убедиться, что настройки сохранились.
 - Демонстрация: повторно открытая нода с сохранённым обновлённым промптом.
-- Фичи: LLM-нода, prompt-editor (`{переменные}`, файлы, preview), выбор провайдера/модели/температуры/лимитов, Publish, draft/published.
+- Фичи: LLM-нода, platform-markdown-editor (`{переменные}`, файлы, preview), выбор провайдера/модели/температуры/лимитов, Publish, draft/published.
 
 #### 2.2 `editor/branch-by-condition`
 - Title: «Развилка в диалоге: условия на связях» / "Branch the dialog with edge conditions"
@@ -475,6 +475,22 @@ Skills остаются в тегах `nodes` и `execution` (отдельный
 - Демонстрация: новый кейс, созданный из наблюдения.
 - Фичи: monitoring panels (baselines, gate policies, monitors), create case from observation, annotations.
 
+#### 9.4 `evaluation/eval-case-turns-inputs`
+- Title: «Собираем кейс из нескольких turns» / "Build a multi-turn evaluation case"
+- Для чего: собрать тест-кейс с несколькими turns и разными типами входа.
+- Результат: кейс с двумя turns сохранён и переживает перезагрузку.
+- Шаги: 1) открыть Evaluation Lab и создать suite; 2) создать первый turn с текстом; 3) добавить второй turn и переключить типы входа; 4) сохранить и проверить после reload.
+- Демонстрация: кейс с Turn 1/Turn 2 после перезагрузки.
+- Фичи: blank case create, turn add/remove, input kinds text/inline_code/node, hydration.
+
+#### 9.5 `evaluation/eval-llm-judge-score`
+- Title: «Оцениваем ответ судьёй LLM» / "Score an answer with an LLM judge"
+- Для чего: создать рубрику, judge-ноду и увидеть score после прогона.
+- Результат: LLM judge case сохранён (ids only), в матрице виден score.
+- Шаги: 1) выбрать check LLM judge; 2) создать рубрику и judge node; 3) сохранить и проверить ids-only; 4) запустить и увидеть score.
+- Демонстрация: score в results matrix / feedback в transcript.
+- Фичи: rubric create, flow judge llm_node (`store.evaluation_role=judge`), MockLLM tool judgment, results matrix.
+
 ### Этап 10. Подключения компании (setup)
 
 #### 10.1 `setup/manage-mcp-servers`
@@ -796,6 +812,8 @@ E2E-тесты (все `[x]`):
 - [x] 9.1 `eval-first-case`
 - [x] 9.2 `eval-run-compare`
 - [x] 9.3 `eval-monitor-quality`
+- [x] 9.4 `eval-case-turns-inputs`
+- [x] 9.5 `eval-llm-judge-score`
 - [x] 10.1 `manage-mcp-servers`
 - [x] 10.2 `connect-oauth-integrations`
 - [x] 11.1 `agent-handoff`

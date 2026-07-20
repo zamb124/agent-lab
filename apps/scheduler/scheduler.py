@@ -92,6 +92,7 @@ _IDLE_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "calendar_sync_tick",
     "calendar_sync_meeting_reminder_tick",
     "mail_sync_tick",
+    "mail_idle_supervisor",
     "span_billing_settlement_tick",
     "file_retention_purge_tick",
     "file_retention_backfill_tick",

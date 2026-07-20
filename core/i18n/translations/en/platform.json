@@ -544,10 +544,8 @@
         "attach": "Attach file",
         "attach_remove": "Remove attachment",
         "attach_too_large": "File “{filename}” exceeds {max_mb} MB",
-        "discard": "Discard"
-    },
-    "prompt_editor": {
-        "label_default": "Prompt",
+        "discard": "Discard",
+        "label_default": "Text",
         "placeholder_default": "Enter text…",
         "empty_preview": "Empty",
         "mode_edit": "Editor",
@@ -555,8 +553,7 @@
         "split": "Split view",
         "split_short": "Split",
         "view_modes": "View mode",
-        "markdown_label": "Markdown + templates",
-        "format_toolbar": "Prompt formatting",
+        "markdown_label": "Markdown",
         "format_heading": "Level two heading",
         "format_bold": "Bold text",
         "format_list": "Bulleted list",
@@ -583,5 +580,19 @@
         "var_hint": "Variables: {variable}, {?optional}, {var|default} | Loops: {for x in list}…{endfor} | References: @var:key, @state:path",
         "var_undefined": "undefined",
         "for_not_array": "{name} is not an array"
+    },
+    "voice_dictation": {
+        "start": "Dictate",
+        "stop": "Stop dictation",
+        "processing": "Transcribing…"
+    },
+    "toast": {
+        "voice_dictation": {
+            "succeeded": "Speech recognized",
+            "failed": "Could not transcribe audio",
+            "empty": "No speech recognized",
+            "unavailable_https": "Microphone needs a secure context (HTTPS)",
+            "unavailable_recorder": "Voice recording is not supported in this browser"
+        }
     }
 }

@@ -57,6 +57,10 @@ Capabilities согласованы с кодом: `streaming=true`, `pushNotifi
 - Inbound `Part.raw` → S3 + `FileRecord`.
 - Inbound `Part.url`: platform download → reuse `file_id`; external → SSRF-safe fetch (`apps/flows/src/files/ssrf_fetch.py`) → persist. Fail closed.
 
+## Historical ledger / Redis projections
+
+`core.a2a.codec.message_from_json_dict` при чтении нормализует 0.3-shaped Message JSON из `workflow_events.state_delta` / Redis projection (`kind: message`, `parts[].kind`, `role: user|agent`) в ProtoJSON 1.0. Новые записи пишутся только ProtoJSON без `kind`.
+
 ## Clients
 
 - HTTP API: `apps/flows/src/api/a2a.py` + `A2AChannel`.

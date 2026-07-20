@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
 from core.mail.exceptions import MailMessageNotFoundError, MailSystemConnectionReadOnlyError
@@ -101,6 +103,69 @@ async def test_system_connection_put_forbidden(
 
 
 @pytest.mark.asyncio
+async def test_bind_existing_role_reassigns_to_user(
+    mail_service: MailService,
+    unique_id: str,
+) -> None:
+    company_id = f"mailrebind_{unique_id}"
+    _ = await mail_service.upsert_connection(
+        CompanyMailConnectionUpsertPayload(
+            mail_domain=f"{unique_id}.example.com",
+            provider=MailProvider.ISPMANAGER,
+            imap_host="imap.example.com",
+            imap_port=993,
+            smtp_host="smtp.example.com",
+            smtp_port=465,
+            use_ssl=True,
+            ispmanager_base_url="https://panel.example.com:1500/ispmgr",
+            ispmanager_authinfo_user="admin",
+            ispmanager_authinfo_password="secret-pass",
+        ),
+        company_id=company_id,
+    )
+    role_binding = await mail_service.bind_mailbox(
+        MailboxBindingCreatePayload(
+            kind=MailboxBindingKind.ROLE,
+            local_part=f"hr.{unique_id}",
+            password="role-pass-1",
+            provision=True,
+            sync_enabled=False,
+        ),
+        company_id=company_id,
+    )
+    assert role_binding.kind == MailboxBindingKind.ROLE
+    assert role_binding.user_id is None
+
+    user_id = f"user_{unique_id}"
+    reassigned = await mail_service.bind_mailbox(
+        MailboxBindingCreatePayload(
+            kind=MailboxBindingKind.USER,
+            user_id=user_id,
+            local_part=f"hr.{unique_id}",
+            provision=True,
+            sync_enabled=True,
+        ),
+        company_id=company_id,
+    )
+    assert reassigned.mailbox_binding_id == role_binding.mailbox_binding_id
+    assert reassigned.kind == MailboxBindingKind.USER
+    assert reassigned.user_id == user_id
+    assert reassigned.is_default is True
+
+    idempotent = await mail_service.bind_mailbox(
+        MailboxBindingCreatePayload(
+            kind=MailboxBindingKind.USER,
+            user_id=user_id,
+            local_part=f"hr.{unique_id}",
+            provision=True,
+        ),
+        company_id=company_id,
+    )
+    assert idempotent.mailbox_binding_id == reassigned.mailbox_binding_id
+    assert idempotent.user_id == user_id
+
+
+@pytest.mark.asyncio
 async def test_healthcheck_uses_recording_port(
     mail_service: MailService,
     unique_id: str,
@@ -126,9 +191,12 @@ async def test_healthcheck_uses_recording_port(
 async def test_list_and_get_message_with_attachment_and_stub(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
+    mail_member_context,
     unique_id: str,
 ) -> None:
     company_id = f"mailatt_{unique_id}"
+    user_id = f"user_{unique_id}"
+    _ = await mail_member_context(company_id=company_id, user_id=user_id)
     _ = await mail_service.upsert_connection(
         CompanyMailConnectionUpsertPayload(
             mail_domain=f"{unique_id}.example.com",
@@ -143,7 +211,7 @@ async def test_list_and_get_message_with_attachment_and_stub(
     binding = await mail_service.bind_mailbox(
         MailboxBindingCreatePayload(
             kind=MailboxBindingKind.USER,
-            user_id="test_user",
+            user_id=user_id,
             local_part=f"bob.{unique_id}",
             password="mailbox-pass-2",
             provision=False,
@@ -178,6 +246,18 @@ async def test_list_and_get_message_with_attachment_and_stub(
         )
     )
 
+    empty = await mail_service.list_messages(
+        MailMessageListPayload(
+            mailbox_binding_id=binding.mailbox_binding_id,
+            folder="INBOX",
+            limit=50,
+        ),
+        company_id=company_id,
+    )
+    assert empty.items == []
+
+    _ = await mail_service.sync_user_inbox(binding, max_new_messages=20)
+
     listed = await mail_service.list_messages(
         MailMessageListPayload(
             mailbox_binding_id=binding.mailbox_binding_id,
@@ -186,10 +266,10 @@ async def test_list_and_get_message_with_attachment_and_stub(
         ),
         company_id=company_id,
     )
-    assert len(listed) == 1
-    assert listed[0].uid == "101"
-    assert listed[0].subject == f"attach-{unique_id}"
-    assert listed[0].attachment_count == 2
+    assert len(listed.items) == 1
+    assert listed.items[0].uid == "101"
+    assert listed.items[0].subject == f"attach-{unique_id}"
+    assert listed.items[0].attachment_count == 2
 
     opened = await mail_service.get_message(
         mailbox_binding_id=binding.mailbox_binding_id,
@@ -198,17 +278,13 @@ async def test_list_and_get_message_with_attachment_and_stub(
         company_id=company_id,
     )
     assert opened.subject == f"attach-{unique_id}"
+    assert opened.body_text == "see attach"
     assert len(opened.attachments) == 2
     assert opened.attachments[0].filename == "ok.txt"
-    assert opened.attachments[0].available is True
-    assert opened.attachments[0].content_base64 is not None
     assert opened.attachments[1].filename == "broken.bin"
     assert opened.attachments[1].available is False
     assert opened.attachments[1].parse_error == "payload_decode_failed:ValueError"
-    assert opened.attachments[1].content_base64 is None
     assert opened.unread is False
-    assert len(recording_mail_port.mark_seen_calls) == 1
-    assert recording_mail_port.mark_seen_calls[0][2] == "101"
 
     listed_after = await mail_service.list_messages(
         MailMessageListPayload(
@@ -218,7 +294,7 @@ async def test_list_and_get_message_with_attachment_and_stub(
         ),
         company_id=company_id,
     )
-    assert listed_after[0].unread is False
+    assert listed_after.items[0].unread is False
 
     with pytest.raises(MailMessageNotFoundError):
         _ = await mail_service.get_message(
@@ -230,7 +306,7 @@ async def test_list_and_get_message_with_attachment_and_stub(
 
 
 @pytest.mark.asyncio
-async def test_list_messages_fetches_bodies_for_attachment_count(
+async def test_list_messages_local_only_empty_without_sync(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
     unique_id: str,
@@ -265,7 +341,7 @@ async def test_list_messages_fetches_bodies_for_attachment_count(
             body_text="should-not-matter-for-list",
         )
     )
-    _ = await mail_service.list_messages(
+    listed = await mail_service.list_messages(
         MailMessageListPayload(
             mailbox_binding_id=binding.mailbox_binding_id,
             folder="INBOX",
@@ -273,16 +349,21 @@ async def test_list_messages_fetches_bodies_for_attachment_count(
         ),
         company_id=company_id,
     )
-    assert recording_mail_port.fetch_messages_calls[-1][2] is True
+    assert listed.items == []
+    assert listed.needs_sync is True
+    assert recording_mail_port.fetch_messages_calls == []
 
 
 @pytest.mark.asyncio
 async def test_list_messages_newest_first(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
+    mail_member_context,
     unique_id: str,
 ) -> None:
     company_id = f"mailord_{unique_id}"
+    user_id = f"user_{unique_id}"
+    _ = await mail_member_context(company_id=company_id, user_id=user_id)
     _ = await mail_service.upsert_connection(
         CompanyMailConnectionUpsertPayload(
             mail_domain=f"{unique_id}.example.com",
@@ -297,7 +378,7 @@ async def test_list_messages_newest_first(
     binding = await mail_service.bind_mailbox(
         MailboxBindingCreatePayload(
             kind=MailboxBindingKind.USER,
-            user_id="test_user",
+            user_id=user_id,
             local_part=f"dana.{unique_id}",
             password="mailbox-pass-4",
             provision=False,
@@ -312,6 +393,7 @@ async def test_list_messages_newest_first(
                 from_address="a@example.com",
                 body_text="old",
                 unread=False,
+                date=datetime(2025, 1, 1, tzinfo=timezone.utc),
             ),
             InboundMailMessage(
                 uid="2",
@@ -319,9 +401,11 @@ async def test_list_messages_newest_first(
                 from_address="b@example.com",
                 body_text="new",
                 unread=True,
+                date=datetime(2025, 2, 1, tzinfo=timezone.utc),
             ),
         ]
     )
+    _ = await mail_service.sync_binding(binding, max_new_messages=20)
     listed = await mail_service.list_messages(
         MailMessageListPayload(
             mailbox_binding_id=binding.mailbox_binding_id,
@@ -330,6 +414,6 @@ async def test_list_messages_newest_first(
         ),
         company_id=company_id,
     )
-    assert [item.uid for item in listed] == ["2", "1"]
-    assert listed[0].unread is True
-    assert listed[1].unread is False
+    assert [item.uid for item in listed.items] == ["2", "1"]
+    assert listed.items[0].unread is True
+    assert listed.items[1].unread is False

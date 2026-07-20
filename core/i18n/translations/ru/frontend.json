@@ -22,6 +22,7 @@
         "dashboard": "Панель",
         "platform_services": "Сервисы",
         "team": "Команда",
+        "namespaces": "Пространства",
         "api-keys": "API ключи",
         "company-variables": "Переменные компании",
         "company-voice-providers": "Провайдеры речи",
@@ -44,6 +45,7 @@
     "console_sidebar": {
         "dashboard": "Dashboard",
         "team": "Команда",
+        "namespaces": "Пространства",
         "api_keys": "API Ключи",
         "company_variables": "Переменные компании",
         "voice_providers": "Провайдеры речи",
@@ -587,6 +589,22 @@
         "title": "Выберите компанию",
         "empty_text": "Создайте свою первую компанию для начала работы",
         "create_action": "Создать компанию"
+    },
+    "namespaces_page": {
+        "title": "Пространства",
+        "subtitle": "Рабочие пространства компании и личные каталоги сотрудников",
+        "create": "Создать пространство",
+        "save": "Создать",
+        "cancel": "Отмена",
+        "field_name": "Имя",
+        "field_description": "Описание",
+        "default": "по умолчанию",
+        "filter_all": "Все",
+        "filter_company_workspace": "Компания",
+        "filter_personal": "Личные",
+        "toast_created": "Пространство создано",
+        "toast_create_failed": "Не удалось создать пространство",
+        "open_crm": "Настройки CRM и grants"
     },
     "team_page": {
         "title": "Команда",

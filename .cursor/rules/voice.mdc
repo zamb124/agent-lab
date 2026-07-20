@@ -189,10 +189,12 @@ Capabilities `voice.transcribe_audio` / `voice.synthesize_speech` для isolate
 
 `POST /voice/api/v1/transcribe` (multipart `file`):
 - `voice_resolver.get_stt_client(company_id=ctx.company.company_id)` → `stt.transcribe_audio(...)`.
-- Длительность через `probe_audio_duration_seconds_from_upload` (ffprobe). Если недоступна — usage пропускается с предупреждением `voice.transcribe.stt_usage_skipped` (запись pусходов не пишется).
+- Длительность через `probe_audio_duration_seconds_from_upload` (ffprobe). Если недоступна — usage пропускается с предупреждением `voice.transcribe.stt_usage_skipped` (запись расходов не пишется).
 - Ответ: `TranscribeResponse(text: str, provider: str)`.
 
-Любой сервис кроме `apps/sync` обращается **только через** `ServiceClient("voice", "/voice/api/v1/transcribe")`. Прямой вызов `MediaTranscriber` из HTTP-хендлеров вне `sync` — запрещён.
+**UI dictation (браузер):** единственный канон — `<platform-voice-dictation>` + factory `platform/voice_dictation` → тот же `POST /voice/api/v1/transcribe`. PME встраивает компонент по умолчанию (`enableVoiceDictation`). Сервисные прокси (`/crm/api/v1/entities/voice-input` и аналоги) и локальные MediaRecorder+op в `apps/**` запрещены.
+
+Любой **backend**-сервис кроме `apps/sync` обращается **только через** `ServiceClient("voice", "/voice/api/v1/transcribe")`. Прямой вызов `MediaTranscriber` из HTTP-хендлеров вне `sync` — запрещён.
 
 ## Биллинг
 

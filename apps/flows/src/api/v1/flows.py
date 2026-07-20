@@ -219,7 +219,11 @@ async def _get_bundle_update_flags(
     container: ContainerDep,
     flows_root: Path,
 ) -> dict[str, bool]:
-    """Возвращает признак наличия обновлений bundle для flow с source=file."""
+    """Возвращает признак наличия обновлений bundle для flow с source=file.
+
+    Ошибка сборки одного bundle не валит весь list: для такого flow_id флаг
+    не ставится (caller читает через ``.get(flow_id, False)``), причина пишется в лог.
+    """
     flow_to_bundle = _build_bundle_index(flows_root)
     file_flow_ids = [f.flow_id for f in flows if (f.source or "manual") == "file"]
     if not file_flow_ids:
@@ -245,15 +249,35 @@ async def _get_bundle_update_flags(
 
         bundle_id = flow_to_bundle.get(flow_cfg.flow_id)
         if not bundle_id:
-            raise HTTPException(
-                status_code=500, detail=f"Bundle mapping not found for flow '{flow_cfg.flow_id}'"
+            logger.error(
+                "bundle_update_flags.skip",
+                flow_id=flow_cfg.flow_id,
+                reason="bundle_mapping_not_found",
             )
+            continue
 
-        bundle_cfg = await loader.build_flow_bundle_config(bundle_id)
-        if bundle_cfg is None:
-            raise HTTPException(
-                status_code=500, detail=f"Failed to build bundle config for '{bundle_id}'"
+        try:
+            bundle_cfg = await loader.build_flow_bundle_config(bundle_id)
+        except Exception as exc:
+            logger.error(
+                "bundle_update_flags.skip",
+                flow_id=flow_cfg.flow_id,
+                bundle_id=bundle_id,
+                reason="build_flow_bundle_config_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+                exc_info=True,
             )
+            continue
+
+        if bundle_cfg is None:
+            logger.error(
+                "bundle_update_flags.skip",
+                flow_id=flow_cfg.flow_id,
+                bundle_id=bundle_id,
+                reason="bundle_config_none",
+            )
+            continue
 
         flags[flow_cfg.flow_id] = _flow_semantic_payload(flow_cfg) != _flow_semantic_payload(
             bundle_cfg

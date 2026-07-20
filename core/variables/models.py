@@ -202,7 +202,7 @@ def normalize_variables_map(raw: Mapping[str, object]) -> VariableMap:
 
 
 def variable_map_to_prompt_values(variables: VariableMap) -> dict[str, JsonValue]:
-    """Plain map для prompt-editor: unwrap VariableEntry.value."""
+    """Plain map for platform-markdown-editor variables: unwrap VariableEntry.value."""
     prompt_values: dict[str, JsonValue] = {}
     for key, entry in variables.items():
         prompt_values[key] = entry.value

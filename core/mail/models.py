@@ -56,10 +56,23 @@ class MailFolderListResult(StrictBaseModel):
     delimiter: str | None = None
     capabilities: list[str] = Field(default_factory=list)
     missing_standard_roles: list[MailFolderRole] = Field(default_factory=list)
+    stale: bool = False
+    needs_sync: bool = False
 
 
 class MailFoldersEnsurePayload(StrictBaseModel):
     mailbox_binding_id: str
+
+
+class StoredMailAttachmentRef(StrictBaseModel):
+    """Ссылка на вложение в локальном store (file_id после materialize)."""
+
+    filename: str = Field(min_length=1)
+    content_type: str = Field(min_length=1)
+    size: int = Field(default=0, ge=0)
+    file_id: str | None = None
+    available: bool = True
+    parse_error: str | None = None
 
 
 class IspmanagerProvisionConfig(StrictBaseModel):
@@ -154,6 +167,7 @@ class MailMessageListPayload(StrictBaseModel):
     mailbox_binding_id: str
     folder: str = "INBOX"
     limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = None
 
 
 class MailMessageListItem(StrictBaseModel):
@@ -165,9 +179,19 @@ class MailMessageListItem(StrictBaseModel):
     snippet: str | None = None
     attachment_count: int = 0
     unread: bool = True
+    flagged: bool = False
     date: datetime | None = None
     in_reply_to: str | None = None
     references: str | None = None
+
+
+class MailMessageListResult(StrictBaseModel):
+    """List + sync meta (до CursorPage wrapper в API)."""
+
+    items: list[MailMessageListItem] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool = False
+    needs_sync: bool = False
 
 
 class MailMessageFlagPayload(StrictBaseModel):
@@ -179,6 +203,84 @@ class MailMessageFlagPayload(StrictBaseModel):
 class MailMessageFlagResult(StrictBaseModel):
     uid: str
     unread: bool
+
+
+class MailSyncNowPayload(StrictBaseModel):
+    mailbox_binding_id: str
+
+
+class MailSyncNowResult(StrictBaseModel):
+    accepted: bool
+    mailbox_binding_id: str
+
+
+class MailMessageMovePayload(StrictBaseModel):
+    mailbox_binding_id: str
+    folder: str
+    uid: str
+    destination_folder: str
+
+
+class MailMessageMoveResult(StrictBaseModel):
+    uid: str
+    folder: str
+    destination_folder: str
+    destination_uid: str | None = None
+
+
+class MailMessageStarPayload(StrictBaseModel):
+    mailbox_binding_id: str
+    folder: str = "INBOX"
+    uid: str
+    flagged: bool
+
+
+class MailMessageStarResult(StrictBaseModel):
+    uid: str
+    flagged: bool
+
+
+class MailDraftSavePayload(StrictBaseModel):
+    mailbox_binding_id: str
+    subject: str = ""
+    body_text: str = ""
+    body_html: str | None = None
+    to_addresses: list[str] = Field(default_factory=list)
+    uid: str | None = None
+    in_reply_to: str | None = None
+    references: str | None = None
+
+
+class MailDraftSaveResult(StrictBaseModel):
+    uid: str
+    folder: str
+    message_id: str | None = None
+
+
+class MailMessageSearchPayload(StrictBaseModel):
+    mailbox_binding_id: str
+    q: str = Field(min_length=1)
+    folder: str | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = None
+
+
+class MailboxBindingMemberRole(StrEnum):
+    MEMBER = "member"
+    MANAGER = "manager"
+
+
+class MailboxBindingMember(StrictBaseModel):
+    mailbox_binding_id: str
+    user_id: str
+    company_id: str
+    role: MailboxBindingMemberRole
+    created_at: datetime
+
+
+class MailboxBindingMemberPayload(StrictBaseModel):
+    user_id: str
+    role: MailboxBindingMemberRole = MailboxBindingMemberRole.MEMBER
 
 
 class MailThreadPayload(StrictBaseModel):
@@ -204,7 +306,9 @@ class InboundMailMessagePublic(StrictBaseModel):
     from_address: str | None = None
     to_addresses: list[str] = Field(default_factory=list)
     body_text: str | None = None
+    body_html: str | None = None
     unread: bool = True
+    flagged: bool = False
     date: datetime | None = None
     in_reply_to: str | None = None
     references: str | None = None
@@ -319,11 +423,67 @@ class InboundMailMessage(StrictBaseModel):
     from_address: str | None = None
     to_addresses: list[str] = Field(default_factory=list)
     body_text: str | None = None
+    body_html: str | None = None
     unread: bool = True
+    flagged: bool = False
+    answered: bool = False
+    draft: bool = False
     date: datetime | None = None
     in_reply_to: str | None = None
     references: str | None = None
     attachments: list[MailAttachment] = Field(default_factory=list)
+
+
+class MailImapSystemFlag(StrEnum):
+    SEEN = "\\Seen"
+    FLAGGED = "\\Flagged"
+    DELETED = "\\Deleted"
+    ANSWERED = "\\Answered"
+    DRAFT = "\\Draft"
+
+
+class MailMessageFlags(StrictBaseModel):
+    unread: bool = True
+    flagged: bool = False
+    answered: bool = False
+    draft: bool = False
+    deleted: bool = False
+
+
+class MailUidSearchCriteria(StrictBaseModel):
+    all_messages: bool = False
+    uid_set: str | None = None
+    text: str | None = None
+    from_address: str | None = None
+    subject: str | None = None
+    header_name: str | None = None
+    header_value: str | None = None
+
+
+class MailUidMoveResult(StrictBaseModel):
+    source_uid: str
+    destination_folder: str
+    destination_uid: str | None = None
+
+
+class MailAppendResult(StrictBaseModel):
+    folder: str
+    uid: str | None = None
+    message_id: str | None = None
+
+
+class MailIdleWakeKind(StrEnum):
+    EXISTS = "exists"
+    RECENT = "recent"
+    EXPUNGE = "expunge"
+    TIMEOUT = "timeout"
+    BYE = "bye"
+    OTHER = "other"
+
+
+class MailIdleWake(StrictBaseModel):
+    kind: MailIdleWakeKind
+    raw: str = ""
 
 
 class MailReconcileResult(StrictBaseModel):
@@ -345,11 +505,48 @@ class MailboxSyncCursor(StrictBaseModel):
     company_id: str
     uidvalidity: int
     last_uid: int
+    backfill_completed: bool = False
+    oldest_uid: int | None = None
+    last_reconcile_at: datetime | None = None
     last_synced_at: datetime | None = None
     last_attempt_at: datetime | None = None
     last_error_kind: MailSyncErrorKind | None = None
     last_error_at: datetime | None = None
     last_error_message: str | None = None
+
+
+class StoredMailMessage(StrictBaseModel):
+    """Локальное письмо (body + attachments_json + RAG ids)."""
+
+    mail_message_id: str
+    company_id: str
+    mailbox_binding_id: str
+    user_id: str | None = None
+    folder: str
+    uid: int
+    message_id: str | None = None
+    thread_id: str
+    subject: str = ""
+    from_address: str = ""
+    to_addresses: list[str] = Field(default_factory=list)
+    cc_addresses: list[str] = Field(default_factory=list)
+    date_at: datetime | None = None
+    unread: bool = True
+    flagged: bool = False
+    answered: bool = False
+    draft: bool = False
+    has_attachments: bool = False
+    snippet: str = ""
+    body_text: str | None = None
+    body_html: str | None = None
+    attachments: list[StoredMailAttachmentRef] = Field(default_factory=list)
+    in_reply_to: str | None = None
+    references: str | None = None
+    rag_document_id: str | None = None
+    rag_namespace: str | None = None
+    synced_at: datetime
+    created_at: datetime
+    updated_at: datetime
 
 
 class MailUidBatch(StrictBaseModel):
@@ -363,8 +560,32 @@ class MailUidBatch(StrictBaseModel):
 class MailSyncBindingResult(StrictBaseModel):
     mailbox_binding_id: str
     company_id: str
-    user_id: str
+    user_id: str | None
     email_address: str
     new_messages: list[InboundMailMessage] = Field(default_factory=list)
     bootstrap: bool = False
     skipped_reason: str | None = None
+    backfill_remaining: bool = False
+
+
+class MailSyncLagStats(StrictBaseModel):
+    """Метрики fairness drain для mail_sync_tick."""
+
+    bindings_pending: int = 0
+    max_lag_seconds: int = 0
+    candidates_total: int = 0
+
+
+class StoredMailboxFolder(StrictBaseModel):
+    mailbox_binding_id: str
+    folder_name: str
+    company_id: str
+    role: MailFolderRole = MailFolderRole.OTHER
+    delimiter: str | None = None
+    flags: list[str] = Field(default_factory=list)
+    selectable: bool = True
+    message_count: int = Field(default=0, ge=0)
+    unseen_count: int = Field(default=0, ge=0)
+    namespace_prefix: str = ""
+    capabilities: list[str] = Field(default_factory=list)
+    updated_at: datetime

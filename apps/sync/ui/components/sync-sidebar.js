@@ -4,10 +4,10 @@
  * Контент списка чатов вынесен в `<sync-chat-list>` (используется и в
  * `sync-shell-page` на мобиле) — сайдбар и главная страница идентичны по UX.
  *
- * Активное «пространство» выбирается тем же глобальным селектом
- * платформенного namespace, что и в CRM. Создание namespace — в CRM
- * (`crm.namespace`-modal); sync редактирует только `Namespace.sync_settings`
- * через карандаш на выбранном namespace (`sync.namespace_settings`).
+ * Namespace switcher отсутствует: список = все membership-каналы компании.
+ * STT defaults компании — `sync.namespace_settings` на workspace `default`
+ * (кнопка settings в header `sync-chat-list`). Создание registry namespace —
+ * в CRM / frontend console.
  *
  * Слоты `<platform-service-sidebar>`:
  *   - header: header из <sync-chat-list> (через slot 'header' внутри sync-chat-list).

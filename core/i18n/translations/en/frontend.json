@@ -22,6 +22,7 @@
         "dashboard": "Dashboard",
         "platform_services": "Services",
         "team": "Team",
+        "namespaces": "Namespaces",
         "api-keys": "API keys",
         "company-variables": "Company variables",
         "company-voice-providers": "Voice providers",
@@ -44,6 +45,7 @@
     "console_sidebar": {
         "dashboard": "Dashboard",
         "team": "Team",
+        "namespaces": "Namespaces",
         "api_keys": "API Keys",
         "company_variables": "Company variables",
         "voice_providers": "Voice providers",
@@ -587,6 +589,22 @@
         "title": "Choose a company",
         "empty_text": "Create your first company to get started",
         "create_action": "Create company"
+    },
+    "namespaces_page": {
+        "title": "Namespaces",
+        "subtitle": "Company workspaces and personal employee catalogs",
+        "create": "Create workspace",
+        "save": "Create",
+        "cancel": "Cancel",
+        "field_name": "Name",
+        "field_description": "Description",
+        "default": "default",
+        "filter_all": "All",
+        "filter_company_workspace": "Company",
+        "filter_personal": "Personal",
+        "toast_created": "Namespace created",
+        "toast_create_failed": "Failed to create namespace",
+        "open_crm": "CRM settings & grants"
     },
     "team_page": {
         "title": "Team",

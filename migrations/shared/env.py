@@ -46,7 +46,7 @@ MANAGED_TABLES = {
     "namespaces", "push_subscriptions",
     "calendar_events", "calendar_integrations", "integration_credentials",
     "scheduler_tasks", "platform_short_links", "api_keys",
-    "company_mail_connections", "mailbox_bindings",
+    "company_mail_connections", "mailbox_bindings", "mailbox_sync_cursors", "mail_messages",
 }
 
 

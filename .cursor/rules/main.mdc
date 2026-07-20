@@ -139,8 +139,8 @@ alwaysApply: true
 |---|---|---|
 | User | `user_id`, `User` | `name`, `first_name`, `last_name`, `emails`, `phones`, `companies`, `active_company_id`, `attrs`; не `id` для пользователя. |
 | Company | `company_id`, `Company` | `name`, `subdomain`, `owner_user_id`, `members`, `tariff_plan`, `balance`; host/subdomain helpers называют `company_subdomain`, `company_host`, `company_host_context`; не `tenant_id`, не `workspace_id`, не `org_id`. |
-| Namespace | `namespace`, `Namespace` | Человеческое workspace/space имя внутри `company_id`; UI может писать "workspace/space" только в текстах и названиях компонентов. Код/API/DB/backend routes — `namespace`/`namespaces`, не `/workspace` и не `/spaces`. |
-| RAG/vector namespace | `namespace_id` | Только технический id индекса/векторного хранилища, обычно производный от `company_id` + `namespace`. Не подменяет CRM/Sync/Office `namespace`. |
+| Namespace | `namespace`, `Namespace` | Workspace-slug внутри `company_id`; `kind ∈ {company_workspace, personal, technical}`; personal slug `user-{user_id}`, `owner_user_id` обязателен. UI copy — workspace/space; API/DB — `namespace`/`namespaces`. Канон → **`namespace.mdc`**. |
+| RAG/vector namespace | `namespace_id` | Id векторного каталога; для platform Namespace обычно равен `Namespace.name` (не `{company_id}_{namespace}`). Не подменяет CRM/Sync/Office `namespace` как продукт. |
 | Flow | `flow_id`, `FlowConfig`, `flow` | Исполняемый граф. Не `agent_id`; термин `agent` допустим только в A2A (`agent-card`, wire `ROLE_AGENT`, helpers вроде `new_agent_text_message`) и legacy test names до миграции. |
 | Flow employee | `flow_employee_{flow_id}` (user_id), `attributes.kind=flow_employee` | Flow как сотрудник — обычный `User` (двустороннее членство в `company.members`), а не отдельная сущность Agent. Ось идентичности агента одна — `user_id`; `AgentActor`/`AgentAssignment`/`platform-agent:*` запрещены. У сотрудника обязателен `attributes.curator_user_ids` (минимум один человек). Хелперы — `core.identity.flow_employee`. |
 | Branch | `branch_id`, `BranchConfig`, `branch` | Вариант графа внутри `flow_id`; не `skill_id`, не `scenario_id`. |
@@ -370,6 +370,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | RAG | `rag.mdc` |
 | Sync (чат, каналы, Git) | `sync.mdc` |
 | Почта (company connection, mailbox bindings, ISPmanager) | `mail.mdc` |
+| Platform Namespace (kind, personal ensure, RAG id) | `namespace.mdc` |
 | WorkItem (ядро задач, канбан, HITL, очереди) | `worktracker.mdc` |
 | Agent Skills (llm_node procedure packs) | `agent_skills.mdc` |
 | AgentPlan (execution checklist) | `agent_plan.mdc` |

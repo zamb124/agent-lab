@@ -13,6 +13,7 @@ from core.llm_context import (
     LLMContextMemoryRecord,
     LLMContextMemoryScope,
 )
+from core.models.identity_models import NamespaceKind
 from core.namespace import NamespaceService
 from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchResult
 from core.rag.rag_resource_bind import RagResourceBindParams
@@ -80,6 +81,7 @@ class RAGLLMContextMemoryStore:
         _ = await self.namespace_service.get_or_create(
             namespace_id,
             description="LLM context episodic memory",
+            kind=NamespaceKind.TECHNICAL,
         )
 
     async def _namespace_exists(self, namespace_id: str) -> bool:

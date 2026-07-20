@@ -1,15 +1,15 @@
-# Sync: space settings
+# Sync: transcription defaults
 
-The user opens Sync settings for the selected platform space and enables voice message transcription.
+The user opens company Sync defaults (workspace default) and enables voice message transcription.
 
 ## Step 1. Sync opened
 
 ![Sync opened](edit-space-name--01-sync-opened.png)
 
-## Step 2. Space settings opened
+## Step 2. Company Sync defaults opened
 
-![Space settings opened](edit-space-name--02-space-settings-opened.png)
+![Company Sync defaults opened](edit-space-name--02-company-sync-defaults-opened.png)
 
-## Step 3. Space settings saved
+## Step 3. Sync defaults saved
 
-![Space settings saved](edit-space-name--03-space-settings-saved.png)
+![Sync defaults saved](edit-space-name--03-sync-defaults-saved.png)

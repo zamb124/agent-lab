@@ -51,6 +51,7 @@ from apps.flows.src.services.schedule_service import ScheduleService
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from apps.flows.src.tools.registry import ToolRegistry
+from apps.flows.src.triggers.handlers.email import EmailTriggerHandler
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 from apps.flows.src.triggers.registry import TriggerRegistry
 from core.capabilities import CAPABILITY_LANGUAGE_SET
@@ -346,6 +347,7 @@ class FlowContainer(BaseContainer):
 
         # Регистрируем handlers
         registry.register_handler(TriggerType.TELEGRAM, TelegramTriggerHandler)
+        registry.register_handler(TriggerType.EMAIL, EmailTriggerHandler)
 
         return registry
 

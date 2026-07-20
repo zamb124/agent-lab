@@ -1,9 +1,5 @@
 # platform-markdown-editor
 
-Gmail-like WYSIWYG compose (`<platform-markdown-editor>`).
+Platform markdown editor. Canon `value` = markdown; `change` = `{ value, htmlValue, textValue }`.
 
-## Run
-
-```bash
-npm run test:ui-kit -- tests/ui/design-system/components/platform-markdown-editor/contract.spec.js
-```
+Strict browser tests: helpers, document, compose, variables, mentions — see `tests/ui/design-system/components/platform-markdown-editor/README.en.md`.

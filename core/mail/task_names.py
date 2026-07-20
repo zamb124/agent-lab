@@ -1,0 +1,13 @@
+"""Имена TaskIQ-задач почты (idle queue)."""
+
+MAIL_SYNC_TICK_TASK_NAME = "mail_sync_tick"
+MAIL_SYNC_BINDING_TASK_NAME = "mail_sync_binding"
+MAIL_MARK_SEEN_TASK_NAME = "mail_mark_seen"
+MAIL_MARK_UNSEEN_TASK_NAME = "mail_mark_unseen"
+MAIL_SEND_TASK_NAME = "mail_send"
+MAIL_MOVE_TASK_NAME = "mail_move"
+MAIL_TRASH_TASK_NAME = "mail_trash"
+MAIL_ARCHIVE_TASK_NAME = "mail_archive"
+MAIL_DELETE_TASK_NAME = "mail_delete"
+MAIL_STAR_TASK_NAME = "mail_star"
+MAIL_IDLE_SUPERVISOR_TASK_NAME = "mail_idle_supervisor"

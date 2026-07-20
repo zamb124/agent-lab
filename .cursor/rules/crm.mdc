@@ -42,6 +42,8 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 
 `member`/`contact`/`company` имеют `optional_fields.aliases` (`array`) — для @-обогащения.
 
+**Описание заметки (UI):** edit — `<platform-markdown-editor variant="embed" .enableMentions=${true} .showHeader=${false} .showPreview=${false} .showHint=${false} .showFormatToolbar=${true}>` (палитра H2/B/list без mode tabs; диктовка — встроенный `<platform-voice-dictation>` / `platform/voice_dictation`, не CRM API); view — `flowsChatMarkdownToHtml` + mention chips. Mentions в тексте: `@[Имя](entity_id)`. Boolean chrome — только `.showHeader=${false}` (не `?show-header=${false}`).
+
 **Подтипы заметки** (`meeting`/`call` из AI-черновика): `entity_type=note`, `entity_subtype=meeting|call` — попадают в `/crm/notes`. Push ``crm/note/updated`` может содержать ``markdown_format``: ``phase: 'started'`` при постановке TaskIQ format Markdown (UI спиннер); ``complete`` + ``chunks_done``/``chunks_total`` после ответа общего `TextTransformService`.
 
 **Якоря контекста** (`COMMON_NAMESPACE_ANCHOR_TYPES`, `is_context_anchor=True`): `topic`, `organization`, `project`.
@@ -81,7 +83,7 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 
 - Дефолт `"default"`. Резолв определения типа: `EntityTypeRepository.get_by_type_id(type_id, namespace=entity.namespace)` + `company_id` из контекста. `type_id` в другом пространстве — отдельная строка.
 - Корневой `NOTE_ROOT_ENTITY_TYPE_ID` без `entity_subtype` ослабленно проверяется в `EntityService._ensure_entity_type_allowed_in_namespace`. Подтипы заметок и прочие — по `allowed_type_ids` namespace. `PUT /namespaces/{name}` к `allowed_type_ids` всегда добавляет `NOTE_ROOT_ENTITY_TYPE_ID` и `TASK_ROOT_ENTITY_TYPE_ID` (нельзя снять).
-- `vector_documents` фильтруется по `namespace_id = "{company_id}_{namespace}"`.
+- `vector_documents`: `namespace_id = namespace` (bare `Namespace.name`, напр. `"default"` / `"sales"`); тенант — колонка / filter `company_id`. Формула `{company_id}_{namespace}` устарела.
 - `POST /namespaces` требует `template_id` (default `'sales'`). `spaces-page`: редактирование описания, `allowed_type_ids`, `crm_settings`, грантов. Удаление типа — только если нет сущностей (`locked_type_ids`).
 
 ### `note_voice` и `in_context`

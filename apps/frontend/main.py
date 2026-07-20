@@ -36,6 +36,7 @@ from apps.frontend.api.design_system import router as design_system_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
 from apps.frontend.api.invites import router as invites_router
 from apps.frontend.api.leads import lead_requests_router, leads_router
+from apps.frontend.api.namespaces import router as namespaces_router
 from apps.frontend.api.payments_webhook import router as payments_webhook_router
 from apps.frontend.api.platform_billing import router as platform_billing_router
 from apps.frontend.api.platform_llm_model_scores import (
@@ -358,6 +359,7 @@ app = create_service_app(
         design_system_router,
         invites_router,
         team_router,
+        namespaces_router,
         api_keys_router,
         billing_router,
         settings_router,

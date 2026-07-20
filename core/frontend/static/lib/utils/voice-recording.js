@@ -1,6 +1,6 @@
 /**
  * Утилиты записи голоса через MediaRecorder.
- * Общие для CRM (daily-notes, note-content) и Sync (message-composer).
+ * Общие для platform-voice-dictation и Sync (message-composer).
  */
 
 /**

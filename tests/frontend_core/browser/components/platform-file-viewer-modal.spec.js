@@ -58,8 +58,8 @@ import {
 import { entityGrantsListOp } from '../../../../apps/crm/ui/events/resources/grants.resource.js';
 import { relatedEntitiesOp } from '../../../../apps/crm/ui/events/resources/graph.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
+import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import { namespacesResource } from '../../../../apps/crm/ui/events/resources/namespaces.resource.js';
-import { noteVoiceInputOp } from '../../../../apps/crm/ui/events/resources/notes.resource.js';
 import { graphViewSlice } from '../../../../apps/crm/ui/events/resources/graph-view.resource.js';
 
 const DOC_SERVER_URL = 'https://docs.example.test';
@@ -376,8 +376,8 @@ function crmFactories() {
         entityGrantsListOp,
         relatedEntitiesOp,
         platformFileCreateOp,
+        platformVoiceDictationOp,
         namespacesResource,
-        noteVoiceInputOp,
         graphViewSlice,
     ];
 }

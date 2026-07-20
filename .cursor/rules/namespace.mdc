@@ -1,0 +1,61 @@
+---
+description: "Platform Namespace: company_workspace / personal / technical, ensure_personal on membership, RAG namespace_id"
+alwaysApply: false
+---
+# Platform Namespace
+
+Единый реестр пространств компании в shared DB (`Namespace` / `NamespaceService`). Не путать с RAG `namespace_id` (часто совпадает со `name`, но это ось B), IMAP `NAMESPACE`, i18n JSON ns, K8s.
+
+## Kind
+
+| kind | Смысл | Create | Sidebar (employee) | Admin console | CRM template |
+|---|---|---|---|---|---|
+| `company_workspace` | Отдел/проект (NetWorkle/Office/Sync) | admin / CRM template / lightweight | да | да | да для CRM product create |
+| `personal` | Именной каталог юзера (mail, private RAG) | **только** `ensure_personal_namespace` при membership | нет (чужие) | **да** | нет |
+| `technical` | Vector/system (`office-catalog-*`, `llm-memory-*`, …) | сервисы через `get_or_create(..., kind=technical)` | нет | diagnostics only | нет |
+
+Поля: `kind`, `owner_user_id` (обязателен при `kind=personal`, иначе `null`).
+
+## Personal — инвариант membership
+
+При любом появлении `user` как member `company` всегда есть personal ns:
+
+- slug `name = user-{user_id}`
+- `description` = `User.name` (именная подпись; slug не меняется при rename)
+- ровно один на `(company_id, user_id)`
+- API: `NamespaceService.ensure_personal_namespace(user_id, display_name=...)`
+- хук: после записи membership (+ safety-net в mail/RAG ingest)
+- backfill: task/миграция для существующих members
+- hard-delete при leave — нет в v1
+
+Mail / личная семантика пишут **только** в personal ns владельца. Несколько `MailboxBinding` → один personal ns; в metadata — `mailbox_binding_id`.
+
+Personal ≠ CRM `member` entity (entity живёт в `default` company_workspace).
+
+Админ видит personal в console list (реестр). Контент RAG/mail — owner или AccessGrant; видимость записи ≠ ACL контента.
+
+## RAG `namespace_id`
+
+- company_workspace / personal: `namespace_id = Namespace.name` (bare slug), плюс filter `company_id` в vector search
+- **Не** формула `{company_id}_{namespace}` (устаревший drift в docs)
+- technical: свой slug (`office-catalog-{catalog_id}`, `llm-memory-…`) в том же registry с `kind=technical`
+- mutating/search API: запись должна быть в registry (`require_registered_rag_namespace`)
+
+## Lifecycle
+
+Единственная точка конструкции: `core/namespace/service.py::NamespaceService`. Прямой `Namespace(...)` + `repository.set` вне сервиса запрещён.
+
+- `ensure_default` → `kind=company_workspace`, `is_default=True`
+- CRM `POST /namespaces` + template → `company_workspace`
+- lightweight create (без template) → `company_workspace` без материализации типов
+- list product UI (CRM/Sync/Office picker): `list_company_workspaces` — только `company_workspace`
+- `NamespaceService.list()` без `kinds` — product list для admin/console (`company_workspace` + `personal`, без `technical`)
+- admin console может явно фильтровать `kind=personal`
+
+## Sync
+
+`channel.namespace` — только `company_workspace` slug. Реальный ACL каналов = membership. `sync_settings` — тонкие STT defaults на workspace. UI Sync **без** namespace switcher: список = membership; create → `default`; STT modal на `default`. Shared platform selection (`setPlatformNamespaceSelection`) — CRM/Office.
+
+## Связанные rules
+
+`main.mdc` (glossary), `crm.mdc`, `sync.mdc`, `office.mdc`, `rag.mdc`, `mail.mdc`, `database.mdc`.

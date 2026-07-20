@@ -237,7 +237,7 @@ async def test_ensure_standard_folders_creates_missing(
     ]
     recording_mail_port.namespace_prefix = ""
 
-    before = await mail_service.list_folders(
+    before = await mail_service.refresh_folders_from_imap(
         binding.mailbox_binding_id,
         company_id=company_id,
     )
@@ -291,26 +291,30 @@ async def test_list_messages_404_on_unknown_exact_folder(
         ),
         company_id=company_id,
     )
-    recording_mail_port.select_fail_names.add("Sent")
-    with pytest.raises(MailMailboxNotFoundError) as exc_info:
-        _ = await mail_service.list_messages(
-            MailMessageListPayload(
-                mailbox_binding_id=binding.mailbox_binding_id,
-                folder="Sent",
-                limit=10,
-            ),
-            company_id=company_id,
-        )
-    assert exc_info.value.folder_name == "Sent"
+    # Local-first: unknown/empty folder returns empty page, no IMAP SELECT.
+    listed = await mail_service.list_messages(
+        MailMessageListPayload(
+            mailbox_binding_id=binding.mailbox_binding_id,
+            folder="Sent",
+            limit=10,
+        ),
+        company_id=company_id,
+    )
+    assert listed.items == []
+    assert listed.needs_sync is True
+    assert recording_mail_port.fetch_messages_calls == []
 
 
 @pytest.mark.asyncio
 async def test_send_appends_copy_to_sent_folder(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
+    mail_member_context,
     unique_id: str,
 ) -> None:
     company_id = f"mailsent_{unique_id}"
+    user_id = f"user_{unique_id}"
+    _ = await mail_member_context(company_id=company_id, user_id=user_id)
     _ = await mail_service.upsert_connection(
         CompanyMailConnectionUpsertPayload(
             mail_domain=f"{unique_id}.example.com",
@@ -329,7 +333,7 @@ async def test_send_appends_copy_to_sent_folder(
     binding = await mail_service.bind_mailbox(
         MailboxBindingCreatePayload(
             kind=MailboxBindingKind.USER,
-            user_id="test_user",
+            user_id=user_id,
             local_part=f"carol.{unique_id}",
             password="mailbox-pass-1",
             provision=True,
@@ -347,6 +351,7 @@ async def test_send_appends_copy_to_sent_folder(
     )
     assert recording_mail_port.append_sent_calls
     assert recording_mail_port.append_sent_calls[-1][1] == "Sent"
+    _ = await mail_service.sync_binding(binding, max_new_messages=50)
     sent_messages = await mail_service.list_messages(
         MailMessageListPayload(
             mailbox_binding_id=binding.mailbox_binding_id,
@@ -355,8 +360,8 @@ async def test_send_appends_copy_to_sent_folder(
         ),
         company_id=company_id,
     )
-    assert len(sent_messages) == 1
-    assert sent_messages[0].subject == f"hello-{unique_id}"
+    assert len(sent_messages.items) == 1
+    assert sent_messages.items[0].subject == f"hello-{unique_id}"
     inbox_messages = await mail_service.list_messages(
         MailMessageListPayload(
             mailbox_binding_id=binding.mailbox_binding_id,
@@ -365,7 +370,7 @@ async def test_send_appends_copy_to_sent_folder(
         ),
         company_id=company_id,
     )
-    assert inbox_messages == []
+    assert inbox_messages.items == []
 
 
 @pytest.mark.asyncio

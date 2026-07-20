@@ -1315,10 +1315,11 @@
   "mail_sync": {
     "enabled": true,
     "cron": "*/1 * * * *",
-    "batch_size": 100,
-    "max_bindings_per_tick": 1000,
-    "max_parallel_bindings": 10,
-    "max_new_messages_per_binding": 20,
+    "batch_size": 200,
+    "max_bindings_per_tick": 2000,
+    "max_parallel_bindings": 20,
+    "max_new_messages_per_binding": 50,
+    "max_drain_continuations": 10,
     "notification_dedup_ttl_seconds": 86400,
     "auth_error_cooldown_seconds": 3600
   },

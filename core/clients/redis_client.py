@@ -220,6 +220,18 @@ class _RedisSdkConnection:
         command = type_cast(Callable[[str, int, int], Awaitable[list[str]]], self._raw.lrange)
         return await command(key, start, end)
 
+    async def sadd(self, key: str, *members: str) -> int:
+        command = type_cast(Callable[..., Awaitable[int]], self._raw.sadd)
+        return await command(key, *members)
+
+    async def srem(self, key: str, *members: str) -> int:
+        command = type_cast(Callable[..., Awaitable[int]], self._raw.srem)
+        return await command(key, *members)
+
+    async def smembers(self, key: str) -> set[str]:
+        command = type_cast(Callable[[str], Awaitable[set[str]]], self._raw.smembers)
+        return await command(key)
+
     async def publish(self, channel: str, message: str) -> int:
         command = type_cast(Callable[[str, str], Awaitable[int]], self._raw.publish)
         return await command(channel, message)
@@ -428,6 +440,57 @@ class RedisClient:
         except (RedisError, OSError, asyncio.TimeoutError) as e:
             logger.error(f"RedisClient: ошибка установки ключа {key} с TTL: {e}")
             return False
+
+    async def sadd(self, key: str, *members: str) -> int:
+        """Добавляет members в Redis SET. При недоступности Redis — RedisOperationError."""
+        if not members:
+            return 0
+        if not await self._ensure_connected():
+            raise RedisOperationError(f"sadd({key}): Redis недоступен после retry")
+        try:
+            client = self._require_client()
+            return await client.sadd(key, *members)
+        except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
+            if not await self._ensure_connected():
+                raise RedisOperationError(
+                    f"sadd({key}): Redis недоступен после retry"
+                ) from primary_error
+            try:
+                client = self._require_client()
+                return await client.sadd(key, *members)
+            except (RedisError, OSError, asyncio.TimeoutError) as retry_error:
+                raise RedisOperationError(f"sadd({key}): {retry_error}") from retry_error
+
+    async def srem(self, key: str, *members: str) -> int:
+        """Удаляет members из Redis SET. При недоступности Redis — RedisOperationError."""
+        if not members:
+            return 0
+        if not await self._ensure_connected():
+            raise RedisOperationError(f"srem({key}): Redis недоступен после retry")
+        try:
+            client = self._require_client()
+            return await client.srem(key, *members)
+        except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
+            if not await self._ensure_connected():
+                raise RedisOperationError(
+                    f"srem({key}): Redis недоступен после retry"
+                ) from primary_error
+            try:
+                client = self._require_client()
+                return await client.srem(key, *members)
+            except (RedisError, OSError, asyncio.TimeoutError) as retry_error:
+                raise RedisOperationError(f"srem({key}): {retry_error}") from retry_error
+
+    async def smembers(self, key: str) -> set[str]:
+        """Читает members Redis SET. Пустой set при отсутствии ключа / недоступности."""
+        if not await self._ensure_connected():
+            return set()
+        try:
+            client = self._require_client()
+            return await client.smembers(key)
+        except (RedisError, OSError, asyncio.TimeoutError) as e:
+            logger.error(f"RedisClient: ошибка SMEMBERS {key}: {e}")
+            return set()
 
     async def delete(self, *keys: str) -> int:
         """

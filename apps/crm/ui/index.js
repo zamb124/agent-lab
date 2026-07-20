@@ -9,3 +9,4 @@ import './app/crm-app.js';
 import './components/crm-sidebar.js';
 
 export { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
+export { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';

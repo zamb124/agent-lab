@@ -35,18 +35,14 @@ export const sidebarHostStyles = css`
         padding-bottom: 0;
     }
 
-    /*
-     * В expanded отрицательный margin даёт полноширинные nav-item без «ступеньки»;
-     * при collapsed узкая колонка + overflow:hidden обрезают содержимое слева.
-     */
     :host([collapsed]) .sidebar-nav {
         margin-inline: 0;
-        padding-inline: 0;
+        padding-inline: var(--space-2);
     }
 
     /*
      * Icon-only rail: компактный padding (8+32+8 ≤ 56px usable) и без
-     * translateX — иначе overflow-x:hidden на .sidebar-nav режет иконки.
+     * translateX — иначе overflow clip на .sidebar-nav режет иконки.
      */
     :host([collapsed]) .nav-item,
     :host([collapsed]) ::slotted(.nav-item) {
@@ -273,8 +269,13 @@ export const sidebarStyles = css`
         overflow-y: auto;
         overflow-x: hidden;
         min-height: 0;
-        padding: 0 var(--sidebar-nav-inline, var(--space-2));
-        margin: 0 calc(-1 * var(--sidebar-nav-inline, var(--space-2)));
+        /*
+         * Inset padding (без negative margin): active/hover shadow и
+         * border-radius не клипаются краем scroll-container.
+         */
+        padding: var(--space-1) var(--sidebar-nav-inline, var(--space-3));
+        margin: 0;
+        box-sizing: border-box;
     }
 
     .sidebar-section {
@@ -345,7 +346,6 @@ export const sidebarNavItemStyles = css`
         border-color: var(--glass-border-subtle);
         box-shadow: var(--glass-shadow-subtle);
         color: var(--text-primary);
-        transform: translateX(4px);
     }
 
     :host([collapsed]) .nav-item,
@@ -367,7 +367,9 @@ export const sidebarNavItemStyles = css`
         border-color: var(--accent);
         color: var(--accent);
         font-weight: var(--font-semibold);
-        box-shadow: var(--accent-glow);
+        /* Soft inset glow — не выходит за padding .sidebar-nav и не клипается */
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent),
+            0 4px 14px color-mix(in srgb, var(--accent) 18%, transparent);
     }
 
     /* Ведущая иконка в одной вертикали: фиксированная полоса, SVG центрируем (разный viewBox у иконок). */
@@ -478,7 +480,8 @@ export const sidebarNavItemStyles = css`
 
     :host-context([data-theme="light"]) .nav-item.active {
         background: var(--accent-subtle);
-        box-shadow: var(--accent-glow);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
+            0 4px 14px color-mix(in srgb, var(--accent) 14%, transparent);
     }
 
     :host-context([data-theme="light"]) .nav-item-badge {

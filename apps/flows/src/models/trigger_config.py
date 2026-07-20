@@ -242,29 +242,33 @@ class WebhookTriggerConfig(StrictBaseModel):
 
 
 class EmailTriggerConfig(StrictBaseModel):
-    """Конфигурация Email триггера."""
+    """
+    Конфигурация Email триггера на platform mail.
 
-    provider: str = Field(
-        default="imap",
-        description="Провайдер: imap, mailgun, sendgrid"
+    Слушает входящие письма MailboxBinding (sync через mail_sync_tick).
+    Фильтры опциональны: пустые = все письма ящика.
+    """
+
+    mailbox_binding_id: str = Field(
+        ...,
+        description="ID ящика пользователя (MailboxBinding.mailbox_binding_id)",
     )
-    # IMAP конфигурация
-    imap_host: str | None = Field(default=None)
-    imap_port: int = Field(default=993)
-    imap_user: str | None = Field(default=None)
-    imap_password: str | None = Field(
-        default=None,
-        description="Пароль (@var:key для секрета)"
-    )
-    poll_interval_minutes: int = Field(
-        default=5,
-        description="Интервал проверки почты"
-    )
-    # Фильтры
     allowed_senders: list[str] = Field(
         default_factory=list,
-        description="Разрешенные отправители (пусто = все)"
+        description="Substring match по from (пусто = все отправители)",
     )
+    subject_contains: str = Field(
+        default="",
+        description="Substring match по subject (пусто = без фильтра по теме)",
+    )
+
+    @field_validator("mailbox_binding_id")
+    @classmethod
+    def _validate_mailbox_binding_id(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("mailbox_binding_id is required")
+        return stripped
 
 
 class RedisTriggerConfig(StrictBaseModel):

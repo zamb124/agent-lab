@@ -1,4 +1,4 @@
-"""E2E: селектор namespace в сайдбаре Sync не ломает список каналов."""
+"""E2E: список каналов Sync usable без namespace switcher."""
 
 from __future__ import annotations
 
@@ -22,6 +22,9 @@ async def test_sync_namespace_select_keeps_channel_list_usable(
     unique_id: str,
 ) -> None:
     await sync_e2e_open_with_namespace(sync_ui, ui_page_system, unique_id, suffix="ns")
+    await expect(
+        ui_page_system.locator("sync-chat-list platform-sidebar-namespace-select")
+    ).to_have_count(0)
 
     channel_name = await sync_e2e_create_topic_channel_and_open(
         ui_page_system,

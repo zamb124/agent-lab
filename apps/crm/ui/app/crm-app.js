@@ -60,7 +60,6 @@ import {
     noteAnalysisErrorDismissOp,
     noteAnalyzeStartOp,
     noteMarkdownFormatOp,
-    noteVoiceInputOp,
     noteSearchOp,
     entityCardsBulkOp,
 } from '../events/resources/notes.resource.js';
@@ -115,6 +114,7 @@ import {
     attachmentDeleteOp,
 } from '../events/resources/attachments.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
+import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 
 import '../components/crm-sidebar.js';
 import '../components/sheets/crm-workspace-picker-sheet.js';
@@ -285,7 +285,6 @@ export class CRMApp extends PlatformApp {
         noteAnalysisDraftRepairOp,
         noteAnalyzeStartOp,
         noteMarkdownFormatOp,
-        noteVoiceInputOp,
         noteSearchOp,
         entityCardsBulkOp,
         dailySummaryOp,
@@ -326,6 +325,7 @@ export class CRMApp extends PlatformApp {
         attachmentUploadOp,
         attachmentDeleteOp,
         platformFileCreateOp,
+        platformVoiceDictationOp,
         graphUiSlice,
         graphViewSlice,
         dailyNotesUiSlice,

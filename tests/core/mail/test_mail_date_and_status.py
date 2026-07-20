@@ -70,9 +70,12 @@ def test_parse_status_counts_missing_raises() -> None:
 async def test_list_folders_includes_unseen_counts(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
+    mail_member_context,
     unique_id: str,
 ) -> None:
     company_id = f"mailcnt_{unique_id}"
+    user_id = f"user_{unique_id}"
+    _ = await mail_member_context(company_id=company_id, user_id=user_id)
     _ = await mail_service.upsert_connection(
         CompanyMailConnectionUpsertPayload(
             mail_domain=f"{unique_id}.example.com",
@@ -87,7 +90,7 @@ async def test_list_folders_includes_unseen_counts(
     binding = await mail_service.bind_mailbox(
         MailboxBindingCreatePayload(
             kind=MailboxBindingKind.USER,
-            user_id="test_user",
+            user_id=user_id,
             local_part=f"cnt.{unique_id}",
             password="mailbox-pass",
             provision=False,
@@ -110,10 +113,19 @@ async def test_list_folders_includes_unseen_counts(
             unread=False,
         )
     )
+    stale = await mail_service.list_folders(
+        binding.mailbox_binding_id,
+        company_id=company_id,
+    )
+    assert stale.folders == []
+    assert stale.stale is True
+
+    _ = await mail_service.sync_user_inbox(binding, max_new_messages=20)
     folders = await mail_service.list_folders(
         binding.mailbox_binding_id,
         company_id=company_id,
     )
+    assert folders.stale is False
     inbox = next(folder for folder in folders.folders if folder.role == MailFolderRole.INBOX)
     assert inbox.message_count == 2
     assert inbox.unseen_count == 1

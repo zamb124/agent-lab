@@ -90,6 +90,8 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         css`
             :host {
                 display: flex;
+                flex: 1;
+                width: 100%;
                 min-width: 0;
                 min-height: 0;
                 color: var(--text-primary);

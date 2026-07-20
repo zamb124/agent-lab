@@ -33,6 +33,7 @@ logger = get_logger(__name__)
 CALENDAR_SYNC_TASK_NAME = "calendar_sync_tick"
 CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME = "calendar_sync_meeting_reminder_tick"
 MAIL_SYNC_TASK_NAME = "mail_sync_tick"
+MAIL_IDLE_SUPERVISOR_TASK_NAME = "mail_idle_supervisor"
 SPAN_BILLING_SETTLEMENT_TASK_NAME = "span_billing_settlement_tick"
 PAYMENT_SYNC_TASK_NAME = "payment_sync_tick"
 LLM_MODELS_SYNC_TASK_NAME = "sync_llm_models_task"
@@ -501,6 +502,14 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         cron=mail_sync_cfg.cron,
         log_label="Mail sync",
         run_now_on_start=True,
+    )
+    await _ensure_calendar_schedule(
+        container=container,
+        config_enabled=mail_sync_cfg.enabled and mail_sync_cfg.idle_enabled,
+        task_name=MAIL_IDLE_SUPERVISOR_TASK_NAME,
+        cron=mail_sync_cfg.cron,
+        log_label="Mail IDLE supervisor",
+        run_now_on_start=False,
     )
     billing_cfg = settings.billing.span_settlement
     await _ensure_calendar_schedule(

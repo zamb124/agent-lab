@@ -14,16 +14,86 @@ from core.types import JsonObject, JsonValue, require_json_object, require_json_
 
 _PART_CONTENT_ONEOF = "content"
 
+# Wire-дискриминаторы A2A JSON Schema / 0.3 — не поля protobuf Message/Part.
+_WIRE_KIND_KEY = "kind"
+_MESSAGE_WIRE_KIND = "message"
+
+_ROLE_ALIASES: dict[str, str] = {
+    "user": "ROLE_USER",
+    "USER": "ROLE_USER",
+    "ROLE_USER": "ROLE_USER",
+    "agent": "ROLE_AGENT",
+    "AGENT": "ROLE_AGENT",
+    "assistant": "ROLE_AGENT",
+    "ROLE_AGENT": "ROLE_AGENT",
+    "system": "ROLE_UNSPECIFIED",
+    "SYSTEM": "ROLE_UNSPECIFIED",
+    "ROLE_UNSPECIFIED": "ROLE_UNSPECIFIED",
+}
+
 
 def message_to_json_dict(message: Message) -> JsonObject:
     """Сериализует protobuf `Message` в ProtoJSON dict (camelCase)."""
     return require_json_object(MessageToDict(message), "Message")
 
 
+def _normalize_part_json(part: JsonObject) -> JsonObject:
+    """Убирает wire `kind` у Part и null-поля; оставляет ProtoJSON oneof content."""
+    normalized: JsonObject = {}
+    for key, value in part.items():
+        if key == _WIRE_KIND_KEY:
+            continue
+        if value is None:
+            continue
+        normalized[key] = value
+    return normalized
+
+
+def _normalize_message_role(raw_role: JsonValue) -> str:
+    if not isinstance(raw_role, str) or raw_role.strip() == "":
+        raise ValueError("Message.role required")
+    mapped = _ROLE_ALIASES.get(raw_role.strip())
+    if mapped is None:
+        raise ValueError(f"Unsupported Message.role: {raw_role!r}")
+    return mapped
+
+
+def normalize_message_json_for_proto(payload: Mapping[str, JsonValue]) -> JsonObject:
+    """Нормализует ProtoJSON / historical A2A JSON Message к форме для ParseDict.
+
+    Исторические ledger/Redis projection могут содержать 0.3-дискриминаторы
+    (`kind: message`, `parts[].kind`, `role: user`). Protobuf Message их не имеет.
+    """
+    normalized: JsonObject = {}
+    for key, value in payload.items():
+        if key == _WIRE_KIND_KEY:
+            if value is not None and value != _MESSAGE_WIRE_KIND:
+                raise ValueError(f"Unsupported Message.kind: {value!r}")
+            continue
+        if value is None:
+            continue
+        if key == "role":
+            normalized[key] = _normalize_message_role(value)
+            continue
+        if key == "parts":
+            if not isinstance(value, list):
+                raise ValueError("Message.parts must be a list")
+            parts: list[JsonValue] = []
+            for index, entry in enumerate(value):
+                if not isinstance(entry, dict):
+                    raise ValueError(f"Message.parts[{index}] must be an object")
+                part_obj = require_json_object(entry, f"Message.parts[{index}]")
+                parts.append(_normalize_part_json(part_obj))
+            normalized[key] = parts
+            continue
+        normalized[key] = value
+    return normalized
+
+
 def message_from_json_dict(payload: Mapping[str, JsonValue]) -> Message:
-    """Десериализует ProtoJSON dict в protobuf `Message`."""
+    """Десериализует ProtoJSON (и historical 0.3-shaped) dict в protobuf `Message`."""
     message = Message()
-    _ = ParseDict(dict(payload), message)
+    _ = ParseDict(normalize_message_json_for_proto(payload), message)
     return message
 
 
@@ -117,6 +187,7 @@ def messages_to_json_list(messages: Sequence[Message]) -> list[JsonObject]:
 __all__ = [
     "message_to_json_dict",
     "message_from_json_dict",
+    "normalize_message_json_for_proto",
     "struct_from_mapping",
     "mapping_from_struct",
     "value_from_json",

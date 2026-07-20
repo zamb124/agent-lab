@@ -57,16 +57,6 @@ def _xlsx_bytes() -> bytes:
     return out.getvalue()
 
 
-async def _create_catalog(office_client_http, headers: dict[str, str], unique_id: str) -> str:
-    response = await office_client_http.post(
-        "/documents/api/v1/catalogs",
-        headers=headers,
-        json={"title": f"documents-tools-{unique_id}", "is_public": False},
-    )
-    assert response.status_code == 200, response.text
-    return response.json()["catalog_id"]
-
-
 async def _create_flow(flows_client_http, headers: dict[str, str], flow_id: str) -> None:
     response = await flows_client_http.post(
         "/flows/api/v1/flows/",
@@ -211,15 +201,14 @@ async def _download_flow_file(flows_client_http, headers: dict[str, str], file_i
 @pytest.mark.asyncio
 async def test_agent_edits_uploaded_docx_with_documents_tools(
     flows_client_http,
-    office_client_http,
     office_service,
     mock_llm_redis,
     auth_headers_system,
     container,
     unique_id: str,
 ) -> None:
+    _ = office_service
     headers = _headers(auth_headers_system)
-    catalog_id = await _create_catalog(office_client_http, headers, unique_id)
     flow_id = f"documents_docx_{unique_id}"
     context_id = f"ctx-docx-{uuid.uuid4().hex}"
     file_name = f"agent-doc-{unique_id}.docx"
@@ -228,14 +217,13 @@ async def test_agent_edits_uploaded_docx_with_documents_tools(
             {
                 "type": "tool_call",
                 "tool": "documents_open_file",
-                "args": {"file_name": file_name, "catalog_id": catalog_id},
+                "args": {"file_name": file_name},
             },
             {
                 "type": "tool_call",
                 "tool": "documents_replace_text",
                 "args": {
                     "file_name": file_name,
-                    "catalog_id": catalog_id,
                     "find": "ORIGINAL_TOKEN",
                     "replace": "UPDATED_TOKEN",
                     "match_case": True,
@@ -246,7 +234,6 @@ async def test_agent_edits_uploaded_docx_with_documents_tools(
                 "tool": "documents_append_text",
                 "args": {
                     "file_name": file_name,
-                    "catalog_id": catalog_id,
                     "text": "APPENDED_TOKEN",
                 },
             },
@@ -274,7 +261,7 @@ async def test_agent_edits_uploaded_docx_with_documents_tools(
         document = _file_document(file_item)
         assert document
         assert document["file_id"] == file_item["file_id"]
-        assert document["catalog_id"] == catalog_id
+        assert isinstance(document["catalog_id"], str) and document["catalog_id"]
         assert document["editor_url"].startswith("/documents/embed/edit/")
         stored = await _download_flow_file(flows_client_http, headers, file_item["file_id"])
         text = _docx_text(stored)
@@ -288,15 +275,14 @@ async def test_agent_edits_uploaded_docx_with_documents_tools(
 @pytest.mark.asyncio
 async def test_agent_updates_uploaded_xlsx_with_documents_tool(
     flows_client_http,
-    office_client_http,
     office_service,
     mock_llm_redis,
     auth_headers_system,
     container,
     unique_id: str,
 ) -> None:
+    _ = office_service
     headers = _headers(auth_headers_system)
-    catalog_id = await _create_catalog(office_client_http, headers, f"xlsx-{unique_id}")
     flow_id = f"documents_xlsx_{unique_id}"
     context_id = f"ctx-xlsx-{uuid.uuid4().hex}"
     file_name = f"agent-sheet-{unique_id}.xlsx"
@@ -305,14 +291,13 @@ async def test_agent_updates_uploaded_xlsx_with_documents_tool(
             {
                 "type": "tool_call",
                 "tool": "documents_open_file",
-                "args": {"file_name": file_name, "catalog_id": catalog_id},
+                "args": {"file_name": file_name},
             },
             {
                 "type": "tool_call",
                 "tool": "documents_update_cells",
                 "args": {
                     "file_name": file_name,
-                    "catalog_id": catalog_id,
                     "sheet": "Sheet1",
                     "cells": {"A1": "UPDATED_CELL", "B2": 42},
                 },
@@ -341,7 +326,7 @@ async def test_agent_updates_uploaded_xlsx_with_documents_tool(
         document = _file_document(file_item)
         assert document
         assert document["file_id"] == file_item["file_id"]
-        assert document["catalog_id"] == catalog_id
+        assert isinstance(document["catalog_id"], str) and document["catalog_id"]
         assert document["editor_url"].startswith("/documents/embed/edit/")
         stored = await _download_flow_file(flows_client_http, headers, file_item["file_id"])
         wb = load_workbook(BytesIO(stored))

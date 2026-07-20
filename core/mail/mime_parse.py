@@ -134,7 +134,9 @@ def _extract_attachment(part: Message) -> MailAttachment:
     )
 
 
-def _walk_body_and_attachments(parsed: Message) -> tuple[str | None, list[MailAttachment]]:
+def _walk_body_and_attachments(
+    parsed: Message,
+) -> tuple[str | None, str | None, list[MailAttachment]]:
     body_text: str | None = None
     body_html: str | None = None
     attachments: list[MailAttachment] = []
@@ -174,7 +176,7 @@ def _walk_body_and_attachments(parsed: Message) -> tuple[str | None, list[MailAt
             body_text = _decode_text_payload(parsed)
     if body_text is None and body_html is not None:
         body_text = body_html
-    return body_text, attachments
+    return body_text, body_html, attachments
 
 
 def parse_inbound_rfc822(uid: str, raw_bytes: bytes) -> InboundMailMessage:
@@ -189,6 +191,7 @@ def parse_inbound_rfc822(uid: str, raw_bytes: bytes) -> InboundMailMessage:
             from_address=None,
             to_addresses=[],
             body_text=None,
+            body_html=None,
             attachments=[],
         )
     try:
@@ -209,10 +212,11 @@ def parse_inbound_rfc822(uid: str, raw_bytes: bytes) -> InboundMailMessage:
                 from_address=None,
                 to_addresses=[],
                 body_text=None,
+                body_html=None,
                 attachments=[],
             )
     try:
-        body_text, attachments = _walk_body_and_attachments(parsed)
+        body_text, body_html, attachments = _walk_body_and_attachments(parsed)
     except Exception as exc:
         logger.warning(
             "mail MIME walk failed uid=%s error=%s — returning headers only",
@@ -220,6 +224,7 @@ def parse_inbound_rfc822(uid: str, raw_bytes: bytes) -> InboundMailMessage:
             exc,
         )
         body_text = None
+        body_html = None
         attachments = []
     return InboundMailMessage(
         uid=uid,
@@ -228,6 +233,7 @@ def parse_inbound_rfc822(uid: str, raw_bytes: bytes) -> InboundMailMessage:
         from_address=_header_str(parsed, "From"),
         to_addresses=_to_addresses(parsed),
         body_text=body_text,
+        body_html=body_html,
         date=_message_date(parsed),
         in_reply_to=_header_str(parsed, "In-Reply-To"),
         references=_header_str(parsed, "References"),

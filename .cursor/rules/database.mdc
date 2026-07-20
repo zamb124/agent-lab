@@ -86,7 +86,7 @@ API: `get`, `set`, `delete`, `list_all`, `get_many`. `EvaluationRepository`/`Sch
 | `FileRepository` | False | `storage` | `company:X:file:` |
 | `DocumentStatusRepository` | False | `storage` | `company:X:doc_status:` |
 | `EmbedConfigRepository` / `EmbedMappingRepository` | False | `storage` | `company:X:embed_config:` / `…:embed_mapping:` |
-| `NamespaceRepository` | False | `storage` | `company:X:namespace:` |
+| `NamespaceRepository` | False | `namespaces` | `company:X:namespace:` |
 | `PushSubscriptionRepository` | False | `push_subscriptions` | `company:X:push:` |
 | `AIModelCatalogRepository` | **True** | `storage` | `ai_model_catalog:{provider}:{model_id}` |
 

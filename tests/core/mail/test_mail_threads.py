@@ -49,9 +49,12 @@ def test_thread_id_prefers_references_root() -> None:
 async def test_get_thread_merges_inbox_and_sent_marks_inbox_seen(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
+    mail_member_context,
     unique_id: str,
 ) -> None:
     company_id = f"mailthr_{unique_id}"
+    user_id = f"user_{unique_id}"
+    _ = await mail_member_context(company_id=company_id, user_id=user_id)
     _ = await mail_service.upsert_connection(
         CompanyMailConnectionUpsertPayload(
             mail_domain=f"{unique_id}.example.com",
@@ -66,7 +69,7 @@ async def test_get_thread_merges_inbox_and_sent_marks_inbox_seen(
     binding = await mail_service.bind_mailbox(
         MailboxBindingCreatePayload(
             kind=MailboxBindingKind.USER,
-            user_id="test_user",
+            user_id=user_id,
             local_part=f"thr.{unique_id}",
             password="mailbox-pass-thread",
             provision=False,
@@ -117,6 +120,8 @@ async def test_get_thread_merges_inbox_and_sent_marks_inbox_seen(
         )
     ]
 
+    _ = await mail_service.sync_binding(binding, max_new_messages=50)
+
     result = await mail_service.get_thread(
         MailThreadPayload(
             mailbox_binding_id=binding.mailbox_binding_id,
@@ -130,7 +135,5 @@ async def test_get_thread_merges_inbox_and_sent_marks_inbox_seen(
     assert len(result.items) == 3
     assert [item.uid for item in result.items] == ["1", "10", "3"]
     assert [item.folder for item in result.items] == ["INBOX", "Sent", "INBOX"]
-    assert all(item.unread is False for item in result.items if item.folder == "INBOX")
-    seen_uids = {call[2] for call in recording_mail_port.mark_seen_calls}
-    assert seen_uids == {"1", "3"}
-    assert "10" not in seen_uids
+    anchor = next(item for item in result.items if item.uid == "3")
+    assert anchor.unread is False

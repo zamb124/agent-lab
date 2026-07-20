@@ -287,6 +287,12 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/frontend/api/embed/configs/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/embed/configs", context_type="api", auth_required=True),
 
+    # Console namespaces (company_workspace + personal; technical скрыты в handler)
+    RouteRule("/api/namespaces", context_type="api", auth_required=True),
+    RouteRule("/api/namespaces/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/namespaces", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/namespaces/*", context_type="api", auth_required=True),
+
     # Принятие инвайта (auth, но без субдомена — пользователь ещё может не иметь компании)
     RouteRule("/api/invites/accept", context_type="frontend", auth_required=True),
     RouteRule("/frontend/api/invites/accept", context_type="frontend", auth_required=True),
@@ -385,6 +391,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/platform-tracing", context_type="frontend", auth_required=True),
     RouteRule("/crawl-report", context_type="frontend", auth_required=True),
     RouteRule("/platform-billing", context_type="frontend", auth_required=True),
+    RouteRule("/namespaces", context_type="frontend", auth_required=True),
 
     # Те же страницы консоли, если путь приходит с префиксом сервиса (/frontend/...).
     # Иначе refresh даёт 404: префикс /frontend/ исключён из анонимного SPA-fallback.
@@ -400,6 +407,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/frontend/platform-tracing", context_type="frontend", auth_required=True),
     RouteRule("/frontend/crawl-report", context_type="frontend", auth_required=True),
     RouteRule("/frontend/platform-billing", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/namespaces", context_type="frontend", auth_required=True),
 
     # API сервиса Scheduler
     RouteRule("/scheduler/api/v1/*", context_type="api", auth_required=True),

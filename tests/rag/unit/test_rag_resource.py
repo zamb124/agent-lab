@@ -6,6 +6,7 @@ import pytest
 
 from apps.flows.src.container import FlowContainer
 from core.clients.service_client import ServiceClient
+from core.models.identity_models import Namespace, NamespaceKind
 from core.rag.providers.pgvector_provider import PgVectorProvider
 from core.rag.rag_resource import RAGResource
 
@@ -81,7 +82,13 @@ async def test_add_document_passes_metadata_through(
     doc = MagicMock()
     doc.document_id = "fid"
     mock_upload = AsyncMock(return_value=doc)
-    mock_namespace_get = AsyncMock(return_value=object())
+    mock_namespace_get = AsyncMock(
+        return_value=Namespace(
+            name="ns-a",
+            company_id="system",
+            kind=NamespaceKind.COMPANY_WORKSPACE,
+        )
+    )
 
     with (
         patch.object(
@@ -112,7 +119,13 @@ async def test_add_document_merges_index_profile_config(
     doc = MagicMock()
     doc.document_id = "fid"
     mock_upload = AsyncMock(return_value=doc)
-    mock_namespace_get = AsyncMock(return_value=object())
+    mock_namespace_get = AsyncMock(
+        return_value=Namespace(
+            name="ns-a",
+            company_id="system",
+            kind=NamespaceKind.COMPANY_WORKSPACE,
+        )
+    )
 
     with (
         patch.object(

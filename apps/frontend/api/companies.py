@@ -16,6 +16,7 @@ from core.config import get_settings
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.models.identity_models import Company, User
+from core.namespace import ensure_personal_namespace_for_user
 from core.pagination import ListResponse
 from core.tasks.kicker import kiq_task_name_with_context
 from core.utils.domain import build_url, get_cookie_domain
@@ -180,6 +181,12 @@ async def create_company(
             company_id=company.company_id,
         )
 
+    await ensure_personal_namespace_for_user(
+        container.namespace_service,
+        user,
+        company=company,
+    )
+
     init_task = await kiq_task_name_with_context(
         TASK_INIT_NEW_COMPANY,
         idle_broker,
@@ -284,6 +291,12 @@ async def enter_company_as_system_member(
         _ = await user_repo.set(user)
     else:
         user.companies[target_company_id] = user_roles
+
+    await ensure_personal_namespace_for_user(
+        container.namespace_service,
+        user,
+        company=target_company,
+    )
 
     return SystemAccessGrantedResponse(
         success=True,

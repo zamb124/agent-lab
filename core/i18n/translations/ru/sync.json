@@ -52,10 +52,8 @@
         "section_chats": "Чаты",
         "subheader_start_dm": "Начать переписку",
         "no_chats_yet": "Чатов пока нет.",
-        "no_channels_in_namespace": "В выбранном пространстве каналов нет.",
-        "namespace_label": "Пространство",
-        "all_namespaces": "Все",
-        "edit_namespace_tooltip": "Sync-настройки пространства",
+        "sync_defaults_tooltip": "Настройки Sync компании (транскрипция)",
+        "sync_defaults_aria": "Открыть настройки Sync",
         "namespace_meeting_btn": "Создать митинг",
         "time_yesterday": "Вчера",
         "section_team": "Команда",
@@ -159,10 +157,10 @@
     "channel_picker": {
         "adhoc_description": "Создаётся служебный канал встречи и сразу запускается видеозвонок. Канал скрыт в списках.",
         "title": "Каналы",
+        "subtitle_all_chats": "Все чаты компании",
         "action_create_channel": "Создать канал",
         "action_adhoc_call": "Создать встречу",
-        "empty": "Нет каналов в выбранных пространствах",
-        "unknown_namespace": "Пространство «{{namespace}}» не найдено"
+        "empty": "Каналов пока нет"
     },
     "message_list": {
         "today": "Сегодня",

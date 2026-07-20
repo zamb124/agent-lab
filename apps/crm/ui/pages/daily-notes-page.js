@@ -8,7 +8,7 @@
  *   - useOp('crm/daily_summary')        — AI-сводка одного дня
  *   - useOp('crm/period_summary')       — AI-сводка диапазона
  *   - useOp('crm/task_daily_summary_start') / 'crm/task_period_summary_start' — пересчёт сводки
- *   - useOp('crm/note_voice_input')     — STT (запись голоса → текст)
+ *   - <platform-voice-dictation> — STT (запись голоса → создание заметки)
  *   - useOp('crm/note_analyze_start')   — старт AI-анализа заметки
  *   - useOp('crm/entity_cards_bulk')    — batch-загрузка карточек связанных entity
  *
@@ -31,16 +31,12 @@
 import { html, css } from 'lit';
 import { CRMNamespacePage } from '../base/crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
-import {
-    getUserMediaCompat,
-    hasGetUserMediaApi,
-    pickVoiceMimeType,
-} from '@platform/lib/utils/voice-recording.js';
 import { stripOuterMarkdownCodeFence } from '@platform/lib/utils/strip-outer-markdown-fence.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-user-chip.js';
+import '@platform/lib/components/platform-voice-dictation.js';
 import '@platform/lib/components/layout/page-header.js';
 import {
     buildSummaryEntityLookupFromNoteBuckets,
@@ -97,7 +93,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         _searchMode: { state: true },
         _isMobile: { state: true },
         _summaryOpen: { state: true },
-        _voiceState: { state: true },
         _noteEntitiesByNoteId: { state: true },
         _analyzeTasksByNoteId: { state: true },
         _searchResults: { state: true },
@@ -238,30 +233,10 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 gap: var(--space-2);
             }
 
-            .voice-btn {
-                min-height: 44px;
-                width: 44px;
-                border: 1px solid transparent;
-                border-radius: var(--radius-full);
-                background: var(--crm-surface-muted);
-                color: var(--text-secondary);
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                transition: var(--motion-transition-interactive);
+            .toolbar-voice {
                 flex-shrink: 0;
-            }
-            .voice-btn.recording {
-                background: rgba(239, 68, 68, 0.12);
-                border-color: #ef4444;
-                color: #ef4444;
-                animation: voice-pulse 1.5s ease-in-out infinite;
-            }
-            .voice-btn.processing { opacity: 0.6; cursor: wait; }
-            @keyframes voice-pulse {
-                0%, 100% { transform: scale(1); }
-                50% { transform: scale(1.08); }
+                display: inline-flex;
+                align-items: center;
             }
 
             .cards-scroll {
@@ -804,8 +779,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this._query = '';
         this._searchMode = 'hybrid';
         this._summaryOpen = false;
-        this._voiceState = 'idle';
-        this._voiceMode = 'note';
         this._noteEntitiesByNoteId = {};
         this._analyzeTasksByNoteId = {};
         this._searchResults = [];
@@ -821,7 +794,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this._periodSummary = this.useOp('crm/period_summary');
         this._dailySummaryStart = this.useOp('crm/task_daily_summary_start');
         this._periodSummaryStart = this.useOp('crm/task_period_summary_start');
-        this._voice = this.useOp('crm/note_voice_input');
         this._analyze = this.useOp('crm/note_analyze_start');
         this._cardsBulk = this.useOp('crm/entity_cards_bulk');
         this._tasks = this.useResource('crm/tasks');
@@ -832,8 +804,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this._mql = null;
         this._mqlListener = null;
         this._debounceTimer = null;
-        this._mediaRecorder = null;
-        this._audioChunks = [];
         this._latestRangeBootstrapped = false;
     }
 
@@ -895,7 +865,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             this._searchLoading = false;
         });
 
-        this.useEvent('crm/note_voice_input/succeeded', (event) => this._onVoiceTranscribed(event.payload.result));
         this.useEvent(this._tasks.resource.events.LIST_LOADED, () => this._rebuildAnalyzeTaskMap());
         this.useEvent('crm/task/updated', () => this._rebuildAnalyzeTaskMap());
         this.useEvent(CoreEvents.WS_CONNECTED, () => {
@@ -1167,65 +1136,13 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this.navigate('note', { itemId: 'new' });
     }
 
-    async _onVoiceToggle() {
-        await this._startVoice('note', 'voice-input.webm');
-    }
-
-    async _onVoiceSearchToggle() {
-        await this._startVoice('search', 'voice-search.webm');
-    }
-
-    async _startVoice(mode, fileName) {
-        if (this._voiceState === 'recording') {
-            this._stopVoice();
-            return;
-        }
-        if (this._voiceState !== 'idle') return;
-        if (typeof window === 'undefined' || !window.isSecureContext) {
-            this.toast('toast.note.voice_unavailable_https', { type: 'warning' });
-            return;
-        }
-        if (!hasGetUserMediaApi() || typeof MediaRecorder === 'undefined') {
-            this.toast('toast.note.voice_unavailable_recorder', { type: 'warning' });
-            return;
-        }
-        this._voiceMode = mode;
-        const stream = await getUserMediaCompat({ audio: true });
-        const mimeType = pickVoiceMimeType();
-        this._mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-        this._audioChunks = [];
-        const resolvedMime = this._mediaRecorder.mimeType || mimeType || 'audio/webm';
-        this._mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) this._audioChunks.push(e.data); };
-        this._mediaRecorder.onstop = () => {
-            stream.getTracks().forEach((t) => t.stop());
-            this._voiceState = 'processing';
-            const blob = new Blob(this._audioChunks, { type: resolvedMime });
-            this._voice.run({ audio: blob, file_name: fileName });
-        };
-        this._mediaRecorder.start();
-        this._voiceState = 'recording';
-        this.toast('toast.note.voice_started', { type: 'info' });
-    }
-
-    _stopVoice() {
-        if (this._mediaRecorder && this._mediaRecorder.state === 'recording') {
-            this._mediaRecorder.stop();
-        }
-    }
-
-    _onVoiceTranscribed(result) {
-        const mode = this._voiceMode;
-        this._voiceState = 'idle';
-        this._voiceMode = 'note';
-        this._mediaRecorder = null;
-        this._audioChunks = [];
-        if (!result || typeof result.text !== 'string' || result.text.trim().length === 0) {
+    /**
+     * @param {CustomEvent<{ text: string, provider: string }>} event
+     */
+    _onVoiceTranscribed(event) {
+        const detail = event && event.detail;
+        if (!detail || typeof detail.text !== 'string' || detail.text.trim().length === 0) {
             this.toast('toast.note.voice_empty', { type: 'warning' });
-            return;
-        }
-        if (mode === 'search') {
-            this._query = result.text.trim();
-            this._runSearch();
             return;
         }
         this.navigate('note', { itemId: 'new' });
@@ -1869,15 +1786,11 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                         .value=${{ start: this._dailyNotesUi.value.range.from, end: this._dailyNotesUi.value.range.to }}
                         @change=${this._onDateRangeChange}
                     ></platform-date-picker>
-                    <button
-                        class="voice-btn ${this._voiceState === 'recording' ? 'recording' : this._voiceState === 'processing' ? 'processing' : ''}"
-                        type="button"
-                        @click=${this._onVoiceToggle}
-                        ?disabled=${this._voiceState === 'processing'}
-                        title=${this.t('daily_notes_page.voice_tooltip')}
-                    >
-                        <platform-icon name="microphone" size="18"></platform-icon>
-                    </button>
+                    <div class="toolbar-voice" title=${this.t('daily_notes_page.voice_tooltip')}>
+                        <platform-voice-dictation
+                            @transcribed=${this._onVoiceTranscribed}
+                        ></platform-voice-dictation>
+                    </div>
                     <button class="cta-btn" type="button" ?disabled=${this._creatingNote} @click=${this._onCreateNote}>
                         <span class="cta-btn-content">
                             ${this._creatingNote

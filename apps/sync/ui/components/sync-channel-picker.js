@@ -3,16 +3,14 @@
  * крупных карточек каналов и горизонтальная панель действий.
  *
  * Источники:
- *   useResource('sync/channels')   — все каналы.
- *   useResource('sync/namespaces') — список платформенных namespace.
+ *   useResource('sync/channels') — все каналы компании (membership).
  *
  * Действия:
  *   - клик по карточке канала → navigate('channel', { channelId })
  * Создание канала / встречи — в сайдбаре (`sync-sidebar`).
  *
- * Активный namespace — `getPlatformNamespaceSidebarSelection(company_id)`
- * (тот же глобальный селект, что и в CRM); фильтрация — по
- * `channel.namespace`.
+ * Namespace switcher отсутствует: показываются все non-direct каналы
+ * без фильтра по `state.ui.namespace`.
  *
  * Стили: только токены платформы (--accent-gradient, --glass-tint-*,
  * --border-*, --text-*, --radius-*); никаких хардкод-цветов.
@@ -20,7 +18,6 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { getPlatformNamespaceSidebarSelection } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/glass-card.js';
 import './sync-chat-header.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
@@ -29,6 +26,8 @@ import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-place
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 
 export class SyncChannelPicker extends PlatformElement {
+    static i18nNamespace = 'sync';
+
     static properties = {
         _tileAvatarFailed: { state: true },
     };
@@ -49,33 +48,6 @@ export class SyncChannelPicker extends PlatformElement {
             overflow-y: auto;
             padding: var(--space-6);
             box-sizing: border-box;
-        }
-        .filters {
-            display: flex;
-            flex-wrap: wrap;
-            gap: var(--space-2);
-            margin-bottom: var(--space-5);
-        }
-        .filter {
-            padding: 6px var(--space-3);
-            border-radius: var(--radius-full);
-            background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
-            border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: var(--text-sm);
-            font-weight: var(--font-medium);
-            user-select: none;
-            transition: var(--motion-transition-interactive);
-        }
-        .filter:hover {
-            background: var(--glass-tint-medium, rgba(255, 255, 255, 0.08));
-            color: var(--text-primary);
-        }
-        .filter.active {
-            background: var(--accent-subtle, rgba(153, 166, 249, 0.18));
-            border-color: var(--accent);
-            color: var(--accent);
         }
         .grid {
             display: grid;
@@ -150,28 +122,10 @@ export class SyncChannelPicker extends PlatformElement {
         super();
         this._tileAvatarFailed = Object.freeze({});
         this._channels = this.useResource('sync/channels', { autoload: true });
-        this._namespaces = this.useResource('sync/namespaces', { autoload: true });
-        this._authSel = this.select((s) => s.auth && s.auth.user ? s.auth.user : null);
-        this._uiNsSel = this.select((s) => s.ui.namespace);
     }
 
-    _activeNamespace() {
-        const user = this._authSel.value;
-        if (!user || typeof user.company_id !== 'string' || user.company_id === '') return 'all';
-        return getPlatformNamespaceSidebarSelection(user.company_id);
-    }
-
-    _activeNamespaceItem() {
-        const activeNs = this._activeNamespace();
-        if (activeNs === 'all') return null;
-        return this._namespaces.items.find((ns) => ns.name === activeNs) || null;
-    }
-
-    _filteredChannels() {
-        const activeNs = this._activeNamespace();
-        const all = this._channels.items.filter((c) => c.type !== 'direct');
-        if (activeNs === 'all') return all;
-        return all.filter((c) => typeof c.namespace === 'string' && c.namespace === activeNs);
+    _groupChannels() {
+        return this._channels.items.filter((c) => c.type !== 'direct');
     }
 
     _onTileAvatarError(channelId) {
@@ -206,32 +160,19 @@ export class SyncChannelPicker extends PlatformElement {
     }
 
     render() {
-        const filtered = this._filteredChannels();
-        const activeNs = this._activeNamespace();
-        const activeNsItem = this._activeNamespaceItem();
-        const headerTitle = activeNsItem
-            ? activeNsItem.name
-            : this.t('channel_picker.title');
-        const listSubtitle = activeNs === 'all'
-            ? this.t('sidebar.all_namespaces')
-            : activeNs;
+        const channels = this._groupChannels();
         return html`
             <sync-chat-header
                 header-mode="list"
-                .listTitle=${headerTitle}
-                .listSubtitle=${listSubtitle}
+                .listTitle=${this.t('channel_picker.title')}
+                .listSubtitle=${this.t('channel_picker.subtitle_all_chats')}
             ></sync-chat-header>
             <div class="body">
-                <div class="filters">
-                    ${activeNs === 'all'
-                        ? html`<span class="filter active">${this.t('sidebar.all_namespaces')}</span>`
-                        : html`<span class="filter active">${activeNs}</span>`}
-                </div>
-                ${filtered.length === 0 ? html`
+                ${channels.length === 0 ? html`
                     <div class="empty">${this.t('channel_picker.empty')}</div>
                 ` : html`
                     <div class="grid">
-                        ${filtered.map((c) => html`
+                        ${channels.map((c) => html`
                             <glass-card class="tile" @click=${() => this.navigate('channel', { channelId: c.channel_id })}>
                                 <div class="tile-head">
                                     ${this._renderTileAvatar(c)}

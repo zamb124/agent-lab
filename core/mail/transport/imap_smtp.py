@@ -29,16 +29,21 @@ from core.mail.imap_folders import (
 from core.mail.mime_parse import parse_inbound_rfc822, strip_attachment_payloads
 from core.mail.models import (
     InboundMailMessage,
+    MailAppendResult,
     MailboxSecret,
     MailFetchQuery,
     MailFolder,
     MailFolderListResult,
     MailFolderRole,
+    MailMessageFlags,
     MailSendResult,
     MailUidBatch,
+    MailUidMoveResult,
+    MailUidSearchCriteria,
     OutboundMailMessage,
 )
 from core.mail.threads import message_belongs_to_thread_ids
+from core.mail.transport.idle_session import MailIdleSession
 
 
 class _ImapCommandResponse(Protocol):
@@ -77,6 +82,10 @@ class _ImapTimeoutClient(Protocol):
     timeout: float
 
 
+class _ImapExpungeClient(Protocol):
+    def expunge(self) -> Awaitable[_ImapCommandResponse]: ...
+
+
 _HEADER_FETCH = (
     "(FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID TO DATE IN-REPLY-TO REFERENCES)] UID)"
 )
@@ -107,9 +116,120 @@ def _build_thread_header_search_criteria(message_ids: Sequence[str]) -> str:
     return expression
 
 
-def _flags_indicate_unread(flags_blob: str) -> bool:
-    normalized = flags_blob.upper().replace("\\", "")
-    return "SEEN" not in normalized.split()
+def _parse_message_flags_blob(flags_blob: str) -> MailMessageFlags:
+    tokens = {token.upper().lstrip("\\") for token in flags_blob.replace("\\", " \\").split()}
+    tokens = {token for token in tokens if token}
+    return MailMessageFlags(
+        unread="SEEN" not in tokens,
+        flagged="FLAGGED" in tokens,
+        answered="ANSWERED" in tokens,
+        draft="DRAFT" in tokens,
+        deleted="DELETED" in tokens,
+    )
+
+
+def _extract_flags_blob_from_fetch(fetch_lines: Sequence[object]) -> str | None:
+    for item in fetch_lines:
+        text = _decode_imap_line(item).upper()
+        marker = "FLAGS"
+        idx = text.find(marker)
+        if idx < 0:
+            continue
+        rest = text[idx + len(marker) :].lstrip()
+        if not rest.startswith("("):
+            continue
+        depth = 0
+        end = -1
+        for pos, char in enumerate(rest):
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    end = pos
+                    break
+        if end < 0:
+            continue
+        return rest[1:end]
+    return None
+
+
+def _extract_message_flags_from_fetch(fetch_lines: Sequence[object]) -> MailMessageFlags:
+    """FLAGS из FETCH. Нет FLAGS → unread=True (не угадываем Seen)."""
+    blob = _extract_flags_blob_from_fetch(fetch_lines)
+    if blob is None:
+        return MailMessageFlags()
+    return _parse_message_flags_blob(blob)
+
+
+def _apply_flags_to_inbound(
+    inbound: InboundMailMessage,
+    flags: MailMessageFlags,
+) -> InboundMailMessage:
+    return inbound.model_copy(
+        update={
+            "unread": flags.unread,
+            "flagged": flags.flagged,
+            "answered": flags.answered,
+            "draft": flags.draft,
+        }
+    )
+
+
+def _build_uid_search_criteria(criteria: MailUidSearchCriteria) -> str:
+    parts: list[str] = []
+    if criteria.all_messages:
+        parts.append("ALL")
+    if criteria.uid_set is not None and criteria.uid_set.strip():
+        parts.append(f"UID {criteria.uid_set.strip()}")
+    if criteria.text is not None and criteria.text.strip():
+        parts.append(f"TEXT {_imap_quoted_string(criteria.text.strip())}")
+    if criteria.from_address is not None and criteria.from_address.strip():
+        parts.append(f"FROM {_imap_quoted_string(criteria.from_address.strip())}")
+    if criteria.subject is not None and criteria.subject.strip():
+        parts.append(f"SUBJECT {_imap_quoted_string(criteria.subject.strip())}")
+    if (
+        criteria.header_name is not None
+        and criteria.header_name.strip()
+        and criteria.header_value is not None
+    ):
+        header_name = criteria.header_name.strip()
+        header_value = _imap_quoted_string(criteria.header_value)
+        parts.append(f"HEADER {header_name} {header_value}")
+    if not parts:
+        raise ValueError("MailUidSearchCriteria requires at least one criterion")
+    return " ".join(parts)
+
+
+def _parse_copyuid_destination(response_text: str) -> str | None:
+    """Parse COPYUID / MOVEUID: `OK [COPYUID uidvalidity srcset destset]`."""
+    upper = response_text.upper()
+    for marker in ("COPYUID ", "MOVEUID "):
+        idx = upper.find(marker)
+        if idx < 0:
+            continue
+        rest = response_text[idx + len(marker) :].strip().rstrip("]")
+        tokens = rest.split()
+        if len(tokens) < 3:
+            continue
+        dest = tokens[2]
+        if ":" in dest:
+            dest = dest.split(":", 1)[1]
+        if "," in dest:
+            dest = dest.split(",")[-1]
+        if dest.isdigit():
+            return dest
+    return None
+
+
+def _format_flags_paren(flags: list[str]) -> str:
+    if not flags:
+        raise ValueError("flags list is required")
+    return "(" + " ".join(flags) + ")"
+
+
+_FLAGS_FETCH = "(FLAGS UID)"
+_UID_FETCH_BATCH = 50
 
 
 def _parse_status_attr_blob(blob: str) -> tuple[int, int] | None:
@@ -164,33 +284,6 @@ def _parse_status_counts(lines: Sequence[object]) -> tuple[int, int]:
                     return parsed
             search_from = end + 1
     raise ValueError("IMAP STATUS response missing MESSAGES/UNSEEN")
-
-
-def _extract_unread_from_fetch(fetch_lines: Sequence[object]) -> bool:
-    """True если \\Seen нет в FLAGS. Нет FLAGS в ответе → unread (не угадываем Seen)."""
-    for item in fetch_lines:
-        text = _decode_imap_line(item).upper()
-        marker = "FLAGS"
-        idx = text.find(marker)
-        if idx < 0:
-            continue
-        rest = text[idx + len(marker) :].lstrip()
-        if not rest.startswith("("):
-            continue
-        depth = 0
-        end = -1
-        for pos, char in enumerate(rest):
-            if char == "(":
-                depth += 1
-            elif char == ")":
-                depth -= 1
-                if depth == 0:
-                    end = pos
-                    break
-        if end < 0:
-            continue
-        return _flags_indicate_unread(rest[1:end])
-    return True
 
 
 def _quote_mailbox_name(name: str) -> str:
@@ -659,7 +752,7 @@ class ImapSmtpTransport:
                     )
                     continue
                 fetch_lines = list(fetch_response.lines)
-                unread = _extract_unread_from_fetch(fetch_lines)
+                flags = _extract_message_flags_from_fetch(fetch_lines)
                 raw_bytes = (
                     _extract_rfc822_bytes(fetch_lines)
                     if query.include_bodies
@@ -672,12 +765,15 @@ class ImapSmtpTransport:
                             message_id=None,
                             subject=None,
                             from_address=None,
-                            unread=unread,
+                            unread=flags.unread,
+                            flagged=flags.flagged,
+                            answered=flags.answered,
+                            draft=flags.draft,
                         )
                     )
                     continue
                 inbound = parse_inbound_rfc822(uid, raw_bytes)
-                inbound = inbound.model_copy(update={"unread": unread})
+                inbound = _apply_flags_to_inbound(inbound, flags)
                 if not query.include_bodies:
                     # List: без тел и без байтов вложений; метаданные вложений сохраняем
                     # если HEADER/парсер их когда-либо отдаст (BODYSTRUCTURE — отдельно).
@@ -716,8 +812,8 @@ class ImapSmtpTransport:
             if raw_bytes is None:
                 raise MailUidNotFoundError(mailbox=mailbox, uid=uid)
             inbound = parse_inbound_rfc822(uid, raw_bytes)
-            unread = _extract_unread_from_fetch(fetch_lines)
-            inbound = inbound.model_copy(update={"unread": unread})
+            flags = _extract_message_flags_from_fetch(fetch_lines)
+            inbound = _apply_flags_to_inbound(inbound, flags)
             return inbound
         finally:
             _ = await client.logout()
@@ -769,8 +865,8 @@ class ImapSmtpTransport:
                 if raw_bytes is None:
                     continue
                 inbound = parse_inbound_rfc822(uid, raw_bytes)
-                unread = _extract_unread_from_fetch(fetch_lines)
-                inbound = inbound.model_copy(update={"unread": unread})
+                flags = _extract_message_flags_from_fetch(fetch_lines)
+                inbound = _apply_flags_to_inbound(inbound, flags)
                 if not message_belongs_to_thread_ids(
                     inbound,
                     thread_ids=message_ids,
@@ -861,7 +957,7 @@ class ImapSmtpTransport:
                 if fetch_response.result != "OK":
                     raise RuntimeError(f"IMAP UID FETCH failed for uid={uid}: {fetch_response}")
                 fetch_lines = list(fetch_response.lines)
-                unread = _extract_unread_from_fetch(fetch_lines)
+                flags = _extract_message_flags_from_fetch(fetch_lines)
                 raw_bytes = _extract_header_bytes(fetch_lines)
                 if raw_bytes is None:
                     messages.append(
@@ -870,12 +966,15 @@ class ImapSmtpTransport:
                             message_id=None,
                             subject=None,
                             from_address=None,
-                            unread=unread,
+                            unread=flags.unread,
+                            flagged=flags.flagged,
+                            answered=flags.answered,
+                            draft=flags.draft,
                         )
                     )
                     continue
                 inbound = parse_inbound_rfc822(uid, raw_bytes)
-                messages.append(inbound.model_copy(update={"unread": unread}))
+                messages.append(_apply_flags_to_inbound(inbound, flags))
             return MailUidBatch(
                 uidvalidity=uidvalidity,
                 max_uid=max_uid,
@@ -883,3 +982,266 @@ class ImapSmtpTransport:
             )
         finally:
             _ = await client.logout()
+
+    async def uid_store_flags(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uid: str,
+        add_flags: list[str],
+        remove_flags: list[str],
+    ) -> None:
+        if not uid.strip():
+            raise ValueError("uid is required")
+        if not add_flags and not remove_flags:
+            raise ValueError("add_flags or remove_flags required")
+        client = await self._login_imap(binding_secret)
+        try:
+            _ = await self._select_exact(client, mailbox)
+            if add_flags:
+                store_response = await client.uid(
+                    "store", uid, "+FLAGS", _format_flags_paren(add_flags)
+                )
+                if store_response.result != "OK":
+                    raise MailTransportError(
+                        f"IMAP UID STORE +FLAGS failed for uid={uid}: {store_response}"
+                    )
+            if remove_flags:
+                store_response = await client.uid(
+                    "store", uid, "-FLAGS", _format_flags_paren(remove_flags)
+                )
+                if store_response.result != "OK":
+                    raise MailTransportError(
+                        f"IMAP UID STORE -FLAGS failed for uid={uid}: {store_response}"
+                    )
+        finally:
+            _ = await client.logout()
+
+    async def uid_move(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uid: str,
+        destination_folder: str,
+    ) -> MailUidMoveResult:
+        if not uid.strip():
+            raise ValueError("uid is required")
+        if not destination_folder.strip():
+            raise ValueError("destination_folder is required")
+        client = await self._login_imap(binding_secret)
+        try:
+            _ = await self._select_exact(client, mailbox)
+            capability_client = cast(_ImapCapabilityClient, cast(object, client))
+            dest_quoted = _quote_mailbox_name(destination_folder)
+            destination_uid: str | None = None
+            if capability_client.has_capability("MOVE"):
+                move_response = await client.uid("move", uid, dest_quoted)
+                if move_response.result != "OK":
+                    raise MailTransportError(
+                        f"IMAP UID MOVE failed uid={uid} dest={destination_folder!r}: {move_response}"
+                    )
+                response_text = " ".join(
+                    _decode_imap_line(line) for line in move_response.lines
+                )
+                destination_uid = _parse_copyuid_destination(response_text)
+            else:
+                copy_response = await client.uid("copy", uid, dest_quoted)
+                if copy_response.result != "OK":
+                    raise MailTransportError(
+                        f"IMAP UID COPY failed uid={uid} dest={destination_folder!r}: {copy_response}"
+                    )
+                response_text = " ".join(
+                    _decode_imap_line(line) for line in copy_response.lines
+                )
+                destination_uid = _parse_copyuid_destination(response_text)
+                store_response = await client.uid(
+                    "store", uid, "+FLAGS", r"(\Deleted)"
+                )
+                if store_response.result != "OK":
+                    raise MailTransportError(
+                        f"IMAP UID STORE \\Deleted failed uid={uid}: {store_response}"
+                    )
+                expunge_response = await client.uid("expunge", uid)
+                if expunge_response.result != "OK":
+                    expunge_client = cast(_ImapExpungeClient, cast(object, client))
+                    expunge_all = await expunge_client.expunge()
+                    if expunge_all.result != "OK":
+                        raise MailTransportError(
+                            f"IMAP EXPUNGE failed after COPY uid={uid}: {expunge_all}"
+                        )
+            return MailUidMoveResult(
+                source_uid=uid,
+                destination_folder=destination_folder,
+                destination_uid=destination_uid,
+            )
+        finally:
+            _ = await client.logout()
+
+    async def uid_expunge(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uid: str | None = None,
+    ) -> None:
+        client = await self._login_imap(binding_secret)
+        try:
+            _ = await self._select_exact(client, mailbox)
+            if uid is not None and uid.strip():
+                store_response = await client.uid(
+                    "store", uid, "+FLAGS", r"(\Deleted)"
+                )
+                if store_response.result != "OK":
+                    raise MailTransportError(
+                        f"IMAP UID STORE \\Deleted failed uid={uid}: {store_response}"
+                    )
+                expunge_response = await client.uid("expunge", uid)
+                if expunge_response.result != "OK":
+                    expunge_client = cast(_ImapExpungeClient, cast(object, client))
+                    expunge_all = await expunge_client.expunge()
+                    if expunge_all.result != "OK":
+                        raise MailTransportError(
+                            f"IMAP EXPUNGE failed uid={uid}: {expunge_all}"
+                        )
+                return
+            expunge_client = cast(_ImapExpungeClient, cast(object, client))
+            expunge_all = await expunge_client.expunge()
+            if expunge_all.result != "OK":
+                raise MailTransportError(f"IMAP EXPUNGE failed: {expunge_all}")
+        finally:
+            _ = await client.logout()
+
+    async def append_message(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        raw_message: bytes,
+        flags: str | None = None,
+    ) -> MailAppendResult:
+        if not mailbox.strip():
+            raise ValueError("mailbox is required")
+        if not raw_message:
+            raise ValueError("raw_message is required")
+        client = await self._login_imap(binding_secret)
+        try:
+            append_client = cast(_ImapAppendClient, cast(object, client))
+            append_response = await append_client.append(
+                raw_message,
+                mailbox=_quote_mailbox_name(mailbox),
+                flags=flags,
+            )
+            if append_response.result != "OK":
+                raise MailTransportError(
+                    f"IMAP APPEND failed mailbox={mailbox!r}: {append_response}"
+                )
+            message_id: str | None = None
+            for line in raw_message.split(b"\n"):
+                if line.lower().startswith(b"message-id:"):
+                    message_id = line.split(b":", 1)[1].decode("utf-8", errors="replace").strip()
+                    break
+            uid: str | None = None
+            if message_id is not None:
+                _ = await self._select_exact(client, mailbox)
+                search_response = await client.uid_search(
+                    f"HEADER Message-ID {_imap_quoted_string(message_id)}"
+                )
+                if search_response.result == "OK":
+                    found = _parse_uid_list(list(search_response.lines))
+                    if found:
+                        uid = found[-1]
+            return MailAppendResult(folder=mailbox, uid=uid, message_id=message_id)
+        finally:
+            _ = await client.logout()
+
+    async def uid_search(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        criteria: MailUidSearchCriteria,
+    ) -> list[str]:
+        client = await self._login_imap(binding_secret)
+        try:
+            _ = await self._select_exact(client, mailbox)
+            criteria_text = _build_uid_search_criteria(criteria)
+            search_response = await client.uid_search(criteria_text)
+            if search_response.result != "OK":
+                raise MailTransportError(
+                    f"IMAP UID SEARCH failed: {search_response}"
+                )
+            return _parse_uid_list(list(search_response.lines))
+        finally:
+            _ = await client.logout()
+
+    async def fetch_flags_for_uids(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uids: list[str],
+    ) -> dict[str, MailMessageFlags]:
+        if not uids:
+            return {}
+        client = await self._login_imap(binding_secret)
+        try:
+            _ = await self._select_exact(client, mailbox)
+            result: dict[str, MailMessageFlags] = {}
+            for offset in range(0, len(uids), _UID_FETCH_BATCH):
+                batch = uids[offset : offset + _UID_FETCH_BATCH]
+                uid_set = ",".join(batch)
+                fetch_response = await client.uid("fetch", uid_set, _FLAGS_FETCH)
+                if fetch_response.result != "OK":
+                    raise MailTransportError(
+                        f"IMAP UID FETCH FLAGS failed: {fetch_response}"
+                    )
+                # Per-UID: parse lines; map by UID token in FETCH
+                current_uid: str | None = None
+                for item in fetch_response.lines:
+                    text = _decode_imap_line(item)
+                    upper = text.upper()
+                    uid_marker = "UID "
+                    uid_idx = upper.find(uid_marker)
+                    if uid_idx >= 0:
+                        rest = upper[uid_idx + len(uid_marker) :]
+                        digits: list[str] = []
+                        for char in rest:
+                            if char.isdigit():
+                                digits.append(char)
+                            elif digits:
+                                break
+                        if digits:
+                            current_uid = "".join(digits)
+                    if current_uid is None:
+                        continue
+                    flags_blob = _extract_flags_blob_from_fetch([item])
+                    if flags_blob is None:
+                        continue
+                    result[current_uid] = _parse_message_flags_blob(flags_blob)
+                for uid in batch:
+                    if uid not in result:
+                        # batch FETCH omitted this UID — load flags with a per-UID FETCH
+                        one = await client.uid("fetch", uid, _FLAGS_FETCH)
+                        if one.result == "OK":
+                            result[uid] = _extract_message_flags_from_fetch(list(one.lines))
+            return result
+        finally:
+            _ = await client.logout()
+
+    async def open_idle_session(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+    ) -> MailIdleSession:
+        if not mailbox.strip():
+            raise ValueError("mailbox is required")
+        client = await self._login_imap(binding_secret)
+        try:
+            _ = await self._select_exact(client, mailbox)
+        except Exception:
+            _ = await client.logout()
+            raise
+        return MailIdleSession(client, mailbox=mailbox)

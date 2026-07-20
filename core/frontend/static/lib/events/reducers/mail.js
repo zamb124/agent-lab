@@ -42,6 +42,9 @@ export const MAIL_EVENTS = Object.freeze({
     FOLDERS_LOAD_FAILED: 'mail/folders/load_failed',
     FOLDERS_ENSURE_REQUESTED: 'mail/folders/ensure_requested',
     FOLDERS_ENSURE_FAILED: 'mail/folders/ensure_failed',
+    SYNC_REQUESTED: 'mail/sync/requested',
+    SYNC_ACCEPTED: 'mail/sync/accepted',
+    SYNC_FAILED: 'mail/sync/failed',
     MESSAGES_LOAD_REQUESTED: 'mail/messages/load_requested',
     MESSAGES_LOADED: 'mail/messages/loaded',
     MESSAGES_LOAD_FAILED: 'mail/messages/load_failed',
@@ -65,6 +68,37 @@ export const MAIL_EVENTS = Object.freeze({
     HEALTHCHECK_REQUESTED: 'mail/connection/healthcheck_requested',
     HEALTHCHECK_COMPLETED: 'mail/connection/healthcheck_completed',
     HEALTHCHECK_FAILED: 'mail/connection/healthcheck_failed',
+    MESSAGE_UPSERTED: 'mail/message/upserted',
+    MESSAGE_MOVED: 'mail/message/moved',
+    MESSAGE_REMOVED: 'mail/message/removed',
+    MESSAGE_SEND_SUCCEEDED: 'mail/message/send_succeeded',
+    MESSAGE_TRASH_REQUESTED: 'mail/message/trash_requested',
+    MESSAGE_TRASH_COMPLETED: 'mail/message/trash_completed',
+    MESSAGE_TRASH_FAILED: 'mail/message/trash_failed',
+    MESSAGE_ARCHIVE_REQUESTED: 'mail/message/archive_requested',
+    MESSAGE_ARCHIVE_COMPLETED: 'mail/message/archive_completed',
+    MESSAGE_ARCHIVE_FAILED: 'mail/message/archive_failed',
+    MESSAGE_DELETE_REQUESTED: 'mail/message/delete_requested',
+    MESSAGE_DELETE_COMPLETED: 'mail/message/delete_completed',
+    MESSAGE_DELETE_FAILED: 'mail/message/delete_failed',
+    MESSAGE_STAR_REQUESTED: 'mail/message/star_requested',
+    MESSAGE_STAR_COMPLETED: 'mail/message/star_completed',
+    MESSAGE_STAR_FAILED: 'mail/message/star_failed',
+    MESSAGES_SEARCH_REQUESTED: 'mail/messages/search_requested',
+    MESSAGES_LOAD_MORE_REQUESTED: 'mail/messages/load_more_requested',
+    MESSAGES_APPEND_LOADED: 'mail/messages/append_loaded',
+    DRAFT_SAVE_REQUESTED: 'mail/draft/save_requested',
+    DRAFT_SAVED: 'mail/draft/saved',
+    DRAFT_SAVE_FAILED: 'mail/draft/save_failed',
+    BINDING_MEMBERS_LOAD_REQUESTED: 'mail/binding_members/load_requested',
+    BINDING_MEMBERS_LOADED: 'mail/binding_members/loaded',
+    BINDING_MEMBERS_LOAD_FAILED: 'mail/binding_members/load_failed',
+    BINDING_MEMBER_ADD_REQUESTED: 'mail/binding_member/add_requested',
+    BINDING_MEMBER_ADDED: 'mail/binding_member/added',
+    BINDING_MEMBER_ADD_FAILED: 'mail/binding_member/add_failed',
+    BINDING_MEMBER_REMOVE_REQUESTED: 'mail/binding_member/remove_requested',
+    BINDING_MEMBER_REMOVED: 'mail/binding_member/removed',
+    BINDING_MEMBER_REMOVE_FAILED: 'mail/binding_member/remove_failed',
 });
 
 const EMPTY_COMPOSE = Object.freeze({
@@ -86,6 +120,11 @@ export const initialMailState = Object.freeze({
     folders: Object.freeze([]),
     missingStandardRoles: Object.freeze([]),
     messages: Object.freeze([]),
+    messagesNextCursor: null,
+    messagesHasMore: false,
+    needsSync: false,
+    syncInProgress: false,
+    searchQuery: '',
     selectedUid: null,
     selectedThreadId: null,
     selectedThreadMessages: Object.freeze([]),
@@ -97,6 +136,8 @@ export const initialMailState = Object.freeze({
     adminMode: false,
     health: null,
     compose: EMPTY_COMPOSE,
+    draftUid: null,
+    bindingMembers: Object.freeze({}),
     errorMessage: null,
 });
 
@@ -213,13 +254,27 @@ export function mailReducer(state = initialMailState, event) {
         case MAIL_EVENTS.DEFAULT_SET_FAILED:
         case MAIL_EVENTS.MESSAGE_SEND_FAILED:
         case MAIL_EVENTS.HEALTHCHECK_FAILED:
+        case MAIL_EVENTS.SYNC_FAILED:
+        case MAIL_EVENTS.MESSAGE_TRASH_FAILED:
+        case MAIL_EVENTS.MESSAGE_ARCHIVE_FAILED:
+        case MAIL_EVENTS.MESSAGE_DELETE_FAILED:
+        case MAIL_EVENTS.MESSAGE_STAR_FAILED:
+        case MAIL_EVENTS.DRAFT_SAVE_FAILED:
+        case MAIL_EVENTS.BINDING_MEMBERS_LOAD_FAILED:
+        case MAIL_EVENTS.BINDING_MEMBER_ADD_FAILED:
+        case MAIL_EVENTS.BINDING_MEMBER_REMOVE_FAILED:
             return {
                 ...state,
                 loading: false,
                 sending: false,
-                errorMessage: event.payload && typeof event.payload.message === 'string'
-                    ? event.payload.message
-                    : 'mail error',
+                syncInProgress: false,
+                errorMessage: (
+                    event.payload && typeof event.payload.message === 'string'
+                        ? event.payload.message
+                        : (event.payload && typeof event.payload.error_detail === 'string'
+                            ? event.payload.error_detail
+                            : 'mail error')
+                ),
             };
         case MAIL_EVENTS.MESSAGE_LOAD_FAILED:
             return {
@@ -283,6 +338,10 @@ export function mailReducer(state = initialMailState, event) {
                 selectedThreadMessages: Object.freeze([]),
                 selectedMessage: null,
                 messages: Object.freeze([]),
+                messagesNextCursor: null,
+                messagesHasMore: false,
+                needsSync: false,
+                searchQuery: '',
             };
         }
         case MAIL_EVENTS.FOLDERS_LOADED: {
@@ -322,14 +381,45 @@ export function mailReducer(state = initialMailState, event) {
                 selectedMessage: null,
                 messageLoading: false,
                 messages: Object.freeze([]),
+                messagesNextCursor: null,
+                messagesHasMore: false,
+                searchQuery: '',
             };
         }
-        case MAIL_EVENTS.MESSAGES_LOADED:
+        case MAIL_EVENTS.MESSAGES_LOADED: {
+            const items = requireItems(event.payload, event.type);
             return {
                 ...state,
                 loading: false,
-                messages: requireItems(event.payload, event.type),
+                messages: Object.freeze(items),
+                messagesNextCursor: typeof event.payload.next_cursor === 'string'
+                    ? event.payload.next_cursor
+                    : null,
+                messagesHasMore: event.payload.has_more === true,
+                needsSync: event.payload.needs_sync === true,
             };
+        }
+        case MAIL_EVENTS.MESSAGES_APPEND_LOADED: {
+            const items = requireItems(event.payload, event.type);
+            const existingUids = new Set(state.messages.map((item) => item.uid));
+            const merged = [
+                ...state.messages,
+                ...items.filter((item) => item && typeof item.uid === 'string' && !existingUids.has(item.uid)),
+            ];
+            return {
+                ...state,
+                loading: false,
+                messages: Object.freeze(merged),
+                messagesNextCursor: typeof event.payload.next_cursor === 'string'
+                    ? event.payload.next_cursor
+                    : null,
+                messagesHasMore: event.payload.has_more === true,
+            };
+        }
+        case MAIL_EVENTS.SYNC_REQUESTED:
+            return { ...state, syncInProgress: true, errorMessage: null };
+        case MAIL_EVENTS.SYNC_ACCEPTED:
+            return { ...state, syncInProgress: true, needsSync: false };
         case MAIL_EVENTS.THREAD_SELECT:
         case MAIL_EVENTS.MESSAGE_SELECT: {
             const uid = event.payload && event.payload.uid;
@@ -498,14 +588,32 @@ export function mailReducer(state = initialMailState, event) {
         case MAIL_EVENTS.DEFAULT_SET: {
             const binding = event.payload && event.payload.binding;
             if (!binding || typeof binding.mailbox_binding_id !== 'string') return state;
-            const bindings = state.bindings.map((item) => ({
-                ...item,
-                is_default: item.mailbox_binding_id === binding.mailbox_binding_id,
-            }));
+            const ownerUserId = typeof binding.user_id === 'string' ? binding.user_id : null;
+            const applyDefaultFlags = (items) => items.map((item) => {
+                if (ownerUserId !== null) {
+                    if (item.user_id !== ownerUserId) return item;
+                    return {
+                        ...item,
+                        is_default: item.mailbox_binding_id === binding.mailbox_binding_id,
+                    };
+                }
+                return {
+                    ...item,
+                    is_default: item.mailbox_binding_id === binding.mailbox_binding_id,
+                };
+            });
+            const bindings = applyDefaultFlags(state.bindings);
+            const companyBindings = applyDefaultFlags(state.companyBindings);
+            const mine = state.bindings.some(
+                (item) => item.mailbox_binding_id === binding.mailbox_binding_id,
+            );
             return {
                 ...state,
                 bindings,
-                activeMailboxBindingId: binding.mailbox_binding_id,
+                companyBindings,
+                activeMailboxBindingId: mine
+                    ? binding.mailbox_binding_id
+                    : state.activeMailboxBindingId,
             };
         }
         case MAIL_EVENTS.BINDING_CREATED:
@@ -533,12 +641,19 @@ export function mailReducer(state = initialMailState, event) {
         case MAIL_EVENTS.BINDING_DELETED: {
             const id = event.payload && event.payload.mailbox_binding_id;
             if (typeof id !== 'string') return state;
+            const bindings = state.bindings.filter((item) => item.mailbox_binding_id !== id);
+            const companyBindings = state.companyBindings.filter(
+                (item) => item.mailbox_binding_id !== id,
+            );
+            const activeMailboxBindingId = state.activeMailboxBindingId === id
+                ? pickActiveId(bindings, null)
+                : state.activeMailboxBindingId;
             return {
                 ...state,
                 loading: false,
-                companyBindings: state.companyBindings.filter(
-                    (item) => item.mailbox_binding_id !== id,
-                ),
+                bindings,
+                companyBindings,
+                activeMailboxBindingId,
             };
         }
         case MAIL_EVENTS.ADMIN_MODE_SET:
@@ -552,6 +667,148 @@ export function mailReducer(state = initialMailState, event) {
                 loading: false,
                 health: event.payload && event.payload.health ? event.payload.health : null,
             };
+        case MAIL_EVENTS.MESSAGE_UPSERTED: {
+            const payload = event.payload;
+            if (!payload || typeof payload !== 'object') {
+                throw new Error('mail/message/upserted: payload required');
+            }
+            const mailboxBindingId = payload.mailbox_binding_id;
+            const folder = payload.folder;
+            const listItem = payload.list_item;
+            if (typeof mailboxBindingId !== 'string' || mailboxBindingId.length === 0) {
+                throw new Error('mail/message/upserted: mailbox_binding_id required');
+            }
+            if (mailboxBindingId !== state.activeMailboxBindingId) {
+                return state;
+            }
+            const unreadDelta = typeof payload.unread_delta === 'number' ? payload.unread_delta : 0;
+            let messages = state.messages;
+            if (
+                typeof folder === 'string'
+                && folder === state.folder
+                && listItem
+                && typeof listItem === 'object'
+                && typeof listItem.uid === 'string'
+            ) {
+                const without = state.messages.filter((item) => item.uid !== listItem.uid);
+                messages = Object.freeze([listItem, ...without]);
+            } else if (
+                typeof payload.uid === 'string'
+                && typeof payload.flagged === 'boolean'
+            ) {
+                messages = Object.freeze(state.messages.map((item) => (
+                    item.uid === payload.uid
+                        ? Object.freeze({ ...item, flagged: payload.flagged })
+                        : item
+                )));
+            }
+            return {
+                ...state,
+                messages,
+                syncInProgress: false,
+                folders: adjustFolderUnseen(
+                    state.folders,
+                    typeof folder === 'string' ? folder : state.folder,
+                    unreadDelta,
+                ),
+            };
+        }
+        case MAIL_EVENTS.MESSAGE_REMOVED:
+        case MAIL_EVENTS.MESSAGE_TRASH_COMPLETED:
+        case MAIL_EVENTS.MESSAGE_ARCHIVE_COMPLETED:
+        case MAIL_EVENTS.MESSAGE_DELETE_COMPLETED: {
+            const payload = event.payload || {};
+            const uid = typeof payload.uid === 'string' ? payload.uid : null;
+            if (!uid) return state;
+            const messages = state.messages.filter((item) => item.uid !== uid);
+            const clearSelected = state.selectedUid === uid;
+            return {
+                ...state,
+                messages: Object.freeze(messages),
+                selectedUid: clearSelected ? null : state.selectedUid,
+                selectedThreadId: clearSelected ? null : state.selectedThreadId,
+                selectedThreadMessages: clearSelected
+                    ? Object.freeze([])
+                    : state.selectedThreadMessages,
+                selectedMessage: clearSelected ? null : state.selectedMessage,
+            };
+        }
+        case MAIL_EVENTS.MESSAGE_MOVED: {
+            const payload = event.payload || {};
+            const uid = typeof payload.uid === 'string' ? payload.uid : null;
+            if (!uid) return state;
+            return {
+                ...state,
+                messages: Object.freeze(state.messages.filter((item) => item.uid !== uid)),
+            };
+        }
+        case MAIL_EVENTS.MESSAGE_STAR_COMPLETED: {
+            const uid = event.payload && event.payload.uid;
+            const flagged = event.payload && event.payload.flagged === true;
+            if (typeof uid !== 'string') return state;
+            return {
+                ...state,
+                messages: Object.freeze(state.messages.map((item) => (
+                    item.uid === uid ? Object.freeze({ ...item, flagged }) : item
+                ))),
+                selectedMessage: state.selectedMessage && state.selectedMessage.uid === uid
+                    ? Object.freeze({ ...state.selectedMessage, flagged })
+                    : state.selectedMessage,
+            };
+        }
+        case MAIL_EVENTS.DRAFT_SAVED: {
+            const uid = event.payload && event.payload.uid;
+            return {
+                ...state,
+                draftUid: typeof uid === 'string' ? uid : state.draftUid,
+            };
+        }
+        case MAIL_EVENTS.BINDING_MEMBERS_LOADED: {
+            const mailboxBindingId = event.payload && event.payload.mailbox_binding_id;
+            const items = requireItems(event.payload, event.type);
+            if (typeof mailboxBindingId !== 'string') return state;
+            return {
+                ...state,
+                bindingMembers: Object.freeze({
+                    ...state.bindingMembers,
+                    [mailboxBindingId]: Object.freeze(items),
+                }),
+            };
+        }
+        case MAIL_EVENTS.BINDING_MEMBER_ADDED: {
+            const member = event.payload && event.payload.member;
+            if (!member || typeof member.mailbox_binding_id !== 'string') return state;
+            const current = Array.isArray(state.bindingMembers[member.mailbox_binding_id])
+                ? state.bindingMembers[member.mailbox_binding_id]
+                : [];
+            const without = current.filter((item) => item.user_id !== member.user_id);
+            return {
+                ...state,
+                bindingMembers: Object.freeze({
+                    ...state.bindingMembers,
+                    [member.mailbox_binding_id]: Object.freeze([...without, member]),
+                }),
+            };
+        }
+        case MAIL_EVENTS.BINDING_MEMBER_REMOVED: {
+            const mailboxBindingId = event.payload && event.payload.mailbox_binding_id;
+            const userId = event.payload && event.payload.user_id;
+            if (typeof mailboxBindingId !== 'string' || typeof userId !== 'string') return state;
+            const current = Array.isArray(state.bindingMembers[mailboxBindingId])
+                ? state.bindingMembers[mailboxBindingId]
+                : [];
+            return {
+                ...state,
+                bindingMembers: Object.freeze({
+                    ...state.bindingMembers,
+                    [mailboxBindingId]: Object.freeze(
+                        current.filter((item) => item.user_id !== userId),
+                    ),
+                }),
+            };
+        }
+        case MAIL_EVENTS.MESSAGE_SEND_SUCCEEDED:
+            return { ...state, syncInProgress: false };
         default:
             return state;
     }

@@ -4,6 +4,12 @@
  * bootstrap-эффектов (file-types, i18n, health, sw) и GET CRM offset-page.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
+
 /** @param {import('koa').Context} context */
 function _pathname(context) {
     if (context.URL && typeof context.URL.pathname === 'string') {
@@ -19,6 +25,13 @@ function _search(context) {
     }
     const href = context.request?.href || context.url;
     return new URL(href, 'http://localhost').search;
+}
+
+function _loadPlatformI18nBundle(locale) {
+    const lang = locale === 'en' ? 'en' : 'ru';
+    const filePath = path.join(rootDir, 'core/i18n/translations', lang, 'platform.json');
+    const platform = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return { ...platform, platform };
 }
 
 /** @param {import('koa').Context} context */
@@ -45,8 +58,9 @@ export async function browserTestDevMiddleware(context, next) {
         return;
     }
     if (method === 'GET' && pathname.startsWith('/api/i18n/')) {
+        const locale = decodeURIComponent(pathname.slice('/api/i18n/'.length).split('/')[0] || 'ru');
         context.status = 200;
-        context.body = JSON.stringify({});
+        context.body = JSON.stringify(_loadPlatformI18nBundle(locale));
         context.set('content-type', 'application/json; charset=utf-8');
         return;
     }

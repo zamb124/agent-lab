@@ -49,6 +49,7 @@ import { callTokenOp, callStatusOp, callTurnOp, callRecordingsListOp,
 import { callPrefsSlice } from '../events/resources/call-prefs.resource.js';
 import { fileUploadCompletedOp } from '../events/resources/files.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
+import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import { gitResourceUpsertOp, gitResourceGetOp } from '../events/resources/git-resources.resource.js';
 import { chatUiResource } from '../events/resources/chat-ui.resource.js';
 import { createSyncPersistEffect } from '../events/sync-persist.effect.js';
@@ -108,12 +109,6 @@ export class SyncApp extends PlatformApp {
         this.useEvent('sync/call/incoming', (event) => this._onIncomingCall(event));
         this.useEvent('sync/call/ended', (event) => this._onCallEnded(event));
         this.useEvent(CoreEvents.WS_CONNECTED, () => this._onWsConnected());
-        // Реакция на смену глобального namespace (CRM/Sync/Office используют один
-        // селект). Сейчас фильтрация каналов на UI-стороне (sidebar/picker сами
-        // перерисовываются через `select(state.ui.namespace)`); хук-точка
-        // расширения для случая, если backend начнёт фильтровать список каналов
-        // по `X-Platform-Namespace`.
-        this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._onNamespaceChanged());
         this.useEvent(CoreEvents.AUTH_COMPANY_SWITCHED, () => this._onCompanySwitched());
     }
 
@@ -121,12 +116,6 @@ export class SyncApp extends PlatformApp {
         this.dispatch('sync/context/company_cleared', null);
         this.navigate('shell', {});
         this.dispatch(channelsResource.events.LIST_REQUESTED, null);
-    }
-
-    _onNamespaceChanged() {
-        // Пустая операция: list уже загружен; фильтрация на UI. Если backend в будущем
-        // начнёт фильтровать по namespace, здесь можно перезапросить
-        // `channelsResource.events.LIST_REQUESTED`.
     }
 
     updated(changed) {
@@ -300,6 +289,7 @@ export class SyncApp extends PlatformApp {
         callPrefsSlice,
         channelCreateAdhocCallOp,
         platformFileCreateOp,
+        platformVoiceDictationOp,
         fileUploadCompletedOp,
         gitResourceUpsertOp,
         gitResourceGetOp,

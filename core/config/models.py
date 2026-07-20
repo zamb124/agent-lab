@@ -1579,12 +1579,19 @@ class MailSyncConfig(BaseModel):
 
     enabled: bool = True
     cron: str = "*/1 * * * *"
-    batch_size: int = 100
-    max_bindings_per_tick: int = 1000
-    max_parallel_bindings: int = 10
-    max_new_messages_per_binding: int = 20
+    batch_size: int = 200
+    max_bindings_per_tick: int = 2000
+    max_parallel_bindings: int = 20
+    max_new_messages_per_binding: int = 50
+    max_drain_continuations: int = 10
+    backfill_batch_size: int = 50
+    reconcile_every_n_syncs: int = 1
     notification_dedup_ttl_seconds: int = 86400
     auth_error_cooldown_seconds: int = 3600
+    idle_enabled: bool = True
+    max_idle_bindings: int = 50
+    idle_reconnect_seconds: int = 30
+    idle_timeout_seconds: int = 1740
 
 
 class MailIspmanagerConfig(BaseModel):

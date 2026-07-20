@@ -84,9 +84,10 @@ export class PlatformWorkItemBadge extends PlatformElement {
             :host([variant="row"]) .badge,
             :host([variant="card"]) .badge {
                 width: 100%;
-                min-height: 56px;
-                padding: var(--space-2) var(--space-3);
+                min-height: 48px;
+                padding: var(--space-1) var(--space-2);
                 border-left: 3px solid var(--work-item-state-open);
+                gap: var(--space-3);
             }
             :host([variant="row"]) .badge[data-state="open"],
             :host([variant="card"]) .badge[data-state="open"] {
@@ -155,7 +156,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
                 flex: 1;
                 display: flex;
                 flex-direction: column;
-                gap: 2px;
+                gap: var(--space-1);
             }
             .title-row {
                 display: flex;
@@ -165,7 +166,9 @@ export class PlatformWorkItemBadge extends PlatformElement {
             }
             .title {
                 font-size: var(--text-sm);
-                font-weight: 600;
+                font-weight: var(--font-semibold);
+                line-height: 1.35;
+                letter-spacing: var(--tracking-tight, -0.01em);
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -181,14 +184,17 @@ export class PlatformWorkItemBadge extends PlatformElement {
                 flex-wrap: wrap;
                 color: var(--text-secondary);
                 font-size: var(--text-xs);
+                line-height: 1.3;
             }
             .pill {
                 display: inline-flex;
                 align-items: center;
                 gap: 4px;
-                padding: 2px 6px;
+                padding: 3px 8px;
                 border-radius: var(--radius-full);
                 font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                line-height: 1.2;
             }
             .pill[data-state="open"] {
                 color: var(--work-item-state-open);
@@ -238,13 +244,19 @@ export class PlatformWorkItemBadge extends PlatformElement {
             :host([embedded]) .badge {
                 border: none;
                 background: transparent;
-                padding: var(--space-1) 0;
+                padding: 0;
             }
             :host([embedded][variant="row"]) .badge,
             :host([embedded][variant="card"]) .badge {
-                border-left-width: 3px;
-                border-left-style: solid;
-                padding-left: var(--space-2);
+                border-left: none;
+                padding-left: 0;
+                min-height: 0;
+                gap: var(--space-3);
+            }
+            :host([embedded][variant="row"]) .state-dot,
+            :host([embedded][variant="card"]) .state-dot {
+                width: 10px;
+                height: 10px;
             }
         `,
     ];

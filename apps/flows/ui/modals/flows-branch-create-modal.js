@@ -10,7 +10,7 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
-import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 const BRANCH_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -28,8 +28,19 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
 
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
-        ...formStyles,
+        glassStyles,
         css`
+            .stack {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+
+            .field-error {
+                margin: calc(var(--space-1) * -1) 0 0;
+                font-size: var(--text-sm);
+                color: var(--error);
+            }
         `,
     ];
 
@@ -53,8 +64,9 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
 
     renderBody() {
         const validId = BRANCH_ID_PATTERN.test(this._branchId);
+        const showIdError = this._branchId.length > 0 && !validId;
         return html`
-            <div class="form-group">
+            <div class="stack">
                 <platform-field
                     type="string"
                     mode="edit"
@@ -66,11 +78,9 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
                         this.isDirty = true;
                     }}
                 ></platform-field>
-                ${this._branchId.length > 0 && !validId
-                    ? html`<div class="form-error">${this.t('branch_create_modal.err_branch_id_pattern')}</div>`
+                ${showIdError
+                    ? html`<div class="field-error">${this.t('branch_create_modal.err_branch_id_pattern')}</div>`
                     : nothing}
-            </div>
-            <div class="form-group">
                 <platform-field
                     type="string"
                     mode="edit"
@@ -81,8 +91,6 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
                         this.isDirty = true;
                     }}
                 ></platform-field>
-            </div>
-            <div class="form-group">
                 <platform-field
                     type="text"
                     mode="edit"
@@ -100,9 +108,16 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
     renderFooter() {
         const validId = BRANCH_ID_PATTERN.test(this._branchId);
         const validName = this._name.trim().length > 0;
+        const busy = this._createBranch.busy;
         return html`
-            <platform-button @click=${() => this.close()}>${this.t('common.action_cancel')}</platform-button>
-            <platform-button variant="primary" ?disabled=${!(validId && validName)} @click=${this._onSubmit}>
+            <platform-button variant="ghost" @click=${() => this.close()}>
+                ${this.t('common.action_cancel')}
+            </platform-button>
+            <platform-button
+                variant="primary"
+                ?disabled=${!(validId && validName) || busy}
+                @click=${this._onSubmit}
+            >
                 ${this.t('common.action_create')}
             </platform-button>
         `;
@@ -110,6 +125,7 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
 
     async _onSubmit() {
         if (!this.flowId) return;
+        if (this._createBranch.busy) return;
         await this._createBranch.run({
             flow_id: this.flowId,
             body: {

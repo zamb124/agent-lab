@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     from core.files.file_repository import FileRepository
     from core.files.service import FilesService
     from core.integrations.oauth_service import OAuthService
+    from core.mail.service import MailService
     from core.rag.llm_context_memory_store import RAGLLMContextMemoryStore
     from core.rag.repository import RAGRepository
     from core.state import ExecutionState
@@ -268,6 +269,9 @@ class EvaluationLabServiceProtocol(Protocol):
 class FlowRuntimeContainer(Protocol):
     @property
     def redis_client(self) -> RedisClient: ...
+
+    @property
+    def mail_service(self) -> MailService: ...
 
     @property
     def shared_storage(self) -> Storage: ...

@@ -10,9 +10,11 @@ from croniter import croniter
 from croniter.croniter import CroniterBadCronError
 
 from apps.flows.config import get_settings
-from apps.flows.src.models import TriggerType
+from apps.flows.src.models import EmailTriggerConfig, TriggerType
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.mail.models import MailConnectionStatus
+from core.mail.service import MailService
 from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
@@ -133,19 +135,57 @@ def verify_webhook_config(
     return True, meta, None, None
 
 
-def verify_email_config(config: JsonObject) -> VerifyResult:
-    provider = str(config.get("provider", "imap")).strip() or "imap"
-    meta = {
-        "provider": provider,
-        "imap_host": config.get("imap_host"),
-        "imap_port": config.get("imap_port", 993),
-    }
-    return (
-        True,
-        meta,
-        None,
+async def verify_email_config(
+    config: JsonObject,
+    *,
+    mail_service: MailService,
+    company_id: str,
+) -> VerifyResult:
+    try:
+        email_config = EmailTriggerConfig.model_validate(config)
+    except Exception as exc:
+        return False, {}, "email_config_invalid", str(exc)
+
+    connection = await mail_service.get_connection(company_id)
+    if connection is None:
+        return (
+            False,
+            {},
+            "mail_connection_missing",
+            "Почта компании не подключена. Откройте настройки почты и настройте сервер.",
+        )
+    if connection.status != MailConnectionStatus.ACTIVE:
+        return (
+            False,
+            {"status": connection.status.value},
+            "mail_connection_inactive",
+            f"Почтовый сервер компании в статусе {connection.status.value}.",
+        )
+
+    bindings = await mail_service.list_my_bindings(company_id)
+    matched = next(
+        (
+            binding
+            for binding in bindings
+            if binding.mailbox_binding_id == email_config.mailbox_binding_id
+        ),
         None,
     )
+    if matched is None:
+        return (
+            False,
+            {"mailbox_binding_id": email_config.mailbox_binding_id},
+            "mailbox_binding_not_found",
+            "Ящик не найден среди ваших mailbox bindings. Выберите ящик или настройте почту.",
+        )
+
+    return True, {
+        "mailbox_binding_id": matched.mailbox_binding_id,
+        "email_address": matched.email_address,
+        "mail_domain": connection.mail_domain,
+        "allowed_senders": list(email_config.allowed_senders),
+        "subject_contains": email_config.subject_contains,
+    }, None, None
 
 
 def verify_redis_config(config: JsonObject) -> VerifyResult:
@@ -163,6 +203,9 @@ async def verify_trigger_draft(
     config: JsonObject,
     flow_id: str,
     trigger_id: str | None,
+    *,
+    mail_service: MailService | None = None,
+    company_id: str | None = None,
 ) -> VerifyResult:
     if trigger_type == TriggerType.TELEGRAM:
         return await verify_telegram_config(config)
@@ -171,6 +214,16 @@ async def verify_trigger_draft(
     if trigger_type == TriggerType.WEBHOOK:
         return verify_webhook_config(config, flow_id, trigger_id)
     if trigger_type == TriggerType.EMAIL:
-        return verify_email_config(config)
-    if trigger_type == TriggerType.REDIS:
-        return verify_redis_config(config)
+        if mail_service is None or company_id is None or not company_id.strip():
+            return (
+                False,
+                {},
+                "mail_verify_context_required",
+                "Для проверки email-триггера нужен контекст компании и MailService.",
+            )
+        return await verify_email_config(
+            config,
+            mail_service=mail_service,
+            company_id=company_id,
+        )
+    return verify_redis_config(config)

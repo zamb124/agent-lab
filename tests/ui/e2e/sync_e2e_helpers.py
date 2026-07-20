@@ -158,6 +158,18 @@ async def sync_e2e_dismiss_pwa_install_banner(page: Page) -> None:
     await ui_e2e_dismiss_pwa_install_banner(page)
 
 
+async def sync_e2e_open_sync_defaults(page: Page) -> Locator:
+    """Открывает ``sync.namespace_settings`` для company workspace ``default``."""
+    gear = page.locator("sync-chat-list .header-action-btn").filter(
+        has=page.locator('platform-icon[name="settings"]')
+    ).first
+    await expect(gear).to_be_visible(timeout=15_000)
+    await gear.click()
+    modal = page.locator("sync-namespace-modal")
+    await expect(modal).to_be_visible(timeout=15_000)
+    return modal
+
+
 async def sync_e2e_open_with_namespace(
     sync_ui,
     page: Page,
@@ -166,24 +178,19 @@ async def sync_e2e_open_with_namespace(
     suffix: str = "ui",
     company_id: str | None = None,
 ) -> str:
-    resolved_company_id = company_id if company_id is not None else ui_e2e_company_id()
-    namespace = await sync_e2e_seed_namespace(
-        unique_id, suffix=suffix, company_id=resolved_company_id
-    )
-    await sync_e2e_activate_namespace_for_next_load(
-        page, namespace, company_id=resolved_company_id
-    )
+    """Открывает Sync shell. Возвращает ``default`` — workspace для seed каналов.
+
+    ``unique_id``/``suffix``/``company_id`` сохранены для совместимости вызовов;
+    Sync UI больше не переключает namespace.
+    """
+    _ = unique_id, suffix, company_id
     await sync_ui.open(page)
     await sync_ui.expect_shell(page)
     await sync_e2e_dismiss_pwa_install_banner(page)
     await sync_e2e_expect_ws_open(page)
-    try:
-        await sync_e2e_expect_namespace(page, namespace, timeout=5_000)
-        return namespace
-    except PlaywrightError:
-        pass
-    await sync_e2e_select_namespace(page, namespace)
-    return namespace
+    await expect(page.locator("sync-chat-list")).to_be_visible(timeout=30_000)
+    await expect(page.locator("sync-chat-list platform-sidebar-namespace-select")).to_have_count(0)
+    return "default"
 
 
 async def sync_e2e_click_platform_button(
@@ -249,12 +256,9 @@ async def _sync_page_origin(page: Page) -> str:
 
 
 async def _sync_active_namespace(page: Page) -> str:
-    namespace = await page.locator(
-        "platform-sidebar-namespace-select platform-field-enum input.field-pill-enum-input"
-    ).first.input_value()
-    if namespace.strip() == "":
-        raise AssertionError("Активный namespace обязателен для создания канала")
-    return namespace
+    """Workspace для API seed каналов в Sync E2E — всегда company ``default``."""
+    _ = page
+    return "default"
 
 
 async def sync_api_create_group_channel(

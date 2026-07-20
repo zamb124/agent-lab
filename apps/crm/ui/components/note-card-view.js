@@ -10,7 +10,7 @@
  *     При `'graph'` в основной колонке только мини-граф (в других режимах canvas не монтируется);
  *     иначе markdown на высоту колонки со скроллом у `.main`.
  *     На узком экране блок `.mobile-header-panels` рендерится только для summary/neighbors.
- *   - `edit`: inline-форма — title, описание (с голосовым вводом), дата, теги,
+ *   - `edit`: inline-форма — title, описание (диктовка через platform-markdown-editor), дата, теги,
  *     аплоад вложений. Текст из файлов добавляется в описание на сервере.
  *     `entitiesResource.create` (для note === null) или
  *     `entityUpdateOp.run({ id, body })` (для существующей заметки).
@@ -35,8 +35,7 @@
  *   - `saved` { entity }         — успешное сохранение существующей заметки.
  *   - `created` { entity }       — успешное создание новой заметки.
  *
- * Markdown рендерится через глобальный `window.marked`, подключённый в
- * `apps/crm/ui/index.html` (`/static/core/assets/js/marked.min.js`).
+ * Markdown: edit через `<platform-markdown-editor>`; view — `flowsChatMarkdownToHtml` + mention chips.
  */
 
 import { html, css, nothing, render } from 'lit';
@@ -48,6 +47,8 @@ import '@platform/lib/components/platform-work-item-badge.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-markdown-editor.js';
+import { flowsChatMarkdownToHtml } from '@platform/lib/chat/markdown.js';
 import './entity-hover-preview.js';
 import './crm-related-neighbor-rows.js';
 import './crm-mini-graph.js';
@@ -63,7 +64,6 @@ import {
     summaryChipUnresolvedIconName,
 } from '../utils/related-entity-presenter.js';
 import { NOTE_ROOT_ENTITY_TYPE_ID } from '../constants/entity-type-ids.js';
-import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { escapeHtml as _escapeHtmlCanon } from '@platform/lib/utils/escape-html.js';
@@ -76,7 +76,6 @@ const ENTITY_UPDATE_OP = 'crm/entity_update';
 const FILE_UPLOAD_OP = 'platform/file_create';
 const ATTACHMENT_UPLOAD_OP = 'crm/attachment_upload';
 const ATTACHMENT_DELETE_OP = 'crm/attachment_delete';
-const VOICE_OP = 'crm/note_voice_input';
 const ENTITY_SEARCH_OP = 'crm/entity_search';
 const ENTITY_TYPES_NAME = 'crm/entity_types';
 const NAMESPACES_NAME = 'crm/namespaces';
@@ -121,13 +120,10 @@ function _restoreMentionsHtml(html) {
 function renderMarkdownToHtml(text) {
     const normalizedMd = stripOuterMarkdownCodeFence(typeof text === 'string' ? text : '');
     const withPlaceholders = _replaceMentionsWithPlaceholder(normalizedMd);
-    const escaped = escapeHtml(withPlaceholders);
-    if (escaped.length === 0) {
+    if (withPlaceholders.length === 0) {
         return '';
     }
-    const rendered = window.marked && typeof window.marked.parse === 'function'
-        ? window.marked.parse(escaped, { breaks: true, gfm: true })
-        : escaped.replace(/\n/g, '<br>');
+    const rendered = flowsChatMarkdownToHtml(withPlaceholders, { streaming: false });
     return _restoreMentionsHtml(rendered);
 }
 
@@ -180,7 +176,6 @@ export class CRMNoteCardView extends PlatformElement {
         _editTags: { state: true },
         _editAttachmentIds: { state: true },
         _tagDraft: { state: true },
-        _voiceState: { state: true },
         _formError: { state: true },
         _mentionOpen: { state: true },
         _mentionQuery: { state: true },
@@ -1181,34 +1176,31 @@ export class CRMNoteCardView extends PlatformElement {
             .meta-pill.context-pill {
                 border-color: var(--glass-border-medium);
             }
+            .note-description-pill {
+                display: flex;
+                flex-direction: column;
+                flex: 1 1 auto;
+                min-height: 280px;
+            }
+            .note-description-pill .field-pill-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+            }
             .description-edit-wrap {
                 position: relative;
-            }
-            .note-description-pill .description-edit {
-                box-sizing: border-box;
-                width: 100%;
+                display: flex;
+                flex-direction: column;
+                flex: 1 1 auto;
                 min-height: 220px;
-                padding-right: 56px;
-                resize: vertical;
+                gap: 0;
             }
-            .voice-btn {
-                position: absolute;
-                top: 12px;
-                right: 12px;
-                width: 36px;
-                height: 36px;
-                border-radius: var(--radius-full);
-                background: var(--crm-note-action-bg);
-                border: none;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-secondary);
-                cursor: pointer;
+            .note-description-pill .description-md-editor {
+                flex: 1 1 auto;
+                min-height: 220px;
+                width: 100%;
             }
-            .voice-btn:hover:not(:disabled) { background: var(--crm-note-action-bg-hover); color: var(--text-primary); }
-            .voice-btn.recording { background: var(--accent-secondary); color: #FFFFFF; }
-            .voice-btn.processing { opacity: 0.5; cursor: progress; }
 
             .edit-row {
                 display: grid;
@@ -1428,10 +1420,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._editAttachmentIds = [];
         this._editAttachmentsMeta = {};
         this._tagDraft = '';
-        this._voiceState = 'idle';
         this._formError = '';
-        this._mediaRecorder = null;
-        this._audioChunks = [];
 
         this._mentionOpen = false;
         this._mentionQuery = '';
@@ -1442,6 +1431,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._mentionPreviewOpen = false;
         this._mentionedEntityIds = new Set();
         this._mentionTriggerIndex = -1;
+        this._mentionToIndex = -1;
         this._mentionDebounce = null;
         this._mentionRequestId = null;
         this._entitySearchPurpose = 'mention';
@@ -1479,7 +1469,6 @@ export class CRMNoteCardView extends PlatformElement {
         this._fileUpload = this.useOp(FILE_UPLOAD_OP);
         this._attachmentUpload = this.useOp(ATTACHMENT_UPLOAD_OP);
         this._attachmentDelete = this.useOp(ATTACHMENT_DELETE_OP);
-        this._voice = this.useOp(VOICE_OP);
         this._entitySearch = this.useOp(ENTITY_SEARCH_OP);
         this._graphView = this.useSlice('crm/graph_view');
         this._uploadTargetMode = 'edit';
@@ -1560,26 +1549,6 @@ export class CRMNoteCardView extends PlatformElement {
                 return;
             }
             this.emit('markdown-format-attachment-queued');
-        });
-
-        this.useEvent(this._voice.op.events.SUCCEEDED, (event) => {
-            const result = event && event.payload && event.payload.result;
-            this._voiceState = 'idle';
-            this._mediaRecorder = null;
-            this._audioChunks = [];
-            if (!result || typeof result.text !== 'string' || result.text.trim().length === 0) {
-                this.toast('toast.note.voice_empty', { type: 'warning' });
-                return;
-            }
-            const insert = result.text.trim();
-            this._editDescription = this._editDescription.length > 0
-                ? `${this._editDescription}\n\n${insert}`
-                : insert;
-        });
-        this.useEvent(this._voice.op.events.FAILED, () => {
-            this._voiceState = 'idle';
-            this._mediaRecorder = null;
-            this._audioChunks = [];
         });
 
         this.useEvent(this._entitySearch.op.events.SUCCEEDED, (event) => {
@@ -2263,41 +2232,25 @@ export class CRMNoteCardView extends PlatformElement {
     }
 
     _onNameInput(e) { this._editName = e.target.value; }
-    _onDescriptionInput(e) {
-        this._editDescription = e.target.value;
+    _onDescriptionChange(e) {
+        const detail = e && e.detail;
+        const value = detail && typeof detail.value === 'string' ? detail.value : '';
+        this._editDescription = value;
         this._mentionedEntityIds = this._extractMentionedIds(this._editDescription);
-        this._maybeOpenMention(e.target);
     }
-    _onDescriptionKeydown(e) {
-        if (!this._mentionOpen) return;
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            this._closeMention();
-        }
-    }
-    _extractMentionedIds(text) {
-        const ids = new Set();
-        if (typeof text !== 'string' || text.length === 0) return ids;
-        let match;
-        const re = new RegExp(MENTION_REGEX.source, 'g');
-        while ((match = re.exec(text)) !== null) {
-            ids.add(match[2]);
-        }
-        return ids;
-    }
-
-    _maybeOpenMention(textareaEl) {
-        if (textareaEl === null || textareaEl === undefined) return;
-        const caret = textareaEl.selectionStart;
-        const value = textareaEl.value;
-        if (typeof caret !== 'number') return;
-        const triggerInfo = this._findMentionTrigger(value, caret);
-        if (triggerInfo === null) {
+    _onDescriptionMentionQuery(e) {
+        const detail = e && e.detail;
+        if (!detail || typeof detail.query !== 'string') {
             this._closeMention();
             return;
         }
-        this._mentionTriggerIndex = triggerInfo.start;
-        this._mentionQuery = triggerInfo.query;
+        if (typeof detail.from !== 'number' || typeof detail.to !== 'number') {
+            this._closeMention();
+            return;
+        }
+        this._mentionTriggerIndex = detail.from;
+        this._mentionQuery = detail.query;
+        this._mentionToIndex = detail.to;
         this._mentionOpen = true;
         if (this._mentionDebounce !== null) {
             clearTimeout(this._mentionDebounce);
@@ -2319,26 +2272,22 @@ export class CRMNoteCardView extends PlatformElement {
             this._mentionRequestId = this._dispatchEntitySearchRequested(payload);
         }, 200);
     }
-
-    _findMentionTrigger(value, caret) {
-        if (typeof value !== 'string' || value.length === 0) return null;
-        let i = caret - 1;
-        while (i >= 0) {
-            const ch = value[i];
-            if (ch === '@') {
-                const before = i === 0 ? '' : value[i - 1];
-                if (before === '' || /\s/.test(before)) {
-                    const query = value.slice(i + 1, caret);
-                    if (query.length === 0) return { start: i, query };
-                    if (/\s/.test(query)) return null;
-                    return { start: i, query };
-                }
-                return null;
-            }
-            if (/\s/.test(ch)) return null;
-            i -= 1;
+    _onDescriptionKeydown(e) {
+        if (!this._mentionOpen) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            this._closeMention();
         }
-        return null;
+    }
+    _extractMentionedIds(text) {
+        const ids = new Set();
+        if (typeof text !== 'string' || text.length === 0) return ids;
+        let match;
+        const re = new RegExp(MENTION_REGEX.source, 'g');
+        while ((match = re.exec(text)) !== null) {
+            ids.add(match[2]);
+        }
+        return ids;
     }
 
     _closeMention() {
@@ -2347,6 +2296,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._mentionResults = [];
         this._mentionLoading = false;
         this._mentionTriggerIndex = -1;
+        this._mentionToIndex = -1;
         if (this._mentionDebounce !== null) {
             clearTimeout(this._mentionDebounce);
             this._mentionDebounce = null;
@@ -2774,26 +2724,23 @@ export class CRMNoteCardView extends PlatformElement {
     }
 
     _onMentionPick(item) {
-        const textareaEl = this.renderRoot.querySelector('.description-edit');
-        if (textareaEl === null) return;
         if (this._mentionTriggerIndex < 0) return;
-        const before = this._editDescription.slice(0, this._mentionTriggerIndex);
-        const triggerEnd = this._mentionTriggerIndex + 1 + this._mentionQuery.length;
-        const after = this._editDescription.slice(triggerEnd);
+        const from = this._mentionTriggerIndex;
+        const to = typeof this._mentionToIndex === 'number' && this._mentionToIndex >= from
+            ? this._mentionToIndex
+            : from + 1 + this._mentionQuery.length;
+        const before = this._editDescription.slice(0, from);
+        const after = this._editDescription.slice(to);
         const insert = `@[${item.name}](${item.entity_id}) `;
         const next = `${before}${insert}${after}`;
         this._editDescription = next;
         this._mentionedEntityIds = new Set(this._mentionedEntityIds);
         this._mentionedEntityIds.add(item.entity_id);
         this._closeMention();
-        const newCaret = before.length + insert.length;
-        Promise.resolve().then(() => {
-            const ta = this.renderRoot.querySelector('.description-edit');
-            if (ta !== null) {
-                ta.focus();
-                ta.setSelectionRange(newCaret, newCaret);
-            }
-        });
+        const editor = this.renderRoot.querySelector('platform-markdown-editor.description-md-editor');
+        if (editor && typeof editor.setValue === 'function') {
+            editor.setValue(next);
+        }
     }
 
     _onTagDraftInput(e) { this._tagDraft = e.target.value; }
@@ -3121,38 +3068,6 @@ export class CRMNoteCardView extends PlatformElement {
         `;
     }
 
-    async _onVoiceToggle() {
-        if (this._voiceState === 'recording') {
-            if (this._mediaRecorder !== null && this._mediaRecorder.state === 'recording') {
-                this._mediaRecorder.stop();
-            }
-            return;
-        }
-        if (this._voiceState !== 'idle') return;
-        if (typeof window === 'undefined' || !window.isSecureContext) {
-            this.toast('toast.note.voice_unavailable_https', { type: 'warning' });
-            return;
-        }
-        if (!hasGetUserMediaApi() || typeof MediaRecorder === 'undefined') {
-            this.toast('toast.note.voice_unavailable_recorder', { type: 'warning' });
-            return;
-        }
-        const stream = await getUserMediaCompat({ audio: true });
-        const mimeType = pickVoiceMimeType();
-        this._mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-        this._audioChunks = [];
-        const resolvedMime = this._mediaRecorder.mimeType || mimeType || 'audio/webm';
-        this._mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) this._audioChunks.push(e.data); };
-        this._mediaRecorder.onstop = () => {
-            stream.getTracks().forEach((t) => t.stop());
-            this._voiceState = 'processing';
-            const blob = new Blob(this._audioChunks, { type: resolvedMime });
-            this._voice.run({ audio: blob, file_name: 'voice-input.webm' });
-        };
-        this._mediaRecorder.start();
-        this._voiceState = 'recording';
-    }
-
     _validateEdit() {
         const hasAttachments = this._editAttachmentIds.length > 0;
         if (this._editName.trim().length === 0 && this._editDescription.trim().length === 0 && !hasAttachments) {
@@ -3352,7 +3267,7 @@ export class CRMNoteCardView extends PlatformElement {
             <button
                 type="button"
                 class="pill-btn"
-                ?disabled=${busy || uploading || this._voiceState === 'processing'}
+                ?disabled=${busy || uploading}
                 @click=${() => this._onSaveEdit()}
             >
                 <platform-icon name=${busy ? 'loader' : 'save'} size="16"></platform-icon>
@@ -3828,28 +3743,21 @@ export class CRMNoteCardView extends PlatformElement {
                             <span class="field-pill-label">${this.t('note_edit.field_description')}</span>
                         </div>
                         <div class="description-edit-wrap">
-                            <textarea
-                                class="field-pill-textarea description-edit"
-                                data-canon="mention"
-                                placeholder=${this.t('note_edit.placeholder_description')}
+                            <platform-markdown-editor
+                                class="description-md-editor"
+                                variant="embed"
                                 .value=${this._editDescription}
-                                @input=${this._onDescriptionInput}
+                                .placeholder=${this.t('note_edit.placeholder_description')}
+                                .enableMentions=${true}
+                                .showHeader=${false}
+                                .showHint=${false}
+                                .showPreview=${false}
+                                .showFormatToolbar=${true}
+                                .minHeight=${220}
+                                @change=${(e) => this._onDescriptionChange(e)}
+                                @mention-query=${(e) => this._onDescriptionMentionQuery(e)}
                                 @keydown=${this._onDescriptionKeydown}
-                            ></textarea>
-                            <button
-                                type="button"
-                                class="voice-btn ${this._voiceState}"
-                                title=${this._voiceState === 'recording'
-                                    ? this.t('note_edit.voice_dictation_stop')
-                                    : this.t('note_edit.voice_dictation_start')}
-                                @click=${() => this._onVoiceToggle()}
-                                ?disabled=${this._voiceState === 'processing'}
-                            >
-                                <platform-icon
-                                    name=${this._voiceState === 'recording' ? 'square' : 'mic'}
-                                    size="16"
-                                ></platform-icon>
-                            </button>
+                            ></platform-markdown-editor>
                             ${this._mentionOpen ? this._renderMentionPopover() : ''}
                         </div>
                     </div>

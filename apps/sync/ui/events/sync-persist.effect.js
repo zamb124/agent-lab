@@ -6,11 +6,9 @@
  * `STORAGE_LOAD_REQUESTED` для каждого ключа и реагирует на `STORAGE_LOADED`
  * соответствующим action для гидратации slice.
  *
- * «Активное пространство Sync» теперь = платформенный namespace
- * (state.ui.namespace.selectionByCompany), который persist'ит сам core
- * ui.effect (`crm:last-namespace-by-company`). В этом эффекте больше нет
- * собственных ключей `selectedSpaceId` / `sidebarSpaceFilterIds` — выбор
- * глобально согласован с CRM/RAG/Office через `setPlatformNamespaceSelection`.
+ * Sync не персистит и не читает платформенный namespace selection
+ * (`crm:last-namespace-by-company` / `state.ui.namespace`) — список чатов
+ * без switcher, CRM/Office владеют shared selection сами.
  *
  * Ключи в localStorage:
  *   sync.chat.selectedChannelId       — string | null

@@ -11,6 +11,8 @@ import {
     resetPlatformBusForTests,
     bootstrapPlatformBus,
     clearFactoryRegistry,
+    registerFactory,
+    collectFactories,
 } from '@platform/lib/events/index.js';
 import { _resetResourceRegistryForTests } from '@platform/lib/events/factories/_internal.js';
 import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
@@ -52,12 +54,20 @@ export function resetPlatformState() {
 /**
  * Поднять минимальный bus для тестов без сетевых эффектов.
  * routes = [] чтобы createRouterEffect не зарегистрировался.
+ * opts.factories — registerFactory + collectFactories → slices/effects в bus.
  */
 export function bootstrapTestBus(opts = {}) {
+    const factories = Array.isArray(opts.factories) ? opts.factories : [];
+    for (const factory of factories) {
+        registerFactory(factory);
+    }
+    const collected = factories.length > 0
+        ? collectFactories(factories)
+        : { slices: {}, effects: [] };
     return bootstrapPlatformBus({
         baseUrl: opts.baseUrl || '',
         routes: opts.routes || [],
-        slices: opts.slices || {},
-        effects: opts.effects || [],
+        slices: { ...collected.slices, ...(opts.slices || {}) },
+        effects: [...collected.effects, ...(opts.effects || [])],
     });
 }

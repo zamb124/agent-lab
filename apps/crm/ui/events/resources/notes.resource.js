@@ -11,7 +11,6 @@
  *   DELETE /crm/api/v1/entities/notes/{note_id}/analysis-error → сброс только ошибки apply
  *   POST  /crm/api/v1/entities/notes/{note_id}/analysis-draft-repair → 202 TaskIQ (AI-починка черновика)
  *   POST  /crm/api/v1/tasks/note-analyze                       → TaskResponse (start_note_analyze)
- *   POST  /crm/api/v1/entities/voice-input                     → { text, stt }
  *   GET   /crm/api/v1/entities/search?q=&entity_type=note&search_mode= → CursorPage[Entity]
  *   POST  /crm/api/v1/entities/cards/bulk                      → { [entity_id]: card }
  */
@@ -178,31 +177,6 @@ export const noteAnalysisDraftRepairOp = createAsyncOp({
             { type: 'error', i18n_key: 'crm:toast.note.draft_repair_queue_failed' },
             { causation_id: event.id },
         );
-    },
-});
-
-export const noteVoiceInputOp = createAsyncOp({
-    name: 'crm/note_voice_input',
-    successToastKey: 'crm:toast.note.voice_stopped',
-    errorToastKey: 'crm:toast.note.voice_failed',
-    restMirror: { method: 'POST', path: '/crm/api/v1/entities/voice-input' },
-    request: async ({ payload }) => {
-        if (!payload || !(payload.audio instanceof Blob)) {
-            throw new Error('noteVoiceInputOp: payload.audio (Blob) required');
-        }
-        const formData = new FormData();
-        const fileName = typeof payload.file_name === 'string' && payload.file_name.length > 0
-            ? payload.file_name
-            : 'voice-input.webm';
-        formData.append('file', payload.audio, fileName);
-        if (typeof payload.language === 'string' && payload.language.length > 0) {
-            formData.append('language', payload.language);
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/entities/voice-input',
-            body: formData,
-        });
     },
 });
 

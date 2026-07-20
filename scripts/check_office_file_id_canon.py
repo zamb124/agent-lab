@@ -9,13 +9,16 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-FORBIDDEN = re.compile(r"binding_id|bindingId|BindingId|binding_kind|bindingKind")
+FORBIDDEN = re.compile(
+    r"(?<![A-Za-z0-9_])binding_id(?![A-Za-z0-9_])"
+    r"|(?<![A-Za-z0-9_])binding_kind(?![A-Za-z0-9_])"
+)
 
 SCAN_ROOTS: tuple[Path, ...] = (
-    REPO_ROOT / "apps",
-    REPO_ROOT / "core",
-    REPO_ROOT / "tests",
-    REPO_ROOT / "scripts",
+    REPO_ROOT / "apps" / "office",
+    REPO_ROOT / "core" / "office",
+    REPO_ROOT / "tests" / "office",
+    REPO_ROOT / "tests" / "ui" / "e2e",
     REPO_ROOT / ".cursor" / "rules",
 )
 

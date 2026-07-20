@@ -26,8 +26,11 @@ from core.mail.models import (
 from core.mail.ports import MailServerPort
 from core.mail.repositories import (
     CompanyMailConnectionRepository,
+    MailboxBindingMemberRepository,
     MailboxBindingRepository,
+    MailboxFolderRepository,
     MailboxSyncCursorRepository,
+    MailMessageRepository,
 )
 from core.mail.service import MailService
 
@@ -116,6 +119,10 @@ def mail_live_service(
         connection_repository=CompanyMailConnectionRepository(db_url=shared_url),
         binding_repository=MailboxBindingRepository(db_url=shared_url),
         sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
+        folder_repository=MailboxFolderRepository(db_url=shared_url),
+        message_repository=MailMessageRepository(db_url=shared_url),
+        member_repository=MailboxBindingMemberRepository(db_url=shared_url),
+        namespace_service=container.namespace_service,
         company_repository=container.company_repository,
         user_repository=container.user_repository,
         mail_config=mail_live_settings,

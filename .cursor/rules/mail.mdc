@@ -12,131 +12,114 @@ alwaysApply: false
 2. `MailboxBinding` — сотрудник (`kind=user`) или role-ящик (`kind=role`) привязан к адресу на этом сервере.
 3. У одного `user_id` может быть **много** user-bindings; ровно один `is_default=true` среди них.
 4. `company_id=system` — те же сущности; значения из `settings.mail.system` (auto-seed), PUT connection запрещён (только reconcile).
+5. **Local-first:** UI/HTTP read только `mail_messages` / `mailbox_folders`. IMAP — sync, ensure, mutation confirm, IDLE wake.
 
 Web `company.subdomain` ≠ `mail_domain`.
+
+Crypto (S/MIME/PGP) — вне scope.
 
 ## Слои
 
 | Модуль | Роль |
 |---|---|
-| `core/mail/models.py` | Pydantic-контракты, `MailAttachment`, outbound/inbound, list/send payloads |
+| `core/mail/models.py` | Pydantic-контракты, flags, list/search/move/star/draft/member payloads |
 | `core/mail/ports.py` | `MailServerPort` Protocol |
 | `core/mail/providers/*` | ISPmanager provision + generic IMAP/SMTP |
-| `core/mail/transport/*` | aioimaplib / aiosmtplib (attachments, reply headers) |
+| `core/mail/transport/*` | aioimaplib / aiosmtplib + IDLE session |
 | `core/mail/imip.py` | iMIP REQUEST ICS ↔ `CalendarEventUpsertPayload` |
-| `core/mail/repositories.py` | shared DB CRUD (`list_by_user`, `is_default`) |
-| `core/mail/service.py` | connect/bind/patch/default/list messages/send |
+| `core/mail/repositories.py` | shared DB CRUD + members + cursor page/search |
+| `core/mail/service.py` | connect/bind/`sync_binding`/mutations/search |
 | `core/api/mail.py` | HTTP (`/{svc}/api/mail/...`) |
-| `platform-mail-modal` | кроссервисный UI (`modalKind=platform.mail`), как calendar |
+| `platform-mail-modal` | кроссервисный UI (`modalKind=platform.mail`) |
 
-Пароли ящиков и ISPmanager `authinfo_password` — Fernet (`encrypt_secret` / `decrypt_secret`), в API не отдаются.
+Пароли ящиков и ISPmanager `authinfo_password` — Fernet; в API не отдаются.
 
 ## Auth
 
 | Операция | Кто |
 |---|---|
-| `GET /connection`, `GET /bindings/me`, messages list/get/send, `PUT .../default` | любой member компании (send/fetch — только свои bindings; admin — любой) |
+| `GET /connection`, `GET /bindings/me`, messages list/search/get/send/triage, `POST /sync`, `PUT .../default` | доступ: owner user-binding **или** role member **или** admin |
 | `PATCH /bindings/{id}` только `calendar_color` | owner своего user-binding или admin |
-| `PUT /connection`, `GET /bindings`, `POST/PATCH/DELETE /bindings*` (кроме color-only), healthcheck | `admin` активной компании |
+| `PUT /connection`, `GET /bindings`, `POST/PATCH/DELETE /bindings*`, members ACL, healthcheck | `admin` активной компании |
 | `POST /system/reconcile` | `company_id=system` + admin |
 
-## Provision
+`GET /bindings/me` = собственные user-bindings ∪ role-bindings из `mailbox_binding_members`.
 
-- **System**: `reconcile_system` / `ensure_system_*` — connection + role boxes; members через `ensure_system_user_bindings` (один default-ящик на member, если ещё нет).
-- **Lazy**: `MailService.get_or_create_user_binding(user_id)` — если bindings есть → default (или promote первого); иначе provision.
-- `ispmanager` `ensure_mailbox` — create-if-missing, не меняет пароль существующих.
-- `delete_mailbox` — `assert_mailbox_delete_allowed` (`protected_local_parts`, prefix `plt-` в live).
-
-## UI entry
-
-`openModal('platform.mail')` из `<platform-user>` / service-switcher. State: `state.mail` + `createMailEffect` (не apps factory). Upcoming meetings — виджет поверх `state.calendar`.
-
-Общий левый rail — `<platform-mail-calendar-rail>` в `platform.mail` и `platform.calendar`:
-- аватары `state.mail.bindings` с `calendar_color` (палитра `COLOR_PALETTE`);
-- switcher Mail ↔ Calendar → `openModal(next, {}, { replaceKinds: ['platform.mail','platform.calendar'], skipEnterMotion: true })` (без close/open-мерцания);
-- chrome обоих: fullscreen edge-to-edge, platform `modal-header`/`modal-actions` скрыты, rail flush left;
-- клик аватара → `MAIL_EVENTS.MAILBOX_SELECT` (в календаре **не** фильтрует события — только активный ящик);
-- settings: mail → overlay настроек (цвета ящиков у всех; connection/CRUD — admin); calendar → integrations menu.
-
-`MailboxBinding.calendar_color` — ключ палитры (NOT NULL); default при create = hash от `email_address`. PATCH `calendar_color` — owner своего user-binding или admin.
-
-`CalendarEvent.mailbox_binding_id` (nullable): platform create/update → активный ящик; iMIP → ящик письма; CRM/Sync/Google/Yandex/flows → `null` (без ленточки). Chip: `metadata.event_color` = fill; ribbon `::before` = цвет ящика.
-
-Compose (reply/forward/new) — плавающее окно поверх mail modal: drag за header, resize за угол, expand почти на весь viewport; body — `<platform-markdown-editor>` (общий UI Kit): WYSIWYG → `body_html` + `body_text`; вложения — local base64 chips в `state.mail.compose.attachments` (не `platform-file-attachments` / S3).
-
-Inbound attachments в thread: `<platform-file-attachments readonly layout="tiles">` по `file_id` (равные карточки в ряд, ширина `--mail-attachment-tile`); без `file_id` — тот же tile-ряд + unavailable/download.
-
-Loading: `state.mail.loading` → `<platform-spinner>` в списке; `state.mail.messageLoading` → spinner в теле треда при select/get.
-
-UI conversation view:
-- список = треды (`groupMailThreads` по list текущей папки); в Inbox в строке только входящие — своих SMTP-ответов там нет (они в Sent);
-- expand строки → `THREAD_SELECT` + `POST /messages/thread` (INBOX+Sent), preview = полный тред, bubbles mine/theirs (From ящика или folder=Sent);
-- деталь = тот же `selectedThreadMessages`; Reply от **последнего** сообщения треда;
-- `POST /messages/thread`: `BODY.PEEK[]`, затем `\Seen` на unread UID исходной папки.
-
-Deep-link из колокольчика: `notify/mail/mail_new_message_received` → `MAIL_EVENTS.OPEN_FROM_NOTIFICATION` `{mailbox_binding_id, uid}` → folders → inbox → `THREAD_LOAD_REQUESTED`. Compose-draft только по Reply / Reply all / Forward / Compose (не при open).
-
-## Attachments / headers / Sent copy / multipart
-
-### Inbound reliability (обязательно)
-
-| Слой | Инвариант |
-|---|---|
-| `core/mail/mime_parse.py` | Любой RFC822 → `InboundMailMessage`; битый charset/CTE/part → stub attach (`available=false`, `parse_error`), письмо не пропадает; `Date` → `date` (UTC) |
-| `list_messages` | `BODY.PEEK[]` + FLAGS + hardened parse + `strip_attachment_payloads`; **newest first** (reverse UID); `unread` из отсутствия `\Seen`; `date` в `MailMessageListItem` |
-| `get_message` | `fetch_message_by_uid` + `UID STORE +FLAGS (\Seen)` → ответ с `unread=false`; UI сразу снимает unread в list и декрементит `folder.unseen_count` |
-| `mark_unseen` | `POST /messages/mark_unseen` → `UID STORE -FLAGS (\Seen)`; UI `unread=true` + инкремент badge |
-| Folders | `LIST` + per-selectable `STATUS (MESSAGES UNSEEN)` → `MailFolder.message_count` / `unseen_count`; UI badge при `unseen > 0` |
-| Public attach | `MailAttachmentPublic`: `available`, `parse_error`, `file_id` (после materialize), `content_base64` только без FilesService |
-| Files | `FileSourceKind.MAIL_MESSAGE` + `FileRetentionKind.MAIL_ATTACHMENT`; `source_ref`: `mailbox_binding_id` + `mail_uid` + `mailbox_email` (+ `mail_subject`); auto DocsPlacement `Mail/{email}/{subject\|uid}` при **первом** `FilesService.create` (office down → soft-fail bind, FileRecord остаётся); idempotency `MailAttachmentFileIndex`; повторный open только lookup `file_id`, без re-bind; UI `openFile` |
-| UI | Плитка вложения всегда видна; unavailable — текст, не скрытие письма; дата справа в списке; шорткат `U` = mark unread |
-
-### Outbound
-
-`OutboundMailMessage.attachments` / `InboundMailMessage.attachments` (`MailAttachment`: filename, content_type, content, size, available, parse_error).  
-Outbound attach с пустым `content` — `ValueError` (не silently skip).  
-`in_reply_to` / `references` на outbound и inbound.
-`body_html: str | None` на send — при наличии SMTP `multipart/alternative` (plain + html), иначе только plain.
-
-Отправка: SMTP `send_message`, затем IMAP `APPEND` копии в mailbox с `role=sent` (exact name из LIST; если нет — `CREATE` Sent + APPEND). Без APPEND Sent в UI остаётся пустым — SMTP сам по себе копию не кладёт.
-
-## IMAP folders (discover + ensure)
-
-Источник правды — IMAP `LIST` + SPECIAL-USE (RFC 6154) + `NAMESPACE`, не UI-строки.
-
-| Инвариант | Как |
-|---|---|
-| Wire id папки | точное mailbox `name` с сервера после LIST |
-| Роль `inbox\|sent\|drafts\|trash\|junk\|archive\|other` | только SPECIAL-USE / `INBOX`, не перевод имени |
-| `messages/list` / SELECT | только exact `name`; **алиасы запрещены** |
-| Ensure `sent/drafts/trash` | `CREATE` + `USE (\Sent)` при CAPABILITY; имя `Sent`/`Drafts`/`Trash` под `namespace_prefix` (не локализованные строки). Idempotent: skip если имя уже в LIST; `ALREADYEXISTS` = OK. Каноническое имя без SPECIAL-USE тоже закрывает роль. |
-| API | `GET /folders?mailbox_binding_id=`, `POST /folders/ensure` (оба с STATUS counts) |
-| UI | `state.mail.folders` из API; подпись по `role` (i18n), иначе raw `name`; badge `unseen_count` |
-
-Парсер: `core/mail/imap_folders.py` (в т.ч. строки aioimaplib без префикса `* LIST` / `* NAMESPACE`). Alias-таблица / `resolve_imap_mailbox` — удалены.
-
-## iMIP ↔ calendar
-
-`core/mail/imip.py`: `build_outbound_imip_invite` → SMTP attachment `text/calendar`; `extract_imip_ics` + `calendar_upsert_payload_from_imip` → `CalendarService.upsert_event`. In-app `notify_user` для platform calendar остаётся отдельным путём.
-
-## Background sync (INBOX)
-
-Паттерн как `calendar_sync_tick`:
+## Background sync (local-first)
 
 | Слой | Что |
 |---|---|
-| Task | `mail_sync_tick` (`apps/idle_worker/tasks/mail_sync_tasks.py`), queue `idle` |
-| Schedule | `apps/scheduler/main.py` → `company_id=system`, cron из `settings.mail_sync` (default `*/1`), `run_now_on_start=true`; drift cron → `reconcile_cron` |
-| UoW | `MailboxBinding` kind=user + `sync_enabled` + connection `active` |
-| Cursor | таблица `mailbox_sync_cursors` (миграция `shared_0020`, uidvalidity + last_uid); **тел писем в DB нет** |
-| Folder | только INBOX; Sent/Drafts — UI on-demand |
-| First sync / UIDVALIDITY change | курсор → max UID, **без** notify |
-| Notify | `NotificationType.MAIL_NEW_MESSAGE` → WS `notify/mail/mail_new_message_received`; dedup `mail:notify:{company_id}:{user_id}:{mailbox_binding_id}:{uid}`; UI action → `OPEN_FROM_NOTIFICATION`; открытый mail modal при том же binding → reload folders+messages |
-| Fairness | `list_sync_candidates` по `last_synced_at ASC NULLS FIRST`; auth fail → cooldown |
+| Task | `mail_sync_tick` + `mail_sync_binding` + `mail_idle_supervisor` (`apps/idle_worker/tasks/`) |
+| Schedule | cron `mail_sync` (default `*/1`); IDLE supervisor на том же cron при `idle_enabled` |
+| Fairness | `list_sync_candidates` USER+ROLE; batch + drain |
+| Folders cache | `mailbox_folders`; `GET /folders` DB-only (`stale`/`needs_sync`) |
+| Messages | `mail_messages` + flags; list/search/thread/get — local |
+| Sync fidelity | UIDVALIDITY wipe, forward catch-up, history backfill, UID reconcile, flag refresh |
+| Sync-now | `POST /sync` → enqueue `mail_sync_binding` + refresh folders |
+| Mutations | trash/move/archive/delete/star/drafts/seen — optimistic local + TaskIQ + push |
+| Role ACL | `mailbox_binding_members`; RAG technical `mail-{mailbox_binding_id}` |
+| Notify + live UI | `mail/message/upserted\|moved\|removed\|send_*` |
+| Send | `prepare_send_local` (temp Sent uid) → enqueue SMTP+APPEND → sync |
 
-Конфиг: секция `mail_sync` / `MailSyncConfig` (`enabled`, `cron`, `batch_size`, `max_bindings_per_tick`, `max_parallel_bindings`, `max_new_messages_per_binding`, `notification_dedup_ttl_seconds`, `auth_error_cooldown_seconds`). Без таблицы курсоров тик падает — после pull всегда `make migrate`.
+Конфиг: `MailSyncConfig` (`backfill_batch_size`, `reconcile_every_n_syncs`, `idle_*`, …). Personal ns — **`namespace.mdc`**.
 
-Role-ящики в v1 не синкаются для notify.
+## Transport (`MailServerPort`)
+
+list/fetch/send + `uid_store_flags`, `uid_move`, `uid_expunge`, `append_message`, `uid_search`, `fetch_flags_for_uids`, `open_idle_session`.
+
+Wire folder = exact IMAP name; роли только SPECIAL-USE. Ensure: sent/drafts/trash/archive.
+
+## Schema extras
+
+- `mail_messages`: `flagged`, `answered`, `draft`; `user_id` nullable (role)
+- `mailbox_sync_cursors`: `backfill_completed`, `oldest_uid`, `last_reconcile_at`
+- `mailbox_binding_members`: PK `(mailbox_binding_id, user_id)`, `role ∈ {member, manager}`
+
+## Provision
+
+- **System**: `reconcile_system` / `ensure_system_*` — connection + role boxes; members через `ensure_system_user_bindings`.
+- **Lazy**: `MailService.get_or_create_user_binding(user_id)`.
+- `bind_mailbox` на существующий email: тот же owner/role → idempotent; иначе admin reassign.
+- `ispmanager` `ensure_mailbox` — create-if-missing.
+- `delete_mailbox` — `assert_mailbox_delete_allowed`.
+
+## UI
+
+`openModal('platform.mail')`. State: `state.mail` + `createMailEffect`.
+
+Rail (`<platform-mail-calendar-rail>`): user + role bindings (role mark); Mail↔Calendar switcher.
+
+Reading:
+- list/thread local; Refresh → `SYNC_REQUESTED`; empty → `needs_sync` + auto sync;
+- search → `POST /messages/search`; load more → cursor;
+- triage: star / archive / trash / delete forever; shortcuts E / # / S;
+- drafts folder open → compose; compose autosave draft.
+
+Settings:
+- **Мои ящики**: цвет, default (user);
+- **Ящики компании** (admin): assign/reassign user; create user|role; role members add/remove;
+- **Почтовый сервер** (admin): connection + healthcheck.
+
+Compose: `<platform-markdown-editor variant="compose">`; outbound attachments local base64.
+
+Inbound attachments: `<platform-file-attachments>` по `file_id`.
+
+`MailboxBinding.calendar_color` — ключ палитры. `CalendarEvent.mailbox_binding_id` — ленточка календаря.
+
+Deep-link: `notify/mail/mail_new_message_received` → `OPEN_FROM_NOTIFICATION`.
+
+## HTTP (зеркало UI)
+
+| Path | Назначение |
+|---|---|
+| `POST /messages/list`, `/messages/search`, `/messages/thread` | local read |
+| `POST /sync` | sync-now |
+| `POST /messages/mark_seen\|mark_unseen\|trash\|archive\|delete\|star\|move\|drafts\|send` | mutations |
+| `GET/POST/DELETE /bindings/{id}/members` | role ACL |
+
+## iMIP
+
+iMIP REQUEST → calendar upsert с `mailbox_binding_id` письма.
 
 ## Conf и креды
 

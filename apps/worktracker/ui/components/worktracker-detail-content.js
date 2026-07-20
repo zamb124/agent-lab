@@ -9,7 +9,7 @@ import { truncateWorkItemId } from '../utils/work-item-detail-shared.js';
 import { buildWorkItemFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import './worktracker-state-pill.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/components/prompt-editor.js';
+import '@platform/lib/components/platform-markdown-editor.js';
 import '@platform/lib/components/platform-file-attachments.js';
 import '@platform/lib/components/glass-spinner.js';
 
@@ -139,19 +139,21 @@ export class WorktrackerDetailContent extends PlatformElement {
                         </button>
                     ` : nothing}
                 </div>
-                <prompt-editor
+                <platform-markdown-editor
                     class="wt-desc-editor"
                     variant="embed"
                     .value=${this.descriptionDraft}
+                    .enableVariables=${true}
                     .variables=${this.descriptionVariables}
                     .label=${this.t('detail_panel.label_description')}
                     .placeholder=${descPlaceholder}
-                    ?show-header=${false}
-                    ?show-hint=${false}
-                    min-height=${this._descriptionMinHeight()}
+                    .showHeader=${true}
+                    .showPreview=${false}
+                    .showHint=${false}
+                    .minHeight=${this._descriptionMinHeight()}
                     @change=${(e) => this._emitDescriptionChange(e)}
                     @blur=${() => this.emit('wt-description-blur', null)}
-                ></prompt-editor>
+                ></platform-markdown-editor>
                 <section class="wt-attachments-section">
                     <h4 class="wt-section-label">${this.t('detail_page.section_attachments')}</h4>
                     <platform-file-attachments

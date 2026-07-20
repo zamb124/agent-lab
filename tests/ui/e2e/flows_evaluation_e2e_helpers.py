@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import re
 
+import httpx
 from playwright.async_api import Locator, Page, expect
 
 from tests.ui.e2e.flows_e2e_helpers import (
     flows_click_platform_button,
     flows_open_evaluation_from_editor,
+    flows_set_platform_field,
 )
 from tests.ui.harness import AppUI
 
@@ -31,6 +33,21 @@ async def flows_eval_create_suite(page: Page) -> None:
     await create_btn.locator("button").first.click()
     suite_row = page_el.locator("flows-evaluation-suite-sidebar .suite-list .row").first
     await expect(suite_row).to_be_visible(timeout=10_000)
+
+
+async def flows_eval_create_blank_case(page: Page) -> Locator:
+    page_el = page.locator("flows-evaluation-page").first
+    create_btn = page_el.locator(
+        'flows-evaluation-suite-sidebar platform-button[aria-label*="case" i], '
+        'flows-evaluation-suite-sidebar platform-button[aria-label*="кейс" i], '
+        'flows-evaluation-suite-sidebar platform-button[aria-label*="New case" i], '
+        'flows-evaluation-suite-sidebar platform-button[aria-label*="Новый" i]'
+    ).first
+    await expect(create_btn).to_be_visible(timeout=10_000)
+    await create_btn.locator("button").first.click()
+    editor = page.locator("flows-evaluation-case-editor").first
+    await expect(editor).to_be_visible(timeout=10_000)
+    return editor
 
 
 async def flows_eval_open_templates_menu(page: Page) -> None:
@@ -69,7 +86,10 @@ async def flows_eval_run(page: Page) -> None:
 async def flows_eval_wait_run_finished(page: Page) -> None:
     toolbar = page.locator("flows-evaluation-run-toolbar").first
     status = toolbar.locator(".status-pill").filter(
-        has_text=re.compile(r"completed|failed|cancelled|заверш", re.I)
+        has_text=re.compile(
+            r"passed|failed|error|canceled|cancelled|completed|заверш",
+            re.I,
+        )
     ).first
     await expect(status).to_be_visible(timeout=180_000)
 
@@ -105,3 +125,190 @@ async def flows_eval_set_baseline(page: Page) -> None:
     ).first
     await expect(baseline_btn).to_be_visible(timeout=30_000)
     await baseline_btn.locator("button").first.click()
+
+
+async def flows_eval_set_segmented(control: Locator, value: str) -> None:
+    await expect(control).to_be_visible(timeout=10_000)
+    await control.evaluate(
+        """
+        (el, value) => {
+            el.value = value;
+            el.dispatchEvent(new CustomEvent('change', {
+                detail: { value },
+                bubbles: true,
+                composed: true,
+            }));
+        }
+        """,
+        value,
+    )
+
+
+async def flows_eval_case_editor(page: Page) -> Locator:
+    editor = page.locator("flows-evaluation-case-editor").first
+    await expect(editor).to_be_visible(timeout=10_000)
+    return editor
+
+
+async def flows_eval_set_case_name(page: Page, name: str) -> None:
+    editor = await flows_eval_case_editor(page)
+    name_field = editor.locator("platform-field").filter(
+        has_text=re.compile(r"Название|Name", re.I)
+    ).first
+    await flows_set_platform_field(name_field, name)
+
+
+async def flows_eval_add_turn(page: Page) -> None:
+    editor = await flows_eval_case_editor(page)
+    await flows_click_platform_button(editor, "Добавить turn", "Add turn")
+    turns = editor.locator(
+        'platform-segmented-control[aria-label*="Turns" i], '
+        'platform-segmented-control[aria-label*="turn" i]'
+    ).first
+    await expect(turns).to_be_visible(timeout=5_000)
+
+
+async def flows_eval_set_input_kind(page: Page, kind: str) -> None:
+    editor = await flows_eval_case_editor(page)
+    control = editor.locator(
+        'platform-segmented-control[aria-label*="Тип входа" i], '
+        'platform-segmented-control[aria-label*="input" i]'
+    ).first
+    await flows_eval_set_segmented(control, kind)
+
+
+async def flows_eval_set_check_type(page: Page, check_type: str) -> None:
+    editor = await flows_eval_case_editor(page)
+    control = editor.locator(
+        'platform-segmented-control[aria-label*="Тип проверки" i], '
+        'platform-segmented-control[aria-label*="check" i]'
+    ).first
+    await flows_eval_set_segmented(control, check_type)
+
+
+async def flows_eval_set_text_input(page: Page, content: str) -> None:
+    editor = await flows_eval_case_editor(page)
+    field = editor.locator("platform-field").filter(
+        has_text=re.compile(r"Входное сообщение|Input message|Input", re.I)
+    ).first
+    await flows_set_platform_field(field, content)
+
+
+async def flows_eval_set_contains_values(page: Page, values: str) -> None:
+    editor = await flows_eval_case_editor(page)
+    field = editor.locator("platform-field").filter(
+        has_text=re.compile(r"фрагмент|Contains|fragment", re.I)
+    ).first
+    await flows_set_platform_field(field, values)
+
+
+async def flows_eval_save_case(page: Page) -> None:
+    editor = await flows_eval_case_editor(page)
+    await flows_click_platform_button(editor, "Создать", "Create", "Сохранить", "Save")
+
+
+async def flows_eval_create_rubric(
+    page: Page,
+    *,
+    name: str,
+    prompt: str,
+    threshold: str = "7",
+) -> None:
+    editor = await flows_eval_case_editor(page)
+    await flows_click_platform_button(editor, "Новая рубрика", "New rubric")
+    name_field = editor.locator("platform-field").filter(
+        has_text=re.compile(r"Название рубрики|Rubric name", re.I)
+    ).first
+    threshold_field = editor.locator("platform-field").filter(
+        has_text=re.compile(r"Pass threshold|threshold", re.I)
+    ).first
+    prompt_field = editor.locator("platform-field").filter(
+        has_text=re.compile(r"Промпт критериев|Rubric prompt|criteria", re.I)
+    ).first
+    await flows_set_platform_field(name_field, name)
+    await flows_set_platform_field(threshold_field, threshold)
+    await flows_set_platform_field(prompt_field, prompt)
+    await flows_click_platform_button(editor, "Создать рубрику", "Create rubric")
+
+
+async def flows_eval_create_judge_node(page: Page) -> None:
+    editor = await flows_eval_case_editor(page)
+    await flows_click_platform_button(editor, "Создать judge node", "Create judge node")
+    judge_field = editor.locator("platform-field").filter(
+        has_text=re.compile(r"Judge llm_node|Judge", re.I)
+    ).first
+    await expect(judge_field).to_be_visible(timeout=15_000)
+
+
+async def flows_eval_api_list_cases(
+    origin: str,
+    auth_token: str,
+    suite_id: str,
+) -> list[dict[str, object]]:
+    async with httpx.AsyncClient(
+        base_url=origin,
+        cookies={"auth_token": auth_token},
+        timeout=60.0,
+    ) as client:
+        response = await client.get(f"/flows/api/v1/evaluation/suites/{suite_id}/cases")
+    _ = response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise AssertionError("cases list must return object")
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise AssertionError("cases list must return items[]")
+    result: list[dict[str, object]] = []
+    for item in items:
+        if isinstance(item, dict):
+            result.append(item)
+    return result
+
+
+async def flows_eval_api_get_case(
+    origin: str,
+    auth_token: str,
+    suite_id: str,
+    case_id: str,
+) -> dict[str, object]:
+    async with httpx.AsyncClient(
+        base_url=origin,
+        cookies={"auth_token": auth_token},
+        timeout=60.0,
+    ) as client:
+        response = await client.get(
+            f"/flows/api/v1/evaluation/suites/{suite_id}/cases/{case_id}"
+        )
+    _ = response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise AssertionError("case GET must return object")
+    return payload
+
+
+async def flows_eval_api_list_suites(
+    origin: str,
+    auth_token: str,
+    flow_id: str,
+) -> list[dict[str, object]]:
+    async with httpx.AsyncClient(
+        base_url=origin,
+        cookies={"auth_token": auth_token},
+        timeout=60.0,
+    ) as client:
+        response = await client.get(
+            "/flows/api/v1/evaluation/suites",
+            params={"flow_id": flow_id},
+        )
+    _ = response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise AssertionError("suites list must return object")
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise AssertionError("suites list must return items[]")
+    result: list[dict[str, object]] = []
+    for item in items:
+        if isinstance(item, dict):
+            result.append(item)
+    return result

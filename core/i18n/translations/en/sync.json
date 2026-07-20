@@ -52,10 +52,8 @@
         "section_chats": "Chats",
         "subheader_start_dm": "Start a chat",
         "no_chats_yet": "No chats yet.",
-        "no_channels_in_namespace": "No channels in the selected namespace.",
-        "namespace_label": "Namespace",
-        "all_namespaces": "All",
-        "edit_namespace_tooltip": "Sync settings for the namespace",
+        "sync_defaults_tooltip": "Company Sync defaults (transcription)",
+        "sync_defaults_aria": "Open Sync defaults",
         "namespace_meeting_btn": "Create meeting",
         "time_yesterday": "Yesterday",
         "section_team": "Team",
@@ -159,10 +157,10 @@
     "channel_picker": {
         "adhoc_description": "Creates a hidden meeting channel and starts a video call immediately. The channel is hidden from lists.",
         "title": "Channels",
+        "subtitle_all_chats": "All company chats",
         "action_create_channel": "Create channel",
         "action_adhoc_call": "Start meeting",
-        "empty": "No channels in selected spaces",
-        "unknown_namespace": "Namespace \"{{namespace}}\" not found"
+        "empty": "No channels yet"
     },
     "message_list": {
         "today": "Today",

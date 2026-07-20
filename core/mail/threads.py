@@ -68,7 +68,7 @@ def thread_id_for_message(message: InboundMailMessage) -> str:
     if subject_key:
         return f"subject:{subject_key}"
     if not message.uid.strip():
-        raise ValueError("uid is required for thread_id fallback")
+        raise ValueError("uid is required for thread_id when Message-ID headers are absent")
     return f"uid:{message.uid}"
 
 

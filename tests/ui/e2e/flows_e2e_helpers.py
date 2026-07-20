@@ -339,15 +339,18 @@ async def flows_set_selected_llm_prompt(page: Page, prompt: str) -> None:
         "flows-property-panel flows-llm-node-editor"
     ).first
     await expect(editor).to_be_visible(timeout=5_000)
-    prompt_editor = editor.locator("prompt-editor").first
+    prompt_editor = editor.locator("platform-markdown-editor").first
     await expect(prompt_editor).to_be_visible(timeout=5_000)
     await prompt_editor.evaluate(
         """
         (el, value) => {
             el.value = value;
+            if (typeof el.setValue === 'function') {
+                el.setValue(value);
+            }
             if (typeof el.requestUpdate === 'function') el.requestUpdate();
             el.dispatchEvent(new CustomEvent('change', {
-                detail: { value },
+                detail: { value, htmlValue: '', textValue: value },
                 bubbles: true,
                 composed: true,
             }));

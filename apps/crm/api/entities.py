@@ -9,7 +9,7 @@ import io
 import json as json_lib
 from typing import Annotated, cast
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from starlette.responses import Response
 
@@ -47,7 +47,6 @@ from apps.crm.services.crm_work_item_service import CrmWorkItemService
 from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
 from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
 from apps.crm.services.task_service import ActiveTaskExistsError
-from core.clients.service_client import ServiceClient
 from core.context import get_context, resolve_namespace_or_raise
 from core.i18n.service import t
 from core.pagination import CursorPage
@@ -885,40 +884,6 @@ async def get_entity_card(
         return card
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-
-
-@router.post("/voice-input")
-async def voice_input(
-    container: ContainerDep,
-    file: Annotated[UploadFile, File()],
-    language: Annotated[str | None, Query()] = None,
-):
-    """Голосовой ввод заметок — транскрипция через voice service."""
-    _ = container
-    _ = language
-    file_name = file.filename or "voice-input"
-    mime_type = file.content_type or "application/octet-stream"
-    audio_bytes = await file.read()
-    if not audio_bytes:
-        raise HTTPException(status_code=400, detail="Пустой аудиофайл.")
-
-    client = ServiceClient()
-    raw_data = await client.post(
-        "voice",
-        "/voice/api/v1/transcribe",
-        files={"file": (file_name, audio_bytes, mime_type)},
-    )
-    if not isinstance(raw_data, dict):
-        raise HTTPException(status_code=502, detail="Invalid voice service response")
-    data = raw_data
-    text_raw = data.get("text")
-    provider_raw = data.get("provider")
-    if not isinstance(text_raw, str) or not isinstance(provider_raw, str):
-        raise HTTPException(status_code=502, detail="Invalid voice service response")
-    return {
-        "text": text_raw,
-        "stt": {"provider": provider_raw, "text": text_raw, "status": "done"},
-    }
 
 
 @router.post("/search/mentions", response_model=dict)

@@ -544,10 +544,8 @@
         "attach": "Прикрепить файл",
         "attach_remove": "Убрать вложение",
         "attach_too_large": "Файл «{filename}» больше {max_mb} МБ",
-        "discard": "Отменить"
-    },
-    "prompt_editor": {
-        "label_default": "Промпт",
+        "discard": "Отменить",
+        "label_default": "Текст",
         "placeholder_default": "Введите текст…",
         "empty_preview": "Пусто",
         "mode_edit": "Редактор",
@@ -555,8 +553,7 @@
         "split": "Split view",
         "split_short": "Рядом",
         "view_modes": "Режим отображения",
-        "markdown_label": "Markdown + шаблоны",
-        "format_toolbar": "Форматирование промпта",
+        "markdown_label": "Markdown",
         "format_heading": "Заголовок второго уровня",
         "format_bold": "Полужирный текст",
         "format_list": "Маркированный список",
@@ -583,5 +580,19 @@
         "var_hint": "Переменные: {variable}, {?optional}, {var|default} | Циклы: {for x in list}…{endfor} | Ссылки: @var:key, @state:path",
         "var_undefined": "не определена",
         "for_not_array": "{name} не является массивом"
+    },
+    "voice_dictation": {
+        "start": "Диктовать",
+        "stop": "Остановить диктовку",
+        "processing": "Распознавание…"
+    },
+    "toast": {
+        "voice_dictation": {
+            "succeeded": "Речь распознана",
+            "failed": "Не удалось распознать аудио",
+            "empty": "Речь не распознана",
+            "unavailable_https": "Микрофон доступен только в защищённом контексте (HTTPS)",
+            "unavailable_recorder": "Запись голоса не поддерживается в этом браузере"
+        }
     }
 }

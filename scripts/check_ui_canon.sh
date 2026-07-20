@@ -498,6 +498,15 @@ if [ -n "$MISSING_BOOT_CSS" ]; then
     echo "$MISSING_BOOT_CSS" >&2
 fi
 
+# 36. Long-text editor canon: только platform-markdown-editor (prompt-editor удалён).
+if rg -q "prompt-editor|PromptEditor|prompt_editor\.js" apps core/frontend tests -g '*.js' -g '*.py' -g '*.html' 2>/dev/null; then
+    fail "prompt-editor запрещён — используйте <platform-markdown-editor> (ui_components.mdc)"
+    rg -n "prompt-editor|PromptEditor|prompt_editor\.js" apps core/frontend tests -g '*.js' -g '*.py' -g '*.html' >&2 || true
+fi
+if [ -f core/frontend/static/lib/components/prompt-editor.js ]; then
+    fail "core/.../prompt-editor.js должен быть удалён — логика в platform-markdown-editor.js"
+fi
+
 if [ "$ERR" -ne 0 ]; then
     exit 1
 fi

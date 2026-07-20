@@ -329,6 +329,9 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                 parameters_schema:
                     isPlainObject(ref.parameters_schema) ? ref.parameters_schema : { ...EMPTY_SCHEMA },
             },
+            nodeId: '',
+            onSaved: null,
+            focusMode: false,
             flowId: '',
             branchId: 'base',
             onSave: (updated) => {

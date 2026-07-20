@@ -109,8 +109,7 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
             }
 
             .docs-link,
-            .template-item,
-            .step-btn {
+            .template-item {
                 min-height: var(--flows-chrome-control-size);
                 display: inline-flex;
                 align-items: center;
@@ -126,8 +125,7 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                 transition: var(--motion-transition-interactive);
             }
 
-            .template-item:hover,
-            .step-btn:hover {
+            .template-item:hover {
                 color: var(--text-primary);
                 background: var(--glass-solid-medium);
             }
@@ -140,21 +138,24 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                 height: var(--flows-chrome-control-size);
                 min-width: 92px;
                 display: grid;
-                grid-template-columns: 1fr auto;
+                grid-template-columns: minmax(0, 1fr) auto;
                 align-items: center;
                 gap: 6px;
-                padding: 0 5px 0 10px;
+                padding: 0 4px 0 10px;
                 border-radius: 18px;
                 border: 1px solid var(--border-subtle);
                 background: var(--glass-solid-subtle);
                 box-sizing: border-box;
+                overflow: hidden;
             }
 
             .step-copy {
                 min-width: 0;
                 display: flex;
                 flex-direction: column;
+                justify-content: center;
                 gap: 1px;
+                line-height: 1;
             }
 
             .step-label {
@@ -168,24 +169,20 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
 
             .step-value {
                 color: var(--text-primary);
-                font-size: var(--text-base);
-                line-height: 1.05;
+                font-size: var(--text-sm);
+                line-height: 1;
                 font-weight: var(--font-semibold);
             }
 
             .step-actions {
                 display: grid;
                 grid-template-rows: 1fr 1fr;
-                gap: 2px;
+                align-items: center;
+                gap: 0;
+                height: 26px;
             }
 
-            .step-btn {
-                width: 20px;
-                min-height: 14px;
-                height: 14px;
-                padding: 0;
-                border-radius: 7px;
-                border-color: transparent;
+            .step-actions platform-button {
                 color: var(--text-tertiary);
             }
 
@@ -602,10 +599,10 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                     <span class="step-value">${value}</span>
                 </span>
                 <span class="step-actions">
-                    <platform-button variant="ghost" icon-only density="compact" title=${label} aria-label=${label} @click=${increment}>
+                    <platform-button variant="ghost" icon-only title=${label} aria-label=${label} @click=${increment}>
                         <platform-icon name="chevron-up" size="10"></platform-icon>
                     </platform-button>
-                    <platform-button variant="ghost" icon-only density="compact" title=${label} aria-label=${label} @click=${decrement}>
+                    <platform-button variant="ghost" icon-only title=${label} aria-label=${label} @click=${decrement}>
                         <platform-icon name="chevron-down" size="10"></platform-icon>
                     </platform-button>
                 </span>

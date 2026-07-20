@@ -1,11 +1,12 @@
 /**
  * sync-namespace-modal — редактирование sync-настроек namespace.
  *
- * `modalKind = 'sync.namespace_settings'`. Открывается из `sync-sidebar`
- * иконкой карандаша при выбранном namespace. Пишет ТОЛЬКО `sync_settings`
- * через PUT `/sync/api/v1/namespaces/{name}` (фабрика `sync/namespace_update`).
+ * `modalKind = 'sync.namespace_settings'`. Открывается из header
+ * `sync-chat-list` (gear) для company workspace `default`. Пишет ТОЛЬКО
+ * `sync_settings` через PUT `/sync/api/v1/namespaces/{name}` (фабрика
+ * `sync/namespace_update`).
  *
- * Создание/удаление namespace выполняется в CRM (см. `crm.namespace`-modal).
+ * Создание/удаление namespace выполняется в CRM / frontend console.
  */
 
 import { html, css } from 'lit';

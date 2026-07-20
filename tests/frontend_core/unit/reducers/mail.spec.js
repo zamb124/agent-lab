@@ -42,10 +42,43 @@ describe('mailReducer', () => {
         expect(() => mailReducer(initialMailState, ev(MAIL_EVENTS.MESSAGES_LOADED, {}))).toThrow(/items/);
         const next = mailReducer(
             initialMailState,
-            ev(MAIL_EVENTS.MESSAGES_LOADED, { items: [{ uid: '1' }] }),
+            ev(MAIL_EVENTS.MESSAGES_LOADED, {
+                items: [{ uid: '1' }],
+                next_cursor: 'c1',
+                has_more: true,
+                needs_sync: false,
+            }),
         );
         expect(next.messages).toEqual([{ uid: '1' }]);
+        expect(next.messagesNextCursor).toBe('c1');
+        expect(next.messagesHasMore).toBe(true);
         expect(next.loading).toBe(false);
+    });
+
+    it('MESSAGE_TRASH_COMPLETED removes from list', () => {
+        const seeded = {
+            ...initialMailState,
+            messages: [{ uid: '1' }, { uid: '2' }],
+            selectedUid: '1',
+        };
+        const next = mailReducer(
+            seeded,
+            ev(MAIL_EVENTS.MESSAGE_TRASH_COMPLETED, { uid: '1' }),
+        );
+        expect(next.messages).toEqual([{ uid: '2' }]);
+        expect(next.selectedUid).toBeNull();
+    });
+
+    it('MESSAGE_STAR_COMPLETED toggles flagged', () => {
+        const seeded = {
+            ...initialMailState,
+            messages: [{ uid: '1', flagged: false }],
+        };
+        const next = mailReducer(
+            seeded,
+            ev(MAIL_EVENTS.MESSAGE_STAR_COMPLETED, { uid: '1', flagged: true }),
+        );
+        expect(next.messages[0].flagged).toBe(true);
     });
 
     it('COMPOSE_DRAFT_SET merges fields', () => {
@@ -58,21 +91,72 @@ describe('mailReducer', () => {
         expect(next.compose.body).toBe('');
     });
 
-    it('DEFAULT_SET updates flags', () => {
+    it('DEFAULT_SET updates flags per user and companyBindings', () => {
         const seeded = {
             ...initialMailState,
+            activeMailboxBindingId: 'mine1',
             bindings: [
+                { mailbox_binding_id: 'mine1', user_id: 'u1', is_default: true },
+                { mailbox_binding_id: 'mine2', user_id: 'u1', is_default: false },
+            ],
+            companyBindings: [
+                { mailbox_binding_id: 'mine1', user_id: 'u1', is_default: true },
+                { mailbox_binding_id: 'mine2', user_id: 'u1', is_default: false },
+                { mailbox_binding_id: 'other1', user_id: 'u2', is_default: true },
+                { mailbox_binding_id: 'other2', user_id: 'u2', is_default: false },
+            ],
+        };
+        const nextMine = mailReducer(
+            seeded,
+            ev(MAIL_EVENTS.DEFAULT_SET, {
+                binding: {
+                    mailbox_binding_id: 'mine2',
+                    user_id: 'u1',
+                    is_default: true,
+                },
+            }),
+        );
+        expect(nextMine.activeMailboxBindingId).toBe('mine2');
+        expect(nextMine.bindings.find((b) => b.mailbox_binding_id === 'mine2').is_default).toBe(true);
+        expect(nextMine.bindings.find((b) => b.mailbox_binding_id === 'mine1').is_default).toBe(false);
+        expect(nextMine.companyBindings.find((b) => b.mailbox_binding_id === 'other1').is_default).toBe(true);
+
+        const nextOther = mailReducer(
+            seeded,
+            ev(MAIL_EVENTS.DEFAULT_SET, {
+                binding: {
+                    mailbox_binding_id: 'other2',
+                    user_id: 'u2',
+                    is_default: true,
+                },
+            }),
+        );
+        expect(nextOther.activeMailboxBindingId).toBe('mine1');
+        expect(nextOther.companyBindings.find((b) => b.mailbox_binding_id === 'other2').is_default).toBe(true);
+        expect(nextOther.companyBindings.find((b) => b.mailbox_binding_id === 'other1').is_default).toBe(false);
+        expect(nextOther.companyBindings.find((b) => b.mailbox_binding_id === 'mine1').is_default).toBe(true);
+    });
+
+    it('BINDING_DELETED removes from my bindings and resets active', () => {
+        const seeded = {
+            ...initialMailState,
+            activeMailboxBindingId: 'b1',
+            bindings: [
+                { mailbox_binding_id: 'b1', is_default: true },
+                { mailbox_binding_id: 'b2', is_default: false },
+            ],
+            companyBindings: [
                 { mailbox_binding_id: 'b1', is_default: true },
                 { mailbox_binding_id: 'b2', is_default: false },
             ],
         };
         const next = mailReducer(
             seeded,
-            ev(MAIL_EVENTS.DEFAULT_SET, { binding: { mailbox_binding_id: 'b2', is_default: true } }),
+            ev(MAIL_EVENTS.BINDING_DELETED, { mailbox_binding_id: 'b1' }),
         );
+        expect(next.bindings.map((b) => b.mailbox_binding_id)).toEqual(['b2']);
+        expect(next.companyBindings.map((b) => b.mailbox_binding_id)).toEqual(['b2']);
         expect(next.activeMailboxBindingId).toBe('b2');
-        expect(next.bindings.find((b) => b.mailbox_binding_id === 'b2').is_default).toBe(true);
-        expect(next.bindings.find((b) => b.mailbox_binding_id === 'b1').is_default).toBe(false);
     });
 
     it('BINDING_CREATED appends companyBindings', () => {
@@ -255,5 +339,154 @@ describe('mailReducer', () => {
         expect(next.loading).toBe(false);
         expect(next.bindings[0].calendar_color).toBe('mint');
         expect(next.companyBindings[0].calendar_color).toBe('mint');
+    });
+
+    it('MESSAGE_UPSERTED merges list item and unseen badge', () => {
+        const seeded = {
+            ...initialMailState,
+            activeMailboxBindingId: 'b1',
+            folder: 'INBOX',
+            folders: Object.freeze([
+                { name: 'INBOX', role: 'inbox', selectable: true, unseen_count: 1 },
+            ]),
+            messages: Object.freeze([{ uid: '1', subject: 'old' }]),
+        };
+        const next = mailReducer(
+            seeded,
+            ev(MAIL_EVENTS.MESSAGE_UPSERTED, {
+                mailbox_binding_id: 'b1',
+                folder: 'INBOX',
+                uid: '2',
+                thread_id: 't2',
+                unread_delta: 1,
+                list_item: { uid: '2', subject: 'new', unread: true },
+            }),
+        );
+        expect(next.messages[0].uid).toBe('2');
+        expect(next.messages).toHaveLength(2);
+        expect(next.folders[0].unseen_count).toBe(2);
+    });
+
+    it('MESSAGE_UPSERTED ignores other mailbox', () => {
+        const seeded = {
+            ...initialMailState,
+            activeMailboxBindingId: 'b1',
+            folder: 'INBOX',
+            messages: Object.freeze([{ uid: '1' }]),
+        };
+        const next = mailReducer(
+            seeded,
+            ev(MAIL_EVENTS.MESSAGE_UPSERTED, {
+                mailbox_binding_id: 'other',
+                folder: 'INBOX',
+                uid: '2',
+                unread_delta: 1,
+                list_item: { uid: '2' },
+            }),
+        );
+        expect(next.messages).toHaveLength(1);
+    });
+
+    it('MESSAGE_UPSERTED requires mailbox_binding_id', () => {
+        expect(() => mailReducer(
+            { ...initialMailState, activeMailboxBindingId: 'b1' },
+            ev(MAIL_EVENTS.MESSAGE_UPSERTED, { folder: 'INBOX' }),
+        )).toThrow(/mailbox_binding_id/);
+    });
+
+    it('SYNC_REQUESTED / SYNC_ACCEPTED toggle syncInProgress', () => {
+        const requested = mailReducer(initialMailState, ev(MAIL_EVENTS.SYNC_REQUESTED, null));
+        expect(requested.syncInProgress).toBe(true);
+        const accepted = mailReducer(requested, ev(MAIL_EVENTS.SYNC_ACCEPTED, { accepted: true }));
+        expect(accepted.syncInProgress).toBe(true);
+        expect(accepted.needsSync).toBe(false);
+    });
+
+    it('MESSAGES_APPEND_LOADED merges by uid', () => {
+        const seeded = {
+            ...initialMailState,
+            messages: Object.freeze([{ uid: '1' }]),
+            messagesHasMore: true,
+        };
+        const next = mailReducer(
+            seeded,
+            ev(MAIL_EVENTS.MESSAGES_APPEND_LOADED, {
+                items: [{ uid: '1' }, { uid: '2' }],
+                next_cursor: null,
+                has_more: false,
+            }),
+        );
+        expect(next.messages.map((item) => item.uid)).toEqual(['1', '2']);
+        expect(next.messagesHasMore).toBe(false);
+    });
+
+    it('MESSAGE_MOVED / MESSAGE_REMOVED drop uid from list', () => {
+        const seeded = {
+            ...initialMailState,
+            messages: Object.freeze([{ uid: '1' }, { uid: '2' }]),
+        };
+        const moved = mailReducer(
+            seeded,
+            ev(MAIL_EVENTS.MESSAGE_MOVED, { uid: '1', destination_folder: 'Trash' }),
+        );
+        expect(moved.messages.map((item) => item.uid)).toEqual(['2']);
+        const removed = mailReducer(
+            seeded,
+            ev(MAIL_EVENTS.MESSAGE_REMOVED, { uid: '2' }),
+        );
+        expect(removed.messages.map((item) => item.uid)).toEqual(['1']);
+    });
+
+    it('MESSAGE_SEND_SUCCEEDED / MESSAGE_SEND_FAILED clear compose error path', () => {
+        const ok = mailReducer(
+            { ...initialMailState, syncInProgress: true },
+            ev(MAIL_EVENTS.MESSAGE_SEND_SUCCEEDED, { message_id: 'm1', accepted: ['a@b.c'] }),
+        );
+        expect(ok.errorMessage).toBeNull();
+        const failed = mailReducer(
+            { ...initialMailState, loading: true },
+            ev(MAIL_EVENTS.MESSAGE_SEND_FAILED, { message: 'smtp down' }),
+        );
+        expect(failed.errorMessage).toBe('smtp down');
+    });
+
+    it('BINDING_MEMBERS_LOADED / ADDED / REMOVED update bindingMembers map', () => {
+        const loaded = mailReducer(
+            initialMailState,
+            ev(MAIL_EVENTS.BINDING_MEMBERS_LOADED, {
+                mailbox_binding_id: 'role1',
+                items: [{ user_id: 'u1', role: 'member' }],
+            }),
+        );
+        expect(loaded.bindingMembers.role1).toHaveLength(1);
+        const added = mailReducer(
+            loaded,
+            ev(MAIL_EVENTS.BINDING_MEMBER_ADDED, {
+                member: { mailbox_binding_id: 'role1', user_id: 'u2', role: 'member' },
+            }),
+        );
+        expect(added.bindingMembers.role1.map((item) => item.user_id)).toEqual(['u1', 'u2']);
+        const removed = mailReducer(
+            added,
+            ev(MAIL_EVENTS.BINDING_MEMBER_REMOVED, {
+                mailbox_binding_id: 'role1',
+                user_id: 'u1',
+            }),
+        );
+        expect(removed.bindingMembers.role1.map((item) => item.user_id)).toEqual(['u2']);
+    });
+
+    it('MESSAGE_ARCHIVE_COMPLETED removes selected message', () => {
+        const seeded = {
+            ...initialMailState,
+            messages: Object.freeze([{ uid: '9' }, { uid: '8' }]),
+            selectedUid: '9',
+        };
+        const next = mailReducer(
+            seeded,
+            ev(MAIL_EVENTS.MESSAGE_ARCHIVE_COMPLETED, { uid: '9' }),
+        );
+        expect(next.messages.map((item) => item.uid)).toEqual(['8']);
+        expect(next.selectedUid).toBeNull();
     });
 });

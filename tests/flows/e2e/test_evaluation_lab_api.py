@@ -1873,7 +1873,11 @@ class TestEvaluationLabAPI:
                         rubric_version_id="rubric-version",
                     ),
                     state,
-                ) == "You are a strict evaluator. Score the assistant response against the rubric."
+                ) == (
+                    "You are a strict evaluator. Score the assistant response against the rubric. "
+                    "You must call the record_evaluation_judgment tool exactly once. "
+                    "Do not answer with free-form text."
+                )
             finally:
                 _ = await container.node_repository.delete(stored_node.node_id)
 
@@ -3277,6 +3281,135 @@ class TestEvaluationLabAPI:
                 clear_context()
                 if previous_context is not None:
                     set_context(previous_context)
+        finally:
+            _ = await client.delete(f"/flows/api/v1/flows/{flow_id}")
+
+    async def test_run_llm_judge_uses_flow_judge_node_id_and_node_llm(
+        self,
+        client: AsyncClient,
+        container: FlowContainer,
+        unique_id: str,
+        mock_llm_redis: Callable[[list[MockLLMQueuedResponse]], Awaitable[None]],
+    ) -> None:
+        """Judge body lives in FlowConfig; case stores judge_node_id only."""
+        flow_id = f"eval_lab_flow_judge_{unique_id}"
+        await _create_code_flow(client, flow_id)
+        try:
+            flow = await container.flow_repository.get(flow_id)
+            assert flow is not None
+            nodes = dict(flow.nodes or {})
+            nodes["eval_judge"] = {
+                "type": "llm_node",
+                "name": "Flow Judge",
+                "prompt": "Flow-owned judge prompt. Call the judgment tool once.",
+                "store": {"evaluation_role": "judge"},
+                "llm": {"temperature": 0.0},
+            }
+            nodes["eval_tester"] = {
+                "type": "llm_node",
+                "name": "Flow Tester",
+                "prompt": "Generate one short user message.",
+                "store": {"evaluation_role": "tester"},
+            }
+            put_response = await client.put(
+                f"/flows/api/v1/flows/{flow_id}",
+                json={
+                    "flow_id": flow_id,
+                    "name": flow.name,
+                    "description": flow.description or "",
+                    "entry": flow.entry,
+                    "nodes": nodes,
+                    "edges": [edge.model_dump(mode="json") for edge in (flow.edges or [])],
+                    "variables": {},
+                    "tags": flow.tags or [],
+                    "branches": {},
+                },
+            )
+            assert put_response.status_code == 200, put_response.text
+
+            suite = await _create_suite(client, flow_id, f"Flow judge suite {unique_id}")
+            rubric = await _create_rubric(
+                client,
+                flow_id,
+                f"Flow judge rubric {unique_id}",
+                prompt="Response must echo.",
+                pass_threshold=7.0,
+            )
+            await mock_llm_redis(
+                [
+                    {"type": "text", "content": "ping from tester node"},
+                    {
+                        "type": "tool_call",
+                        "tool": EVALUATION_JUDGE_TOOL_NAME,
+                        "args": {
+                            "scores": {"quality": 9.0},
+                            "total_score": None,
+                            "passed": True,
+                            "feedback": "flow judge accepted",
+                        },
+                    },
+                ]
+            )
+            case_response = await client.post(
+                f"/flows/api/v1/evaluation/suites/{suite.suite_id}/cases",
+                json={
+                    "name": f"Flow judge case {unique_id}",
+                    "branch_ids": "*",
+                    "turns": [
+                        {
+                            "input": {
+                                "type": "node",
+                                "node_id": "eval_tester",
+                                "node": None,
+                            },
+                            "checks": [
+                                {
+                                    "type": "llm_judge",
+                                    "rubric_version_id": rubric.version.rubric_version_id,
+                                    "judge_node_id": "eval_judge",
+                                    "judge_node": None,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            )
+            assert case_response.status_code == 200, case_response.text
+            case = EvaluationCase.model_validate(case_response.json())
+            assert case.turns[0].input.type == "node"
+            assert case.turns[0].input.node_id == "eval_tester"
+            assert case.turns[0].checks[0].type == "llm_judge"
+            assert case.turns[0].checks[0].judge_node_id == "eval_judge"
+            assert case.turns[0].checks[0].judge_node is None
+
+            run_response = await client.post(
+                "/flows/api/v1/evaluation/runs",
+                json={
+                    "suite_id": suite.suite_id,
+                    "branch_id": "default",
+                    "scope": {"type": "cases", "case_ids": [case.case_id]},
+                },
+            )
+            assert run_response.status_code == 200, run_response.text
+            created_run = EvaluationRunWithCases.model_validate(run_response.json())
+            run_payload = await _wait_for_run(client, created_run.run.run_id)
+            assert run_payload.run.state == EvaluationRunState.PASSED
+            assert run_payload.case_runs[0].judge_feedback == "flow judge accepted"
+            assert run_payload.case_runs[0].dialog[0].content == "ping from tester node"
+
+            service: EvaluationLabService = container.evaluation_lab_service
+            updated_flow = await container.flow_repository.get(flow_id)
+            assert updated_flow is not None
+            resolution_state = _state(flow_id, f"{unique_id}-flow-judge", updated_flow.version)
+            prompt = await service._judge_prompt(
+                EvaluationCheckLlmJudge(
+                    type="llm_judge",
+                    rubric_version_id=rubric.version.rubric_version_id,
+                    judge_node_id="eval_judge",
+                ),
+                resolution_state,
+            )
+            assert prompt == "Flow-owned judge prompt. Call the judgment tool once."
         finally:
             _ = await client.delete(f"/flows/api/v1/flows/{flow_id}")
 

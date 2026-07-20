@@ -36,8 +36,9 @@ from apps.crm.system_templates import (
     EntityTypeTemplate,
 )
 from core.db.repositories.company_repository import CompanyRepository
+from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
-from core.namespace import NamespaceService
+from core.namespace import NamespaceService, ensure_personal_namespace_for_user
 from core.types import require_json_object
 
 logger = get_logger(__name__)
@@ -53,6 +54,7 @@ class CompanyInitService:
     1. Копирует системные типы сущностей
     2. Копирует системные типы связей
     3. Создает системные CRM-сущности (company entity, default namespace entity)
+    4. Гарантирует personal namespace каждому member
     """
 
     def __init__(
@@ -65,6 +67,7 @@ class CompanyInitService:
         relationship_repo: RelationshipRepository,
         company_mapping_repo: CompanyMappingRepository,
         namespace_service: NamespaceService,
+        user_repo: UserRepository,
     ) -> None:
         self._entity_type_repo: EntityTypeRepository = entity_type_repo
         self._relationship_type_repo: RelationshipTypeRepository = relationship_type_repo
@@ -74,6 +77,7 @@ class CompanyInitService:
         self._relationship_repo: RelationshipRepository = relationship_repo
         self._company_mapping_repo: CompanyMappingRepository = company_mapping_repo
         self._namespace_service: NamespaceService = namespace_service
+        self._user_repo: UserRepository = user_repo
 
     async def initialize_company(self, company_id: str) -> dict[str, int | bool]:
         """
@@ -94,15 +98,21 @@ class CompanyInitService:
         _ = await self._ensure_namespace_entity(company_id, "default")
         await self._ensure_default_namespace_record(company_id)
         await self._ensure_default_organization_entity(company_id)
+        personal_ensured = await self._ensure_personal_namespaces_for_members(company_id)
 
         logger.info(
-            f"Company {company_id} initialized: {entity_types_created} entity types, {relationship_types_created} relationship types, {templates_created} namespace templates"
+            (
+                f"Company {company_id} initialized: {entity_types_created} entity types, "
+                f"{relationship_types_created} relationship types, {templates_created} namespace templates, "
+                f"{personal_ensured} personal namespaces"
+            )
         )
 
         return {
             "entity_types": entity_types_created,
             "relationship_types": relationship_types_created,
             "namespace_templates": templates_created,
+            "personal_namespaces": personal_ensured,
             "already_initialized": entity_types_created == 0
             and relationship_types_created == 0
             and templates_created == 0,
@@ -391,6 +401,29 @@ class CompanyInitService:
         """Запись Namespace в storage — отдельно от CRM graph entity namespace."""
         _ = company_id
         _ = await self._namespace_service.ensure_default()
+
+    async def _ensure_personal_namespaces_for_members(self, company_id: str) -> int:
+        """Идемпотентно создаёт personal namespace каждому member компании."""
+        company = await self._company_repo.get(company_id)
+        if company is None:
+            raise ValueError(f"Company not found: {company_id}")
+        ensured = 0
+        for member_user_id in company.members:
+            user = await self._user_repo.get(member_user_id)
+            if user is None:
+                logger.warning(
+                    "company_init.personal_ns_skip_missing_user",
+                    company_id=company_id,
+                    user_id=member_user_id,
+                )
+                continue
+            await ensure_personal_namespace_for_user(
+                self._namespace_service,
+                user,
+                company=company,
+            )
+            ensured += 1
+        return ensured
 
     async def _ensure_namespace_entity(
         self,

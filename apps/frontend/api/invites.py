@@ -16,6 +16,7 @@ from apps.frontend.dependencies import ContainerDep
 from core.context import get_context
 from core.logging import get_logger
 from core.models.identity_models import Company, User
+from core.namespace import ensure_personal_namespace_for_user
 from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
 from core.utils.invite_tokens import (
     INVITE_EXPIRES_SECONDS,
@@ -260,6 +261,12 @@ async def accept_invite(
     user.companies[company.company_id] = roles
     user.active_company_id = company.company_id
     _ = await user_repo.set(user)
+
+    await ensure_personal_namespace_for_user(
+        container.namespace_service,
+        user,
+        company=company,
+    )
 
     logger.info(
         "Пользователь %s вступил в компанию %s с ролью %s",

@@ -68,6 +68,7 @@ import { dataflowInspectOp } from '../events/resources/dataflow.resource.js';
 import { llmContextResolveParentOp } from '../events/resources/llm-context.resource.js';
 import { integrationsListOp, integrationsRemoveOp } from '../events/resources/integrations.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
+import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import { apiConsoleRunOp } from '../events/resources/api-console.resource.js';
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
@@ -104,6 +105,10 @@ import {
     evaluationMonitorObservationsOp,
     evaluationMonitorObservationCaseCreateOp,
     evaluationPairwiseJudgmentCreateOp,
+    evaluationRubricsListOp,
+    evaluationRubricCreateOp,
+    evaluationRubricVersionsListOp,
+    evaluationRubricVersionCreateOp,
 } from '../events/resources/evaluation.resource.js';
 import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import {
@@ -246,6 +251,7 @@ export class FlowsApp extends PlatformApp {
         integrationsListOp,
         integrationsRemoveOp,
         platformFileCreateOp,
+        platformVoiceDictationOp,
         apiConsoleRunOp,
         editorResource,
         editorBulkDeleteOp,
@@ -283,6 +289,10 @@ export class FlowsApp extends PlatformApp {
         evaluationMonitorObservationsOp,
         evaluationMonitorObservationCaseCreateOp,
         evaluationPairwiseJudgmentCreateOp,
+        evaluationRubricsListOp,
+        evaluationRubricCreateOp,
+        evaluationRubricVersionsListOp,
+        evaluationRubricVersionCreateOp,
     ];
 
     static styles = [

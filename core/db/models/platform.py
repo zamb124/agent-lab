@@ -695,6 +695,13 @@ class MailboxSyncCursorRecord(Base):
     last_error_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error_message: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    backfill_completed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    oldest_uid: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    last_reconcile_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__: _TableArgs = (
         CheckConstraint(
@@ -702,4 +709,106 @@ class MailboxSyncCursorRecord(Base):
             name="mailbox_sync_cursors_error_kind_check",
         ),
         Index("ix_mailbox_sync_cursors_last_synced_at", "last_synced_at"),
+    )
+
+
+class MailboxBindingMemberRecord(Base):
+    """ACL участников role-ящика (kind=role)."""
+
+    __tablename__: str = "mailbox_binding_members"
+
+    mailbox_binding_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__: _TableArgs = (
+        CheckConstraint(
+            "role IN ('member','manager')",
+            name="mailbox_binding_members_role_check",
+        ),
+        Index("ix_mailbox_binding_members_user_id", "user_id"),
+    )
+
+
+class MailboxFolderRecord(Base):
+    """Кэш IMAP-папок ящика (UI list_folders без hot-path IMAP)."""
+
+    __tablename__: str = "mailbox_folders"
+
+    mailbox_binding_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    folder_name: Mapped[str] = mapped_column(String(255), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(32), nullable=False, server_default="other")
+    delimiter: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    flags: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    selectable: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    message_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    unseen_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    namespace_prefix: Mapped[str] = mapped_column(String(255), nullable=False, server_default="")
+    capabilities: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MailMessageRecord(Base):
+    """Локальное письмо: headers + body + file_ids вложений; RAG — parallel ingest."""
+
+    __tablename__: str = "mail_messages"
+
+    mail_message_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    mailbox_binding_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    folder: Mapped[str] = mapped_column(String(255), nullable=False)
+    uid: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    message_id: Mapped[str | None] = mapped_column(String(998), nullable=True)
+    thread_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    subject: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    from_address: Mapped[str] = mapped_column(String(998), nullable=False, server_default="")
+    to_addresses: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    cc_addresses: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    date_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    unread: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    flagged: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    answered: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    draft: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    has_attachments: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    snippet: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attachments_json: Mapped[list[JsonObject]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    in_reply_to: Mapped[str | None] = mapped_column(String(998), nullable=True)
+    references_header: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rag_document_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rag_namespace: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__: _TableArgs = (
+        UniqueConstraint(
+            "mailbox_binding_id",
+            "folder",
+            "uid",
+            name="uq_mail_messages_binding_folder_uid",
+        ),
+        Index(
+            "ix_mail_messages_mailbox_folder_date",
+            "mailbox_binding_id",
+            "folder",
+            "date_at",
+        ),
     )

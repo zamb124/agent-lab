@@ -11,6 +11,7 @@ import '../components/evaluation/flows-evaluation-transcript.js';
 import '../components/evaluation/flows-evaluation-case-editor.js';
 import '../components/evaluation/flows-evaluation-compare-panel.js';
 import '../components/evaluation/flows-evaluation-trace-panel.js';
+import '../modals/flows-embedded-tool-config-modal.js';
 import { evaluationCatalogDescriptionKey, evaluationCatalogNameKey } from '../_helpers/evaluation-catalog-labels.js';
 
 function asArray(value) {
@@ -195,20 +196,27 @@ export class FlowsEvaluationPage extends PlatformPage {
 
             .panel-frame {
                 position: relative;
+                flex: 1;
+                width: 100%;
                 min-width: 0;
                 min-height: 0;
                 display: flex;
+                flex-direction: column;
+                overflow: hidden;
             }
 
             .panel-content {
-                flex: 1;
+                flex: 1 1 auto;
+                width: 100%;
                 min-width: 0;
                 min-height: 0;
                 display: flex;
+                overflow: hidden;
             }
 
             .panel-content > * {
                 flex: 1;
+                width: 100%;
                 min-width: 0;
                 min-height: 0;
             }
@@ -285,6 +293,7 @@ export class FlowsEvaluationPage extends PlatformPage {
                 min-height: 0;
                 padding: 12px 12px 12px 0;
                 display: flex;
+                align-items: stretch;
                 overflow: hidden;
             }
 
@@ -1266,6 +1275,8 @@ export class FlowsEvaluationPage extends PlatformPage {
                     .suite=${suite}
                     .testCase=${testCase}
                     .catalog=${this._catalogItems()}
+                    .flowId=${this.flowId}
+                    .branchId=${this._branchId()}
                     .busy=${this._caseCreate.busy || this._caseUpdate.busy}
                     @case-create=${this._createCase}
                     @case-update=${this._updateCase}

@@ -123,11 +123,11 @@ alwaysApply: false
 
 `GET /flows/api/v1/code/editor-state` — заполняет `state.files` так же для preview. `POST /flows/api/v1/code/execute` с `flow_id` (опц. `branch_id`): `state.files` = файлы графа + уникальные из тела; `state.variables` = merge резолвнутых переменных flow с переданным `state.variables`; `flow_config_version` из конфига.
 
-Валидация: `FlowValidator._validate_node_files`. UI — закрепление файлов в модалке ноды; в `llm_node` сигнатура `[FILE]…[/FILE]` в промпте через drag (`prompt-editor` `accept-file-drop`). В code-ноде drop чипа в `code-editor` (`accept-node-file-drop`) вставляет `get_files` + `reader.read`. Drag payload: MIME `application/x-humanitec-flows-node-file+json` + `text/plain`.
+Валидация: `FlowValidator._validate_node_files`. UI — закрепление файлов в модалке ноды; в `llm_node` сигнатура `[FILE]…[/FILE]` в промпте через drag (`platform-markdown-editor` `accept-file-drop`). В code-ноде drop чипа в `code-editor` (`accept-node-file-drop`) вставляет `get_files` + `reader.read`. Drag payload: MIME `application/x-humanitec-flows-node-file+json` + `text/plain`.
 
 ## Triggers
 
-Хранятся в `FlowConfig.triggers`. Типы: `telegram`, `webhook`, `cron`.
+Хранятся в `FlowConfig.triggers`. Типы: `telegram`, `webhook`, `cron`, `email`, `redis`.
 
 ```json
 "triggers": {
@@ -139,6 +139,18 @@ alwaysApply: false
     "config": {"bot_token": "@var:telegram_token", "secret_token": "..."},
     "output_mapping": {"content": "message.text", "context.chat_id": "message.chat.id"},
     "output_actions": [...]
+  },
+  "inbox_mail": {
+    "trigger_id": "inbox_mail",
+    "name": "Inbound mail",
+    "type": "email",
+    "branch_id": "default",
+    "config": {
+      "mailbox_binding_id": "mailbind_…",
+      "allowed_senders": [],
+      "subject_contains": ""
+    },
+    "output_mapping": {"content": "body", "context.from": "from"}
   }
 }
 ```
@@ -150,6 +162,8 @@ alwaysApply: false
 `output_actions` — действия после выполнения flow: `{channel, action, mapping, config, condition}`.
 
 Webhook URL: `/flows/api/v1/triggers/{telegram|webhook}/{flow_id}/{trigger_id}`.
+
+**Email (platform mail):** `EmailTriggerConfig.mailbox_binding_id` — ящик текущего пользователя (`GET .../api/mail/bindings/me`). Фильтр опционален: `allowed_senders` (substring по `from`), `subject_contains` (пусто = все). Runtime: `EmailTriggerHandler` пишет Redis-индекс `flows:email_triggers:{mailbox_binding_id}`; `mail_sync_tick` после non-bootstrap new INBOX вызывает `dispatch_email_triggers_for_messages` → `TriggerExecutor`. UI: 1-клик default-ящик или CTA `openModal('platform.mail', { openSettings: true })`. Сырой IMAP/Mailgun в UI не используется.
 
 **Multi-brand webhooks:** `BaseTriggerHandler.generate_webhook_url` строит URL через `resolve_flows_webhook_public_base_url_from_context()` (Host запроса → `{apex}/flows`). Без request context — fallback на `TriggerRegistry.base_url` (TaskIQ/startup). Один Telegram bot = один webhook URL; при смене apex или tenant Host — `POST /flows/api/v1/flows/{flow_id}/triggers/{trigger_id}/reregister`.
 
@@ -214,7 +228,39 @@ Resolved LLM candidate может нести `context_length`; context layer и�
 
 **HITL в bundles:** demo-очередь slug `example_hitl` (WorkQueue) создаётся при `init_company_resources` и при `TESTING=true` после `load_flows_to_db` — `ensure_example_hitl_queue` (`apps/flows/src/services/hitl_demo_queue.py`). Примеры — `example_react`, `example_graph` (нода `hitl_node`, ключи `work_queue_slug`/`handoff_*`). **Agent handoff** (tools между flows) — отдельный контур, см. **`handoff.mdc`** и bundles `handoff_demo_parent`/`handoff_demo_child`.
 
-## Evaluation (`flow.evaluation`)
+## Evaluation Lab
+
+Evaluation Lab (`apps/flows/src/evaluation/`, UI `/flows/.../evaluation/...`) — dataset/suite → experiment/run → scorers для flow.
+
+### Вход turn (`EvaluationInput`)
+
+| `type` | Смысл | Persistence |
+|---|---|---|
+| `text` | Фиксированное user-сообщение | `content` в case |
+| `inline_code` | Генератор через `RemoteCodeRunner` | `source` (+ language) в case |
+| `node` | Tester/generator = `llm_node` flow | **только** `node_id` → effective nodes FlowConfig |
+
+Harness вызывает tester **один раз на каждый turn** case и передаёт dialog so far; тестер возвращает только следующее user-сообщение. Конец теста задаёт список `turns` (+ `max_turns` как safety), не промпт tester.
+
+Inline `node` blob на check/input — legacy/draft-only; UI v1 пишет `node_id`.
+
+### LLM judge
+
+| Сущность | Где живёт | Что хранит case/check |
+|---|---|---|
+| Судья | `llm_node` в FlowConfig (`store.evaluation_role: "judge"`) | `judge_node_id` |
+| Tester | `llm_node` в FlowConfig (`store.evaluation_role: "tester"`) | `EvaluationInputNode.node_id` |
+| Рубрика | `evaluation_rubrics` + immutable versions | `rubric_version_id` |
+
+**Запрещено:** таблица `evaluation_judges`; новый check type вместо `llm_judge`; primary persistence inline `judge_node` / evaluation-owned NodeConfig blob.
+
+UI Eval Lab: create tester/judge пишет orphan `llm_node` в FlowConfig и сразу открывает существующую модалку `flows.embedded_tool_config` (тот же `flows-llm-node-editor`, что у tool config / property panel). Edit/create — иконки в `slot="suffix"` у enum-пикера; сохранение — `flows/flow_update`.
+
+Runtime (`lab_service`): harness-owned structured call (`record_evaluation_judgment`), не durable graph walk. Резолв `judge_node_id`/`node_id` → `NodeConfig` из effective nodes; из ноды берутся `prompt`, `llm` (`core.ai`), `llm_context`. Structured tool обязателен (fail-closed); вызов идёт с `tool_choice` на конкретный tool name.
+
+Магазин шаблонов судей (MCP-like) — будущий эпик; в v1 не делать.
+
+### Legacy `flow.evaluation`
 
 У шагов тест-кейса поля `input.type` и `check.type`: `text` | `inline_code` | `node` (для check ещё `string`).
 

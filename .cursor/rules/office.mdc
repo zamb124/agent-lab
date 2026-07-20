@@ -100,7 +100,7 @@ globs:
 | presentation | default_view_mode | Preview surface | Raw |
 |---|---|---|---|
 | `html` | `preview` | sandbox iframe `srcdoc` | CodeMirror |
-| `markdown` | `preview` | `platform-markdown-editor` readonly (MD→HTML через `flowsChatMarkdownToHtml`) | CodeMirror |
+| `markdown` | `preview` | `platform-markdown-editor` readonly `view-mode="preview"` (`.value` = MD) | CodeMirror |
 | `code` | `source` | — | CodeMirror / JSON editor |
 
 - Edit/save только в `view_mode=source` (preview не мутирует файл).
@@ -150,7 +150,7 @@ Slice `office/documents` хранит `items`, `loadedCatalogIds`, `activeCatalo
 
 ### Sidebar / namespace / редактор
 
-`<office-sidebar>`: `useResource('office/namespaces', autoload)` для NS-select, `setPlatformNamespaceSelection(companyId, name)` пишет выбор через `UI_NAMESPACE_SELECT_REQUESTED`. В редакторе — кнопка «Назад». На `documents_list` и `documents_recent` — `office-explorer-nav-rail` (в т.ч. «Все документы») + `office-explorer-tree` (nested catalogs). Настройки каталога (edit, members, RAG, delete) — контекстное меню `office-catalog-context-menu` на пункте дерева (ПКМ или ⋮), модалки `office.catalog_edit` / `office.catalog_members` / `office.catalog_rag`. Создание и загрузка — в toolbar explorer (`office-file-toolbar`), не в sidebar.
+`<office-sidebar>`: `useResource('office/namespaces', autoload)` для NS-select; list API — только `company_workspace` (`NamespaceService.list_company_workspaces`), без personal/technical. `setPlatformNamespaceSelection(companyId, name)` пишет выбор через `UI_NAMESPACE_SELECT_REQUESTED`. В редакторе — кнопка «Назад». На `documents_list` и `documents_recent` — `office-explorer-nav-rail` (в т.ч. «Все документы») + `office-explorer-tree` (nested catalogs). Настройки каталога (edit, members, RAG, delete) — контекстное меню `office-catalog-context-menu` на пункте дерева (ПКМ или ⋮), модалки `office.catalog_edit` / `office.catalog_members` / `office.catalog_rag`. Создание и загрузка — в toolbar explorer (`office-file-toolbar`), не в sidebar.
 
 `document-editor-page` — Paper Stage: stage bar (back / title / save chip) + ambient; sidebar скрыт на `document_editor`. `useOp('office/document_editor_config').run({fileId})` → `/files/{file_id}/editor-config` → `<platform-document-viewer-host>`.
 

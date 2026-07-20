@@ -12,18 +12,23 @@ from core.mail.delete_policy import assert_mailbox_delete_allowed
 from core.mail.exceptions import MailError
 from core.mail.models import (
     InboundMailMessage,
+    MailAppendResult,
     MailboxEnsureSpec,
     MailboxInfo,
     MailboxSecret,
     MailFetchQuery,
     MailFolderListResult,
     MailFolderRole,
+    MailMessageFlags,
     MailProvider,
     MailSendResult,
     MailServerHealth,
     MailUidBatch,
+    MailUidMoveResult,
+    MailUidSearchCriteria,
     OutboundMailMessage,
 )
+from core.mail.transport.idle_session import MailIdleSession
 from core.mail.transport.imap_smtp import ImapSmtpTransport
 
 
@@ -243,6 +248,103 @@ class IspmanagerMailServerPort:
             binding_secret,
             mailbox=mailbox,
             uid=uid,
+        )
+
+    async def uid_store_flags(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uid: str,
+        add_flags: list[str],
+        remove_flags: list[str],
+    ) -> None:
+        await self._transport.uid_store_flags(
+            binding_secret,
+            mailbox=mailbox,
+            uid=uid,
+            add_flags=add_flags,
+            remove_flags=remove_flags,
+        )
+
+    async def uid_move(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uid: str,
+        destination_folder: str,
+    ) -> MailUidMoveResult:
+        return await self._transport.uid_move(
+            binding_secret,
+            mailbox=mailbox,
+            uid=uid,
+            destination_folder=destination_folder,
+        )
+
+    async def uid_expunge(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uid: str | None = None,
+    ) -> None:
+        await self._transport.uid_expunge(
+            binding_secret,
+            mailbox=mailbox,
+            uid=uid,
+        )
+
+    async def append_message(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        raw_message: bytes,
+        flags: str | None = None,
+    ) -> MailAppendResult:
+        return await self._transport.append_message(
+            binding_secret,
+            mailbox=mailbox,
+            raw_message=raw_message,
+            flags=flags,
+        )
+
+    async def uid_search(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        criteria: MailUidSearchCriteria,
+    ) -> list[str]:
+        return await self._transport.uid_search(
+            binding_secret,
+            mailbox=mailbox,
+            criteria=criteria,
+        )
+
+    async def fetch_flags_for_uids(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uids: list[str],
+    ) -> dict[str, MailMessageFlags]:
+        return await self._transport.fetch_flags_for_uids(
+            binding_secret,
+            mailbox=mailbox,
+            uids=uids,
+        )
+
+    async def open_idle_session(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+    ) -> MailIdleSession:
+        return await self._transport.open_idle_session(
+            binding_secret,
+            mailbox=mailbox,
         )
 
     async def fetch_uids_since(

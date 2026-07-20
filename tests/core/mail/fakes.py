@@ -16,6 +16,7 @@ from core.mail.imap_folders import (
 from core.mail.mime_parse import strip_attachment_payloads
 from core.mail.models import (
     InboundMailMessage,
+    MailAppendResult,
     MailboxEnsureSpec,
     MailboxInfo,
     MailboxSecret,
@@ -23,13 +24,31 @@ from core.mail.models import (
     MailFolder,
     MailFolderListResult,
     MailFolderRole,
+    MailIdleWake,
+    MailIdleWakeKind,
+    MailMessageFlags,
     MailProvider,
     MailSendResult,
     MailServerHealth,
     MailUidBatch,
+    MailUidMoveResult,
+    MailUidSearchCriteria,
     OutboundMailMessage,
 )
 from core.mail.threads import message_belongs_to_thread_ids
+
+
+class _FakeIdleSession:
+    def __init__(self, *, mailbox: str, wake: MailIdleWake | None = None) -> None:
+        self.mailbox = mailbox
+        self._wake = wake if wake is not None else MailIdleWake(kind=MailIdleWakeKind.TIMEOUT)
+
+    async def wait_wake(self, *, timeout_seconds: float) -> MailIdleWake:
+        _ = timeout_seconds
+        return self._wake
+
+    async def aclose(self) -> None:
+        return None
 
 
 class RecordingMailServerPort:
@@ -60,9 +79,14 @@ class RecordingMailServerPort:
         self.last_sent_body_html: str | None = None
         self.namespace_prefix: str = ""
         self.delimiter: str | None = "/"
-        self.capabilities: list[str] = ["IMAP4rev1", "SPECIAL-USE", "NAMESPACE"]
+        self.capabilities: list[str] = ["IMAP4rev1", "SPECIAL-USE", "NAMESPACE", "MOVE"]
         self.create_imap_folder_calls: list[tuple[str, MailFolderRole | None]] = []
         self.select_fail_names: set[str] = set()
+        self.uid_store_flags_calls: list[tuple[str, str, list[str], list[str]]] = []
+        self.uid_move_calls: list[tuple[str, str, str]] = []
+        self.uid_expunge_calls: list[tuple[str, str | None]] = []
+        self.append_message_calls: list[tuple[str, str]] = []
+        self.idle_wake: MailIdleWake | None = None
 
     async def healthcheck(self) -> MailServerHealth:
         return MailServerHealth(
@@ -273,6 +297,11 @@ class RecordingMailServerPort:
         unseen = sum(1 for item in items if item.unread)
         return len(items), unseen
 
+    def _messages_for_mailbox(self, mailbox: str) -> list[InboundMailMessage]:
+        if mailbox.casefold() == "inbox":
+            return list(self.inbox)
+        return list(self.mailbox_messages.get(mailbox, []))
+
     async def fetch_uids_since(
         self,
         binding_secret: MailboxSecret,
@@ -285,7 +314,8 @@ class RecordingMailServerPort:
         self.fetch_uids_since_calls.append((mailbox, since_uid, limit))
         if mailbox in self.select_fail_names:
             raise MailMailboxNotFoundError(folder_name=mailbox)
-        max_uid = max((int(item.uid) for item in self.inbox), default=0)
+        folder_items = self._messages_for_mailbox(mailbox)
+        max_uid = max((int(item.uid) for item in folder_items), default=0)
         if since_uid <= 0:
             return MailUidBatch(
                 uidvalidity=self.uidvalidity,
@@ -293,7 +323,7 @@ class RecordingMailServerPort:
                 messages=[],
             )
         new_messages = sorted(
-            (item for item in self.inbox if int(item.uid) > since_uid),
+            (item for item in folder_items if int(item.uid) > since_uid),
             key=lambda item: int(item.uid),
         )[:limit]
         return MailUidBatch(
@@ -384,3 +414,234 @@ class RecordingMailServerPort:
             )
             await self.create_imap_folder(binding_secret, name=folder_name, role=role)
         return await self.list_imap_folders(binding_secret)
+
+    def _mutate_message_flags(
+        self,
+        mailbox: str,
+        uid: str,
+        *,
+        unread: bool | None = None,
+        flagged: bool | None = None,
+        answered: bool | None = None,
+        draft: bool | None = None,
+    ) -> InboundMailMessage:
+        if mailbox.casefold() == "inbox":
+            collection = self.inbox
+        else:
+            collection = self.mailbox_messages.setdefault(mailbox, [])
+        for index, message in enumerate(collection):
+            if message.uid != uid:
+                continue
+            updates: dict[str, bool] = {}
+            if unread is not None:
+                updates["unread"] = unread
+            if flagged is not None:
+                updates["flagged"] = flagged
+            if answered is not None:
+                updates["answered"] = answered
+            if draft is not None:
+                updates["draft"] = draft
+            updated = message.model_copy(update=updates)
+            collection[index] = updated
+            return updated
+        raise MailUidNotFoundError(mailbox=mailbox, uid=uid)
+
+    async def uid_store_flags(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uid: str,
+        add_flags: list[str],
+        remove_flags: list[str],
+    ) -> None:
+        _ = binding_secret
+        self.uid_store_flags_calls.append((mailbox, uid, list(add_flags), list(remove_flags)))
+        unread: bool | None = None
+        flagged: bool | None = None
+        answered: bool | None = None
+        draft: bool | None = None
+        normalized_add = {flag.upper().lstrip("\\") for flag in add_flags}
+        normalized_remove = {flag.upper().lstrip("\\") for flag in remove_flags}
+        if "SEEN" in normalized_add:
+            unread = False
+        if "SEEN" in normalized_remove:
+            unread = True
+        if "FLAGGED" in normalized_add:
+            flagged = True
+        if "FLAGGED" in normalized_remove:
+            flagged = False
+        if "ANSWERED" in normalized_add:
+            answered = True
+        if "ANSWERED" in normalized_remove:
+            answered = False
+        if "DRAFT" in normalized_add:
+            draft = True
+        if "DRAFT" in normalized_remove:
+            draft = False
+        if "DELETED" in normalized_add:
+            await self.uid_expunge(binding_secret, mailbox=mailbox, uid=uid)
+            return
+        _ = self._mutate_message_flags(
+            mailbox,
+            uid,
+            unread=unread,
+            flagged=flagged,
+            answered=answered,
+            draft=draft,
+        )
+
+    async def uid_move(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uid: str,
+        destination_folder: str,
+    ) -> MailUidMoveResult:
+        _ = binding_secret
+        self.uid_move_calls.append((mailbox, uid, destination_folder))
+        message = await self.fetch_message_by_uid(
+            binding_secret, mailbox=mailbox, uid=uid
+        )
+        if mailbox.casefold() == "inbox":
+            self.inbox = [item for item in self.inbox if item.uid != uid]
+        else:
+            items = self.mailbox_messages.get(mailbox, [])
+            self.mailbox_messages[mailbox] = [item for item in items if item.uid != uid]
+        dest_items = self.mailbox_messages.setdefault(destination_folder, [])
+        new_uid = str(max((int(item.uid) for item in dest_items), default=0) + 1)
+        dest_items.append(message.model_copy(update={"uid": new_uid}))
+        return MailUidMoveResult(
+            source_uid=uid,
+            destination_folder=destination_folder,
+            destination_uid=new_uid,
+        )
+
+    async def uid_expunge(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uid: str | None = None,
+    ) -> None:
+        _ = binding_secret
+        self.uid_expunge_calls.append((mailbox, uid))
+        if uid is None:
+            if mailbox.casefold() == "inbox":
+                self.inbox = []
+            else:
+                self.mailbox_messages[mailbox] = []
+            return
+        if mailbox.casefold() == "inbox":
+            self.inbox = [item for item in self.inbox if item.uid != uid]
+        else:
+            items = self.mailbox_messages.get(mailbox, [])
+            self.mailbox_messages[mailbox] = [item for item in items if item.uid != uid]
+
+    async def append_message(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        raw_message: bytes,
+        flags: str | None = None,
+    ) -> MailAppendResult:
+        _ = binding_secret
+        self.append_message_calls.append((mailbox, flags if flags is not None else ""))
+        items = self.mailbox_messages.setdefault(mailbox, [])
+        new_uid = str(max((int(item.uid) for item in items), default=0) + 1)
+        message_id = f"append-{new_uid}@fake.local"
+        subject = "appended"
+        for line in raw_message.split(b"\n"):
+            lower = line.lower()
+            if lower.startswith(b"message-id:"):
+                message_id = line.split(b":", 1)[1].decode("utf-8", errors="replace").strip()
+            elif lower.startswith(b"subject:"):
+                subject = line.split(b":", 1)[1].decode("utf-8", errors="replace").strip()
+        draft = flags is not None and "DRAFT" in flags.upper()
+        unread = flags is None or "SEEN" not in flags.upper()
+        items.append(
+            InboundMailMessage(
+                uid=new_uid,
+                message_id=message_id,
+                subject=subject,
+                from_address=binding_secret.email_address,
+                body_text=raw_message.decode("utf-8", errors="replace"),
+                unread=unread,
+                draft=draft,
+            )
+        )
+        return MailAppendResult(folder=mailbox, uid=new_uid, message_id=message_id)
+
+    async def uid_search(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        criteria: MailUidSearchCriteria,
+    ) -> list[str]:
+        _ = binding_secret
+        items = self._messages_for_mailbox(mailbox)
+        if criteria.uid_set is not None and criteria.uid_set.strip():
+            wanted = {part.strip() for part in criteria.uid_set.replace(":", ",").split(",") if part.strip()}
+            return [item.uid for item in items if item.uid in wanted]
+        if criteria.all_messages:
+            return [item.uid for item in items]
+        matched = items
+        if criteria.subject is not None:
+            needle = criteria.subject.casefold()
+            matched = [
+                item
+                for item in matched
+                if item.subject is not None and needle in item.subject.casefold()
+            ]
+        if criteria.from_address is not None:
+            needle = criteria.from_address.casefold()
+            matched = [
+                item
+                for item in matched
+                if item.from_address is not None and needle in item.from_address.casefold()
+            ]
+        if criteria.text is not None:
+            needle = criteria.text.casefold()
+            matched = [
+                item
+                for item in matched
+                if (item.body_text is not None and needle in item.body_text.casefold())
+                or (item.subject is not None and needle in item.subject.casefold())
+            ]
+        return [item.uid for item in matched]
+
+    async def fetch_flags_for_uids(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+        uids: list[str],
+    ) -> dict[str, MailMessageFlags]:
+        _ = binding_secret
+        result: dict[str, MailMessageFlags] = {}
+        for uid in uids:
+            try:
+                message = await self.fetch_message_by_uid(
+                    binding_secret, mailbox=mailbox, uid=uid
+                )
+            except MailUidNotFoundError:
+                continue
+            result[uid] = MailMessageFlags(
+                unread=message.unread,
+                flagged=message.flagged,
+                answered=message.answered,
+                draft=message.draft,
+            )
+        return result
+
+    async def open_idle_session(
+        self,
+        binding_secret: MailboxSecret,
+        *,
+        mailbox: str,
+    ) -> _FakeIdleSession:
+        _ = binding_secret
+        return _FakeIdleSession(mailbox=mailbox, wake=self.idle_wake)

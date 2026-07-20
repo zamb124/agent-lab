@@ -164,6 +164,7 @@ class CRMContainer(BaseContainer):
             relationship_repo=self.relationship_repository,
             company_mapping_repo=self.company_mapping_repository,
             namespace_service=self.namespace_service,
+            user_repo=self.user_repository,
         )
 
     @lazy

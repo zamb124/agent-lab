@@ -1,0 +1,13 @@
+component: platform-voice-dictation
+doc_slug: platform-voice-dictation
+tier: T0
+title_ru: Voice Dictation
+title_en: Voice Dictation
+import: "@platform/lib/components/platform-voice-dictation.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

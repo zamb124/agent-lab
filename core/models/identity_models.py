@@ -456,6 +456,14 @@ class NamespaceSyncSettings(BaseModel):
     )
 
 
+class NamespaceKind(str, Enum):
+    """Вид платформенного namespace (company workspace / personal / technical)."""
+
+    COMPANY_WORKSPACE = "company_workspace"
+    PERSONAL = "personal"
+    TECHNICAL = "technical"
+
+
 class Namespace(BaseModel):
     """
     Namespace (изолированная область данных).
@@ -475,6 +483,16 @@ class Namespace(BaseModel):
         default=False,
         title="По умолчанию",
         description="Является ли namespace дефолтным для компании",
+    )
+    kind: NamespaceKind = Field(
+        default=NamespaceKind.COMPANY_WORKSPACE,
+        title="Вид",
+        description="company_workspace | personal | technical",
+    )
+    owner_user_id: str | None = Field(
+        default=None,
+        title="Владелец",
+        description="user_id владельца; обязателен для kind=personal",
     )
     crm_settings: NamespaceCRMSettings | None = Field(
         default=None,
@@ -496,6 +514,17 @@ class Namespace(BaseModel):
         title="Обновлен",
         description="Время последнего обновления namespace",
     )
+
+    @model_validator(mode="after")
+    def _validate_personal_owner(self) -> "Namespace":
+        if self.kind == NamespaceKind.PERSONAL:
+            if self.owner_user_id is None or self.owner_user_id.strip() == "":
+                raise ValueError("owner_user_id is required for kind=personal")
+            if self.is_default:
+                raise ValueError("personal namespace cannot be is_default")
+        elif self.owner_user_id is not None:
+            raise ValueError("owner_user_id is only allowed for kind=personal")
+        return self
 
 
 class AuthResult(BaseModel):

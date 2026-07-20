@@ -195,7 +195,7 @@ async def test_flows_configure_agent_answers(
     await flows_open_editor(page, flows_ui, flow_id, layout="agent")
     await flows_open_node_editor(page, "agent")
     await flows_e2e_open_studio_prompt_section(page)
-    prompt_editor = page.locator("flows-agent-focus-studio prompt-editor").first
+    prompt_editor = page.locator("flows-agent-focus-studio platform-markdown-editor").first
     await expect(prompt_editor).to_be_visible(timeout=5_000)
     prompt_value = await prompt_editor.evaluate("(el) => String(el.value || '')")
     assert "доставки" in prompt_value, f"reopened prompt missing доставки: {prompt_value!r}"

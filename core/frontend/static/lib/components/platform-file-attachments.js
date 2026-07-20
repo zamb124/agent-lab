@@ -96,7 +96,12 @@ export class PlatformFileAttachments extends PlatformElement {
             width: var(--file-attachment-tile-width);
             flex: 0 0 var(--file-attachment-tile-width);
             max-width: 100%;
-            min-height: 52px;
+            min-height: 56px;
+            padding: var(--space-2);
+            gap: var(--space-3);
+        }
+        .list[data-layout='tiles'] .row > platform-icon {
+            flex-shrink: 0;
         }
         .meta {
             flex: 0 1 auto;
@@ -237,12 +242,13 @@ export class PlatformFileAttachments extends PlatformElement {
         const originalName = fileRef && typeof fileRef.original_name === 'string' ? fileRef.original_name : fileId;
         const contentType = fileRef && typeof fileRef.content_type === 'string' ? fileRef.content_type : '';
         const fileSize = fileRef && typeof fileRef.file_size === 'number' ? fileRef.file_size : 0;
+        const iconSize = this._layout === LAYOUTS.tiles ? 32 : 20;
         return html`
             <div class="row">
                 <platform-icon
                     file-icon
                     name=${resolveFileIconKey(originalName, contentType)}
-                    size="20"
+                    size=${iconSize}
                 ></platform-icon>
                 <div class="meta">
                     <div class="name">${originalName}</div>
