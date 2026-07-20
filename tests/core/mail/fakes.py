@@ -61,6 +61,7 @@ class RecordingMailServerPort:
         self.inbox: list[InboundMailMessage] = []
         self.mailbox_messages: dict[str, list[InboundMailMessage]] = {}
         self.ensure_calls: list[MailboxEnsureSpec] = []
+        self.set_password_calls: list[MailboxEnsureSpec] = []
         self.delete_calls: list[str] = []
         self.uidvalidity: int = 1
         self.fetch_uids_since_calls: list[tuple[str, int, int]] = []
@@ -115,6 +116,9 @@ class RecordingMailServerPort:
             raise MailProvisionUnsupportedError(MailProvider.GENERIC_IMAP_SMTP.value)
         self.ensure_calls.append(spec)
         email_address = f"{spec.local_part}@{spec.mail_domain}".lower()
+        existing = self.mailboxes.get(email_address)
+        if existing is not None:
+            return existing
         info = MailboxInfo(
             email_address=email_address,
             local_part=spec.local_part.lower(),
@@ -127,6 +131,7 @@ class RecordingMailServerPort:
     async def set_mailbox_password(self, spec: MailboxEnsureSpec) -> None:
         if not self.supports_provision:
             raise MailProvisionUnsupportedError(MailProvider.GENERIC_IMAP_SMTP.value)
+        self.set_password_calls.append(spec)
         email_address = f"{spec.local_part}@{spec.mail_domain}".lower()
         if email_address not in self.mailboxes:
             raise MailError(f"Mailbox not found for password set: {email_address}")

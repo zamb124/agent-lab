@@ -1631,11 +1631,25 @@ class MailLiveTestConfig(BaseModel):
     allow_delete: bool = True
 
 
+class MailLocalDevConfig(BaseModel):
+    """Локальная разработка против shared ISP без смены паролей на сервере.
+
+    Пароли ящиков — только в conf.local.json / ENV (gitignored). IMAP/SMTP
+    логин берёт plaintext отсюда; email.edit(passwd) на ISP не вызывается,
+    пока mutate_remote_passwords=false.
+    """
+
+    enabled: bool = False
+    mutate_remote_passwords: bool = False
+    mailbox_passwords: dict[str, str] = Field(default_factory=dict)
+
+
 class MailConfig(BaseModel):
     """Платформенная почта: system auto-seed + live test gates."""
 
     system: MailSystemConfig = Field(default_factory=MailSystemConfig)
     live_test: MailLiveTestConfig = Field(default_factory=MailLiveTestConfig)
+    local_dev: MailLocalDevConfig = Field(default_factory=MailLocalDevConfig)
 
 
 class OpenAIProviderConfig(BaseModel):

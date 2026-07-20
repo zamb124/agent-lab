@@ -129,6 +129,16 @@ iMIP REQUEST → calendar upsert с `mailbox_binding_id` письма.
 Hosts: hostname панели (`sm36.hosting.reg.ru`), не `mail.linnex.io` если A-запись на IP платформы.  
 Исходящий SMTP часто режет **VPN** — live send гонять без VPN или с VPS.
 
+### Local-dev против shared ISP
+
+`mail.local_dev` (только `conf.local.json`, gitignored):
+
+- `enabled=true` + `mailbox_passwords: { "user@domain": "…" }` — IMAP/SMTP логин берёт plaintext из конфига (прод-пароли можно один раз выгрузить в conf.local).
+- `mutate_remote_passwords=false` (дефолт) — **запрет** `set_mailbox_password` / `email.edit(passwd)`: локальный `bind`/`reconcile` не меняет пароли на ISP и не роняет прод.
+- `reconcile_system` дополнительно пишет эти пароли в локальные `mailbox_bindings.password_encrypted`.
+
+Прод K8s: `local_dev.enabled` остаётся `false` в overlay.
+
 ## Тесты
 
 - Offline: `tests/core/mail` + `RecordingMailServerPort` (`--ignore=live`).

@@ -59,6 +59,13 @@ uv run pytest tests/ui/design-system/components/platform-mail-modal/playwright.s
         "authinfo_password": "YOUR_PASSWORD"
       }
     },
+    "local_dev": {
+      "enabled": true,
+      "mutate_remote_passwords": false,
+      "mailbox_passwords": {
+        "you@linnex.io": "IMAP_PASSWORD_FROM_PROD_OR_PANEL"
+      }
+    },
     "live_test": {
       "enabled": true,
       "mailbox_prefix": "plt-",
@@ -67,6 +74,8 @@ uv run pytest tests/ui/design-system/components/platform-mail-modal/playwright.s
   }
 }
 ```
+
+`mail.local_dev`: пароли ящиков только локально (не в git). `mutate_remote_passwords=false` — локалка **не** крутит пароли на ISP (прод не падает). IMAP логин читает `mailbox_passwords`.
 
 `imap_host`/`smtp_host` = hostname панели ISPmanager.  
 `mail.linnex.io` сейчас указывает на IP платформы — для IMAP/SMTP не использовать, пока DNS/MX не укажут на mail-сервер.

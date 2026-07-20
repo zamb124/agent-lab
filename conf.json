@@ -1346,6 +1346,11 @@
       "enabled": false,
       "mailbox_prefix": "plt-",
       "allow_delete": true
+    },
+    "local_dev": {
+      "enabled": false,
+      "mutate_remote_passwords": false,
+      "mailbox_passwords": {}
     }
   },
   "mcp_catalog": {

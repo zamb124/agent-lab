@@ -12,7 +12,7 @@ from typing import Final, final
 
 from core.ai.company_settings import decrypt_secret, encrypt_secret
 from core.clients.rag_client import RagClient
-from core.config.models import MailConfig
+from core.config.models import MailConfig, MailLocalDevConfig
 from core.context import get_context
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.user_repository import UserRepository
@@ -32,6 +32,7 @@ from core.mail.exceptions import (
     MailPermissionError,
     MailSecretMissingError,
     MailSystemConnectionReadOnlyError,
+    MailTransportError,
     MailUidNotFoundError,
 )
 from core.mail.factory import build_mail_server_port
@@ -707,9 +708,10 @@ class MailService:
                 has_secret = bool(
                     existing.password_encrypted and existing.password_encrypted.strip()
                 )
-                if has_secret:
+                local_override = self._local_dev_mailbox_password(email_address)
+                if has_secret and local_override is None:
                     return existing
-                password = secrets.token_urlsafe(24)
+                password = local_override if local_override is not None else secrets.token_urlsafe(24)
                 if payload.provision and connection.supports_provision:
                     port = self._port_for(connection)
                     spec = MailboxEnsureSpec(
@@ -718,7 +720,13 @@ class MailService:
                         password=password,
                     )
                     _ = await port.ensure_mailbox(spec)
-                    await port.set_mailbox_password(spec)
+                    if self._local_dev_allows_remote_password_mutation():
+                        await port.set_mailbox_password(spec)
+                    elif local_override is None and not has_secret:
+                        raise MailConfigError(
+                            "mail.local_dev: remote password mutation disabled; "
+                            + f"add mailbox_passwords[{email_address!r}] in conf.local.json"
+                        )
                 repaired = existing.model_copy(
                     update={
                         "password_encrypted": encrypt_secret(password),
@@ -730,9 +738,13 @@ class MailService:
         previous_user_id = existing.user_id if existing is not None else None
         previous_was_default = bool(existing is not None and existing.is_default)
 
+        local_override = self._local_dev_mailbox_password(email_address)
         password = payload.password
         if password is None or not password.strip():
-            password = secrets.token_urlsafe(24)
+            if local_override is not None:
+                password = local_override
+            else:
+                password = secrets.token_urlsafe(24)
 
         mailbox_already_on_server = False
         if payload.provision and connection.supports_provision:
@@ -748,7 +760,17 @@ class MailService:
             )
             _ = await port.ensure_mailbox(spec)
             if mailbox_already_on_server:
-                await port.set_mailbox_password(spec)
+                if self._local_dev_allows_remote_password_mutation():
+                    await port.set_mailbox_password(spec)
+                elif local_override is None and (
+                    existing is None
+                    or not existing.password_encrypted
+                    or not existing.password_encrypted.strip()
+                ):
+                    raise MailConfigError(
+                        "mail.local_dev: remote password mutation disabled; "
+                        + f"add mailbox_passwords[{email_address!r}] in conf.local.json"
+                    )
 
         now = _utcnow()
         password_encrypted: str | None
@@ -1938,13 +1960,80 @@ class MailService:
         port = self._port_for(connection)
         return await port.healthcheck()
 
+    def _mail_local_dev(self) -> MailLocalDevConfig | None:
+        fields = type(self._mail_config).model_fields
+        if "local_dev" not in fields:
+            return None
+        return self._mail_config.local_dev
+
+    def _local_dev_allows_remote_password_mutation(self) -> bool:
+        local_dev = self._mail_local_dev()
+        if local_dev is None or not local_dev.enabled:
+            return True
+        return local_dev.mutate_remote_passwords
+
+    def _local_dev_mailbox_password(self, email_address: str) -> str | None:
+        local_dev = self._mail_local_dev()
+        if local_dev is None or not local_dev.enabled:
+            return None
+        key = email_address.strip().lower()
+        if not key:
+            return None
+        password = local_dev.mailbox_passwords.get(key)
+        if password is None:
+            return None
+        if not password.strip():
+            raise MailConfigError(
+                f"mail.local_dev.mailbox_passwords[{key!r}] must be non-empty"
+            )
+        return password
+
     def _binding_secret(self, binding: MailboxBinding) -> MailboxSecret:
+        override = self._local_dev_mailbox_password(binding.email_address)
+        if override is not None:
+            return MailboxSecret(
+                email_address=binding.email_address,
+                password=override,
+            )
         if binding.password_encrypted is None or not binding.password_encrypted.strip():
             raise MailSecretMissingError(binding.email_address)
         return MailboxSecret(
             email_address=binding.email_address,
             password=decrypt_secret(binding.password_encrypted),
         )
+
+    async def apply_local_dev_mailbox_passwords(self) -> int:
+        """Записать mail.local_dev.mailbox_passwords в локальные bindings (без ISP)."""
+        local_dev = self._mail_local_dev()
+        if local_dev is None or not local_dev.enabled:
+            return 0
+        applied = 0
+        for email_raw, password in local_dev.mailbox_passwords.items():
+            email = email_raw.strip().lower()
+            if not email:
+                raise MailConfigError("mail.local_dev.mailbox_passwords has empty email key")
+            if not password.strip():
+                raise MailConfigError(
+                    f"mail.local_dev.mailbox_passwords[{email!r}] must be non-empty"
+                )
+            binding = await self._binding_repository.get_by_email(SYSTEM_COMPANY_ID, email)
+            if binding is None:
+                continue
+            updated = binding.model_copy(
+                update={
+                    "password_encrypted": encrypt_secret(password),
+                    "updated_at": _utcnow(),
+                }
+            )
+            _ = await self._binding_repository.upsert(updated)
+            applied += 1
+        if applied > 0:
+            logger.info(
+                "mail.local_dev.passwords_applied",
+                applied=applied,
+                configured=len(local_dev.mailbox_passwords),
+            )
+        return applied
 
     def binding_secret(self, binding: MailboxBinding) -> MailboxSecret:
         return self._binding_secret(binding)
@@ -2224,15 +2313,25 @@ class MailService:
                     limit=500,
                 )
                 if local_rows:
-                    await self._refresh_flags_for_messages(
-                        binding,
-                        port,
-                        secret,
-                        folder=folder_name,
-                        messages=[
-                            InboundMailMessage(uid=str(row.uid)) for row in local_rows
-                        ],
-                    )
+                    try:
+                        await self._refresh_flags_for_messages(
+                            binding,
+                            port,
+                            secret,
+                            folder=folder_name,
+                            messages=[
+                                InboundMailMessage(uid=str(row.uid))
+                                for row in local_rows
+                                if row.uid > 0
+                            ],
+                        )
+                    except MailTransportError as exc:
+                        logger.warning(
+                            "mail.sync.flag_refresh_failed",
+                            mailbox_binding_id=binding.mailbox_binding_id,
+                            folder=folder_name,
+                            error=str(exc),
+                        )
 
             oldest_uid = cursor.oldest_uid
             backfill_completed = cursor.backfill_completed
@@ -2368,7 +2467,14 @@ class MailService:
     ) -> None:
         if self._message_repository is None or not messages:
             return
-        uids = [message.uid for message in messages]
+        uids: list[str] = []
+        for message in messages:
+            uid_raw = message.uid.strip()
+            if not uid_raw.isdigit() or int(uid_raw) < 1:
+                continue
+            uids.append(uid_raw)
+        if not uids:
+            return
         flags_map = await port.fetch_flags_for_uids(
             secret, mailbox=folder, uids=uids
         )
@@ -2692,6 +2798,7 @@ class MailService:
         connection = await self.ensure_system_mail_connection()
         role_mailboxes = await self.ensure_system_role_mailboxes()
         user_bindings = await self.ensure_system_user_bindings()
+        _ = await self.apply_local_dev_mailbox_passwords()
         return MailReconcileResult(
             connection_ensured=connection is not None,
             role_mailboxes_ensured=role_mailboxes,

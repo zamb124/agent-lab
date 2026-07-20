@@ -31,6 +31,7 @@ import { formatFileSize } from '../utils/format-file-size.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import { hueFromString, initialsFromName } from '../utils/hash-string.js';
 import { COLOR_PALETTE } from '../utils/color-palette.js';
+import { escapeHtml } from '../utils/escape-html.js';
 import {
     findThreadByUid,
     findThreadMessageByMessageId,
@@ -140,6 +141,7 @@ export class PlatformMailModal extends PlatformModal {
         _composeDragging: { state: true },
         _composeResizing: { state: true },
         _listQuery: { state: true },
+        _quickReplyText: { state: true },
         _expandedThreadIds: { state: true },
         _createKind: { state: true },
         _memberDraftUserId: { state: true },
@@ -1014,15 +1016,34 @@ export class PlatformMailModal extends PlatformModal {
                 padding-bottom: max(var(--space-3), env(safe-area-inset-bottom, 0px));
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
                 gap: var(--space-3);
                 background: var(--bg-surface);
                 flex-wrap: wrap;
                 flex-shrink: 0;
             }
-            .reply-bar-hint {
-                font-size: 0.8125rem;
+            .reply-bar-input {
+                flex: 1 1 12rem;
+                min-width: 0;
+                height: 2.25rem;
+                padding: 0 var(--space-3);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-full, 999px);
+                background: var(--bg-elevated);
+                color: var(--text-primary);
+                font: inherit;
+                font-size: 0.875rem;
+                outline: none;
+            }
+            .reply-bar-input::placeholder {
                 color: var(--text-tertiary);
+            }
+            .reply-bar-input:focus {
+                border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle));
+                box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+            }
+            .reply-bar .thread-actions {
+                flex-shrink: 0;
+                margin-left: auto;
             }
             .compose {
                 position: fixed;
@@ -1434,6 +1455,7 @@ export class PlatformMailModal extends PlatformModal {
         this._composeDragState = null;
         this._composeResizeState = null;
         this._listQuery = '';
+        this._quickReplyText = '';
         this._expandedThreadIds = [];
         this._createKind = 'user';
         this._memberDraftUserId = '';
@@ -1860,12 +1882,7 @@ export class PlatformMailModal extends PlatformModal {
         return thread.messages;
     }
 
-    _openReply() {
-        const message = this._replyTargetMessage(this._mailSelect.value);
-        if (!message) {
-            this._startCompose();
-            return;
-        }
+    _replyDraftPayload(message, overrides = {}) {
         const from = parseMailAddress(message.from_address);
         const subject = typeof message.subject === 'string' ? message.subject : '';
         const references = [
@@ -1876,7 +1893,7 @@ export class PlatformMailModal extends PlatformModal {
                 ? [message.message_id.trim()]
                 : []),
         ].filter((item, index, arr) => item && arr.indexOf(item) === index).join(' ');
-        this.dispatch(MAIL_EVENTS.COMPOSE_DRAFT_SET, {
+        return {
             to: from.email,
             subject: subjectWithPrefix(subject, 'Re:'),
             body: '',
@@ -1884,8 +1901,67 @@ export class PlatformMailModal extends PlatformModal {
             attachments: [],
             in_reply_to: message.message_id,
             references: references || message.message_id,
-        });
+            ...overrides,
+        };
+    }
+
+    _openReply() {
+        const message = this._replyTargetMessage(this._mailSelect.value);
+        if (!message) {
+            this._startCompose();
+            return;
+        }
+        this.dispatch(MAIL_EVENTS.COMPOSE_DRAFT_SET, this._replyDraftPayload(message));
         this._showComposePanel();
+    }
+
+    _focusQuickReplyInput() {
+        const root = this.renderRoot;
+        if (!root) {
+            return;
+        }
+        const input = root.querySelector('.reply-bar-input');
+        if (input instanceof HTMLInputElement) {
+            input.focus();
+        }
+    }
+
+    _onQuickReplyInput(event) {
+        const value = event.target && typeof event.target.value === 'string'
+            ? event.target.value
+            : '';
+        this._quickReplyText = value;
+    }
+
+    _onQuickReplyKeydown(event) {
+        if (event.key !== 'Enter' || event.shiftKey) {
+            return;
+        }
+        event.preventDefault();
+        this._submitQuickReply();
+    }
+
+    _submitQuickReply() {
+        const text = this._quickReplyText.trim();
+        if (!text) {
+            this._openReply();
+            return;
+        }
+        const message = this._replyTargetMessage(this._mailSelect.value);
+        if (!message) {
+            this._startCompose();
+            return;
+        }
+        const escaped = escapeHtml(text).replace(/\n/g, '<br>');
+        this.dispatch(
+            MAIL_EVENTS.COMPOSE_DRAFT_SET,
+            this._replyDraftPayload(message, {
+                body: text,
+                body_html: sanitizeMarkdownEditorHtml(`<p>${escaped}</p>`),
+            }),
+        );
+        this._quickReplyText = '';
+        this._sendReply();
     }
 
     _openReplyAll() {
@@ -2137,6 +2213,7 @@ export class PlatformMailModal extends PlatformModal {
             throw new Error('platform-mail-modal: thread required');
         }
         this._closeCompose();
+        this._quickReplyText = '';
         const mail = this._mailSelect.value;
         const folderMeta = mail.folders.find((folder) => folder.name === mail.folder);
         if (folderMeta && folderMeta.role === 'drafts') {
@@ -2226,7 +2303,11 @@ export class PlatformMailModal extends PlatformModal {
         }
         if (key === 'r' || key === 'R') {
             event.preventDefault();
-            this._openReply();
+            if (this._quickReplyText.trim().length > 0) {
+                this._submitQuickReply();
+                return;
+            }
+            this._focusQuickReplyInput();
             return;
         }
         if (key === 'f' || key === 'F') {
@@ -3178,9 +3259,17 @@ export class PlatformMailModal extends PlatformModal {
                 </div>
                 ${hasThread && !this._composeOpen ? html`
                     <div class="reply-bar">
-                        <span class="reply-bar-hint">${this.t('reply_bar_hint')}</span>
+                        <input
+                            class="reply-bar-input"
+                            type="text"
+                            data-canon="composer"
+                            .value=${this._quickReplyText}
+                            .placeholder=${this.t('reply_bar_hint')}
+                            @input=${(e) => this._onQuickReplyInput(e)}
+                            @keydown=${(e) => this._onQuickReplyKeydown(e)}
+                        />
                         <div class="thread-actions">
-                            <platform-button variant="primary" @click=${() => this._openReply()}>
+                            <platform-button variant="primary" @click=${() => this._submitQuickReply()}>
                                 <platform-icon name="reply" size="16"></platform-icon>
                                 ${this.t('reply')}
                             </platform-button>

@@ -121,7 +121,7 @@
   "compose_reply_title": "Reply",
   "compose_forward_title": "Forward",
   "compose_new_title": "New message",
-  "reply_bar_hint": "Reply here or press R",
+  "reply_bar_hint": "Write a reply… Enter to send, empty opens full editor",
   "shortcuts_hint": "J/K · E · # · S · R · U · F · C · Esc",
   "reply_quote": {
     "previous": "Previous message"
