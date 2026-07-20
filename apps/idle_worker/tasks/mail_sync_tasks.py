@@ -16,9 +16,17 @@ from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.triggers.handlers.email import dispatch_email_triggers_for_messages
 from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import IdleWorkerContainer, get_container
+from apps.idle_worker.tasks.mail_job_context import (
+    enter_mail_binding_context,
+    leave_mail_binding_context,
+)
 from core.logging import get_logger
 from core.mail.enqueue import enqueue_mail_sync_tick_continuation
-from core.mail.models import InboundMailMessage, MailboxBinding, MailSyncErrorKind
+from core.mail.models import (
+    InboundMailMessage,
+    MailboxBinding,
+    MailSyncErrorKind,
+)
 from core.mail.service import to_message_list_item
 from core.mail.threads import thread_id_for_message
 from core.types import JsonObject
@@ -200,11 +208,15 @@ async def _sync_single_binding(
     dedup_ttl_seconds: int,
 ) -> tuple[int, int, bool, str | None]:
     async with semaphore:
-        result = await container.mail_service.sync_binding(
-            binding,
-            max_new_messages=max_new_messages,
-            backfill_batch_size=get_settings().mail_sync.backfill_batch_size,
-        )
+        previous = await enter_mail_binding_context(container, binding)
+        try:
+            result = await container.mail_service.sync_binding(
+                binding,
+                max_new_messages=max_new_messages,
+                backfill_batch_size=get_settings().mail_sync.backfill_batch_size,
+            )
+        finally:
+            leave_mail_binding_context(previous)
         if result.skipped_reason is not None:
             return 0, 0, False, result.skipped_reason
         if result.bootstrap:
@@ -400,11 +412,15 @@ async def mail_sync_binding_task(
     )
     if binding is None:
         raise ValueError(f"mailbox_binding_id not found: {mailbox_binding_id}")
-    result = await container.mail_service.sync_binding(
-        binding,
-        max_new_messages=config.max_new_messages_per_binding,
-        backfill_batch_size=config.backfill_batch_size,
-    )
+    previous = await enter_mail_binding_context(container, binding)
+    try:
+        result = await container.mail_service.sync_binding(
+            binding,
+            max_new_messages=config.max_new_messages_per_binding,
+            backfill_batch_size=config.backfill_batch_size,
+        )
+    finally:
+        leave_mail_binding_context(previous)
     if (
         result.skipped_reason is None
         and not result.bootstrap

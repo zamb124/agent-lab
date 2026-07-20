@@ -926,5 +926,6 @@ platformSecrets:
   searchSerperApiKey: ""
   searchTavilyApiKey: ""
   agentReleasesGithubToken: ""
+  mailSystemIspmanagerAuthinfoPassword: ""
 
 platformSecretName: platform-secrets

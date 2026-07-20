@@ -211,3 +211,61 @@ export function findThreadByUid(threads, uid) {
     }
     return null;
 }
+
+/**
+ * Найти сообщение в треде по Message-ID (In-Reply-To / References lookup).
+ *
+ * @param {Array<{ message_id?: string | null }>} messages
+ * @param {string | null | undefined} messageId
+ * @returns {(typeof messages)[number] | null}
+ */
+export function findThreadMessageByMessageId(messages, messageId) {
+    if (!Array.isArray(messages)) {
+        throw new Error('findThreadMessageByMessageId: messages must be an array');
+    }
+    const targets = parseMessageIdTokens(messageId);
+    if (targets.length === 0) {
+        return null;
+    }
+    const targetSet = new Set(targets);
+    for (const item of messages) {
+        if (!item || typeof item !== 'object') {
+            continue;
+        }
+        const ownIds = parseMessageIdTokens(item.message_id);
+        if (ownIds.some((id) => targetSet.has(id))) {
+            return item;
+        }
+    }
+    return null;
+}
+
+/**
+ * Компактный превью-текст для reply-quote (snippet / body_text).
+ *
+ * @param {{ snippet?: string | null, body_text?: string | null } | null | undefined} message
+ * @param {number} [maxLen=80]
+ * @returns {string}
+ */
+export function mailReplyPreviewText(message, maxLen = 80) {
+    if (typeof maxLen !== 'number' || !Number.isFinite(maxLen) || maxLen < 1) {
+        throw new Error('mailReplyPreviewText: maxLen must be a positive number');
+    }
+    if (!message || typeof message !== 'object') {
+        return '';
+    }
+    let raw = '';
+    if (typeof message.snippet === 'string' && message.snippet.trim()) {
+        raw = message.snippet;
+    } else if (typeof message.body_text === 'string' && message.body_text.trim()) {
+        raw = message.body_text;
+    }
+    const collapsed = raw.replace(/\s+/g, ' ').trim();
+    if (!collapsed) {
+        return '';
+    }
+    if (collapsed.length <= maxLen) {
+        return collapsed;
+    }
+    return `${collapsed.slice(0, Math.max(1, maxLen - 1)).trimEnd()}…`;
+}

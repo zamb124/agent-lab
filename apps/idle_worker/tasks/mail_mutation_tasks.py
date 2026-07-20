@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
+
 from apps.idle_worker.broker import broker as idle_broker
-from apps.idle_worker.container import get_container
+from apps.idle_worker.container import IdleWorkerContainer, get_container
+from apps.idle_worker.tasks.mail_job_context import (
+    enter_mail_binding_context,
+    leave_mail_binding_context,
+)
 from core.logging import get_logger
 from core.mail.models import (
+    MailboxBinding,
     MailMessageFlagPayload,
     MailMessageMovePayload,
     MailMessageStarPayload,
@@ -15,6 +23,43 @@ from core.types import JsonObject
 from core.ui_events.dispatcher import publish_ui_event_to_user
 
 logger = get_logger(__name__)
+
+T = TypeVar("T")
+
+
+async def _load_binding(
+    container: IdleWorkerContainer,
+    *,
+    company_id: str,
+    mailbox_binding_id: str,
+) -> MailboxBinding:
+    binding = await container.mailbox_binding_repository.get(
+        mailbox_binding_id, company_id
+    )
+    if binding is None:
+        raise ValueError(f"mailbox_binding_id not found: {mailbox_binding_id}")
+    return binding
+
+
+async def _with_mail_binding_context(
+    *,
+    company_id: str,
+    mailbox_binding_id: str,
+    op: Callable[[IdleWorkerContainer, MailboxBinding], Awaitable[T]],
+) -> T:
+    container = get_container()
+    binding = await _load_binding(
+        container,
+        company_id=company_id,
+        mailbox_binding_id=mailbox_binding_id,
+    )
+    previous = await enter_mail_binding_context(
+        container, binding, channel="mail_mutation"
+    )
+    try:
+        return await op(container, binding)
+    finally:
+        leave_mail_binding_context(previous)
 
 
 async def _notify_users_for_binding(
@@ -53,14 +98,21 @@ async def mail_mark_seen_task(
     folder: str,
     uid: str,
 ) -> None:
-    container = get_container()
-    _ = await container.mail_service.mark_message_seen(
-        MailMessageFlagPayload(
-            mailbox_binding_id=mailbox_binding_id,
-            folder=folder,
-            uid=uid,
-        ),
+    async def _op(container: IdleWorkerContainer, binding: MailboxBinding) -> None:
+        _ = binding
+        _ = await container.mail_service.mark_message_seen(
+            MailMessageFlagPayload(
+                mailbox_binding_id=mailbox_binding_id,
+                folder=folder,
+                uid=uid,
+            ),
+            company_id=company_id,
+        )
+
+    await _with_mail_binding_context(
         company_id=company_id,
+        mailbox_binding_id=mailbox_binding_id,
+        op=_op,
     )
     logger.info(
         "mail.mark_seen.done",
@@ -78,14 +130,21 @@ async def mail_mark_unseen_task(
     folder: str,
     uid: str,
 ) -> None:
-    container = get_container()
-    _ = await container.mail_service.mark_message_unseen(
-        MailMessageFlagPayload(
-            mailbox_binding_id=mailbox_binding_id,
-            folder=folder,
-            uid=uid,
-        ),
+    async def _op(container: IdleWorkerContainer, binding: MailboxBinding) -> None:
+        _ = binding
+        _ = await container.mail_service.mark_message_unseen(
+            MailMessageFlagPayload(
+                mailbox_binding_id=mailbox_binding_id,
+                folder=folder,
+                uid=uid,
+            ),
+            company_id=company_id,
+        )
+
+    await _with_mail_binding_context(
         company_id=company_id,
+        mailbox_binding_id=mailbox_binding_id,
+        op=_op,
     )
     logger.info(
         "mail.mark_unseen.done",
@@ -101,12 +160,20 @@ async def mail_send_task(
     company_id: str,
     payload: JsonObject,
 ) -> None:
-    container = get_container()
     send_payload = MailSendPayload.model_validate(payload)
-    try:
-        result = await container.mail_service.send_message(
+
+    async def _op(container: IdleWorkerContainer, binding: MailboxBinding):
+        _ = binding
+        return await container.mail_service.send_message(
             send_payload,
             company_id=company_id,
+        )
+
+    try:
+        result = await _with_mail_binding_context(
+            company_id=company_id,
+            mailbox_binding_id=send_payload.mailbox_binding_id,
+            op=_op,
         )
     except Exception as exc:
         await _notify_users_for_binding(
@@ -139,10 +206,18 @@ async def mail_send_task(
 
 @idle_broker.task(task_name="mail_move", queue_name="idle")
 async def mail_move_task(*, company_id: str, payload: JsonObject) -> None:
-    container = get_container()
     move_payload = MailMessageMovePayload.model_validate(payload)
-    result = await container.mail_service.move_message(
-        move_payload, company_id=company_id
+
+    async def _op(container: IdleWorkerContainer, binding: MailboxBinding):
+        _ = binding
+        return await container.mail_service.move_message(
+            move_payload, company_id=company_id
+        )
+
+    result = await _with_mail_binding_context(
+        company_id=company_id,
+        mailbox_binding_id=move_payload.mailbox_binding_id,
+        op=_op,
     )
     await _notify_users_for_binding(
         mailbox_binding_id=move_payload.mailbox_binding_id,
@@ -154,10 +229,18 @@ async def mail_move_task(*, company_id: str, payload: JsonObject) -> None:
 
 @idle_broker.task(task_name="mail_trash", queue_name="idle")
 async def mail_trash_task(*, company_id: str, payload: JsonObject) -> None:
-    container = get_container()
     flag_payload = MailMessageFlagPayload.model_validate(payload)
-    result = await container.mail_service.trash_message(
-        flag_payload, company_id=company_id
+
+    async def _op(container: IdleWorkerContainer, binding: MailboxBinding):
+        _ = binding
+        return await container.mail_service.trash_message(
+            flag_payload, company_id=company_id
+        )
+
+    result = await _with_mail_binding_context(
+        company_id=company_id,
+        mailbox_binding_id=flag_payload.mailbox_binding_id,
+        op=_op,
     )
     await _notify_users_for_binding(
         mailbox_binding_id=flag_payload.mailbox_binding_id,
@@ -169,10 +252,18 @@ async def mail_trash_task(*, company_id: str, payload: JsonObject) -> None:
 
 @idle_broker.task(task_name="mail_archive", queue_name="idle")
 async def mail_archive_task(*, company_id: str, payload: JsonObject) -> None:
-    container = get_container()
     flag_payload = MailMessageFlagPayload.model_validate(payload)
-    result = await container.mail_service.archive_message(
-        flag_payload, company_id=company_id
+
+    async def _op(container: IdleWorkerContainer, binding: MailboxBinding):
+        _ = binding
+        return await container.mail_service.archive_message(
+            flag_payload, company_id=company_id
+        )
+
+    result = await _with_mail_binding_context(
+        company_id=company_id,
+        mailbox_binding_id=flag_payload.mailbox_binding_id,
+        op=_op,
     )
     await _notify_users_for_binding(
         mailbox_binding_id=flag_payload.mailbox_binding_id,
@@ -184,10 +275,18 @@ async def mail_archive_task(*, company_id: str, payload: JsonObject) -> None:
 
 @idle_broker.task(task_name="mail_delete", queue_name="idle")
 async def mail_delete_task(*, company_id: str, payload: JsonObject) -> None:
-    container = get_container()
     flag_payload = MailMessageFlagPayload.model_validate(payload)
-    _ = await container.mail_service.delete_message(
-        flag_payload, company_id=company_id
+
+    async def _op(container: IdleWorkerContainer, binding: MailboxBinding) -> None:
+        _ = binding
+        _ = await container.mail_service.delete_message(
+            flag_payload, company_id=company_id
+        )
+
+    await _with_mail_binding_context(
+        company_id=company_id,
+        mailbox_binding_id=flag_payload.mailbox_binding_id,
+        op=_op,
     )
     await _notify_users_for_binding(
         mailbox_binding_id=flag_payload.mailbox_binding_id,
@@ -203,10 +302,18 @@ async def mail_delete_task(*, company_id: str, payload: JsonObject) -> None:
 
 @idle_broker.task(task_name="mail_star", queue_name="idle")
 async def mail_star_task(*, company_id: str, payload: JsonObject) -> None:
-    container = get_container()
     star_payload = MailMessageStarPayload.model_validate(payload)
-    result = await container.mail_service.star_message(
-        star_payload, company_id=company_id
+
+    async def _op(container: IdleWorkerContainer, binding: MailboxBinding):
+        _ = binding
+        return await container.mail_service.star_message(
+            star_payload, company_id=company_id
+        )
+
+    result = await _with_mail_binding_context(
+        company_id=company_id,
+        mailbox_binding_id=star_payload.mailbox_binding_id,
+        op=_op,
     )
     await _notify_users_for_binding(
         mailbox_binding_id=star_payload.mailbox_binding_id,

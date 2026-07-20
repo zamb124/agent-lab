@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from core.mail.exceptions import (
+    MailError,
     MailMailboxNotFoundError,
     MailProvisionUnsupportedError,
     MailUidNotFoundError,
@@ -55,6 +56,7 @@ class RecordingMailServerPort:
     def __init__(self, *, supports_provision: bool = True) -> None:
         self.supports_provision = supports_provision
         self.mailboxes: dict[str, MailboxInfo] = {}
+        self.mailbox_passwords: dict[str, str] = {}
         self.sent: list[tuple[str, OutboundMailMessage]] = []
         self.inbox: list[InboundMailMessage] = []
         self.mailbox_messages: dict[str, list[InboundMailMessage]] = {}
@@ -119,7 +121,16 @@ class RecordingMailServerPort:
             mail_domain=spec.mail_domain.lower(),
         )
         self.mailboxes[email_address] = info
+        self.mailbox_passwords[email_address] = spec.password
         return info
+
+    async def set_mailbox_password(self, spec: MailboxEnsureSpec) -> None:
+        if not self.supports_provision:
+            raise MailProvisionUnsupportedError(MailProvider.GENERIC_IMAP_SMTP.value)
+        email_address = f"{spec.local_part}@{spec.mail_domain}".lower()
+        if email_address not in self.mailboxes:
+            raise MailError(f"Mailbox not found for password set: {email_address}")
+        self.mailbox_passwords[email_address] = spec.password
 
     async def delete_mailbox(self, email_address: str) -> None:
         if not self.supports_provision:
@@ -127,6 +138,7 @@ class RecordingMailServerPort:
         normalized = email_address.lower()
         self.delete_calls.append(normalized)
         _ = self.mailboxes.pop(normalized, None)
+        _ = self.mailbox_passwords.pop(normalized, None)
 
     async def send_message(
         self,

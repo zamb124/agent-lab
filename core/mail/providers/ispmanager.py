@@ -164,6 +164,20 @@ class IspmanagerMailServerPort:
             mail_domain=spec.mail_domain.lower(),
         )
 
+    async def set_mailbox_password(self, spec: MailboxEnsureSpec) -> None:
+        if not spec.password.strip():
+            raise ValueError("MailboxEnsureSpec.password is required")
+        email_address = f"{spec.local_part}@{spec.mail_domain}".lower()
+        _ = await self._call(
+            "email.edit",
+            {
+                "elid": email_address,
+                "passwd": spec.password,
+                "confirm": spec.password,
+                "sok": "ok",
+            },
+        )
+
     async def delete_mailbox(self, email_address: str) -> None:
         assert_mailbox_delete_allowed(
             email_address,

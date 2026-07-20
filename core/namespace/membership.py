@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.context import get_context, set_context
+from core.context import clear_context, get_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
 from core.namespace.service import NamespaceService
@@ -31,20 +31,26 @@ async def ensure_personal_namespace_for_user(
     if company is not None:
         active = previous.active_company if previous is not None else None
         if active is None or active.company_id != company.company_id:
-            if previous is None:
-                raise ValueError(
-                    "ensure_personal_namespace_for_user requires Context when switching company"
-                )
-            set_context(
-                previous.model_copy(
-                    update={
-                        "active_company": company,
-                        "user": user.model_copy(
-                            update={"active_company_id": company.company_id}
-                        ),
-                    }
-                )
+            scoped_user = user.model_copy(
+                update={"active_company_id": company.company_id}
             )
+            if previous is None:
+                set_context(
+                    Context(
+                        user=scoped_user,
+                        active_company=company,
+                        channel="mail_sync",
+                    )
+                )
+            else:
+                set_context(
+                    previous.model_copy(
+                        update={
+                            "active_company": company,
+                            "user": scoped_user,
+                        }
+                    )
+                )
             switched = True
 
     try:
@@ -53,5 +59,8 @@ async def ensure_personal_namespace_for_user(
             display_name=display_name,
         )
     finally:
-        if switched and previous is not None:
-            set_context(previous)
+        if switched:
+            if previous is not None:
+                set_context(previous)
+            else:
+                clear_context()

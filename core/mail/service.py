@@ -704,25 +704,35 @@ class MailService:
                 and existing.kind == MailboxBindingKind.ROLE
             )
             if same_owner or same_role:
+                has_secret = bool(
+                    existing.password_encrypted and existing.password_encrypted.strip()
+                )
+                if has_secret:
+                    return existing
+                password = secrets.token_urlsafe(24)
                 if payload.provision and connection.supports_provision:
                     port = self._port_for(connection)
-                    _ = await port.ensure_mailbox(
-                        MailboxEnsureSpec(
-                            mail_domain=connection.mail_domain,
-                            local_part=local_part,
-                            password=secrets.token_urlsafe(24),
-                        )
+                    spec = MailboxEnsureSpec(
+                        mail_domain=connection.mail_domain,
+                        local_part=local_part,
+                        password=password,
                     )
-                return existing
+                    _ = await port.ensure_mailbox(spec)
+                    await port.set_mailbox_password(spec)
+                repaired = existing.model_copy(
+                    update={
+                        "password_encrypted": encrypt_secret(password),
+                        "updated_at": _utcnow(),
+                    }
+                )
+                return await self._binding_repository.upsert(repaired)
 
         previous_user_id = existing.user_id if existing is not None else None
         previous_was_default = bool(existing is not None and existing.is_default)
 
         password = payload.password
-        generated_password = False
         if password is None or not password.strip():
             password = secrets.token_urlsafe(24)
-            generated_password = True
 
         mailbox_already_on_server = False
         if payload.provision and connection.supports_provision:
@@ -731,22 +741,23 @@ class MailService:
             mailbox_already_on_server = any(
                 item.email_address == email_address for item in before
             )
-            _ = await port.ensure_mailbox(
-                MailboxEnsureSpec(
-                    mail_domain=connection.mail_domain,
-                    local_part=local_part,
-                    password=password,
-                )
+            spec = MailboxEnsureSpec(
+                mail_domain=connection.mail_domain,
+                local_part=local_part,
+                password=password,
             )
+            _ = await port.ensure_mailbox(spec)
+            if mailbox_already_on_server:
+                await port.set_mailbox_password(spec)
 
         now = _utcnow()
         password_encrypted: str | None
-        if existing is not None and payload.password is None:
+        if payload.password is not None and payload.password.strip():
+            password_encrypted = encrypt_secret(password)
+        elif payload.provision and connection.supports_provision:
+            password_encrypted = encrypt_secret(password)
+        elif existing is not None and existing.password_encrypted is not None:
             password_encrypted = existing.password_encrypted
-        elif mailbox_already_on_server and generated_password:
-            password_encrypted = (
-                existing.password_encrypted if existing is not None else None
-            )
         else:
             password_encrypted = encrypt_secret(password)
 

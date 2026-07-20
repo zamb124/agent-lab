@@ -69,12 +69,17 @@ async def _idle_one_binding(
 
 
 @idle_broker.task(task_name="mail_idle_supervisor", queue_name="idle")
-async def mail_idle_supervisor_task() -> dict[str, int]:
+async def mail_idle_supervisor_task(
+    schedule_task_id: str | None = None,
+    company_id: str | None = None,
+) -> dict[str, int]:
     """Параллельный IDLE-pass (короткий timeout) → enqueue sync на wake.
 
     Долгий per-binding IDLE в HTTP/worker process не держим: cron tick
     запускает supervisor; timeout ограничен, fairness по max_idle_bindings.
     """
+    _ = schedule_task_id
+    _ = company_id
     settings = get_settings()
     config = settings.mail_sync
     if not config.enabled or not config.idle_enabled:

@@ -51,6 +51,7 @@ Crypto (S/MIME/PGP) — вне scope.
 |---|---|
 | Task | `mail_sync_tick` + `mail_sync_binding` + `mail_idle_supervisor` (`apps/idle_worker/tasks/`) |
 | Schedule | cron `mail_sync` (default `*/1`); IDLE supervisor на том же cron при `idle_enabled` |
+| Context | перед sync/mutations — `enter_mail_binding_context` + `build_job_context` (JWT): `MailService._active_user_id` и RAG/files/office; USER → owner mailbox, ROLE → member binding или любой member компании |
 | Fairness | `list_sync_candidates` USER+ROLE; batch + drain |
 | Folders cache | `mailbox_folders`; `GET /folders` DB-only (`stale`/`needs_sync`) |
 | Messages | `mail_messages` + flags; list/search/thread/get — local |
@@ -78,6 +79,7 @@ Wire folder = exact IMAP name; роли только SPECIAL-USE. Ensure: sent/d
 ## Provision
 
 - **System**: `reconcile_system` / `ensure_system_*` — connection + role boxes; members через `ensure_system_user_bindings`.
+- **Prod K8s**: `mail.system.enabled` + hosts/user в `deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`; `authinfo_password` — GitHub Secret `MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD` → `platform-secrets` → ENV. Frontend lifespan вызывает `reconcile_system` при `enabled=true`.
 - **Lazy**: `MailService.get_or_create_user_binding(user_id)`.
 - `bind_mailbox` на существующий email: тот же owner/role → idempotent; иначе admin reassign.
 - `ispmanager` `ensure_mailbox` — create-if-missing.

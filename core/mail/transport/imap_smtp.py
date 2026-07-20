@@ -519,7 +519,11 @@ class ImapSmtpTransport:
         smtp = await self._connect_smtp()
         try:
             _ = await smtp.login(binding_secret.email_address, binding_secret.password)
-            _errors, _response = await smtp.send_message(mime)
+            errors, response = await smtp.send_message(mime)
+            if errors:
+                raise MailTransportError(
+                    f"SMTP recipients refused for {from_address}: {errors!r} response={response!r}"
+                )
         finally:
             _ = await smtp.quit()
 

@@ -102,6 +102,7 @@ Reg.ru API принимает запросы **только с whitelist IP**. �
 | `STT__CLOUD_RU__API_KEY` |
 | `VOICE__STT__YANDEX__API_KEY` / `VOICE__STT__YANDEX__FOLDER_ID` |
 | `VOICE__STT__SBER__CLIENT_ID` / `VOICE__STT__SBER__CLIENT_SECRET` |
+| `MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD` |
 | `VOICE__TTS__CLOUD_RU__API_KEY` |
 | `VOICE__TTS__YANDEX__API_KEY` / `VOICE__TTS__YANDEX__FOLDER_ID` |
 | `VOICE__TTS__SBER__CLIENT_ID` / `VOICE__TTS__SBER__CLIENT_SECRET` |
@@ -109,6 +110,7 @@ Reg.ru API принимает запросы **только с whitelist IP**. �
 | `YOOMONEY_ACCOUNT_NUMBER` / `YOOMONEY_NOTIFICATION_SECRET` / `YOOMONEY_CLIENT_ID` / `YOOMONEY_CLIENT_SECRET` / `YOOMONEY_ACCESS_TOKEN` |
 | `PROXY__ENABLED` / `PROXY__PROXIES` | (опционально) исходящий HTTP(S) прокси платформы: `PROXY__ENABLED` — `true` / `false`; `PROXY__PROXIES` — **одна строка**, JSON-массив URL, например `["http://user:pass@host:3128"]`. Попадает в Kubernetes `platform-secrets` и в Pod env как `PROXY__ENABLED` / `PROXY__PROXIES` (см. `settings.proxy`). |
 | `SEARCH__TINYFISH__API_KEY` / `SEARCH__LINKUP__API_KEY` / `SEARCH__SERPER__API_KEY` / `SEARCH__TAVILY__API_KEY` | (опционально) ключи провайдеров Search MCP. Без ключа конкретный provider возвращает typed provider error; provider policy пробует следующий доступный provider. |
+| `MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD` | (опционально) ISPmanager authinfo для `mail.system` на company `system`. Hosts/user — в `app-conf.k8s-overlay.json`. |
 | `AGENT__RELEASES__GITHUB_TOKEN` | (опционально) PAT для GitHub Releases API на prod (`/frontend/api/agent/download/*`). **Обязателен для private repo.** Fallback в deploy: `GHCR_PULL_TOKEN`, если у него есть `repo` / Contents Read. Без токена API отдаёт 404. |
 
 **Voice/Speech:** `STT__CLOUD_RU__API_KEY` попадает в Kubernetes Secret `platform-secrets` как `stt-cloud-ru-api-key`; в Pod env проброшен как **`VOICE__STT__CLOUD_RU__API_KEY`** (`settings.voice.stt.cloud_ru.api_key`). Остальные ключи `VOICE__STT__*` / `VOICE__TTS__*` маппятся через `helm_platform_secrets_json.sh` в `platformSecrets.{stt,tts}{Yandex,Sber,CloudRu}{ApiKey,FolderId,ClientId,ClientSecret}`, оттуда в `platform-secrets` (ключи `stt-yandex-api-key` и т.п.).

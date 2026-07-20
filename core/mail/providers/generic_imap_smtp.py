@@ -87,6 +87,10 @@ class GenericImapSmtpMailServerPort:
         _ = spec
         raise MailProvisionUnsupportedError(MailProvider.GENERIC_IMAP_SMTP.value)
 
+    async def set_mailbox_password(self, spec: MailboxEnsureSpec) -> None:
+        _ = spec
+        raise MailProvisionUnsupportedError(MailProvider.GENERIC_IMAP_SMTP.value)
+
     async def delete_mailbox(self, email_address: str) -> None:
         _ = email_address
         raise MailProvisionUnsupportedError(MailProvider.GENERIC_IMAP_SMTP.value)

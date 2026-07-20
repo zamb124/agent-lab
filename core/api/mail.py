@@ -358,7 +358,13 @@ async def send_mail_message(
         company_id = _require_company_context()
         message_id = payload.message_id
         if message_id is None or not message_id.strip():
-            message_id = f"<{uuid.uuid4().hex}@platform.mail>"
+            connection = await mail_service.get_connection(company_id)
+            if connection is None:
+                raise MailConnectionNotFoundError(company_id)
+            domain = connection.mail_domain.strip()
+            if not domain:
+                raise MailConfigError("mail_domain is required for outbound Message-ID")
+            message_id = f"<{uuid.uuid4().hex}@{domain}>"
         send_payload = payload.model_copy(update={"message_id": message_id})
         result = await mail_service.prepare_send_local(send_payload, company_id=company_id)
         await enqueue_mail_send(

@@ -122,5 +122,11 @@
   "compose_forward_title": "Пересылка",
   "compose_new_title": "Новое письмо",
   "reply_bar_hint": "Ответьте прямо здесь или нажмите R",
-  "shortcuts_hint": "J/K · E · # · S · R · U · F · C · Esc"
+  "shortcuts_hint": "J/K · E · # · S · R · U · F · C · Esc",
+  "reply_quote": {
+    "previous": "Предыдущее письмо"
+  },
+  "compose": {
+    "reply_to": "Ответ на {author}"
+  }
 }

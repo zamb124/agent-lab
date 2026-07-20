@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
     findThreadByUid,
+    findThreadMessageByMessageId,
     groupMailThreads,
+    mailReplyPreviewText,
     normalizeMailSubject,
     threadRootId,
 } from '@platform/lib/utils/mail-threads.js';
@@ -84,5 +86,34 @@ describe('mail-threads', () => {
         expect(threads).toHaveLength(1);
         expect(threads[0].threadId).toBe('subject:ping');
         expect(threads[0].messages).toHaveLength(2);
+    });
+
+    it('findThreadMessageByMessageId matches normalized Message-ID', () => {
+        const messages = [
+            { uid: '1', message_id: '<a@x>', body_text: 'root' },
+            { uid: '2', message_id: 'b@x', body_text: 'child' },
+        ];
+        expect(findThreadMessageByMessageId(messages, '<a@x>')?.uid).toBe('1');
+        expect(findThreadMessageByMessageId(messages, 'a@x')?.uid).toBe('1');
+        expect(findThreadMessageByMessageId(messages, '<b@x>')?.uid).toBe('2');
+        expect(findThreadMessageByMessageId(messages, '<missing@x>')).toBeNull();
+        expect(findThreadMessageByMessageId(messages, '')).toBeNull();
+        expect(findThreadMessageByMessageId(messages, null)).toBeNull();
+    });
+
+    it('mailReplyPreviewText prefers snippet and truncates', () => {
+        expect(mailReplyPreviewText({
+            snippet: '  short note  ',
+            body_text: 'longer body ignored',
+        })).toBe('short note');
+        expect(mailReplyPreviewText({
+            body_text: 'first line\n\nsecond',
+        })).toBe('first line second');
+        const long = 'x'.repeat(100);
+        const preview = mailReplyPreviewText({ body_text: long }, 80);
+        expect(preview.length).toBe(80);
+        expect(preview.endsWith('…')).toBe(true);
+        expect(mailReplyPreviewText(null)).toBe('');
+        expect(mailReplyPreviewText({})).toBe('');
     });
 });

@@ -122,5 +122,11 @@
   "compose_forward_title": "Forward",
   "compose_new_title": "New message",
   "reply_bar_hint": "Reply here or press R",
-  "shortcuts_hint": "J/K · E · # · S · R · U · F · C · Esc"
+  "shortcuts_hint": "J/K · E · # · S · R · U · F · C · Esc",
+  "reply_quote": {
+    "previous": "Previous message"
+  },
+  "compose": {
+    "reply_to": "Reply to {author}"
+  }
 }

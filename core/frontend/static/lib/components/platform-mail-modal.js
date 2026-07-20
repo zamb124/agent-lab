@@ -33,7 +33,9 @@ import { hueFromString, initialsFromName } from '../utils/hash-string.js';
 import { COLOR_PALETTE } from '../utils/color-palette.js';
 import {
     findThreadByUid,
+    findThreadMessageByMessageId,
     groupMailThreads,
+    mailReplyPreviewText,
     normalizeMailSubject,
 } from '../utils/mail-threads.js';
 
@@ -779,6 +781,69 @@ export class PlatformMailModal extends PlatformModal {
             .chat-bubble-row.mine .chat-bubble-reply {
                 margin-left: 0;
                 margin-right: auto;
+            }
+            .chat-bubble-row.reply-target-flash .chat-bubble {
+                outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+                outline-offset: 2px;
+                transition: outline-color 0.6s ease;
+            }
+            .mail-reply-quote {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 2px;
+                width: 100%;
+                margin: 0 0 8px;
+                padding: 6px 10px;
+                border: none;
+                border-left: 3px solid var(--accent);
+                border-radius: 0 8px 8px 0;
+                background: color-mix(in srgb, var(--glass-solid-soft, var(--bg-surface)) 78%, var(--accent) 8%);
+                color: var(--text-secondary);
+                text-align: left;
+                cursor: pointer;
+                font: inherit;
+            }
+            .mail-reply-quote:hover {
+                background: color-mix(in srgb, var(--glass-solid-soft, var(--bg-surface)) 70%, var(--accent) 14%);
+            }
+            .mail-reply-quote .who {
+                font-size: 0.75rem;
+                font-weight: 650;
+                color: var(--text-primary);
+                line-height: 1.2;
+            }
+            .mail-reply-quote .preview {
+                font-size: 0.75rem;
+                color: var(--text-tertiary);
+                line-height: 1.35;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+            .compose-reply-mode {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: 6px 10px;
+                margin: 0 var(--space-4) var(--space-2);
+                border-left: 3px solid var(--accent);
+                border-radius: 0 8px 8px 0;
+                background: color-mix(in srgb, var(--bg-elevated) 85%, var(--accent) 10%);
+                color: var(--text-secondary);
+                font-size: 0.8125rem;
+            }
+            .compose-reply-mode-label {
+                min-width: 0;
+                flex: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .compose-reply-mode-label .who {
+                font-weight: 650;
+                color: var(--text-primary);
             }
             .chat-bubble .thread-body-text {
                 padding: 0;
@@ -2861,8 +2926,14 @@ export class PlatformMailModal extends PlatformModal {
             ? formatPlatformDateTime(message.date, this._localeTag())
             : '';
         const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+        const uid = typeof message.uid === 'string' ? message.uid : '';
+        const messageId = typeof message.message_id === 'string' ? message.message_id : '';
         return html`
-            <div class="chat-bubble-row ${mine ? 'mine' : 'theirs'}">
+            <div
+                class="chat-bubble-row ${mine ? 'mine' : 'theirs'}"
+                data-uid=${uid}
+                data-message-id=${messageId}
+            >
                 ${mine ? nothing : html`
                     <span class="msg-avatar" style="background: hsl(${hue} 55% 45%);">
                         ${initialsFromName(parsed.seed)}
@@ -2888,11 +2959,93 @@ export class PlatformMailModal extends PlatformModal {
                             <platform-icon name="reply" size="14"></platform-icon>
                         </platform-button>
                     </div>
+                    ${this._renderReplyQuote(message, mail)}
                     ${this._renderMessageBody(bodyText)}
                     ${this._renderThreadAttachments(attachments)}
                 </div>
             </div>
         `;
+    }
+
+    _renderReplyQuote(message, mail) {
+        const inReplyTo = typeof message.in_reply_to === 'string' ? message.in_reply_to.trim() : '';
+        if (!inReplyTo) {
+            return nothing;
+        }
+        const threadMessages = Array.isArray(mail.selectedThreadMessages)
+            ? mail.selectedThreadMessages
+            : [];
+        const parent = findThreadMessageByMessageId(threadMessages, inReplyTo);
+        let who = this.t('reply_quote.previous');
+        let preview = '';
+        let parentUid = '';
+        if (parent) {
+            const parsed = parseMailAddress(parent.from_address);
+            who = parsed.display.length > 0 ? parsed.display : this.t('empty_sender');
+            preview = mailReplyPreviewText(parent);
+            parentUid = typeof parent.uid === 'string' ? parent.uid : '';
+        }
+        return html`
+            <button
+                type="button"
+                class="mail-reply-quote"
+                data-parent-uid=${parentUid}
+                @click=${(event) => {
+                    event.stopPropagation();
+                    this._scrollToThreadMessage(parentUid);
+                }}
+            >
+                <span class="who">${who}</span>
+                ${preview.length > 0
+                    ? html`<span class="preview">${preview}</span>`
+                    : nothing}
+            </button>
+        `;
+    }
+
+    _scrollToThreadMessage(uid) {
+        if (typeof uid !== 'string' || !uid) {
+            return;
+        }
+        const root = this.renderRoot;
+        if (!root) {
+            return;
+        }
+        const target = root.querySelector(`.chat-bubble-row[data-uid="${CSS.escape(uid)}"]`);
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.classList.add('reply-target-flash');
+        window.setTimeout(() => {
+            target.classList.remove('reply-target-flash');
+        }, 900);
+    }
+
+    _clearComposeReplyMode() {
+        this.dispatch(MAIL_EVENTS.COMPOSE_DRAFT_SET, {
+            in_reply_to: null,
+            references: null,
+        });
+    }
+
+    _composeReplyModeLabel(mail) {
+        const inReplyTo = typeof mail.compose.in_reply_to === 'string'
+            ? mail.compose.in_reply_to.trim()
+            : '';
+        if (!inReplyTo) {
+            return '';
+        }
+        const threadMessages = Array.isArray(mail.selectedThreadMessages)
+            ? mail.selectedThreadMessages
+            : [];
+        const parent = findThreadMessageByMessageId(threadMessages, inReplyTo);
+        if (!parent) {
+            return this.t('compose.reply_to', { author: this.t('reply_quote.previous') });
+        }
+        const parsed = parseMailAddress(parent.from_address);
+        const author = parsed.display.length > 0 ? parsed.display : this.t('empty_sender');
+        return this.t('compose.reply_to', { author });
     }
 
     _renderThread(mail) {
@@ -2914,6 +3067,7 @@ export class PlatformMailModal extends PlatformModal {
             : (mail.compose.subject.startsWith('Fwd:')
                 ? this.t('compose_forward_title')
                 : this.t('compose_new_title'));
+        const composeReplyModeLabel = this._composeReplyModeLabel(mail);
         return html`
             <section class="mail-thread">
                 <div class="mail-thread-header">
@@ -3078,6 +3232,22 @@ export class PlatformMailModal extends PlatformModal {
                                 </platform-button>
                             </div>
                         </div>
+                        ${composeReplyModeLabel
+                            ? html`
+                                <div class="compose-reply-mode">
+                                    <span class="compose-reply-mode-label">${composeReplyModeLabel}</span>
+                                    <platform-button
+                                        variant="ghost"
+                                        icon-only
+                                        density="dense"
+                                        .ariaLabel=${this.t('compose_discard')}
+                                        @click=${() => this._clearComposeReplyMode()}
+                                    >
+                                        <platform-icon name="close" size="14"></platform-icon>
+                                    </platform-button>
+                                </div>
+                            `
+                            : nothing}
                         <div class="compose-meta">
                             <label class="compose-row">
                                 <span class="compose-row-label">${this.t('to_label')}</span>
