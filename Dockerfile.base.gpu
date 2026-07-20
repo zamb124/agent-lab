@@ -71,12 +71,6 @@ ENV PATH="/opt/venv/bin:${PATH}"
 ENV UV_HTTP_TIMEOUT=600
 RUN uv venv --python 3.14 "${VIRTUAL_ENV}"
 
-# CUDA-enabled Torch. Host driver/container runtime только прокидывают GPU в Pod;
-# PyTorch wheel всё равно должен быть собран с CUDA, иначе torch.cuda.is_available()
-# останется False даже при nvidia.com/gpu: 1.
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --python "${VIRTUAL_ENV}/bin/python" torch torchvision torchaudio
-
 # Production deps платформы для GPU/ML-стороны: core + rag (litserve, silero,
 # silero-vad, pyannote-audio, sentence-transformers, transformers, flagembedding,
 # soundfile, hydra, omegaconf) + rag-worker (tiktoken, beautifulsoup4) +
@@ -93,3 +87,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --no-annotate --no-header --no-emit-project \
         -o /tmp/requirements.txt && \
     uv pip install --python "${VIRTUAL_ENV}/bin/python" -r /tmp/requirements.txt
+
+# CUDA Torch stack ПОСЛЕ lock-install: uv.lock тянет torch без torchvision,
+# и рассинхрон даёт RuntimeError: operator torchvision::nms does not exist.
+# Host driver/container runtime только прокидывают GPU; wheel должен быть CUDA.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --python "${VIRTUAL_ENV}/bin/python" --force-reinstall \
+        "torch==2.12.0" "torchvision==0.27.1" "torchaudio==2.11.0"

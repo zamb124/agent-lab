@@ -14,6 +14,12 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
 
+# Базовый image мог остаться с рассинхроном torch/torchvision после lock-install.
+# Переустанавливаем согласованный CUDA-стек на каждом GPU app-build.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --python /opt/venv/bin/python --force-reinstall \
+        "torch==2.12.0" "torchvision==0.27.1" "torchaudio==2.11.0"
+
 COPY core/ ./core/
 COPY apps/ ./apps/
 COPY scripts/ ./scripts/
