@@ -14,11 +14,11 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
 
-# Базовый image мог остаться с рассинхроном torch/torchvision после lock-install.
-# Переустанавливаем согласованный CUDA-стек на каждом GPU app-build.
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --python /opt/venv/bin/python --force-reinstall \
-        "torch==2.12.0" "torchvision==0.27.1" "torchaudio==2.11.0"
+# Базовый image иногда оставляет torchvision 0.28+ при torch 2.12 →
+# RuntimeError: operator torchvision::nms does not exist.
+# --no-deps: uv resolver иначе требует torch==2.12.1 для torchvision==0.27.1.
+RUN uv pip install --python /opt/venv/bin/python --force-reinstall --no-deps \
+        "torchvision==0.27.1"
 
 COPY core/ ./core/
 COPY apps/ ./apps/
