@@ -10,6 +10,7 @@ Drive API: upload DOCX с конвертацией, share.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Mapping
 from typing import Protocol, cast
@@ -17,6 +18,8 @@ from typing import Protocol, cast
 from google.auth.transport.requests import Request as AuthRequest
 from google.oauth2 import service_account as sa
 
+from core.config import get_settings
+from core.config.models import GoogleWorkspaceApiBases
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.types import (
@@ -29,9 +32,9 @@ from core.types import (
 
 logger = get_logger(__name__)
 
-_DOCS_BASE = "https://docs.googleapis.com/v1/documents"
-_DRIVE_UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3/files"
-_DRIVE_BASE = "https://www.googleapis.com/drive/v3"
+_DEFAULT_DOCS_BASE = "https://docs.googleapis.com/v1/documents"
+_DEFAULT_DRIVE_UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3/files"
+_DEFAULT_DRIVE_BASE = "https://www.googleapis.com/drive/v3"
 
 _SCOPES = [
     "https://www.googleapis.com/auth/documents",
@@ -70,6 +73,18 @@ class _FromServiceAccountInfo(Protocol):
     ) -> _GoogleCredentials: ...
 
 
+def _resolve_docs_api_base(
+    explicit: str | None,
+    from_settings: str | None,
+    default: str,
+) -> str:
+    if explicit is not None and explicit.strip() != "":
+        return explicit.rstrip("/")
+    if from_settings is not None and from_settings.strip() != "":
+        return from_settings.rstrip("/")
+    return default
+
+
 class GoogleDocsClient:
     """
     Async-клиент для Google Docs API v1 + Google Drive API v3.
@@ -95,6 +110,10 @@ class GoogleDocsClient:
         credentials_json: str | None = None,
         access_token: str | None = None,
         subject: str | None = None,
+        docs_base: str | None = None,
+        drive_base: str | None = None,
+        drive_upload_base: str | None = None,
+        api_bases: GoogleWorkspaceApiBases | None = None,
     ) -> None:
         if credentials_json and access_token:
             raise ValueError(
@@ -110,11 +129,35 @@ class GoogleDocsClient:
                 "subject (impersonation) работает только с credentials_json."
             )
 
+        resolved_bases = api_bases
+        if resolved_bases is None:
+            resolved_bases = get_settings().google_workspace.api_bases
+        self._docs_base: str = _resolve_docs_api_base(
+            docs_base,
+            resolved_bases.docs_base,
+            _DEFAULT_DOCS_BASE,
+        )
+        self._drive_base: str = _resolve_docs_api_base(
+            drive_base,
+            resolved_bases.drive_base,
+            _DEFAULT_DRIVE_BASE,
+        )
+        self._drive_upload_base: str = _resolve_docs_api_base(
+            drive_upload_base,
+            resolved_bases.drive_upload_base,
+            _DEFAULT_DRIVE_UPLOAD_BASE,
+        )
+
         self._credentials: _GoogleCredentials | None = None
         self._static_token: str | None = None
 
         if credentials_json:
             info = parse_json_object(credentials_json, "google.service_account")
+            if (
+                resolved_bases.token_uri is not None
+                and resolved_bases.token_uri.strip() != ""
+            ):
+                info = {**info, "token_uri": resolved_bases.token_uri.strip()}
             from_service_account_info = cast(
                 _FromServiceAccountInfo,
                 sa.Credentials.from_service_account_info,
@@ -130,7 +173,7 @@ class GoogleDocsClient:
 
     # ── helpers ──────────────────────────────────────────────────
 
-    def _auth_headers(self) -> dict[str, str]:
+    async def _auth_headers(self) -> dict[str, str]:
         if self._static_token:
             return {"Authorization": f"Bearer {self._static_token}"}
 
@@ -138,7 +181,9 @@ class GoogleDocsClient:
         if credentials is None:
             raise RuntimeError("GoogleDocsClient credentials are not configured")
         if not credentials.valid:
-            credentials.refresh(AuthRequest())
+            # google-auth refresh is sync HTTP; to_thread avoids blocking the loop
+            # (deadlock with local ASGI emulator serving /token).
+            await asyncio.to_thread(credentials.refresh, AuthRequest())
         token = credentials.token
         if token is None or token == "":
             raise RuntimeError("GoogleDocsClient credentials did not produce access token")
@@ -154,7 +199,7 @@ class GoogleDocsClient:
         headers: dict[str, str] | None = None,
         timeout: float = 60.0,
     ) -> JsonObject:
-        hdrs = {**self._auth_headers(), **(headers or {})}
+        hdrs = {**(await self._auth_headers()), **(headers or {})}
         client = get_httpx_client(timeout=timeout)
         if method == "GET":
             resp = await client.get(url, headers=hdrs)
@@ -184,13 +229,13 @@ class GoogleDocsClient:
         """POST /v1/documents — пустой документ с заголовком."""
         return await self._request(
             "POST",
-            _DOCS_BASE,
+            self._docs_base,
             json_body=require_json_object({"title": title}, "gdocs.create_document"),
         )
 
     async def get_document(self, document_id: str) -> JsonObject:
         """GET /v1/documents/{documentId} — полная структура документа."""
-        return await self._request("GET", f"{_DOCS_BASE}/{document_id}")
+        return await self._request("GET", f"{self._docs_base}/{document_id}")
 
     async def read_as_text(self, document_id: str) -> str:
         """Читает документ и извлекает plain-text из JSON-структуры."""
@@ -203,7 +248,7 @@ class GoogleDocsClient:
         """POST /v1/documents/{documentId}:batchUpdate — атомарное обновление."""
         return await self._request(
             "POST",
-            f"{_DOCS_BASE}/{document_id}:batchUpdate",
+            f"{self._docs_base}/{document_id}:batchUpdate",
             json_body=require_json_object({"requests": requests}, "gdocs.batch_update"),
         )
 
@@ -284,7 +329,7 @@ class GoogleDocsClient:
             f"Content-Type: {_DOCX_MIME}\r\n\r\n"
         ).encode("utf-8") + docx_bytes + f"\r\n--{boundary}--".encode("utf-8")
 
-        url = f"{_DRIVE_UPLOAD_BASE}?uploadType=multipart&fields=id,name,mimeType,webViewLink"
+        url = f"{self._drive_upload_base}?uploadType=multipart&fields=id,name,mimeType,webViewLink"
         return await self._request(
             "POST",
             url,
@@ -301,7 +346,7 @@ class GoogleDocsClient:
         role: str = "reader",
     ) -> JsonObject:
         """Выдаёт доступ к документу по email (Drive permissions API)."""
-        url = f"{_DRIVE_BASE}/files/{document_id}/permissions"
+        url = f"{self._drive_base}/files/{document_id}/permissions"
         return await self._request(
             "POST",
             url,
@@ -317,7 +362,7 @@ class GoogleDocsClient:
         role: str = "reader",
     ) -> JsonObject:
         """Делает документ доступным по ссылке (anyone with link)."""
-        url = f"{_DRIVE_BASE}/files/{document_id}/permissions"
+        url = f"{self._drive_base}/files/{document_id}/permissions"
         return await self._request(
             "POST",
             url,

@@ -19,7 +19,8 @@ from typing import TYPE_CHECKING
 
 from apps.flows.src.state.node_files import validate_node_files_list
 from core.logging import get_logger
-from core.types import JsonObject, JsonValue
+from core.reflection import default_pass_fail_exits
+from core.types import JsonObject, JsonValue, parse_json_object
 from core.urn import extract_resource_id
 
 if TYPE_CHECKING:
@@ -30,7 +31,27 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-_EDGE_ALLOWED_FIELDS = frozenset({"from_node", "to_node", "condition", "contributes_to_join"})
+_EDGE_ALLOWED_FIELDS = frozenset(
+    {"from_node", "to_node", "condition", "from_port", "contributes_to_join"}
+)
+
+_EVALUATION_ROLES = frozenset({"tester", "judge"})
+
+
+def _is_evaluation_node(cfg: JsonObject) -> bool:
+    """llm_node с store.evaluation_role tester|judge — harness-only, не execution-граф."""
+    store = cfg.get("store")
+    if not isinstance(store, dict):
+        return False
+    role = store.get("evaluation_role")
+    return isinstance(role, str) and role in _EVALUATION_ROLES
+
+
+def _is_non_execution_graph_node(cfg: JsonObject) -> bool:
+    """Resource или evaluation — не участвуют в walk/terminal/unreachable."""
+    if cfg.get("type") == "resource":
+        return True
+    return _is_evaluation_node(cfg)
 
 
 def _edge_endpoint_ids(edge: JsonObject) -> tuple[str | None, str | None]:
@@ -42,6 +63,59 @@ def _edge_endpoint_ids(edge: JsonObject) -> tuple[str | None, str | None]:
     if not isinstance(tn, str) or tn == "":
         tn = None
     return (fn, tn)
+
+
+def _default_reflection_exit_ids() -> frozenset[str]:
+    return frozenset(exit_item.exit_id for exit_item in default_pass_fail_exits())
+
+
+def _reflection_exit_ids(node_cfg: JsonObject) -> frozenset[str]:
+    """exit_id из critic_policy.exits; без/пустых exits — default approved/blocked."""
+    raw_policy = node_cfg.get("critic_policy")
+    if not isinstance(raw_policy, dict):
+        return _default_reflection_exit_ids()
+    raw_exits = raw_policy.get("exits")
+    if raw_exits is None:
+        return _default_reflection_exit_ids()
+    if not isinstance(raw_exits, list):
+        return _default_reflection_exit_ids()
+    exit_ids: list[str] = []
+    for item in raw_exits:
+        if not isinstance(item, dict):
+            continue
+        exit_id = item.get("exit_id")
+        if isinstance(exit_id, str) and exit_id.strip() != "":
+            exit_ids.append(exit_id)
+    if not exit_ids:
+        return _default_reflection_exit_ids()
+    return frozenset(exit_ids)
+
+
+def _infer_reflection_exit_port(
+    condition: JsonValue | None,
+    *,
+    allowed_exit_ids: frozenset[str],
+) -> str | None:
+    """Сопоставляет simple condition с exit_id (validation.exit_id или approved)."""
+    if not isinstance(condition, dict):
+        return None
+    if condition.get("type") != "simple":
+        return None
+    if condition.get("operator") != "==":
+        return None
+    variable = condition.get("variable")
+    value = condition.get("value")
+    if variable == "validation.exit_id":
+        if isinstance(value, str) and value in allowed_exit_ids:
+            return value
+        return None
+    if variable == "validation.approved":
+        if value is True and "approved" in allowed_exit_ids:
+            return "approved"
+        if value is False and "blocked" in allowed_exit_ids:
+            return "blocked"
+        return None
+    return None
 
 
 class ValidationSeverity(str, Enum):
@@ -214,6 +288,31 @@ class FlowValidator:
                     details={"edge": edge},
                 )
 
+            from_port = edge.get("from_port")
+            if from_port is not None:
+                if not isinstance(from_port, str) or from_port.strip() == "":
+                    result.add_error(
+                        code="edge_from_port_invalid",
+                        message="Edge from_port must be a non-empty string when set",
+                        details={"edge": edge},
+                    )
+                elif from_node and from_node in node_ids:
+                    source_cfg = nodes.get(from_node) or {}
+                    if source_cfg.get("type") == "reflection":
+                        allowed = _reflection_exit_ids(source_cfg)
+                        if from_port not in allowed:
+                            result.add_error(
+                                code="edge_from_port_unknown",
+                                message=(
+                                    f"Reflection edge from_port must be one of "
+                                    f"{sorted(allowed)}, got {from_port!r}"
+                                ),
+                                node_id=from_node,
+                                details={"edge": edge, "allowed_ports": sorted(allowed)},
+                            )
+
+        self._check_reflection_exit_coverage(nodes, edges, result)
+
         for edge in edges:
             e_from, e_to = _edge_endpoint_ids(edge)
             for label, nid in (("from_node", e_from), ("to_node", e_to)):
@@ -229,11 +328,25 @@ class FlowValidator:
                         node_id=nid,
                         details={"edge": edge, "endpoint": label},
                     )
+                elif _is_evaluation_node(ncfg):
+                    result.add_error(
+                        code="edge_involves_evaluation_node",
+                        message=(
+                            f"Ребро не может соединяться с evaluation-нодой "
+                            f"(tester/judge) '{nid}'"
+                        ),
+                        node_id=nid,
+                        details={"edge": edge, "endpoint": label},
+                    )
 
         # Проверка достижимости нод от entry
         if entry and entry in node_ids:
             reachable = self._find_reachable_nodes(entry, edges, node_ids)
-            unreachable = node_ids - reachable
+            unreachable = {
+                nid
+                for nid in (node_ids - reachable)
+                if not _is_non_execution_graph_node(nodes.get(nid) or {})
+            }
 
             if unreachable:
                 result.add_error(
@@ -245,7 +358,9 @@ class FlowValidator:
 
         # Проверка что граф имеет выход
         execution_node_ids = {
-            nid for nid in node_ids if (nodes.get(nid) or {}).get("type") != "resource"
+            nid
+            for nid in node_ids
+            if not _is_non_execution_graph_node(nodes.get(nid) or {})
         }
         nodes_with_outgoing: set[str] = set()
         for e in edges:
@@ -266,6 +381,49 @@ class FlowValidator:
         if entry and entry in node_ids:
             self._warn_cycles_reachable_from_entry(entry, edges, node_ids, result)
 
+    def _check_reflection_exit_coverage(
+        self,
+        nodes: dict[str, JsonObject],
+        edges: list[JsonObject],
+        result: FlowValidationResult,
+    ) -> None:
+        """Error, если у reflection есть исходящие, но не покрыты все exits policy."""
+        for node_id, cfg in nodes.items():
+            if cfg.get("type") != "reflection":
+                continue
+            allowed = _reflection_exit_ids(cfg)
+            covered: set[str] = set()
+            has_outgoing = False
+            for edge in edges:
+                from_node, _to_node = _edge_endpoint_ids(edge)
+                if from_node != node_id:
+                    continue
+                has_outgoing = True
+                port = edge.get("from_port")
+                if isinstance(port, str) and port in allowed:
+                    covered.add(port)
+                    continue
+                inferred = _infer_reflection_exit_port(
+                    edge.get("condition"),
+                    allowed_exit_ids=allowed,
+                )
+                if inferred is not None:
+                    covered.add(inferred)
+            if not has_outgoing:
+                continue
+            missing = sorted(allowed - covered)
+            if missing:
+                result.add_error(
+                    code="reflection_exits_incomplete",
+                    message=(
+                        f"Reflection-нода '{node_id}' имеет исходящие рёбра, "
+                        f"но не покрыты выходы: {', '.join(missing)}"
+                    ),
+                    severity=ValidationSeverity.ERROR,
+                    node_id=node_id,
+                    details={"missing_ports": missing, "declared_ports": sorted(allowed)},
+                )
+
     def _warn_fan_in_without_incoming_policy(
         self,
         nodes: dict[str, JsonObject],
@@ -281,7 +439,7 @@ class FlowValidator:
             if edge_n < 2:
                 continue
             cfg = nodes.get(target) or {}
-            if cfg.get("type") == "resource":
+            if _is_non_execution_graph_node(cfg):
                 continue
             if "incoming_policy" not in cfg:
                 result.add_error(
@@ -500,19 +658,196 @@ class FlowValidator:
                             node_id=node_id,
                         )
 
-            # remote_flow
+            # remote_flow — только direct A2A URL (без registry flow_id)
             if node_type == "remote_flow":
                 flow_id = config.get("flow_id")
                 url = config.get("url")
                 has_flow_id = isinstance(flow_id, str) and bool(flow_id.strip())
                 has_url = isinstance(url, str) and bool(url.strip())
 
-                if not has_flow_id and not has_url:
+                if has_flow_id:
                     result.add_error(
-                        code="remote_flow_no_target",
-                        message="Remote flow должен иметь flow_id или url",
+                        code="remote_flow_registry_forbidden",
+                        message=(
+                            "Remote flow не поддерживает registry flow_id — "
+                            "укажите прямой A2A url"
+                        ),
                         node_id=node_id,
                     )
+                elif not has_url:
+                    result.add_error(
+                        code="remote_flow_no_target",
+                        message="Remote flow должен иметь url",
+                        node_id=node_id,
+                    )
+
+                metadata_template = config.get("metadata_template")
+                if metadata_template is not None:
+                    if not isinstance(metadata_template, str):
+                        result.add_error(
+                            code="remote_flow_metadata_template_invalid",
+                            message="remote_flow.metadata_template must be a JSON object string",
+                            node_id=node_id,
+                        )
+                    elif metadata_template.strip():
+                        try:
+                            _ = parse_json_object(
+                                metadata_template.strip(),
+                                "remote_flow.metadata_template",
+                            )
+                        except ValueError as e:
+                            result.add_error(
+                                code="remote_flow_metadata_template_invalid",
+                                message=str(e),
+                                node_id=node_id,
+                            )
+
+            if node_type == "channel":
+                self._validate_channel_node(node_id, config, result)
+
+    def _validate_channel_node(
+        self,
+        node_id: str,
+        config: JsonObject,
+        result: FlowValidationResult,
+    ) -> None:
+        """Валидация ChannelNode; email — delivery XOR; sms — HTTP-супербаза."""
+        channel = config.get("channel")
+        if channel == "email":
+            self._validate_email_channel_node(node_id, config, result)
+            return
+        if channel == "sms":
+            self._validate_sms_channel_node(node_id, config, result)
+            return
+
+    def _validate_sms_channel_node(
+        self,
+        node_id: str,
+        config: JsonObject,
+        result: FlowValidationResult,
+    ) -> None:
+        """SMS: url обязателен; method/timeout/body_template — типы; recipient/text не требуются."""
+        raw_cfg = config.get("channel_config")
+        channel_config = raw_cfg if isinstance(raw_cfg, dict) else {}
+        url = channel_config.get("url")
+        if not isinstance(url, str) or not url.strip():
+            result.add_error(
+                code="sms_channel_url_required",
+                message="SMS channel требует channel_config.url",
+                node_id=node_id,
+            )
+        method = channel_config.get("method")
+        if method is not None and (not isinstance(method, str) or not method.strip()):
+            result.add_error(
+                code="sms_channel_method_invalid",
+                message="SMS channel_config.method must be a non-empty string",
+                node_id=node_id,
+            )
+        body_template = channel_config.get("body_template")
+        if body_template is not None and not isinstance(body_template, (str, dict)):
+            result.add_error(
+                code="sms_channel_body_template_invalid",
+                message="SMS channel_config.body_template must be a JSON string or object",
+                node_id=node_id,
+            )
+        timeout = channel_config.get("timeout")
+        if timeout is not None and (
+            isinstance(timeout, bool) or not isinstance(timeout, (int, float))
+        ):
+            result.add_error(
+                code="sms_channel_timeout_invalid",
+                message="SMS channel_config.timeout must be a number",
+                node_id=node_id,
+            )
+
+    def _validate_email_channel_node(
+        self,
+        node_id: str,
+        config: JsonObject,
+        result: FlowValidationResult,
+    ) -> None:
+        """Email — delivery=mailbox|smtp (XOR)."""
+        raw_cfg = config.get("channel_config")
+        channel_config = raw_cfg if isinstance(raw_cfg, dict) else {}
+        smtp_keys = (
+            "smtp_host",
+            "smtp_port",
+            "smtp_user",
+            "from_email",
+            "password",
+            "smtp_use_tls",
+        )
+        delivery = channel_config.get("delivery")
+        if delivery not in ("mailbox", "smtp"):
+            result.add_error(
+                code="email_channel_delivery_required",
+                message="Email channel требует channel_config.delivery = 'mailbox' | 'smtp'",
+                node_id=node_id,
+            )
+        elif delivery == "mailbox":
+            for smtp_key in smtp_keys:
+                if smtp_key in channel_config:
+                    result.add_error(
+                        code="email_channel_mailbox_smtp_mixed",
+                        message=(
+                            f"Email delivery=mailbox запрещает {smtp_key!r}; "
+                            "используйте delivery=smtp"
+                        ),
+                        node_id=node_id,
+                        details={"key": smtp_key},
+                    )
+            binding_id = channel_config.get("mailbox_binding_id")
+            if not isinstance(binding_id, str) or not binding_id.strip():
+                result.add_error(
+                    code="email_channel_mailbox_binding_required",
+                    message="Email delivery=mailbox требует channel_config.mailbox_binding_id",
+                    node_id=node_id,
+                )
+        else:
+            if "mailbox_binding_id" in channel_config:
+                result.add_error(
+                    code="email_channel_smtp_mailbox_mixed",
+                    message=(
+                        "Email delivery=smtp запрещает mailbox_binding_id; "
+                        "используйте delivery=mailbox"
+                    ),
+                    node_id=node_id,
+                )
+            for required_key in ("smtp_host", "from_email", "password"):
+                value = channel_config.get(required_key)
+                if not isinstance(value, str) or not value.strip():
+                    result.add_error(
+                        code="email_channel_smtp_field_required",
+                        message=(
+                            f"Email delivery=smtp требует channel_config.{required_key}"
+                        ),
+                        node_id=node_id,
+                        details={"key": required_key},
+                    )
+
+        raw_mapping = config.get("input_mapping")
+        mapping = raw_mapping if isinstance(raw_mapping, dict) else {}
+        recipient = mapping.get("recipient")
+        if not isinstance(recipient, str) or not recipient.strip():
+            result.add_error(
+                code="email_channel_recipient_required",
+                message="Email channel требует input_mapping.recipient (Кому)",
+                node_id=node_id,
+            )
+        text = mapping.get("text")
+        if not isinstance(text, str) or not text.strip():
+            result.add_error(
+                code="email_channel_text_required",
+                message="Email channel требует input_mapping.text (тело письма)",
+                node_id=node_id,
+            )
+        if "subject" not in mapping:
+            result.add_error(
+                code="email_channel_subject_missing",
+                message="Email channel: задайте input_mapping.subject (допускается пустая строка)",
+                severity=ValidationSeverity.WARNING,
+                node_id=node_id,
+            )
 
     def _validate_variables(
         self,
@@ -584,6 +919,12 @@ class FlowValidator:
                 bt = config.get("body_template")
                 if isinstance(bt, str):
                     check_var_refs(bt, node_id, "body_template")
+
+            # metadata_template (remote_flow A2A params.metadata)
+            if "metadata_template" in config:
+                mt = config.get("metadata_template")
+                if isinstance(mt, str):
+                    check_var_refs(mt, node_id, "metadata_template")
 
         # Проверяем значения переменных flow на @var: ссылки
         for var_key, var_value in variables.items():

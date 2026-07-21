@@ -63,6 +63,7 @@ from core.files.s3_client import S3ClientFactory
 from core.files.service import FilesService
 from core.identity.auth_service import AuthService
 from core.identity.integration_external_author import IntegrationExternalAuthorService
+from core.integrations.company_credentials import CompanyIntegrationCredentialService
 from core.integrations.oauth_service import OAuthService
 from core.integrations.repository import IntegrationCredentialRepository
 from core.logging import get_logger
@@ -444,6 +445,13 @@ class BaseContainer:
         return OAuthService(
             repository=self.integration_credential_repository,
             storage=self.shared_storage,
+        )
+
+    @lazy
+    def company_integration_credential_service(self) -> CompanyIntegrationCredentialService:
+        return CompanyIntegrationCredentialService(
+            repository=self.integration_credential_repository,
+            google_workspace_config=get_settings().google_workspace,
         )
 
     @lazy

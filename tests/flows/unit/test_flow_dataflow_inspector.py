@@ -2,6 +2,7 @@ from pydantic import TypeAdapter
 
 from apps.flows.src.models import Edge, FlowVariableConfig, GraphNodeConfig
 from apps.flows.src.services.flow_dataflow_inspector import inspect_flow_dataflow
+from tests.flows.fixtures.reflection import reflection_policy
 
 _GRAPH_NODES_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(dict[str, GraphNodeConfig])
 
@@ -306,3 +307,50 @@ def test_inspector_input_schema_overrides_type_inference():
     assert any(
         issue.code == "missing_required_input" and issue.target == "topic" for issue in node.issues
     )
+
+
+def test_inspector_reflection_target_unavailable_without_upstream_response():
+    result = inspect_flow_dataflow(
+        flow_id="flow_1",
+        branch_id="default",
+        entry="critic",
+        variables={},
+        nodes=_nodes({
+            "critic": {
+                "type": "reflection",
+                "llm": {"model": "mock-gpt-4", "temperature": 0.0},
+                "critic_policy": reflection_policy().model_dump(mode="json"),
+            },
+        }),
+        edges=[],
+    )
+    node = result.nodes["critic"]
+    assert any(issue.code == "reflection_target_unavailable" for issue in node.issues)
+    required = {req.name: req for req in node.required_inputs}
+    assert required["response"].satisfied is False
+    writes = {item.path for item in node.writes}
+    assert "validation" in writes
+    assert "reflection_history" in writes
+
+
+def test_inspector_reflection_target_ok_after_llm():
+    result = inspect_flow_dataflow(
+        flow_id="flow_1",
+        branch_id="default",
+        entry="llm_1",
+        variables={},
+        nodes=_nodes({
+            "llm_1": {"type": "llm_node", "prompt": "Say hi"},
+            "critic": {
+                "type": "reflection",
+                "llm": {"model": "mock-gpt-4", "temperature": 0.0},
+                "critic_policy": reflection_policy().model_dump(mode="json"),
+            },
+        }),
+        edges=_edges([{"from_node": "llm_1", "to_node": "critic"}]),
+    )
+    node = result.nodes["critic"]
+    assert not any(issue.code == "reflection_target_unavailable" for issue in node.issues)
+    required = {req.name: req for req in node.required_inputs}
+    assert required["response"].satisfied is True
+    assert any(read.source_path == "response" for read in node.reads)

@@ -14,6 +14,15 @@ from apps.flows.src.services.flow_speech_resolve import (
 )
 from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
 from core.ai.runtime import synthesize_speech_audio, transcribe_audio_bytes
+from core.clients.google_workspace_auth import (
+    GoogleAuthMaterial,
+    auth_material_from_execution_variables,
+)
+from core.clients.google_workspace_scopes import (
+    GOOGLE_OAUTH_SERVICE_CANONICAL,
+    GOOGLE_OAUTH_SERVICE_PRIOR_KEYS,
+    scopes_for_google_service,
+)
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
 from core.context import get_context
@@ -21,6 +30,7 @@ from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.registry import default_retention_for_source
 from core.files.s3_client import S3ClientFactory
+from core.integrations.constants import TOKEN_TYPE_SERVICE_ACCOUNT
 from core.integrations.models import IntegrationProvider
 from core.logging import get_logger
 from core.state.interrupt import OAuthInterrupt
@@ -313,41 +323,63 @@ async def synthesize_speech(
     return record.file_id
 
 
-async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
+async def resolve_google_workspace_auth(state: "ExecutionState") -> GoogleAuthMaterial:
     """
-    Per-user OAuth для Google API.
+    Auth для Google Docs/Sheets tools.
 
-    Ищет сохранённый токен в БД. Если нет — бросает FlowInterrupt с ссылкой
-    на авторизацию Google. Flow ставится на паузу и автоматически
-    продолжается после OAuth callback.
-
-    Аргументы:
-        state: ExecutionState текущего flow
-        service: идентификатор сервиса (docs, calendar, drive, ...)
-
-    Возвращает:
-        access_token (строка)
+    Порядок: state.variables → user service=workspace → prior docs/sheets credentials →
+    company user_id=__company__ SA → OAuthInterrupt (Connect Google, service=workspace).
     """
-    scopes = [
-        "https://www.googleapis.com/auth/documents",
-        "https://www.googleapis.com/auth/drive",
-    ]
+    from_vars = auth_material_from_execution_variables(state.variables)
+    if from_vars is not None:
+        return from_vars
 
     ctx = get_context()
     if ctx is None or ctx.active_company is None:
-        raise ValueError("Контекст с активной компанией обязателен для Google OAuth")
+        raise ValueError("Контекст с активной компанией обязателен для Google Workspace auth")
 
+    company_id = ctx.active_company.company_id
+    user_id = ctx.user.user_id
     oauth = get_oauth_service()
-    credential = await oauth.get_valid_token(
-        company_id=ctx.active_company.company_id,
-        user_id=ctx.user.user_id,
-        provider=IntegrationProvider.GOOGLE,
-        service=service,
-    )
-    if credential:
-        logger.debug("Google OAuth: credential found, user=%s, service=%s", ctx.user.user_id, service)
-        return credential.access_token
 
+    workspace_cred = await oauth.get_valid_token(
+        company_id=company_id,
+        user_id=user_id,
+        provider=IntegrationProvider.GOOGLE,
+        service=GOOGLE_OAUTH_SERVICE_CANONICAL,
+    )
+    if workspace_cred is not None and workspace_cred.token_type != TOKEN_TYPE_SERVICE_ACCOUNT:
+        logger.debug(
+            "Google Workspace: user workspace credential, user=%s",
+            user_id,
+        )
+        return GoogleAuthMaterial(access_token=workspace_cred.access_token)
+
+    for prior_service in GOOGLE_OAUTH_SERVICE_PRIOR_KEYS:
+        prior_cred = await oauth.get_valid_token(
+            company_id=company_id,
+            user_id=user_id,
+            provider=IntegrationProvider.GOOGLE,
+            service=prior_service,
+        )
+        if prior_cred is not None and prior_cred.token_type != TOKEN_TYPE_SERVICE_ACCOUNT:
+            logger.debug(
+                "Google Workspace: prior credential service=%s user=%s",
+                prior_service,
+                user_id,
+            )
+            return GoogleAuthMaterial(access_token=prior_cred.access_token)
+
+    company_material = await (
+        require_current_container()
+        .company_integration_credential_service
+        .get_google_workspace_auth_material(company_id)
+    )
+    if company_material is not None:
+        logger.debug("Google Workspace: company SA credential, company=%s", company_id)
+        return company_material
+
+    scopes = scopes_for_google_service(GOOGLE_OAUTH_SERVICE_CANONICAL)
     flow_context: JsonObject = {
         "flow_id": state.session_flow_id,
         "session_id": state.session_id,
@@ -355,7 +387,7 @@ async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
         "context_id": state.context_id,
         "branch_id": state.branch_id,
         "channel": "a2a",
-        "user_id": ctx.user.user_id,
+        "user_id": user_id,
         "context_data": ctx.model_dump(mode="json"),
     }
     saved_trace_context = get_current_trace_context()
@@ -364,18 +396,40 @@ async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
 
     auth_url = await oauth.build_auth_url(
         provider=IntegrationProvider.GOOGLE,
-        service=service,
+        service=GOOGLE_OAUTH_SERVICE_CANONICAL,
         scopes=scopes,
-        user_id=ctx.user.user_id,
-        company_id=ctx.active_company.company_id,
+        user_id=user_id,
+        company_id=company_id,
         flow_context=flow_context,
     )
-    logger.info("Google OAuth: no credential, raising OAuthInterrupt for user=%s, service=%s", ctx.user.user_id, service)
+    logger.info(
+        "Google Workspace: no credential, raising OAuthInterrupt for user=%s",
+        user_id,
+    )
     raise FlowInterrupt(
         body=OAuthInterrupt(
-            question="Для работы с Google необходима авторизация",
+            # UI переводит через platform_chat.interrupt_oauth_workspace_*;
+            # строка — стабильный ключ для non-SPA клиентов.
+            question="oauth_required.google.workspace",
             auth_url=auth_url,
             provider="google",
-            service=service,
+            service=GOOGLE_OAUTH_SERVICE_CANONICAL,
         ),
     )
+
+
+async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
+    """
+    Thin helper: resolve auth and return access_token only.
+
+    New tools must use resolve_google_workspace_auth (supports company SA).
+    service is ignored for lookup order; interrupt always uses workspace.
+    """
+    _ = service
+    material = await resolve_google_workspace_auth(state)
+    if material.access_token is None or material.access_token.strip() == "":
+        raise ValueError(
+            "get_google_oauth_token requires OAuth access_token; "
+            + "company SA needs resolve_google_workspace_auth"
+        )
+    return material.access_token

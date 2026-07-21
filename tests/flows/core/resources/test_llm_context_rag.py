@@ -317,3 +317,127 @@ async def test_rag_context_registry_uses_all_merged_rag_resources() -> None:
         "skill-kb",
         "node-kb",
     ]
+
+
+class RecordingNamespaceService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str | None]] = []
+
+    async def get_or_create(
+        self,
+        name: str,
+        *,
+        description: str | None = None,
+        **_kwargs: object,
+    ) -> object:
+        self.calls.append((name, description))
+        return object()
+
+
+@pytest.mark.asyncio
+async def test_resolve_ensures_namespace_via_namespace_service() -> None:
+    ns = RecordingNamespaceService()
+    binds = await resolve_rag_resource_binds_for_runtime(
+        flow_resources={
+            "kb": {
+                "type": "rag",
+                "config": {
+                    "namespace": "kb-support",
+                    "namespace_description": "Support docs",
+                },
+            }
+        },
+        skill_resources=None,
+        node_resources_raw={},
+        repository=InMemoryResourceRepository(),
+        namespace_service=ns,
+    )
+    assert binds["kb"].namespace == "kb-support"
+    assert ns.calls == [("kb-support", "Support docs")]
+
+
+@pytest.mark.asyncio
+async def test_inline_rag_permission_denied_when_groups_missing(
+    flows_permissions_enabled,
+) -> None:
+    _ = flows_permissions_enabled
+    state = ExecutionState.create(
+        task_id="task-rag-perm",
+        context_id="ctx-rag-perm",
+        user_id="user-rag-perm",
+        session_id="flow-rag-perm:ctx-rag-perm",
+        variables={},
+        user_groups=["users"],
+    )
+    with pytest.raises(PermissionError, match="RAG-ресурс"):
+        await resolve_rag_resource_binds_for_runtime(
+            flow_resources={
+                "kb": {
+                    "type": "rag",
+                    "permission": ["managers"],
+                    "config": {"namespace": "kb-private"},
+                }
+            },
+            skill_resources=None,
+            node_resources_raw={},
+            repository=InMemoryResourceRepository(),
+            state=state,
+        )
+
+
+@pytest.mark.asyncio
+async def test_shared_rag_permission_allows_matching_group(
+    flows_permissions_enabled,
+) -> None:
+    _ = flows_permissions_enabled
+    repository = InMemoryResourceRepository(
+        ResourceDefinition(
+            resource_id="shared_kb",
+            type=ResourceType.RAG,
+            permission=["managers"],
+            config={"namespace": "company-kb"},
+        )
+    )
+    state = ExecutionState.create(
+        task_id="task-rag-perm-ok",
+        context_id="ctx-rag-perm-ok",
+        user_id="user-rag-perm",
+        session_id="flow-rag-perm:ctx-rag-perm-ok",
+        variables={},
+        user_groups=["managers"],
+    )
+    binds = await resolve_rag_resource_binds_for_runtime(
+        flow_resources={"kb": {"resource_id": "shared_kb"}},
+        skill_resources=None,
+        node_resources_raw={},
+        repository=repository,
+        state=state,
+    )
+    assert binds["kb"].namespace == "company-kb"
+
+
+@pytest.mark.asyncio
+async def test_empty_permission_allows_any_user(flows_permissions_enabled) -> None:
+    _ = flows_permissions_enabled
+    state = ExecutionState.create(
+        task_id="task-rag-perm-empty",
+        context_id="ctx-rag-perm-empty",
+        user_id="user-rag-perm",
+        session_id="flow-rag-perm:ctx-rag-perm-empty",
+        variables={},
+        user_groups=[],
+    )
+    binds = await resolve_rag_resource_binds_for_runtime(
+        flow_resources={
+            "kb": {
+                "type": "rag",
+                "permission": [],
+                "config": {"namespace": "kb-open"},
+            }
+        },
+        skill_resources=None,
+        node_resources_raw={},
+        repository=InMemoryResourceRepository(),
+        state=state,
+    )
+    assert binds["kb"].namespace == "kb-open"

@@ -78,7 +78,7 @@ export class CRMNoteGraphModal extends PlatformModal {
                 background: var(--crm-surface);
                 color: var(--text-secondary);
             }
-            .btn:hover { background: var(--crm-surface-muted); color: var(--text-primary); }
+            .btn:not(.btn-primary):not(.btn-danger):hover { background: var(--crm-surface-muted); color: var(--text-primary); }
         `,
     ];
 

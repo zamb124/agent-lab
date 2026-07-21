@@ -98,8 +98,6 @@ export class PlatformBottomNav extends PlatformElement {
                 padding: var(--space-2);
                 box-sizing: border-box;
                 background: var(--glass-solid-strong);
-                backdrop-filter: blur(var(--glass-blur-strong));
-                -webkit-backdrop-filter: blur(var(--glass-blur-strong));
                 border: 1px solid var(--glass-border-medium);
                 border-radius: var(--platform-bottom-nav-radius);
                 box-shadow: var(--glass-shadow-strong), var(--glass-inner-glow-medium);

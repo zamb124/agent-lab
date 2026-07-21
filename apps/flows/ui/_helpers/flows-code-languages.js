@@ -117,6 +117,21 @@ export function flowCodeLanguageOptions() {
     return FLOW_CODE_LANGUAGES.map((item) => ({ value: item.value, label: item.label }));
 }
 
+/**
+ * Items для platform-segmented-control: brand-логотипы через iconSrc (img), не platform-icon.
+ * @param {{ iconOnly?: boolean }} [options]
+ */
+export function flowCodeLanguageSegmentItems(options = {}) {
+    const iconOnly = options.iconOnly === true;
+    return FLOW_CODE_LANGUAGES.map((item) => ({
+        value: item.value,
+        iconSrc: `/static/core/assets/icons/${item.icon}.svg`,
+        iconFallback: item.shortLabel,
+        title: item.label,
+        ...(iconOnly ? {} : { label: item.label }),
+    }));
+}
+
 export function flowCodeLanguageLabel(value) {
     return flowCodeLanguageMeta(value).label;
 }

@@ -65,6 +65,7 @@ from core.state import ExecutionState
 from core.types import (
     JsonObject,
     JsonValue,
+    parse_json_object,
     require_json_array,
     require_json_object,
 )
@@ -1209,6 +1210,9 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
         raw_node_flow_id = request.node_config.get("flow_id")
         if raw_node_flow_id is not None and not isinstance(raw_node_flow_id, str):
             raise ValueError("execute.node_config.flow_id must be a string")
+        # remote_flow: flow_id в конфиге не является parent execute flow (запрещён валидатором)
+        if request.node_type == "remote_flow":
+            raw_node_flow_id = None
         flow_id = request.flow_id or raw_node_flow_id or "test-flow"
         if "session_id" not in input_state_normalized:
             input_state_normalized["session_id"] = f"{flow_id}:{context_id}"
@@ -1316,8 +1320,19 @@ def _validate_node_config(config: JsonObject) -> None:
             raise ValueError("url обязателен для external_api")
 
     elif node_type == "remote_flow":
-        if not config.get("url") and not config.get("flow_id"):
-            raise ValueError("url или flow_id обязателен для remote_flow")
+        flow_id = config.get("flow_id")
+        if isinstance(flow_id, str) and flow_id.strip():
+            raise ValueError("remote_flow не поддерживает registry flow_id — укажите url")
+        url = config.get("url")
+        if not isinstance(url, str) or not url.strip():
+            raise ValueError("url обязателен для remote_flow")
+        metadata_template = config.get("metadata_template")
+        if metadata_template is not None:
+            if not isinstance(metadata_template, str):
+                raise ValueError("remote_flow.metadata_template must be a JSON object string")
+            raw_metadata = metadata_template.strip()
+            if raw_metadata:
+                _ = parse_json_object(raw_metadata, "remote_flow.metadata_template")
 
     elif node_type == "flow":
         if not config.get("flow_id"):

@@ -32,6 +32,7 @@ import {
 } from '../../../../apps/flows/ui/events/resources/agent-skills.resource.js';
 import { llmContextResolveParentOp } from '../../../../apps/flows/ui/events/resources/llm-context.resource.js';
 import { exceptionAbsorbAllowNamesOp, executionLimitsOp } from '../../../../apps/flows/ui/events/resources/metadata.resource.js';
+import { workQueuesResource } from '../../../../apps/flows/ui/events/resources/work-queues.resource.js';
 
 import '../../../../apps/flows/ui/components/nodes/flows-base-node-editor.js';
 import '../../../../apps/flows/ui/components/nodes/flows-llm-node-editor.js';
@@ -62,6 +63,7 @@ const FACTORIES = [
     llmContextResolveParentOp,
     exceptionAbsorbAllowNamesOp,
     executionLimitsOp,
+    workQueuesResource,
 ];
 
 function bootstrap() {
@@ -70,6 +72,7 @@ function bootstrap() {
     const effects = collected.effects.filter((effect) => (
         effect.__factoryName === 'flows/code_validate'
         || effect.__factoryName === 'flows/code_editor_state'
+        || effect.__factoryName === 'flows/work_queues'
     ));
     return bootstrapTestBus({ slices: collected.slices, effects });
 }
@@ -79,6 +82,10 @@ function segmentedSegments(control) {
 }
 
 function settingsSegmentedControl(baseEditor, selector = 'platform-segmented-control') {
+    return settingsQuery(baseEditor, selector);
+}
+
+function settingsQuery(baseEditor, selector) {
     const settingsSlot = baseEditor.shadowRoot.querySelector('slot[name="settings"]');
     const assigned = settingsSlot.assignedElements({ flatten: true });
     for (const root of assigned) {
@@ -109,6 +116,19 @@ describe('node editors — top-level NodeConfig contract', () => {
         fetchMock.respondJson('GET', (url) => /\/flows\/api\/v1\/agent-skills(\?|$)/.test(url), {
             items: [],
             total: 0,
+            limit: 200,
+            offset: 0,
+        });
+        fetchMock.respondJson('GET', (url) => /\/flows\/api\/v1\/work-queues(\?|$)/.test(url), {
+            items: [
+                {
+                    work_queue_id: 'wq_support',
+                    work_queue_slug: 'support',
+                    name: 'Support',
+                    description: null,
+                },
+            ],
+            total: 1,
             limit: 200,
             offset: 0,
         });
@@ -263,14 +283,17 @@ describe('node editors — top-level NodeConfig contract', () => {
         await elementUpdated(el);
         const workbench = el.shadowRoot.querySelector('flows-code-workbench');
         await elementUpdated(workbench);
-        const langControl = codeEditorToolbarControls(workbench)
-            .find((control) => control.hasAttribute('icon-only'));
-        expect(langControl).to.not.be.undefined;
+        const langSegment = workbench.shadowRoot.querySelector('flows-code-language-segment');
+        expect(langSegment).to.not.be.null;
+        await elementUpdated(langSegment);
+        const langControl = langSegment.shadowRoot.querySelector('platform-segmented-control');
+        expect(langControl).to.not.be.null;
+        await elementUpdated(langControl);
         const buttons = segmentedSegments(langControl);
         expect(buttons.length).to.equal(5);
         const tsButton = buttons.find((button) => button.getAttribute('aria-label') === 'TypeScript');
         expect(tsButton).to.not.be.undefined;
-        expect(tsButton.querySelector('platform-icon')).to.not.be.null;
+        expect(tsButton.querySelector('img.segment-icon-img')).to.not.be.null;
         setTimeout(() => tsButton.click());
         const changeEv = await oneEvent(el, 'change');
         expect(changeEv.detail.patch).to.have.property('language', 'typescript');
@@ -545,7 +568,7 @@ describe('node editors — top-level NodeConfig contract', () => {
             }
         });
         const base = el.shadowRoot.querySelector('flows-base-node-editor');
-        const channelPf = base.querySelector('.grid platform-field[type="enum"]');
+        const channelPf = base.querySelector('.grid platform-field[data-field="channel"]');
         expect(channelPf, 'channel enum field').to.not.be.null;
         const pfEnum = channelPf.shadowRoot.querySelector('platform-field-enum');
         expect(pfEnum, 'channel platform-field-enum').to.not.be.null;
@@ -558,6 +581,216 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(last, 'editor change event').to.exist;
         expect(last.patch).to.have.property('channel', 'webhook');
         expect(last.patch).to.have.property('channel_config').that.deep.equals({});
+
+        const actionPf = base.querySelector('.grid platform-field[data-field="action"]');
+        expect(actionPf, 'action enum field').to.not.be.null;
+        expect(actionPf.getAttribute('type')).to.equal('enum');
+        const actionEnum = actionPf.shadowRoot.querySelector('platform-field-enum');
+        expect(actionEnum, 'action platform-field-enum').to.not.be.null;
+    });
+
+    it('flows-channel-node-editor — email facade пишет input_mapping.recipient', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'channel',
+            name: 'A',
+            channel: 'email',
+            action: 'send_message',
+            channel_config: { delivery: 'mailbox', mailbox_binding_id: 'mailbind_1' },
+            input_mapping: { recipient: '', subject: '', text: '' },
+        };
+        const el = await fixture(html`
+            <flows-channel-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'channel'}>
+            </flows-channel-node-editor>
+        `);
+        await elementUpdated(el);
+        el._mailSelect = {
+            value: {
+                connection: { company_id: 'c1' },
+                bindings: [
+                    {
+                        mailbox_binding_id: 'mailbind_1',
+                        email_address: 'me@example.com',
+                        is_default: true,
+                    },
+                ],
+            },
+        };
+        el.requestUpdate();
+        await elementUpdated(el);
+
+        let last = null;
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
+                last = e.detail;
+            }
+        });
+
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const actionPf = base.querySelector('.grid platform-field[data-field="action"]');
+        expect(actionPf, 'action enum').to.not.be.null;
+        const actionEnum = actionPf.shadowRoot.querySelector('platform-field-enum');
+        const actionOpts = [...actionEnum.shadowRoot.querySelectorAll('[data-enum-value]')].map(
+            (n) => n.getAttribute('data-enum-value'),
+        );
+        const actionInp = actionEnum.shadowRoot.querySelector('input.field-pill-enum-input');
+        actionInp.focus();
+        await elementUpdated(actionEnum);
+        const openedOpts = [...actionEnum.shadowRoot.querySelectorAll('[data-enum-value]')].map(
+            (n) => n.getAttribute('data-enum-value'),
+        );
+        const realActions = (openedOpts.length ? openedOpts : actionOpts).filter((v) => v !== '');
+        expect(realActions).to.deep.equal(['send_message']);
+
+        const deliveryPf = base.querySelector('platform-field[data-field="delivery"]');
+        expect(deliveryPf, 'delivery enum').to.not.be.null;
+
+        const toInput = base.querySelector('platform-variable-input[data-field="recipient"]');
+        expect(toInput, 'to variable input').to.not.be.null;
+        toInput.value = 'user@example.com';
+        toInput.dispatchEvent(new CustomEvent('change', {
+            detail: { value: 'user@example.com' },
+            bubbles: true,
+            composed: true,
+        }));
+        expect(last, 'mapping patch').to.exist;
+        expect(last.patch.input_mapping).to.have.property('recipient', 'user@example.com');
+
+        last = null;
+        const bodyEditor = base.querySelector('platform-markdown-editor[data-field="text"]');
+        expect(bodyEditor, 'message body markdown editor').to.not.be.null;
+        bodyEditor.dispatchEvent(new CustomEvent('change', {
+            detail: { value: 'Hello @state:response' },
+            bubbles: true,
+            composed: true,
+        }));
+        expect(last, 'body patch').to.exist;
+        expect(last.patch.input_mapping).to.have.property('text', 'Hello @state:response');
+    });
+
+    it('flows-channel-node-editor — telegram message body через markdown-editor', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'channel',
+            name: 'A',
+            channel: 'telegram',
+            action: 'send_message',
+            channel_config: { bot_token: '@var:tg_token' },
+            input_mapping: { recipient: '', text: '' },
+        };
+        const el = await fixture(html`
+            <flows-channel-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'channel'}
+                .flowVariables=${{ chat_id: { value: '1', type: 'string' } }}>
+            </flows-channel-node-editor>
+        `);
+        await elementUpdated(el);
+
+        let last = null;
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
+                last = e.detail;
+            }
+        });
+
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const toInput = base.querySelector('platform-variable-input[data-field="recipient"]');
+        expect(toInput, 'telegram recipient').to.not.be.null;
+        toInput.dispatchEvent(new CustomEvent('change', {
+            detail: { value: '@state:variables.chat_id' },
+            bubbles: true,
+            composed: true,
+        }));
+        expect(last.patch.input_mapping.recipient).to.equal('@state:variables.chat_id');
+
+        last = null;
+        const bodyEditor = base.querySelector('platform-markdown-editor[data-field="text"]');
+        expect(bodyEditor, 'telegram body editor').to.not.be.null;
+        expect(bodyEditor.enableVariables).to.equal(true);
+        bodyEditor.dispatchEvent(new CustomEvent('change', {
+            detail: { value: 'Привет {user_name}' },
+            bubbles: true,
+            composed: true,
+        }));
+        expect(last, 'telegram body patch').to.exist;
+        expect(last.patch.input_mapping).to.have.property('text', 'Привет {user_name}');
+    });
+
+    it('flows-channel-node-editor — email delivery smtp пишет channel_config', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'channel',
+            name: 'A',
+            channel: 'email',
+            action: 'send_message',
+            channel_config: { delivery: 'mailbox', mailbox_binding_id: 'mailbind_1' },
+            input_mapping: { recipient: '', subject: '', text: '' },
+        };
+        const el = await fixture(html`
+            <flows-channel-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'channel'}>
+            </flows-channel-node-editor>
+        `);
+        await elementUpdated(el);
+        el._mailSelect = {
+            value: {
+                connection: { company_id: 'c1' },
+                bindings: [
+                    {
+                        mailbox_binding_id: 'mailbind_1',
+                        email_address: 'me@example.com',
+                        is_default: true,
+                    },
+                ],
+            },
+        };
+        el.requestUpdate();
+        await elementUpdated(el);
+
+        let last = null;
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
+                last = e.detail;
+            }
+        });
+
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const deliveryPf = base.querySelector('platform-field[data-field="delivery"]');
+        expect(deliveryPf, 'delivery enum').to.not.be.null;
+        deliveryPf.dispatchEvent(new CustomEvent('change', {
+            detail: { value: 'smtp' },
+            bubbles: true,
+            composed: true,
+        }));
+        expect(last, 'delivery patch').to.exist;
+        expect(last.patch.channel_config).to.include({
+            delivery: 'smtp',
+            smtp_port: 587,
+            smtp_use_tls: true,
+        });
+        expect(last.patch.channel_config).to.not.have.property('mailbox_binding_id');
+
+        el.nodeConfig = {
+            ...node,
+            channel_config: last.patch.channel_config,
+        };
+        el.requestUpdate();
+        await elementUpdated(el);
+
+        last = null;
+        const passwordInput = base.querySelector('platform-variable-input[data-field="password"]');
+        expect(passwordInput, 'smtp password input').to.not.be.null;
+        passwordInput.dispatchEvent(new CustomEvent('change', {
+            detail: { value: '@var:smtp_password' },
+            bubbles: true,
+            composed: true,
+        }));
+        expect(last, 'password patch').to.exist;
+        expect(last.patch.channel_config).to.include({
+            delivery: 'smtp',
+            password: '@var:smtp_password',
+        });
     });
 
     it('flows-hitl-node-editor — work_queue_slug устанавливается', async () => {
@@ -568,15 +801,45 @@ describe('node editors — top-level NodeConfig contract', () => {
             </flows-hitl-node-editor>
         `);
         await elementUpdated(el);
+        await waitUntil(() => Array.isArray(el._queues.items) && el._queues.items.length > 0);
         let last = null;
         el.addEventListener('change', (e) => {
             if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
                 last = e.detail;
             }
         });
-        el._onQueueSlug({ detail: { value: 'support' } });
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const combobox = base.querySelector('platform-searchable-combobox');
+        expect(combobox, 'queue combobox').to.exist;
+        expect(combobox.createLabel, 'createLabel for on-the-fly create').to.be.a('string').and.not.empty;
+        combobox.dispatchEvent(new CustomEvent('change', {
+            detail: { value: 'support' },
+            bubbles: true,
+            composed: true,
+        }));
         expect(last, 'editor change event').to.exist;
         expect(last.patch).to.deep.equal({ work_queue_slug: 'support' });
+
+        const titleInput = base.querySelector('platform-variable-input[data-field="handoff_task_title"]');
+        expect(titleInput, 'task title variable input').to.exist;
+        const md = base.querySelector('platform-markdown-editor');
+        expect(md, 'user message markdown').to.exist;
+        expect(md.enableVariables, 'enableVariables').to.equal(true);
+        expect(md.variableSyntax, 'variableSyntax at-ref').to.equal('at-ref');
+        expect(md.hint, 'user message hint').to.be.a('string').and.not.empty;
+    });
+
+    it('flows-hitl-node-editor — create из combobox открывает форму при пустом query', async () => {
+        const node = { node_id: 'a', type: 'hitl_node', name: 'A' };
+        const el = await fixture(html`
+            <flows-hitl-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'hitl_node'} .flowVariables=${{}}>
+            </flows-hitl-node-editor>
+        `);
+        await elementUpdated(el);
+        expect(el._showCreate).to.equal(false);
+        el._onQueueCreate({ detail: { query: '' } });
+        expect(el._showCreate).to.equal(true);
     });
 
     it('flows-external-api-editor — смена HTTP-метода эмитит patch', async () => {
@@ -594,21 +857,99 @@ describe('node editors — top-level NodeConfig contract', () => {
             }
         });
         const base = el.shadowRoot.querySelector('flows-base-node-editor');
-        const methodPf = base.querySelector('.grid platform-field[type="enum"]');
-        expect(methodPf, 'method enum field').to.not.be.null;
-        const pfEnum = methodPf.shadowRoot.querySelector('platform-field-enum');
-        expect(pfEnum, 'method platform-field-enum').to.not.be.null;
-        const inp = pfEnum.shadowRoot.querySelector('input.field-pill-enum-input');
-        inp.focus();
-        await elementUpdated(pfEnum);
-        const getRow = pfEnum.shadowRoot.querySelector('[data-enum-value="GET"]');
-        expect(getRow, 'GET enum row').to.not.be.null;
-        getRow.click();
+        const methodToggle = base.querySelector('platform-segmented-control');
+        expect(methodToggle, 'method segmented control').to.not.be.null;
+        expect(
+            base.querySelectorAll('.settings-wrap details').length,
+            'POST shows body + headers',
+        ).to.equal(2);
+        const getBtn = methodToggle.shadowRoot.querySelector('button.segment[aria-label="GET"]');
+        expect(getBtn, 'GET method segment').to.not.be.null;
+        getBtn.click();
         expect(last, 'editor change event').to.exist;
         expect(last.patch).to.deep.equal({ method: 'GET' });
     });
 
-    it('flows-mcp-node-editor — server select', async () => {
+    it('flows-external-api-editor — GET скрывает секцию тела запроса', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'external_api',
+            name: 'API',
+            url: 'https://x',
+            method: 'GET',
+            body_template: '{"keep":true}',
+        };
+        const el = await fixture(html`
+            <flows-external-api-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'external_api'}>
+            </flows-external-api-editor>
+        `);
+        await elementUpdated(el);
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        expect(
+            base.querySelectorAll('.settings-wrap details').length,
+            'GET shows only headers',
+        ).to.equal(1);
+        expect(
+            base.querySelector('.settings-wrap flows-http-headers-editor'),
+            'headers editor',
+        ).to.not.be.null;
+        expect(
+            base.querySelector('.settings-wrap platform-json-editor'),
+            'no body json editor on GET',
+        ).to.be.null;
+    });
+
+    it('flows-external-api-editor — headers editor эмитит patch', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'external_api',
+            name: 'API',
+            url: 'https://x',
+            method: 'GET',
+            headers: {},
+        };
+        const el = await fixture(html`
+            <flows-external-api-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'external_api'}>
+            </flows-external-api-editor>
+        `);
+        await elementUpdated(el);
+        let last = null;
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
+                last = e.detail;
+            }
+        });
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const headersEditor = base.querySelector('flows-http-headers-editor');
+        expect(headersEditor, 'headers editor').to.not.be.null;
+        const addBtn = headersEditor.shadowRoot.querySelector('platform-button.header-pairs-add');
+        expect(addBtn, 'add header button').to.not.be.null;
+        addBtn.click();
+        await elementUpdated(headersEditor);
+        const nameInputs = headersEditor.shadowRoot.querySelectorAll('platform-variable-input');
+        expect(nameInputs.length, 'header name+value inputs').to.equal(2);
+        const nameField = nameInputs[0];
+        const valueInput = nameInputs[1];
+        nameField.dispatchEvent(new CustomEvent('change', {
+            detail: { value: 'Authorization' },
+            bubbles: true,
+            composed: true,
+        }));
+        await elementUpdated(headersEditor);
+        valueInput.dispatchEvent(new CustomEvent('change', {
+            detail: { value: 'Bearer @var:token' },
+            bubbles: true,
+            composed: true,
+        }));
+        expect(last, 'editor change event').to.exist;
+        expect(last.patch).to.deep.equal({
+            headers: { Authorization: 'Bearer @var:token' },
+        });
+    });
+
+    it('flows-mcp-node-editor — pick tool button opens tool_picker', async () => {
         const node = { node_id: 'a', type: 'mcp', name: 'M' };
         const el = await fixture(html`
             <flows-mcp-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
@@ -617,8 +958,17 @@ describe('node editors — top-level NodeConfig contract', () => {
         `);
         await elementUpdated(el);
         const base = el.shadowRoot.querySelector('flows-base-node-editor');
-        const enumFields = base.querySelectorAll('platform-field[type="enum"]');
-        expect(enumFields.length).to.be.greaterThanOrEqual(2);
+        const pickBtn = base.querySelector('.mcp-actions platform-button');
+        expect(pickBtn, 'pick tool button').to.exist;
+        let opened = null;
+        el.openModal = (kind, props) => {
+            opened = { kind, props };
+        };
+        pickBtn.click();
+        expect(opened).to.exist;
+        expect(opened.kind).to.equal('flows.tool_picker');
+        expect(opened.props.pickMode).to.equal('mcp_only');
+        expect(opened.props.onPick).to.be.a('function');
     });
 
     it('flows-mcp-node-editor — читает mcp_server_id/mcp_tool_name из ToolReference', async () => {
@@ -635,10 +985,10 @@ describe('node editors — top-level NodeConfig contract', () => {
             </flows-mcp-node-editor>
         `);
         await elementUpdated(el);
-        const fields = el.shadowRoot.querySelector('flows-base-node-editor')
-            .querySelectorAll('.mcp-control-row platform-field');
-        expect(fields[0].value).to.equal('browser');
-        expect(fields[1].value).to.equal('browser_create_session');
+        const selection = el.shadowRoot.querySelector('flows-base-node-editor')
+            .querySelector('.mcp-selection-meta');
+        expect(selection).to.exist;
+        expect(selection.textContent.trim()).to.equal('mcp:browser:browser_create_session');
     });
 
     it('flows-flow-node-editor — toggle ручного ID', async () => {
@@ -687,7 +1037,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(changeEv.detail.patch).to.deep.equal({ call_type: 'handoff' });
     });
 
-    it('flows-remote-flow-editor — toggle url ↔ flow_id', async () => {
+    it('flows-remote-flow-editor — protocol panel + url clears flow_id', async () => {
         const node = { node_id: 'a', type: 'remote_flow', name: 'R', url: 'https://api/x' };
         const el = await fixture(html`
             <flows-remote-flow-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
@@ -697,12 +1047,50 @@ describe('node editors — top-level NodeConfig contract', () => {
         await elementUpdated(el);
         const base = el.shadowRoot.querySelector('flows-base-node-editor');
         await elementUpdated(base);
-        const modeControl = settingsSegmentedControl(base, 'platform-segmented-control.endpoint-mode');
-        expect(modeControl).to.not.be.null;
-        setTimeout(() => segmentedSegments(modeControl)[1].click());
+
+        const protocolPanel = settingsQuery(base, '[data-testid="remote-flow-protocol-panel"]');
+        expect(protocolPanel).to.not.be.null;
+        expect(settingsQuery(base, 'platform-segmented-control.endpoint-mode')).to.be.null;
+
+        const urlField = settingsQuery(base, '.remote-flow-endpoint-stack platform-field');
+        expect(urlField).to.not.be.null;
+        setTimeout(() => urlField.dispatchEvent(new CustomEvent('change', {
+            detail: { value: 'https://partner.example/a2a' },
+            bubbles: true,
+            composed: true,
+        })));
         const changeEv = await oneEvent(el, 'change');
-        expect(changeEv.detail.patch).to.have.property('flow_id', '');
-        expect(changeEv.detail.patch).to.have.property('url', null);
+        expect(changeEv.detail.patch).to.deep.equal({
+            url: 'https://partner.example/a2a',
+            flow_id: null,
+        });
+    });
+
+    it('flows-remote-flow-editor — metadata_template json editor', async () => {
+        const node = { node_id: 'a', type: 'remote_flow', name: 'R', url: 'https://api/x' };
+        const el = await fixture(html`
+            <flows-remote-flow-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'remote_flow'}>
+            </flows-remote-flow-editor>
+        `);
+        await elementUpdated(el);
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        await elementUpdated(base);
+
+        const metaBlock = settingsQuery(base, '[data-testid="remote-flow-metadata"]');
+        expect(metaBlock).to.not.be.null;
+        const jsonEditor = settingsQuery(base, '[data-testid="remote-flow-metadata"] platform-json-editor');
+        expect(jsonEditor).to.not.be.null;
+        setTimeout(() => jsonEditor.dispatchEvent(new CustomEvent('change', {
+            detail: { parsed: { variables: { order_id: '@state:order.id' } } },
+            bubbles: true,
+            composed: true,
+        })));
+        const changeEv = await oneEvent(el, 'change');
+        expect(changeEv.detail.patch).to.have.property('metadata_template');
+        expect(JSON.parse(changeEv.detail.patch.metadata_template)).to.deep.equal({
+            variables: { order_id: '@state:order.id' },
+        });
     });
 
     it('flows-base-node-editor — id ноды только для чтения (rename отключён)', async () => {

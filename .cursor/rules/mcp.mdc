@@ -89,7 +89,11 @@ active_servers = await mcp_repo.list_active()
 - **Crawl:** `apps/idle_worker/tasks/mcp_catalog_tasks.py::mcp_catalog_crawl_task` — paginate registry, filter `streamable-http`/`sse` + `https://`, verify через `MCPClient.initialize()` + `list_tools()`, upsert `MCPCatalogRepository`.
 - **Provision:** `mcp_catalog_provision_companies_task` — все компании → `provision_mcp_catalog_for_company`.
 - **Resync:** `mcp_catalog_resync_tools_task` — `sync_mcp_server_tools` для `source=catalog` без `override_locked`.
-- Scheduler: `apps/scheduler/main.py` — `mcp_catalog_crawl_task` по `crawl_cron` (default `0 * * * *`, раз в hour) + `crawl_run_on_start=true`. `mcp_catalog.resync_tools_cron`.
+- Scheduler: `apps/scheduler/main.py` — `mcp_catalog_crawl_task` по `crawl_cron` (default `0 0 * * *`, раз в сутки) + `crawl_run_on_start=true`. `mcp_catalog.resync_tools_cron` (тот же дефолт).
+
+### UI display order
+
+Во всех списках MCP (Installed API, Catalog Store, library picker): **platform → yaml allowlist (порядок строк в `mcp_catalog_allowlist.yaml`) → manual → прочий catalog**. Реализация — `apps/flows/src/services/mcp_server_display_order.py`. UI не пересортировывает список серверов алфавитом поверх API.
 
 ### Модели catalog
 
@@ -281,6 +285,7 @@ Git-бандл: `apps/flows/mcp_branding/` (`manifest.yaml`, `icons/`, `SOURCES.
 - `apps/flows/src/db/mcp_catalog_repository.py` — `MCPCatalogRepository`.
 - `apps/flows/src/services/mcp_catalog_store.py` — Store list/install/uninstall.
 - `apps/flows/src/services/mcp_catalog_provisioner.py` — provision per company, override lock, reset.
+- `apps/flows/src/services/mcp_server_display_order.py` — порядок UI: platform → yaml allowlist → manual → catalog.
 - `apps/flows/src/services/mcp_sync.py` — `sync_mcp_server_tools`.
 - `apps/flows/src/tasks/company_init_tasks.py` — `init_company_resources`.
 - `apps/idle_worker/tasks/company_init_tasks.py` — `company_init_new_company`, `company_init_system`.

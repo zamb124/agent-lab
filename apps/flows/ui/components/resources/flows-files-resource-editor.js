@@ -152,13 +152,11 @@ export class FlowsFilesResourceEditor extends PlatformElement {
                             }}
                         ></platform-field>
                     </div>
-                    <div class="field">
-                        <label>${this.t('files_resource_editor.secret_access_key')}</label>
-                        <platform-variable-input
-                            .value=${secretKey}
-                            @change=${(e) => { const v = e.detail?.value; this._emitConfig({ secret_access_key: typeof v === 'string' && v.length > 0 ? v : null }); }}
-                        ></platform-variable-input>
-                    </div>
+                    <platform-variable-input
+                        .label=${this.t('files_resource_editor.secret_access_key')}
+                        .value=${secretKey}
+                        @change=${(e) => { const v = e.detail?.value; this._emitConfig({ secret_access_key: typeof v === 'string' && v.length > 0 ? v : null }); }}
+                    ></platform-variable-input>
                 </div>
             </flows-base-resource-editor>
         `;

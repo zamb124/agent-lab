@@ -60,6 +60,47 @@ export function evaluationRoleFromNode(node) {
 }
 
 /**
+ * Tester/judge orphan llm_node — не часть execution-графа на канве.
+ * @param {unknown} node
+ * @returns {boolean}
+ */
+export function isEvaluationRoleNode(node) {
+    const role = evaluationRoleFromNode(node);
+    return role === 'judge' || role === 'tester';
+}
+
+/**
+ * Нода без портов/рёбер исполнения: resource или evaluation tester/judge.
+ * @param {unknown} node
+ * @returns {boolean}
+ */
+export function isPortlessCanvasNode(node) {
+    if (!isPlainObject(node)) {
+        return false;
+    }
+    if (asString(node.type) === 'resource') {
+        return true;
+    }
+    return isEvaluationRoleNode(node);
+}
+
+/**
+ * Подпись типа на карточке канвы: роль evaluation или node.type.
+ * @param {unknown} node
+ * @returns {string}
+ */
+export function canvasNodeTypeSubtitle(node) {
+    if (!isPlainObject(node)) {
+        return '';
+    }
+    const role = evaluationRoleFromNode(node);
+    if (role === 'judge' || role === 'tester') {
+        return role;
+    }
+    return asString(node.type);
+}
+
+/**
  * @param {unknown} flow
  * @param {string} branchId
  * @returns {{ node_id: string, name: string, evaluation_role: string, prompt: string }[]}

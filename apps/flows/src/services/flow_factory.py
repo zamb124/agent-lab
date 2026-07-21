@@ -250,6 +250,7 @@ class FlowFactory:
                 "condition": (
                     e.condition.model_dump(mode="json") if e.condition is not None else None
                 ),
+                "from_port": e.from_port,
                 "contributes_to_join": e.contributes_to_join,
             }
             for e in effective["edges"]

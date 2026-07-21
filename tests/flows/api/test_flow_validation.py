@@ -138,6 +138,405 @@ class TestFlowValidationStructure:
         unreachable_warning = next((w for w in warnings if w["code"] == "unreachable_nodes"))
         assert "orphan" in unreachable_warning["details"]["unreachable"]
 
+    @pytest.mark.asyncio
+    async def test_validate_email_channel_requires_delivery(self, client, app):
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "mail": {
+                        "type": "channel",
+                        "channel": "email",
+                        "action": "send_message",
+                        "channel_config": {},
+                        "input_mapping": {
+                            "recipient": "a@example.com",
+                            "text": "hi",
+                            "subject": "",
+                        },
+                    },
+                },
+                "edges": [{"from_node": "mail", "to_node": None}],
+                "entry": "mail",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "email_channel_delivery_required" in codes
+
+    @pytest.mark.asyncio
+    async def test_validate_email_channel_requires_mailbox_binding(self, client, app):
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "mail": {
+                        "type": "channel",
+                        "channel": "email",
+                        "action": "send_message",
+                        "channel_config": {"delivery": "mailbox"},
+                        "input_mapping": {
+                            "recipient": "a@example.com",
+                            "text": "hi",
+                            "subject": "",
+                        },
+                    },
+                },
+                "edges": [{"from_node": "mail", "to_node": None}],
+                "entry": "mail",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "email_channel_mailbox_binding_required" in codes
+
+    @pytest.mark.asyncio
+    async def test_validate_email_channel_mailbox_rejects_smtp_keys(self, client, app):
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "mail": {
+                        "type": "channel",
+                        "channel": "email",
+                        "action": "send_message",
+                        "channel_config": {
+                            "delivery": "mailbox",
+                            "mailbox_binding_id": "mailbind_1",
+                            "smtp_host": "smtp.example.com",
+                        },
+                        "input_mapping": {
+                            "recipient": "a@example.com",
+                            "text": "hi",
+                            "subject": "",
+                        },
+                    },
+                },
+                "edges": [{"from_node": "mail", "to_node": None}],
+                "entry": "mail",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "email_channel_mailbox_smtp_mixed" in codes
+
+    @pytest.mark.asyncio
+    async def test_validate_email_channel_smtp_ok(self, client, app):
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "mail": {
+                        "type": "channel",
+                        "channel": "email",
+                        "action": "send_message",
+                        "channel_config": {
+                            "delivery": "smtp",
+                            "smtp_host": "smtp.example.com",
+                            "from_email": "me@example.com",
+                            "password": "@var:smtp_password",
+                        },
+                        "input_mapping": {
+                            "recipient": "a@example.com",
+                            "text": "hi",
+                            "subject": "",
+                        },
+                    },
+                },
+                "edges": [{"from_node": "mail", "to_node": None}],
+                "entry": "mail",
+                "variables": {"smtp_password": {"value": "x", "type": "string"}},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "email_channel_delivery_required" not in codes
+        assert "email_channel_smtp_field_required" not in codes
+        assert "email_channel_smtp_mailbox_mixed" not in codes
+
+    @pytest.mark.asyncio
+    async def test_validate_email_channel_smtp_rejects_mailbox_binding(self, client, app):
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "mail": {
+                        "type": "channel",
+                        "channel": "email",
+                        "action": "send_message",
+                        "channel_config": {
+                            "delivery": "smtp",
+                            "mailbox_binding_id": "mailbind_1",
+                            "smtp_host": "smtp.example.com",
+                            "from_email": "me@example.com",
+                            "password": "x",
+                        },
+                        "input_mapping": {
+                            "recipient": "a@example.com",
+                            "text": "hi",
+                            "subject": "",
+                        },
+                    },
+                },
+                "edges": [{"from_node": "mail", "to_node": None}],
+                "entry": "mail",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "email_channel_smtp_mailbox_mixed" in codes
+
+    @pytest.mark.asyncio
+    async def test_validate_sms_channel_requires_url(self, client, app):
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "sms": {
+                        "type": "channel",
+                        "channel": "sms",
+                        "action": "send_message",
+                        "channel_config": {},
+                        "input_mapping": {
+                            "recipient": "+79991234567",
+                            "text": "hi",
+                        },
+                    },
+                },
+                "edges": [{"from_node": "sms", "to_node": None}],
+                "entry": "sms",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "sms_channel_url_required" in codes
+
+    @pytest.mark.asyncio
+    async def test_validate_sms_channel_ok(self, client, app):
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "sms": {
+                        "type": "channel",
+                        "channel": "sms",
+                        "action": "send_message",
+                        "channel_config": {
+                            "preset_id": "custom",
+                            "url": "https://example.com/sms",
+                            "method": "POST",
+                            "headers": {"Content-Type": "application/json"},
+                            "body_template": '{"to":"@state:phone","msg":"@state:response"}',
+                            "timeout": 30,
+                        },
+                        "input_mapping": {},
+                    },
+                },
+                "edges": [{"from_node": "sms", "to_node": None}],
+                "entry": "sms",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "sms_channel_url_required" not in codes
+        assert "sms_channel_method_invalid" not in codes
+        assert "sms_channel_body_template_invalid" not in codes
+        assert "sms_channel_timeout_invalid" not in codes
+
+    @pytest.mark.asyncio
+    async def test_validate_sms_channel_method_invalid(self, client, app):
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "sms": {
+                        "type": "channel",
+                        "channel": "sms",
+                        "action": "send_message",
+                        "channel_config": {
+                            "url": "https://example.com/sms",
+                            "method": "   ",
+                        },
+                        "input_mapping": {},
+                    },
+                },
+                "edges": [{"from_node": "sms", "to_node": None}],
+                "entry": "sms",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "sms_channel_method_invalid" in codes
+
+    @pytest.mark.asyncio
+    async def test_validate_sms_channel_body_template_invalid(self, client, app):
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "sms": {
+                        "type": "channel",
+                        "channel": "sms",
+                        "action": "send_message",
+                        "channel_config": {
+                            "url": "https://example.com/sms",
+                            "body_template": 123,
+                        },
+                        "input_mapping": {},
+                    },
+                },
+                "edges": [{"from_node": "sms", "to_node": None}],
+                "entry": "sms",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "sms_channel_body_template_invalid" in codes
+
+    @pytest.mark.asyncio
+    async def test_validate_sms_channel_timeout_invalid(self, client, app):
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "sms": {
+                        "type": "channel",
+                        "channel": "sms",
+                        "action": "send_message",
+                        "channel_config": {
+                            "url": "https://example.com/sms",
+                            "timeout": True,
+                        },
+                        "input_mapping": {},
+                    },
+                },
+                "edges": [{"from_node": "sms", "to_node": None}],
+                "entry": "sms",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "sms_channel_timeout_invalid" in codes
+
+    @pytest.mark.asyncio
+    async def test_validate_sms_channel_does_not_require_recipient_text(self, client, app):
+        """SMS: сообщение в body_template; recipient/text в input_mapping не обязательны."""
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "sms": {
+                        "type": "channel",
+                        "channel": "sms",
+                        "action": "send_message",
+                        "channel_config": {
+                            "url": "https://example.com/sms",
+                            "method": "POST",
+                            "body_template": {
+                                "to": "@state:phone",
+                                "msg": "@state:response",
+                            },
+                            "timeout": 30,
+                        },
+                        "input_mapping": {},
+                    },
+                },
+                "edges": [{"from_node": "sms", "to_node": None}],
+                "entry": "sms",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        sms_codes = [code for code in codes if code.startswith("sms_channel_")]
+        assert sms_codes == []
+
+    @pytest.mark.asyncio
+    async def test_validate_evaluation_orphan_not_unreachable_warning(self, client, app):
+        """Orphan tester/judge не дают unreachable_nodes warning."""
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "main": {"type": "llm_node", "prompt": "Test"},
+                    "eval_tester": {
+                        "type": "llm_node",
+                        "prompt": "Ask next",
+                        "store": {"evaluation_role": "tester"},
+                    },
+                    "eval_judge": {
+                        "type": "llm_node",
+                        "prompt": "Score",
+                        "store": {"evaluation_role": "judge"},
+                    },
+                },
+                "edges": [{"from_node": "main", "to_node": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        warnings = [e for e in data["errors"] if e["severity"] == "warning"]
+        unreachable = [w for w in warnings if w["code"] == "unreachable_nodes"]
+        assert unreachable == []
+
+    @pytest.mark.asyncio
+    async def test_validate_edge_involves_evaluation_node(self, client, app):
+        """Ребро к/от evaluation-ноды — ошибка."""
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "main": {"type": "llm_node", "prompt": "Test"},
+                    "eval_judge": {
+                        "type": "llm_node",
+                        "prompt": "Score",
+                        "store": {"evaluation_role": "judge"},
+                    },
+                },
+                "edges": [
+                    {"from_node": "main", "to_node": "eval_judge"},
+                    {"from_node": "eval_judge", "to_node": None},
+                ],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "edge_involves_evaluation_node" in error_codes
+
 
 class TestFlowValidationReferences:
     """Тесты валидации ссылок на сущности."""
@@ -320,7 +719,7 @@ class TestFlowValidationReferences:
 
     @pytest.mark.asyncio
     async def test_validate_remote_flow_no_target(self, client, app):
-        """remote_flow без flow_id и url."""
+        """remote_flow без url."""
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
@@ -336,9 +735,96 @@ class TestFlowValidationReferences:
         error_codes = [e["code"] for e in data["errors"]]
         assert "remote_flow_no_target" in error_codes
 
+    @pytest.mark.asyncio
+    async def test_validate_remote_flow_registry_flow_id_forbidden(self, client, app):
+        """remote_flow с registry flow_id без url — запрещён."""
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {"main": {"type": "remote_flow", "flow_id": "external_agent"}},
+                "edges": [{"from_node": "main", "to_node": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "remote_flow_registry_forbidden" in error_codes
+        assert "remote_flow_no_target" not in error_codes
 
-class TestFlowValidationVariables:
-    """Тесты валидации переменных @var:."""
+    @pytest.mark.asyncio
+    async def test_validate_remote_flow_url_ok(self, client, app):
+        """remote_flow с прямым A2A url — OK."""
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "remote_flow",
+                        "url": "https://example.test/a2a",
+                        "branch_id": "default",
+                    }
+                },
+                "edges": [{"from_node": "main", "to_node": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "remote_flow_no_target" not in error_codes
+        assert "remote_flow_registry_forbidden" not in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_remote_flow_metadata_template_invalid(self, client, app):
+        """remote_flow.metadata_template не JSON-object."""
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "remote_flow",
+                        "url": "https://example.test/a2a",
+                        "metadata_template": '["not", "object"]',
+                    }
+                },
+                "edges": [{"from_node": "main", "to_node": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "remote_flow_metadata_template_invalid" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_remote_flow_metadata_template_ok(self, client, app):
+        """remote_flow.metadata_template с @var: — OK."""
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "remote_flow",
+                        "url": "https://example.test/a2a",
+                        "metadata_template": '{"variables": {"x": "@var:my_key"}}',
+                    }
+                },
+                "edges": [{"from_node": "main", "to_node": None}],
+                "entry": "main",
+                "variables": {"my_key": "v"},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "remote_flow_metadata_template_invalid" not in error_codes
+        assert "my_key" in data["var_keys_used"]
 
     @pytest.mark.asyncio
     async def test_validate_defined_variable(self, client, app):

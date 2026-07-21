@@ -508,6 +508,9 @@
     --platform-btn-primary-shadow: none;
     --platform-btn-primary-shadow-hover: 0 0 10px rgba(153, 166, 249, 0.6);
 
+    /* Текст на solid accent/primary fill (не путать с --text-inverse) */
+    --text-on-accent: var(--platform-btn-primary-text);
+
     --platform-btn-accent-bg: var(--accent-secondary);
     --platform-btn-accent-bg-hover: var(--accent-secondary-hover);
     --platform-btn-accent-text: #ffffff;

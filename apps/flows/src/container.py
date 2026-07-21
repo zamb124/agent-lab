@@ -25,6 +25,7 @@ from apps.flows.src.db import (
 from apps.flows.src.db.mcp_catalog_repository import MCPCatalogRepository
 from apps.flows.src.db.mcp_repository import MCPServerRepository
 from apps.flows.src.db.mcp_server_branding_repository import MCPServerBrandingRepository
+from apps.flows.src.db.tool_tag_group_repository import ToolTagGroupRepository
 from apps.flows.src.durable_execution import (
     DurableWorkflowRepository,
     DurableWorkflowRuntime,
@@ -48,6 +49,7 @@ from apps.flows.src.services.llm_models_service import LLMModelsService
 from apps.flows.src.services.mcp_branding_service import MCPServerBrandingService
 from apps.flows.src.services.resource_loader import ResourceLoader
 from apps.flows.src.services.schedule_service import ScheduleService
+from apps.flows.src.services.tool_tag_group_service import ToolTagGroupService
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from apps.flows.src.tools.registry import ToolRegistry
@@ -99,6 +101,17 @@ class FlowContainer(BaseContainer):
     @lazy
     def tool_repository(self) -> ToolRepository:
         return ToolRepository(storage=self.storage)
+
+    @lazy
+    def tool_tag_group_repository(self) -> ToolTagGroupRepository:
+        return ToolTagGroupRepository(storage=self.storage)
+
+    @lazy
+    def tool_tag_group_service(self) -> ToolTagGroupService:
+        return ToolTagGroupService(
+            repository=self.tool_tag_group_repository,
+            flow_repository=self.flow_repository,
+        )
 
     @lazy
     def agent_skill_repository(self) -> AgentSkillRepository:

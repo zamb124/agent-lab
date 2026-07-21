@@ -232,6 +232,12 @@ def create_llm_transport_client(
         )
 
     if testing and _is_humanitec_llm_provider(provider):
+        logger.warning(
+            "llm.testing_humanitec_replaced",
+            original_provider=HUMANITEC_LLM_PROVIDER,
+            original_model=model,
+            replacement_model="mock-gpt-4",
+        )
         provider = None
         model = "mock-gpt-4"
 
@@ -309,6 +315,12 @@ def create_llm_transport_client(
         model = "mock-gpt-4"
 
     if model.startswith("mock-"):
+        logger.warning(
+            "llm.mock_client_selected",
+            model=model,
+            provider=provider,
+            testing=testing,
+        )
         return get_or_create_global_mock_llm(model)
 
     model_config = settings.llm.models.get(model)

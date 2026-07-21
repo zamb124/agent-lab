@@ -33,6 +33,7 @@ from apps.flows.src.db.models import (  # noqa: F401
     Nodes,
     Resources,
     Tools,
+    ToolTagGroups,
     WorkflowEvents,
     WorkflowInstances,
     WorkflowSnapshots,
@@ -47,7 +48,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 MANAGED_TABLES = {
-    "flows", "flows_versions", "nodes", "tools", "agent_skills",
+    "flows", "flows_versions", "nodes", "tools", "agent_skills", "tool_tag_groups",
     "workflow_instances", "execution_branches", "workflow_events",
     "workflow_snapshots", "activity_tasks",
     "evaluation_suites", "evaluation_cases",

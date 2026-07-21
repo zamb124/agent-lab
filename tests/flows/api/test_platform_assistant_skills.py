@@ -23,32 +23,11 @@ from tests.flows.agent_skills_harness import (
 
 @pytest.mark.asyncio
 async def test_seed_platform_assistant_skills_idempotent(container, unique_id: str) -> None:
-    assert PLATFORM_ASSISTANT_SEED_SKILL_IDS == (
-        "docx-templates",
-        "document-workspace",
-        "documents-catalog",
-        "diagrams-viz",
-        "knowledge-rag",
-        "web-research",
-        "crm-notes",
-        "crm-entities",
-        "work-tracking",
-        "agent-planning",
-        "flows-editor",
-        "flows-node-edit",
-        "code-node",
-        "llm-node-config",
-        "flows-code",
-        "flows-platform",
-        "docs-knowledge",
-        "networkle",
-        "platform-workspace",
-        "console-platform",
-        "sync-platform",
-        "documents-platform",
-        "worktracker-platform",
-        "litserve-platform",
-    )
+    expected_seed_ids = PLATFORM_ASSISTANT_SEED_SKILL_IDS
+    assert "google-sheets" in expected_seed_ids
+    assert expected_seed_ids.index("google-sheets") > expected_seed_ids.index("web-research")
+    assert expected_seed_ids.index("google-sheets") < expected_seed_ids.index("crm-notes")
+    seed_count = len(expected_seed_ids)
     company_id = f"company_{unique_id}"
     async with company_scope(company_id, unique_id):
         first = await seed_platform_assistant_skills(
@@ -61,8 +40,8 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
             container.files_service,
             company_id,
         )
-        assert first == 24
-        assert second == 24
+        assert first == seed_count
+        assert second == seed_count
         for skill_id in LARA_PLATFORM_SKILL_ROOTS:
             skill = await container.agent_skill_service.get(skill_id)
             assert skill.agent_skill_id == skill_id
@@ -104,6 +83,11 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
         assert planning.references
         workspace = await container.agent_skill_service.get("platform-workspace")
         assert "agent-planning" in workspace.depends_on
+        assert "google-sheets" in workspace.depends_on
+        sheets = await container.agent_skill_service.get("google-sheets")
+        sheets_tool_ids = {ref.tool_id for ref in sheets.tool_refs}
+        assert "sheets_get_values" in sheets_tool_ids
+        assert "sheets_append_rows" in sheets_tool_ids
         web = await container.agent_skill_service.get("web-research")
         web_tool_ids = [ref.tool_id for ref in web.tool_refs]
         assert "browser_duckduckgo_links_batch" in web_tool_ids

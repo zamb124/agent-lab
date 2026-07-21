@@ -237,9 +237,9 @@ describe('mailReducer', () => {
                     thread_id: '<root>',
                     subject: 'hi',
                     items: [
-                        { folder: 'INBOX', uid: '1', subject: 'hi', unread: false },
+                        { folder: 'INBOX', uid: '1', subject: 'hi', unread: true },
                         { folder: 'Sent', uid: '10', subject: 'Re: hi', unread: false },
-                        { folder: 'INBOX', uid: '3', subject: 'Re: hi', unread: false },
+                        { folder: 'INBOX', uid: '3', subject: 'Re: hi', unread: true },
                     ],
                 },
             }),
@@ -248,6 +248,8 @@ describe('mailReducer', () => {
         expect(next.selectedThreadId).toBe('<root>');
         expect(next.selectedThreadMessages).toHaveLength(3);
         expect(next.selectedMessage.uid).toBe('3');
+        expect(next.selectedThreadMessages.find((m) => m.uid === '1').unread).toBe(false);
+        expect(next.selectedThreadMessages.find((m) => m.uid === '3').unread).toBe(false);
         expect(next.messages.find((m) => m.uid === '1').unread).toBe(false);
         expect(next.messages.find((m) => m.uid === '3').unread).toBe(false);
         expect(next.messages.find((m) => m.uid === '9').unread).toBe(true);

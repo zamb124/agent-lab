@@ -43,7 +43,7 @@ class Context(StrictBaseModel):
     channel: str = Field(
         default="unknown",
         title="Канал",
-        description="Канал откуда поступил запрос (a2a, telegram, whatsapp)",
+        description="Канал откуда поступил запрос (a2a, telegram, webhook, email, sms)",
     )
     flow_id: str | None = Field(
         default=None,

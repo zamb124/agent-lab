@@ -2,7 +2,7 @@
  * platform-island: glass surface отделён от scrollable content.
  */
 
-import { fixture, html, expect, elementUpdated } from '../helpers/render.js';
+import { fixture, html, expect } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/layout/platform-island.js';
 
@@ -20,7 +20,7 @@ describe('platform-island', () => {
         expect(el.querySelector('#slot-child')).to.exist;
     });
 
-    it('scroll внутри island-content включает is-scrolling', async () => {
+    it('не ставит is-scrolling при scroll (solid surface, без blur-toggle)', async () => {
         const el = await fixture(html`
             <platform-island style="display:block;height:120px;">
                 <div style="height:400px;">tall</div>
@@ -29,7 +29,6 @@ describe('platform-island', () => {
         const content = el.shadowRoot.querySelector('.island-content');
         content.scrollTop = 40;
         content.dispatchEvent(new Event('scroll', { bubbles: false }));
-        await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.island.is-scrolling')).to.exist;
+        expect(el.shadowRoot.querySelector('.island.is-scrolling')).to.not.exist;
     });
 });

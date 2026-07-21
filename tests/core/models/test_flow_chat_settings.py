@@ -57,6 +57,13 @@ def test_resolve_effective_flow_chat_override_show_skill_loads() -> None:
     assert effective.show_skill_loads is False
 
 
+def test_resolve_effective_flow_chat_override_show_reflection() -> None:
+    flow_chat = FlowChatSettings(show_reflection=True)
+    override = EmbedChatPolicyOverride(show_reflection=False)
+    effective = resolve_effective_flow_chat(flow_chat, override)
+    assert effective.show_reflection is False
+
+
 def test_resolve_effective_flow_chat_override_suggested_prompts() -> None:
     flow_chat = FlowChatSettings(suggested_prompts=["one"])
     override = EmbedChatPolicyOverride(suggested_prompts=[])

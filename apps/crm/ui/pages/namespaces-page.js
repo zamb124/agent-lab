@@ -173,13 +173,13 @@ export class CRMNamespacesPage extends PlatformPage {
                 background: var(--crm-surface);
                 color: var(--text-secondary);
             }
-            .btn:hover { background: var(--crm-surface-muted); color: var(--text-primary); }
+            .btn:not(.btn-primary):not(.btn-danger):hover { background: var(--crm-surface-muted); color: var(--text-primary); }
             .btn-primary {
                 background: var(--accent);
                 border-color: var(--accent);
-                color: white;
+                color: var(--platform-btn-primary-text);
             }
-            .btn-primary:hover { filter: brightness(1.05); }
+            .btn-primary:hover { filter: brightness(1.05); color: var(--platform-btn-primary-text); }
         `,
     ];
 

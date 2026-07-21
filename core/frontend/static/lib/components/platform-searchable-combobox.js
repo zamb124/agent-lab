@@ -1,6 +1,11 @@
 /**
  * platform-searchable-combobox — pill combobox: search options or commit free-form id on blur.
  * Emits `change` with `{ value }`. `flush()` commits without waiting for blur.
+ *
+ * Optional create-on-the-fly:
+ *   - `createLabel` — row when query empty (e.g. "Create new…")
+ *   - `createQueryLabel` — template with `{{query}}` when typed text has no exact match
+ *   - emits `create` with `{ query: string }` (trimmed input; may be empty)
  */
 
 import { html, css, nothing } from 'lit';
@@ -25,6 +30,17 @@ function _asOption(o) {
     return { value, label };
 }
 
+/**
+ * @param {string} template
+ * @param {string} query
+ */
+function _formatCreateQueryLabel(template, query) {
+    if (template.indexOf('{{query}}') >= 0) {
+        return template.split('{{query}}').join(query);
+    }
+    return `${template} ${query}`.trim();
+}
+
 export class PlatformSearchableCombobox extends PlatformElement {
     static properties = {
         value: { type: String },
@@ -32,6 +48,8 @@ export class PlatformSearchableCombobox extends PlatformElement {
         label: { type: String },
         placeholder: { type: String },
         emptyLabel: { type: String },
+        createLabel: { type: String },
+        createQueryLabel: { type: String },
         ariaLabel: { type: String, attribute: 'aria-label' },
         compact: { type: Boolean, reflect: true },
         _open: { type: Boolean, state: true },
@@ -170,6 +188,12 @@ export class PlatformSearchableCombobox extends PlatformElement {
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
             }
+            .item-create {
+                color: var(--accent);
+                font-weight: var(--font-medium);
+                border-top: 1px solid var(--border-subtle);
+                margin-top: var(--space-1);
+            }
         `,
     ];
 
@@ -180,6 +204,8 @@ export class PlatformSearchableCombobox extends PlatformElement {
         this.label = '';
         this.placeholder = '';
         this.emptyLabel = '';
+        this.createLabel = '';
+        this.createQueryLabel = '';
         this.ariaLabel = '';
         this.compact = false;
         this._open = false;
@@ -348,6 +374,47 @@ export class PlatformSearchableCombobox extends PlatformElement {
         this._selectOption(o.value, disp);
     }
 
+    /**
+     * @returns {{ query: string, label: string } | null}
+     */
+    _createRow() {
+        const baseCreate = typeof this.createLabel === 'string' ? this.createLabel.trim() : '';
+        const queryTemplate = typeof this.createQueryLabel === 'string'
+            ? this.createQueryLabel.trim()
+            : '';
+        if (baseCreate.length === 0 && queryTemplate.length === 0) {
+            return null;
+        }
+        const query = this._input.trim();
+        if (query.length === 0) {
+            if (baseCreate.length === 0) {
+                return null;
+            }
+            return { query: '', label: baseCreate };
+        }
+        for (const o of this._opts()) {
+            if (o.value === query || o.label === query) {
+                return null;
+            }
+        }
+        if (queryTemplate.length > 0) {
+            return { query, label: _formatCreateQueryLabel(queryTemplate, query) };
+        }
+        if (baseCreate.length === 0) {
+            return null;
+        }
+        return { query, label: `${baseCreate}: ${query}` };
+    }
+
+    _onCreateMouseDown(e) {
+        e.preventDefault();
+        this._clearBlurHandle();
+        this._editing = false;
+        this._open = false;
+        const query = this._input.trim();
+        this.emit('create', { query });
+    }
+
     disconnectedCallback() {
         this._clearBlurHandle();
         super.disconnectedCallback();
@@ -356,6 +423,7 @@ export class PlatformSearchableCombobox extends PlatformElement {
     _listItems() {
         const hasEmpty = typeof this.emptyLabel === 'string' && this.emptyLabel.length > 0;
         const rows = this._filtered();
+        const createRow = this._createRow();
         if (!this._open) {
             return null;
         }
@@ -382,6 +450,16 @@ export class PlatformSearchableCombobox extends PlatformElement {
                         </li>
                     `,
                 )}
+                ${createRow
+                    ? html`
+                        <li
+                            class="item item-create"
+                            role="option"
+                            data-create="true"
+                            @mousedown=${this._onCreateMouseDown}
+                        >${createRow.label}</li>
+                    `
+                    : null}
             </ul>
         `;
     }

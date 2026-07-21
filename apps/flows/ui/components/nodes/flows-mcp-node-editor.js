@@ -4,15 +4,15 @@
  * Поля по `MCPNode` (apps/flows/src/runtime/nodes.py):
  *   - server_id, tool_name, headers; input_mapping и state_mapping — в `flows-base-node-editor` (МАППИНГ Вход/Выход).
  *
+ * Выбор tool — тот же `flows.tool_picker` (`pickMode: mcp_only`), что и при дропе MCP на canvas.
  * `cached_tools` в API — полные `mcp:server:tool_id`; в конфиге `tool_name` — короткое имя.
  * Схема аргументов и драфт `input_mapping` — из GET /flows/api/v1/tools/{tool_id} (`flows/tools`).
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
-import '@platform/lib/components/platform-json-editor.js';
+import '../editors/flows-http-headers-editor.js';
 import '../editors/flows-parameters-schema-form.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
@@ -20,7 +20,7 @@ import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import {
     fullMcpToolId,
     mcpInputMappingDraftFromToolRecord,
-    shortMcpNameFromCacheEntry,
+    parseMcpToolIdToNodeConfig,
 } from '../../_helpers/flows-mcp-tool-registry.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
@@ -53,41 +53,54 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                 border-radius: var(--radius-md);
             }
             summary { cursor: pointer; font-size: var(--text-sm); font-weight: var(--font-semibold); }
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
-            input, select {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle);
-                background: var(--bg-elevated);
-                color: var(--text-primary); font: inherit;
-                width: 100%; box-sizing: border-box;
-            }
-            .row { display: flex; align-items: center; gap: var(--space-2); }
             .mcp-control-row {
-                display: grid;
-                grid-template-columns: minmax(180px, 0.55fr) minmax(260px, 1fr) auto;
-                align-items: end;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
                 gap: var(--space-2);
                 margin-bottom: var(--space-2);
             }
-            .mcp-control-row platform-field {
+            .mcp-selection {
+                flex: 1 1 220px;
                 min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-subtle);
+                background: var(--bg-elevated);
+            }
+            .mcp-selection-label {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .mcp-selection-value {
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                font-weight: var(--font-medium);
+                word-break: break-word;
+            }
+            .mcp-selection-value[data-empty='true'] {
+                color: var(--text-tertiary);
+                font-weight: var(--font-normal);
+            }
+            .mcp-selection-meta {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                font-family: var(--font-mono);
+            }
+            .mcp-actions {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--space-2);
             }
             .mcp-sync-button {
                 min-height: 40px;
                 white-space: nowrap;
             }
             .mcp-hint { font-size: var(--text-xs); color: var(--text-tertiary); margin: 0 0 var(--space-2) 0; line-height: 1.4; }
-            @media (max-width: 900px) {
-                .mcp-control-row {
-                    grid-template-columns: minmax(0, 1fr);
-                    align-items: stretch;
-                }
-                .mcp-sync-button {
-                    justify-self: start;
-                }
-            }
         `,
     ];
 
@@ -302,40 +315,16 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         });
     }
 
-    _onServer(e) {
+    _onHeaders(e) {
         const d = e.detail;
-        if (d === null || typeof d !== 'object') {
-            throw new Error('flows-mcp-node-editor: server_id change detail');
+        if (d === null || typeof d !== 'object' || !('value' in d)) {
+            throw new Error('flows-mcp-node-editor: headers change detail.value');
         }
-        if (!('value' in d)) {
-            throw new Error('flows-mcp-node-editor: server_id detail.value');
+        const headers = d.value;
+        if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+            throw new Error('flows-mcp-node-editor: headers must be an object');
         }
-        const v = d.value;
-        if (typeof v !== 'string') {
-            throw new Error('flows-mcp-node-editor: server_id string required');
-        }
-        this._draftGenFullId = null;
-        this._emitPatch({ server_id: v, tool_name: '' });
-    }
-
-    _onTool(e) {
-        const d = e.detail;
-        if (d === null || typeof d !== 'object') {
-            throw new Error('flows-mcp-node-editor: tool_name change detail');
-        }
-        if (!('value' in d)) {
-            throw new Error('flows-mcp-node-editor: tool_name detail.value');
-        }
-        const v = d.value;
-        if (typeof v !== 'string') {
-            throw new Error('flows-mcp-node-editor: tool_name string required');
-        }
-        this._draftGenFullId = null;
-        this._emitPatch({ tool_name: v });
-    }
-
-    _onHeaders(parsed) {
-        this._emitPatch({ headers: parsed && typeof parsed === 'object' ? parsed : {} });
+        this._emitPatch({ headers });
     }
 
     async _onSync(serverId) {
@@ -348,36 +337,28 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         return found ? found : null;
     }
 
-    _toolOptions(server, serverId) {
-        if (!server || !Array.isArray(server.cached_tools)) {
-            return [];
-        }
-        const byId = isPlainObject(this._tools.byId) ? this._tools.byId : {};
-        return server.cached_tools.map((entry) => {
-            if (typeof entry === 'string') {
-                if (!entry.startsWith('mcp:')) {
-                    throw new Error('flows-mcp-node-editor: cached_tools entry must be mcp:… id');
+    _onPickTool() {
+        this.openModal('flows.tool_picker', {
+            pickMode: 'mcp_only',
+            onPick: (detail) => {
+                if (!detail || typeof detail !== 'object') {
+                    return;
                 }
-                const short = shortMcpNameFromCacheEntry(entry, serverId);
-                if (short === null) {
-                    return null;
+                if (detail.kind !== 'tool') {
+                    return;
                 }
-                const rec = isPlainObject(byId[entry]) ? byId[entry] : null;
-                const label = rec && typeof rec.title === 'string' && rec.title.length > 0
-                    ? rec.title
-                    : short;
-                return { value: short, label, fullId: entry };
-            }
-            if (isPlainObject(entry) && typeof entry.name === 'string' && entry.name.length > 0) {
-                const fullId = fullMcpToolId(serverId, entry.name);
-                const rec = isPlainObject(byId[fullId]) ? byId[fullId] : null;
-                const label = (rec && typeof rec.title === 'string' && rec.title.length > 0)
-                    ? rec.title
-                    : (typeof entry.title === 'string' && entry.title.length > 0 ? entry.title : entry.name);
-                return { value: entry.name, label, fullId };
-            }
-            throw new Error('flows-mcp-node-editor: unsupported cached_tools entry shape');
-        }).filter((x) => x !== null);
+                const toolId = detail.tool_id;
+                if (typeof toolId !== 'string' || toolId.length === 0) {
+                    return;
+                }
+                const parsed = parseMcpToolIdToNodeConfig(toolId);
+                this._draftGenFullId = null;
+                this._emitPatch({
+                    server_id: parsed.server_id,
+                    tool_name: parsed.tool_name,
+                });
+            },
+        });
     }
 
     _toolSchema(tool) {
@@ -400,24 +381,34 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         return isPlainObject(rec) ? rec : null;
     }
 
+    _selectionLabel(server, serverId, toolName, loaded) {
+        if (serverId.length === 0 || toolName.length === 0) {
+            return this.t('mcp_node_editor.tool_not_selected');
+        }
+        const toolTitle = loaded && typeof loaded.title === 'string' && loaded.title.length > 0
+            ? loaded.title
+            : toolName;
+        const serverLabel = server && typeof server.name === 'string' && server.name.length > 0
+            ? server.name
+            : serverId;
+        return `${serverLabel} · ${toolTitle}`;
+    }
+
     render() {
         const b = this._mcpFieldBundle();
         const serverId = b.serverId;
         const toolName = b.toolName;
         const servers = Array.isArray(this._servers.items) ? this._servers.items : [];
         const server = this._findServer(servers, serverId);
-        const toolOptions = this._toolOptions(server, serverId);
         const loaded = this._resolveLoadedToolRecord(serverId, toolName);
         const schema = this._toolSchema(loaded);
-        const headersJson = JSON.stringify(b.headers, null, 2);
-        const serverValues = [
-            { value: '', label: '—' },
-            ...servers.map((s) => ({ value: s.server_id, label: s.name })),
-        ];
-        const toolValues = [
-            { value: '', label: '—' },
-            ...toolOptions.map((o) => ({ value: o.value, label: o.label })),
-        ];
+        const headers =
+            b.headers && typeof b.headers === 'object' && !Array.isArray(b.headers)
+                ? b.headers
+                : {};
+        const hasSelection = serverId.length > 0 && toolName.length > 0;
+        const selectionLabel = this._selectionLabel(server, serverId, toolName, loaded);
+        const fullId = hasSelection ? fullMcpToolId(serverId, toolName) : '';
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
@@ -437,32 +428,35 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                 <div slot="settings">
                     <p class="mcp-hint">${this.t('mcp_node_editor.input_mapping_hint')}</p>
                     <div class="mcp-control-row">
-                        <platform-field
-                            mode="edit"
-                            type="enum"
-                            .label=${this.t('mcp_node_editor.server_id')}
-                            .value=${serverId}
-                            .config=${{ values: serverValues }}
-                            @change=${this._onServer}
-                        ></platform-field>
-                        <platform-field
-                            mode="edit"
-                            type="enum"
-                            .label=${this.t('mcp_node_editor.tool_name')}
-                            .value=${toolName}
-                            .config=${{ values: toolValues }}
-                            @change=${this._onTool}
-                        ></platform-field>
-                        <platform-button
-                            class="mcp-sync-button"
-                            variant="ghost"
-                            density="compact"
-                            ?disabled=${!serverId || this._sync.busy}
-                            @click=${() => this._onSync(serverId)}
-                        >
-                            <platform-icon name="refresh"></platform-icon>
-                            ${this.t('mcp_node_editor.sync_server')}
-                        </platform-button>
+                        <div class="mcp-selection">
+                            <span class="mcp-selection-label">${this.t('mcp_node_editor.selected_tool')}</span>
+                            <span class="mcp-selection-value" data-empty=${hasSelection ? 'false' : 'true'}>
+                                ${selectionLabel}
+                            </span>
+                            ${fullId.length > 0
+                                ? html`<span class="mcp-selection-meta">${fullId}</span>`
+                                : ''}
+                        </div>
+                        <div class="mcp-actions">
+                            <platform-button
+                                variant="secondary"
+                                density="compact"
+                                @click=${() => this._onPickTool()}
+                            >
+                                <platform-icon name="plus"></platform-icon>
+                                ${this.t('mcp_node_editor.pick_tool')}
+                            </platform-button>
+                            <platform-button
+                                class="mcp-sync-button"
+                                variant="ghost"
+                                density="compact"
+                                ?disabled=${!serverId || this._sync.busy}
+                                @click=${() => this._onSync(serverId)}
+                            >
+                                <platform-icon name="refresh"></platform-icon>
+                                ${this.t('mcp_node_editor.sync_server')}
+                            </platform-button>
+                        </div>
                     </div>
                     ${schema ? html`
                         <details class="glass-subtle">
@@ -474,12 +468,12 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                             ></flows-parameters-schema-form>
                         </details>
                     ` : ''}
-                    <details class="glass-subtle">
+                    <details class="glass-subtle" open>
                         <summary>${this.t('mcp_node_editor.headers')}</summary>
-                        <platform-json-editor validate-json show-toolbar="false"
-                            .value=${headersJson}
-                            @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._onHeaders(e.detail.parsed); }}
-                        ></platform-json-editor>
+                        <flows-http-headers-editor
+                            .value=${headers}
+                            @change=${this._onHeaders}
+                        ></flows-http-headers-editor>
                     </details>
                 </div>
             </flows-base-node-editor>

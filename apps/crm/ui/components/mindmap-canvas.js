@@ -435,7 +435,7 @@ export class CRMMindmapCanvas extends PlatformElement {
                 pointer-events: none;
             }
             .mm-node-inner.mm-root-text {
-                color: var(--text-inverse);
+                color: var(--platform-btn-primary-text);
             }
             .mm-label {
                 flex: 1;

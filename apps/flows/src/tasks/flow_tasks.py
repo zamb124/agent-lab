@@ -41,7 +41,7 @@ async def process_flow_task(
         user_id: ID пользователя
         content: Содержимое сообщения
         branch_id: ID skill для агента
-        channel: Канал ("a2a", "telegram", "whatsapp")
+        channel: Канал ("a2a", "telegram", "webhook")
         task_id: ID задачи A2A
         context_id: ID контекста A2A
         metadata: Дополнительные данные

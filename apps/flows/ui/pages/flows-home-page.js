@@ -191,6 +191,7 @@ export class FlowsHomePage extends PlatformPage {
     static properties = {
         mobileCatalogOpen: { type: Boolean, reflect: true, attribute: 'mobile-catalog-open' },
         _isMobile: { state: true },
+        _toolsCount: { state: true },
     };
 
     static styles = [
@@ -525,7 +526,7 @@ export class FlowsHomePage extends PlatformPage {
                 align-items: center;
                 justify-content: center;
                 border-radius: var(--radius-md);
-                color: var(--text-inverse);
+                color: var(--platform-btn-primary-text);
             }
             .tone-accent { background: var(--accent); }
             .tone-success { background: var(--success); }
@@ -683,7 +684,8 @@ export class FlowsHomePage extends PlatformPage {
         this._mcpServers = this.useResource('flows/mcp_servers');
         this._agentSkills = this.useResource('flows/agent_skills');
         this._variables = this.useResource('secrets/variables');
-        this._tools = this.useOp('flows/tools_all');
+        this._tools = this.useResource('flows/tools', { autoload: false });
+        this._toolsCount = 0;
         this._bundles = this.useOp('flows/flow_store_bundles');
         this._integrations = this.useOp('flows/integrations_list');
         this._workItemCounts = this.useOp('platform/work_item_counts');
@@ -717,7 +719,7 @@ export class FlowsHomePage extends PlatformPage {
         void this._mcpServers.load();
         void this._agentSkills.load({ limit: 200, offset: 0 });
         void this._variables.load({ limit: 200, offset: 0 });
-        void this._tools.run({ limit: 2000, offset: 0 });
+        void this._loadToolsCount();
         void this._bundles.run({});
         void this._integrations.run({});
         void this._workItemCounts.run({});
@@ -733,6 +735,36 @@ export class FlowsHomePage extends PlatformPage {
         this._flowsHomeMql = null;
         this._onFlowsHomeMql = null;
         super.disconnectedCallback();
+    }
+
+    async _loadToolsCount() {
+        const ctl = this._tools;
+        const okType = ctl.resource.events.LIST_LOADED;
+        const failType = ctl.resource.events.LIST_FAILED;
+        await new Promise((resolve) => {
+            let unsubOk = null;
+            let unsubFail = null;
+            const cleanup = () => {
+                if (typeof unsubOk === 'function') {
+                    unsubOk();
+                }
+                if (typeof unsubFail === 'function') {
+                    unsubFail();
+                }
+            };
+            unsubOk = this.bus.subscribeType(okType, (event) => {
+                cleanup();
+                const total = event && isPlainObject(event.payload) ? event.payload.total : null;
+                this._toolsCount = typeof total === 'number' && total >= 0 ? total : 0;
+                resolve();
+            });
+            unsubFail = this.bus.subscribeType(failType, () => {
+                cleanup();
+                this._toolsCount = 0;
+                resolve();
+            });
+            ctl.load({ limit: 1, offset: 0 });
+        });
     }
 
     _installMobileModeListener() {
@@ -1354,9 +1386,7 @@ export class FlowsHomePage extends PlatformPage {
         const sessions = asArray(this._sessions.items).slice(0, 5);
         const bundles = resultItems(this._bundles.lastResult);
         const installedBundles = bundles.filter((item) => isPlainObject(item) && item.installed === true).length;
-        const toolsCount = resultItems(this._tools.lastResult)
-            .filter((item) => isPlainObject(item) && item.item_type === 'tool')
-            .length;
+        const toolsCount = this._toolsCount;
         return html`
             <section>
                 ${this._renderSectionHead('flows_home.activity_title', 'flows_home.activity_subtitle', '', 'flows_home.activity_help')}

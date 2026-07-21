@@ -185,7 +185,7 @@ export const worktrackerDetailContentStyles = css`
         border: none;
         border-radius: var(--radius-md);
         background: var(--accent);
-        color: var(--text-on-accent, #fff);
+        color: var(--text-on-accent);
         cursor: pointer;
         transition: background var(--duration-fast) ease;
     }

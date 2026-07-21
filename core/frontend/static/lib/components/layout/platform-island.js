@@ -3,6 +3,9 @@
  * 
  * На мобильных устройствах Island занимает весь экран без закруглений.
  * Бургер-меню рендерится через page-header компонент внутри страниц.
+ *
+ * Surface — solid tint без backdrop-filter: nested blur + scroll давал GPU flicker
+ * во всех сервисах (раньше is-scrolling выключал blur и сам вызывал snap).
  */
 import { html } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
@@ -19,7 +22,6 @@ export class PlatformIsland extends PlatformElement {
         /** У .island-content overflow:hidden — скролл только у внутренних областей (иначе iOS при фокусе в input прокручивает весь слот вверх). */
         contentNoScroll: { type: Boolean, attribute: 'content-no-scroll' },
         loading: { type: Boolean, reflect: true },
-        _scrolling: { state: true },
     };
 
     static styles = [
@@ -36,47 +38,11 @@ export class PlatformIsland extends PlatformElement {
         this.safeBottom = false;
         this.contentNoScroll = false;
         this.loading = false;
-        this._scrolling = false;
-        this._scrollEndTimer = null;
-        this._onIslandScroll = this._handleIslandScroll.bind(this);
-        this._islandEl = null;
-    }
-
-    firstUpdated() {
-        this._islandEl = this.renderRoot.querySelector('.island');
-        if (this._islandEl) {
-            this._islandEl.addEventListener('scroll', this._onIslandScroll, { capture: true, passive: true });
-        }
-    }
-
-    disconnectedCallback() {
-        if (this._islandEl) {
-            this._islandEl.removeEventListener('scroll', this._onIslandScroll, { capture: true });
-            this._islandEl = null;
-        }
-        if (this._scrollEndTimer !== null) {
-            clearTimeout(this._scrollEndTimer);
-            this._scrollEndTimer = null;
-        }
-        super.disconnectedCallback();
-    }
-
-    _handleIslandScroll() {
-        if (!this._scrolling) {
-            this._scrolling = true;
-        }
-        if (this._scrollEndTimer !== null) {
-            clearTimeout(this._scrollEndTimer);
-        }
-        this._scrollEndTimer = setTimeout(() => {
-            this._scrollEndTimer = null;
-            this._scrolling = false;
-        }, 120);
     }
 
     render() {
         return html`
-            <div class="island ${this._scrolling ? 'is-scrolling' : ''}">
+            <div class="island">
                 <div class="island-surface" aria-hidden="true">
                     ${this.headerGlow ? html`<div class="island-header-glow"></div>` : ''}
                 </div>

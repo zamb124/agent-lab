@@ -106,6 +106,8 @@ describe('platform typography canon', () => {
         expect(platformElementStyles).toContain('font-family: var(--font-sans);');
         expect(platformElementStyles).toContain(':host button');
         expect(platformElementStyles).toContain('font: inherit;');
+        // color: inherit на :host button запрещён — перебивает .btn-primary / .cta-btn в light theme
+        expect(platformElementStyles).not.toMatch(/:host button\s*\{[^}]*color:\s*inherit/);
     });
 
     it('platform-fonts.css declares manifest families with font-display swap', () => {

@@ -481,10 +481,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         company = await handler.extract_company_from_webhook_path(request.url.path, platform)
 
-        # GET для верификации WhatsApp — анонимный контекст
-        if platform == "whatsapp" and request.method == "GET":
-            return await context_factory.create(request, "anonymous", company, trace_id=trace_id)
-
         user, metadata = await handler.create_user_from_request(request, company)
 
         context = await context_factory.create(

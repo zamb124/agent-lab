@@ -17,6 +17,7 @@ from core.config.models import (
     CallsConfig,
     DatabaseConfig,
     FilesConfig,
+    GoogleWorkspaceConfig,
     LegalConfig,
     LLMConfig,
     LoggingConfig,
@@ -42,7 +43,6 @@ from core.config.models import (
     TelegramConfig,
     TextTransformsConfig,
     TracingConfig,
-    WhatsAppConfig,
     WorkerConfig,
     default_platform_brands,
 )
@@ -99,7 +99,6 @@ class BaseSettings(PydanticBaseSettings):
     mcp_catalog: MCPCatalogConfig = Field(default_factory=MCPCatalogConfig)
     voice: SpeechProvidersConfig = Field(default_factory=SpeechProvidersConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
-    whatsapp: WhatsAppConfig = Field(default_factory=WhatsAppConfig)
     nano_banana: NanoBananaConfig = Field(default_factory=NanoBananaConfig)
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)
     payment_providers: PaymentProvidersConfig = Field(default_factory=PaymentProvidersConfig)
@@ -121,6 +120,9 @@ class BaseSettings(PydanticBaseSettings):
     calendar_sync: CalendarSyncConfig = Field(default_factory=CalendarSyncConfig)
     mail_sync: MailSyncConfig = Field(default_factory=MailSyncConfig)
     mail: MailConfig = Field(default_factory=MailConfig)
+    google_workspace: GoogleWorkspaceConfig = Field(
+        default_factory=GoogleWorkspaceConfig
+    )
     push: PushConfig = Field(default_factory=PushConfig)
     calls: CallsConfig = Field(default_factory=CallsConfig)
     media_transcriber: MediaTranscriberConfig = Field(default_factory=MediaTranscriberConfig)
@@ -259,10 +261,6 @@ class _SettingsProxy:
     @property
     def telegram(self) -> TelegramConfig:
         return get_settings().telegram
-
-    @property
-    def whatsapp(self) -> WhatsAppConfig:
-        return get_settings().whatsapp
 
     @property
     def nano_banana(self) -> NanoBananaConfig:

@@ -11,10 +11,10 @@ import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
+import '../components/common/flows-code-language-segment.js';
 import { asObject } from '../_helpers/flows-resolvers.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import {
-    FLOW_CODE_LANGUAGES,
     flowCodeLanguageLabel,
     normalizeFlowCodeLanguage,
 } from '../_helpers/flows-code-languages.js';
@@ -335,19 +335,12 @@ export class FlowsCodeDocsModal extends PlatformModal {
     _renderLanguageSegment() {
         const current = this._documentationLanguage();
         return html`
-            <platform-segmented-control
-                icon-only
-                density="compact"
+            <flows-code-language-segment
                 full-width
                 .value=${current}
-                .items=${FLOW_CODE_LANGUAGES.map((lang) => ({
-                    value: lang.value,
-                    icon: lang.icon,
-                    title: lang.label,
-                }))}
                 aria-label=${this.t('code_workbench.language_aria')}
                 @change=${(e) => this._setLanguage(e.detail.value)}
-            ></platform-segmented-control>
+            ></flows-code-language-segment>
         `;
     }
 

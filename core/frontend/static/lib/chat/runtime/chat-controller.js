@@ -31,7 +31,7 @@ import {
     createInitialChatRuntimeState,
     STREAM_INCOMPLETE_I18N_KEY,
 } from './chat-state.js';
-import { findActiveHitlPause } from './hitl-pause-listener.js';
+import { findActiveHitlPause, findActiveLiveTailPause } from './hitl-pause-listener.js';
 import {
     feedStreamTtsFromA2aResult,
     stopStreamTtsPlayback,
@@ -175,13 +175,16 @@ export class ChatController {
         this.applyRuntimeVerb('session_init', payload || {});
     }
 
-    newChat() {
+    /**
+     * @param {{ flowId?: string|null }|null|undefined} payload — optional new currentFlowId
+     */
+    newChat(payload) {
         this.stopHitlLiveTail();
         if (this._streamAbort !== null) {
             this._streamAbort.abort();
         }
         stopStreamTtsPlayback();
-        this.applyRuntimeVerb('session_reset', {});
+        this.applyRuntimeVerb('session_reset', payload && typeof payload === 'object' ? payload : {});
     }
 
     addUserMessage(contextId, message) {
@@ -509,8 +512,8 @@ export class ChatController {
     }
 
     /**
-     * На активной operator_task паузе — live `SubscribeToTask` (тот же Redis stream,
-     * что у operator chat). Не используется при operator_handoff transport.
+     * На активной operator_task или oauth_required паузе — live `SubscribeToTask`
+     * (тот же Redis stream). Не используется при operator_handoff transport.
      */
     syncHitlLiveTail() {
         if (this._transport !== null) {
@@ -519,7 +522,7 @@ export class ChatController {
         if (this._sending) {
             return;
         }
-        const pause = findActiveHitlPause(this._state);
+        const pause = findActiveLiveTailPause(this._state);
         if (pause === null) {
             this.stopHitlLiveTail();
             return;

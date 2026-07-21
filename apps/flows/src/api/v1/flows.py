@@ -521,6 +521,7 @@ class EdgeRequest(BaseModel):
     from_node: str
     to_node: str | None
     condition: EdgeCondition | None = None
+    from_port: str | None = None
 
 
 class BranchRequest(BranchPayload):

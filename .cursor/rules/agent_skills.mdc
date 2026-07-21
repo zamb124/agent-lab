@@ -78,7 +78,7 @@ alwaysApply: false
 - Skill Library CTA → `flow_chat` / `lara`. `platform_assistant` — deprecated alias с теми же roots.
 - Seed: `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` / `ensure-seed`.
 - Service skill может содержать только существующие operational `tool_refs`; если tool контракта нет, body ведёт по UI и запрещает заявлять об исполнении.
-- Shared tree под `platform-workspace`: `document-workspace` → `docx-templates`, `diagrams-viz`, `web-research`, `work-tracking`, `agent-planning`. `web-research` включает batch browser search + page snapshot; `work-tracking` включает one-time + cron + interval scheduler; `agent-planning` — `agent_plan_write` / `agent_plan_get` (→ **`agent_plan.mdc`**).
+- Shared tree под `platform-workspace`: `document-workspace` → `docx-templates`, `diagrams-viz`, `web-research`, `work-tracking`, `agent-planning`, `google-sheets` (`sheets_*`, OAuth `service=sheets`). `web-research` включает batch browser search + page snapshot; `work-tracking` включает one-time + cron + interval scheduler; `agent-planning` — `agent_plan_write` / `agent_plan_get` (→ **`agent_plan.mdc`**).
 - Service children переиспользуют shared leaves через `depends_on` либо направляют к отдельному Tier-1 root; копировать один tool pack между service skills запрещено.
 
 

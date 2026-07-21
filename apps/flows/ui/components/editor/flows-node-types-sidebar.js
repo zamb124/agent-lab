@@ -151,18 +151,27 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 border-color: var(--accent);
                 box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent);
             }
+            .trigger-row-help {
+                display: inline-flex;
+                align-items: center;
+                flex-shrink: 0;
+            }
 
             .search-wrap {
                 padding: 0 var(--space-2);
             }
-            .palette-help {
+            .search-row {
                 display: flex;
-                align-items: flex-start;
-                gap: var(--space-2);
-                padding: 0 var(--space-2);
-                color: var(--text-tertiary);
-                font-size: var(--text-xs);
-                line-height: 1.35;
+                align-items: center;
+                gap: var(--space-1);
+                min-width: 0;
+            }
+            .search-row platform-modal-search-field {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            .search-row platform-help-hint {
+                flex-shrink: 0;
             }
 
             /* Категории */
@@ -367,18 +376,21 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                             <platform-icon name="adjustment" size="12"></platform-icon>
                         </div>
                         <span class="trigger-row-label">${this.t('flow_property_panel.card_title')}</span>
+                        <span
+                            class="trigger-row-help"
+                            @click=${(e) => e.stopPropagation()}
+                            @keydown=${(e) => e.stopPropagation()}
+                        >
+                            <platform-help-hint
+                                .label=${this.t('node_types_sidebar.flow_settings_help_label')}
+                                .summary=${this.t('node_types_sidebar.flow_settings_help_summary')}
+                                .details=${this.t('node_types_sidebar.flow_settings_help_details')}
+                                .docHref=${'/documentation/scenarios/flows/operate-published-flow/'}
+                                .docLabel=${this.t('help_hints.open_scenario')}
+                            ></platform-help-hint>
+                        </span>
                     </div>
                 </article>
-                <div class="palette-help">
-                    <platform-help-hint
-                        .label=${this.t('node_types_sidebar.flow_settings_help_label')}
-                        .summary=${this.t('node_types_sidebar.flow_settings_help_summary')}
-                        .details=${this.t('node_types_sidebar.flow_settings_help_details')}
-                        .docHref=${'/documentation/scenarios/flows/operate-published-flow/'}
-                        .docLabel=${this.t('help_hints.open_scenario')}
-                    ></platform-help-hint>
-                    <span>${this.t('node_types_sidebar.flow_settings_help_inline')}</span>
-                </div>
             </div>
         `;
     }
@@ -465,22 +477,21 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
     _renderSearch() {
         return html`
             <div class="search-wrap">
-                <platform-modal-search-field
-                    layout="fill"
-                    .value=${this._query}
-                    placeholder=${this.t('node_types_sidebar.search_placeholder')}
-                    @change=${this._onSearchChange}
-                ></platform-modal-search-field>
-            </div>
-            <div class="palette-help">
-                <platform-help-hint
-                    .label=${this.t('node_types_sidebar.palette_help_label')}
-                    .summary=${this.t('node_types_sidebar.palette_help_summary')}
-                    .details=${this.t('node_types_sidebar.palette_help_details')}
-                    .docHref=${'/documentation/scenarios/flows/add-llm-node/'}
-                    .docLabel=${this.t('help_hints.open_scenario')}
-                ></platform-help-hint>
-                <span>${this.t('node_types_sidebar.palette_help_inline')}</span>
+                <div class="search-row">
+                    <platform-modal-search-field
+                        layout="fill"
+                        .value=${this._query}
+                        placeholder=${this.t('node_types_sidebar.search_placeholder')}
+                        @change=${this._onSearchChange}
+                    ></platform-modal-search-field>
+                    <platform-help-hint
+                        .label=${this.t('node_types_sidebar.palette_help_label')}
+                        .summary=${this.t('node_types_sidebar.palette_help_summary')}
+                        .details=${this.t('node_types_sidebar.palette_help_details')}
+                        .docHref=${'/documentation/scenarios/flows/add-llm-node/'}
+                        .docLabel=${this.t('help_hints.open_scenario')}
+                    ></platform-help-hint>
+                </div>
             </div>
         `;
     }

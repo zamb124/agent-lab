@@ -1444,6 +1444,21 @@ export class PlatformChat extends LitElement {
         if (changed.has('flowId') || changed.has('embedId') || changed.has('branchId') || changed.has('flowsBaseUrl')) {
             this._controller.setTarget(this._controllerTarget());
             this._ttsOnly.dispose();
+            // Смена уже заданного flow/branch/embed — новая A2A-сессия (не оставлять чужие пузыри).
+            // Первый assign ('' → id) не трогаем: init в firstUpdated.
+            const prevFlow = changed.has('flowId') ? changed.get('flowId') : undefined;
+            const prevEmbed = changed.has('embedId') ? changed.get('embedId') : undefined;
+            const prevBranch = changed.has('branchId') ? changed.get('branchId') : undefined;
+            const identityRetargeted =
+                (typeof prevFlow === 'string' && prevFlow.length > 0 && prevFlow !== this.flowId)
+                || (typeof prevEmbed === 'string' && prevEmbed.length > 0 && prevEmbed !== this.embedId)
+                || (typeof prevBranch === 'string' && prevBranch.length > 0 && prevBranch !== this.branchId);
+            if (identityRetargeted) {
+                this._chatProfileRequested = false;
+                this._fetchedPolicy = null;
+                this._newChat();
+                void this._loadChatProfileIfNeeded();
+            }
         }
         if (changed.has('useCredentials')) {
             this._controller.setCredentials(this._requestCredentials());
@@ -3353,7 +3368,10 @@ export class PlatformChat extends LitElement {
         this._uiEventDispatchKeys.clear();
         this._uiBlocksByTaskId = {};
         this._voiceStreamState = null;
-        this._controller.newChat();
+        const flowId = typeof this.flowId === 'string' && this.flowId.trim() !== ''
+            ? this.flowId.trim()
+            : null;
+        this._controller.newChat(flowId !== null ? { flowId } : {});
         this._stickToBottom = true;
         this.requestUpdate();
         this._startGreetingTypingIfNeeded();
@@ -3501,6 +3519,9 @@ export class PlatformChat extends LitElement {
         if (!vc.showSkillLoads) {
             projected.skillLoads = [];
         }
+        if (!vc.showReflection) {
+            projected.reflectionResults = [];
+        }
         if (vc.toolCallsDisplay === 'hidden') {
             projected.toolCalls = [];
             projected.toolResults = [];
@@ -3598,6 +3619,7 @@ export class PlatformChat extends LitElement {
                 .toolResults=${Array.isArray(m.toolResults) ? m.toolResults : []}
                 .browserPreviews=${Array.isArray(m.browserPreviews) ? m.browserPreviews : []}
                 .skillLoads=${Array.isArray(m.skillLoads) ? m.skillLoads : []}
+                .reflectionResults=${Array.isArray(m.reflectionResults) ? m.reflectionResults : []}
                 .inputRequired=${m.inputRequired || null}
                 .handoff=${m.handoff || null}
                 .handback=${m.handback || null}

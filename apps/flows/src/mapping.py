@@ -2,17 +2,22 @@
 MappingResolver - единая логика резолвинга @state:path и @var:name.
 
 Используется в:
-- LlmNode (input_mapping)
-- FlowNode (input_mapping)
-- RemoteFlowNode (input_mapping, headers, url)
-- ExternalAPIClient (URL, headers; body_template через resolve_json_template_tree)
+- LlmNode / FlowNode / RemoteFlowNode (input_mapping)
+- ExternalAPIClient / SMS (URL, headers, body_template)
+- RemoteFlowNode (metadata_template → A2A params.metadata)
+- HitlNode (handoff_task_title / handoff_user_message)
+
+Свободные строки (headers, URL, HITL): resolve_interpolated_string.
+JSON-ячейки body (typed whole-ref): resolve_json_template_string / tree.
+input_mapping ячейки: resolve_value / build_mapped_state.
 
 Синтаксис:
 - "@state:field" -> state.field
 - "@state:user.profile.name" -> state.user.profile.name
-- "@var:name" -> state.variables["name"]
-- "@var:nested.path" -> state.variables["nested"]["path"]
-- "constant" -> "constant" (любое значение без префикса)
+- "@var:name" -> state.variables["name"] (или overlay variables=)
+- "@var:nested.path" -> вложенный путь
+- в свободной строке: токены @state: / @var: в тексте
+- "constant" -> "constant"
 
 Zero-Guess: работает с ExecutionState напрямую (но может принимать dict для тестов).
 """
@@ -20,8 +25,9 @@ Zero-Guess: работает с ExecutionState напрямую (но может
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from pydantic import BaseModel
 
@@ -46,6 +52,10 @@ def _state_variables(state: MappingState) -> Mapping[str, JsonValue]:
 
 class MappingResolver:
     """Единая логика резолвинга @state:path и @var:name для всех нод."""
+
+    _STATE_TOKEN_PATTERN: ClassVar[re.Pattern[str]] = re.compile(
+        r"@state:([a-zA-Z_][a-zA-Z0-9_.]*)"
+    )
 
     @staticmethod
     def _as_mapping(value: object) -> Mapping[str, object] | None:
@@ -131,6 +141,65 @@ class MappingResolver:
             return value
         return VarResolver.resolve_text(value, variables)
 
+    @classmethod
+    def resolve_state_text(cls, value: str, state: MappingState) -> str:
+        """
+        Заменяет все @state:path токены в строке на значения из state.
+
+        Отсутствующий путь или None → ValueError (Zero-Guess).
+        """
+        if not value or "@state:" not in value:
+            return value
+
+        def replace_state(match: re.Match[str]) -> str:
+            path = match.group(1)
+            resolved = MappingResolver.get_nested_value(state, path)
+            if resolved is None:
+                raise ValueError(f"@state:{path} resolved to None")
+            return MappingResolver._coerce_to_header_string(resolved)
+
+        return cls._STATE_TOKEN_PATTERN.sub(replace_state, value)
+
+    @classmethod
+    def resolve_interpolated_string(
+        cls,
+        value: str,
+        state: MappingState,
+        *,
+        variables: Mapping[str, JsonValue] | None = None,
+    ) -> str:
+        """
+        Свободная строка: @state: / @var: (целая ссылка или токены в тексте) → str.
+
+        Канон для HITL title/message, HTTP headers, URL.
+        Brace {var} не резолвится (только VariableResolver для LLM prompts).
+        variables — overlay поверх state.variables для @var:.
+        """
+        raw = value.strip()
+        if not raw:
+            return raw
+
+        effective_vars: JsonObject = dict(_state_variables(state))
+        if variables is not None:
+            effective_vars.update(dict(variables))
+
+        if raw.startswith("@state:"):
+            resolved = MappingResolver.resolve_value(raw, state)
+            if resolved is None:
+                raise ValueError(f"{raw!r} resolved to None")
+            return cls._coerce_to_header_string(resolved).strip()
+
+        if _VAR_FULL_VAR.match(raw) is not None:
+            resolved = VarResolver.resolve_ref(raw, effective_vars)
+            return cls._coerce_to_header_string(resolved).strip()
+
+        text = raw
+        if "@state:" in text:
+            text = cls.resolve_state_text(text, state)
+        if "@var:" in text:
+            text = VarResolver.resolve_text(text, effective_vars)
+        return text.strip()
+
     @staticmethod
     def build_mapped_state(
         mapping: Mapping[str, object],
@@ -163,8 +232,9 @@ class MappingResolver:
         Резолвит одну строку внутри JSON-шаблона тела запроса external_api.
 
         - Полная строка @state:path или @var:path — значение любого типа из state / variables.
-        - Иначе при наличии подстроки @state: — ошибка (смешанный текст запрещён).
-        - Иначе подстановка токенов @var: через VarResolver.resolve_text.
+        - Иначе при наличии подстроки @state: — ошибка (смешанный текст запрещён;
+          для свободного текста используйте resolve_interpolated_string).
+        - Иначе подстановка токенов @var: через resolve_interpolated_string.
         """
         if s.startswith("@state:"):
             return require_json_value(
@@ -172,17 +242,17 @@ class MappingResolver:
                 "JSON body template @state value",
             )
         if _VAR_FULL_VAR.match(s):
-            return require_json_value(
-                MappingResolver.resolve_value(s, state),
-                "JSON body template @var value",
-            )
+            resolved = VarResolver.resolve_ref(s, variables)
+            return require_json_value(resolved, "JSON body template @var value")
         if "@state:" in s:
             raise ValueError(
                 "JSON body template: mixed text with @state: is not supported; "
                 + "use a whole-string @state:path or @var:path reference"
             )
         if "@var:" in s:
-            return VarResolver.resolve_text(s, variables)
+            return MappingResolver.resolve_interpolated_string(
+                s, state, variables=variables
+            )
         return s
 
     @staticmethod
@@ -223,9 +293,9 @@ class MappingResolver:
 
     @staticmethod
     def _coerce_to_header_string(value: object) -> str:
-        """Скаляр или JSON в одну строку для HTTP-заголовка."""
+        """Скаляр или JSON в одну строку для HTTP-заголовка / interpolated string."""
         if value is None:
-            raise ValueError("header template resolved to None")
+            raise ValueError("template resolved to None")
         if isinstance(value, str):
             return value
         if isinstance(value, (bool, int, float)):
@@ -240,8 +310,7 @@ class MappingResolver:
         state: MappingState,
         variables: Mapping[str, JsonValue],
     ) -> str:
-        """
-        Значение одного HTTP-заголовка: те же правила, что resolve_json_template_string, итог — str.
-        """
-        resolved = MappingResolver.resolve_json_template_string(value, state, variables)
-        return MappingResolver._coerce_to_header_string(resolved)
+        """HTTP-заголовок / URL: resolve_interpolated_string (включая mixed @state:)."""
+        return MappingResolver.resolve_interpolated_string(
+            value, state, variables=variables
+        )

@@ -17,6 +17,7 @@ from tests.ui.browser_auth import add_auth_token_cookie
 from tests.ui.click_highlight import install_click_highlight_on_context
 from tests.ui.e2e_worker import publish_ui_e2e_worker_env, ui_e2e_scope_headers
 from tests.ui.harness import AppUI
+from tests.ui.perf.collector import get_current_collector
 from tests.ui.personas import ANONYMOUS_UI_USER, UiPersona, UiTestUser, ui_test_user_from_token
 from tests.ui.scenario_doc import ScenarioRecorder
 from tests.ui.subdomain_setup import ensure_ui_subdomain_mappings
@@ -184,7 +185,17 @@ async def _new_browser_context(
     # Office share / copy link; без grant headless clipboard.writeText падает.
     await context.grant_permissions(["clipboard-read", "clipboard-write"])
     await install_click_highlight_on_context(context)
+    collector = get_current_collector()
+    if collector is not None:
+        await collector.attach_to_context(context)
     return context
+
+
+async def _close_browser_context(context: BrowserContext) -> None:
+    collector = get_current_collector()
+    if collector is not None:
+        await collector.capture_context(context)
+    await context.close()
 
 
 @pytest_asyncio.fixture
@@ -193,7 +204,7 @@ async def page(_browser_session: Browser) -> Page:
     context = await _new_browser_context(_browser_session, with_test_scope=False)
     p = await context.new_page()
     yield p
-    await context.close()
+    await _close_browser_context(context)
 
 
 @pytest_asyncio.fixture
@@ -213,28 +224,28 @@ async def _authenticated_page(browser: Browser, token: str) -> tuple[Page, Brows
 async def ui_page_system(_browser_session: Browser, auth_token_system: str) -> Page:
     page, ctx = await _authenticated_page(_browser_session, auth_token_system)
     yield page
-    await ctx.close()
+    await _close_browser_context(ctx)
 
 
 @pytest_asyncio.fixture
 async def ui_page_system_member(_browser_session: Browser, auth_token_system_user2: str) -> Page:
     page, ctx = await _authenticated_page(_browser_session, auth_token_system_user2)
     yield page
-    await ctx.close()
+    await _close_browser_context(ctx)
 
 
 @pytest_asyncio.fixture
 async def ui_page_company2(_browser_session: Browser, auth_token_company2: str) -> Page:
     page, ctx = await _authenticated_page(_browser_session, auth_token_company2)
     yield page
-    await ctx.close()
+    await _close_browser_context(ctx)
 
 
 @pytest_asyncio.fixture
 async def ui_page_company2_member(_browser_session: Browser, auth_token_company2_user2: str) -> Page:
     page, ctx = await _authenticated_page(_browser_session, auth_token_company2_user2)
     yield page
-    await ctx.close()
+    await _close_browser_context(ctx)
 
 
 @pytest_asyncio.fixture

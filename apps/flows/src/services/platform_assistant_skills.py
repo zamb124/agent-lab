@@ -44,6 +44,7 @@ PLATFORM_ASSISTANT_SEED_SKILL_IDS: tuple[str, ...] = (
     "diagrams-viz",
     "knowledge-rag",
     "web-research",
+    "google-sheets",
     "crm-notes",
     "crm-entities",
     "work-tracking",

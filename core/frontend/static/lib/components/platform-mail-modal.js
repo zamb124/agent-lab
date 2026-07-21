@@ -1236,26 +1236,24 @@ export class PlatformMailModal extends PlatformModal {
             .settings-overlay {
                 position: absolute;
                 inset: 0;
-                background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
-                backdrop-filter: blur(8px);
+                background: var(--bg-surface);
                 z-index: 5;
                 display: flex;
-                justify-content: center;
-                padding: var(--space-6);
-                overflow: auto;
+                flex-direction: column;
+                overflow: hidden;
             }
             .settings-panel {
-                width: min(760px, 100%);
-                background: var(--bg-elevated);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-lg);
+                width: 100%;
+                height: 100%;
+                min-height: 0;
+                background: var(--bg-surface);
+                border: none;
+                border-radius: 0;
                 padding: 0;
                 display: flex;
                 flex-direction: column;
                 gap: 0;
-                height: fit-content;
-                max-height: calc(100% - var(--space-4));
-                box-shadow: var(--glass-shadow-medium);
+                box-shadow: none;
                 overflow: hidden;
             }
             .settings-header {
@@ -1263,56 +1261,59 @@ export class PlatformMailModal extends PlatformModal {
                 align-items: center;
                 justify-content: space-between;
                 gap: var(--space-3);
-                padding: var(--space-4) var(--space-5);
+                padding: var(--space-4) var(--space-6);
                 border-bottom: 1px solid var(--border-subtle);
-                position: sticky;
-                top: 0;
+                flex-shrink: 0;
                 background: var(--bg-elevated);
                 z-index: 1;
             }
             .settings-header-title {
                 font-weight: 700;
-                font-size: 1.05rem;
+                font-size: 1.15rem;
             }
             .settings-body {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-5);
-                padding: var(--space-5);
+                gap: var(--space-6);
+                padding: var(--space-5) var(--space-6) var(--space-8);
                 overflow: auto;
+                min-height: 0;
+                flex: 1;
+                max-width: 960px;
+                width: 100%;
+                margin: 0 auto;
+                box-sizing: border-box;
             }
             .settings-hint {
                 font-size: 0.85rem;
                 color: var(--text-secondary);
-                line-height: 1.4;
+                line-height: 1.45;
+                max-width: 62ch;
             }
             .settings-section {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
-                padding-top: var(--space-2);
-                border-top: 1px solid var(--border-subtle);
-            }
-            .settings-section:first-child {
-                border-top: none;
-                padding-top: 0;
             }
             .settings-section-title {
                 font-weight: 700;
+                font-size: 0.95rem;
+                letter-spacing: 0.01em;
             }
             .settings-row {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
-                padding: var(--space-3) 0;
-                border-bottom: 1px solid var(--border-subtle);
+                padding: var(--space-4);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--bg-elevated);
             }
             .settings-row-main {
                 display: flex;
-                flex-wrap: wrap;
+                flex-direction: column;
                 gap: var(--space-3);
-                align-items: center;
-                justify-content: space-between;
+                align-items: stretch;
             }
             .settings-row-meta {
                 display: flex;
@@ -1324,32 +1325,53 @@ export class PlatformMailModal extends PlatformModal {
             .settings-row-form {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) auto;
-                gap: var(--space-2);
+                gap: var(--space-2) var(--space-3);
                 align-items: end;
+            }
+            .settings-row-form > .settings-hint {
+                grid-column: 1 / -1;
+            }
+            .settings-members {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                padding-top: var(--space-2);
+                border-top: 1px solid var(--border-subtle);
+            }
+            .settings-member-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
             }
             .binding-email {
                 font-weight: 600;
                 word-break: break-all;
+                font-size: 0.95rem;
             }
             .binding-unassigned {
                 font-size: 0.85rem;
                 color: var(--text-tertiary);
             }
+            .binding-color {
+                width: 100%;
+                min-width: 0;
+            }
             .binding-actions {
                 display: flex;
                 gap: var(--space-2);
                 flex-wrap: wrap;
-                justify-content: flex-end;
+                justify-content: flex-start;
                 align-items: center;
             }
             .settings-create-card {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
-                padding: var(--space-3);
+                padding: var(--space-4);
                 border: 1px dashed var(--border-subtle);
-                border-radius: var(--radius-md);
-                background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
+                border-radius: var(--radius-lg);
+                background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
             }
             .btn-icon {
                 display: inline-flex;
@@ -3407,20 +3429,22 @@ export class PlatformMailModal extends PlatformModal {
                             ? html`<span class="att-badge">${this.t('default_badge')}</span>`
                             : nothing}
                     </div>
-                    <div class="binding-actions">
+                    <div class="binding-color">
                         <platform-palette-color-picker
                             .value=${binding.calendar_color || 'default'}
                             @change=${(e) => this._patchBindingColor(binding.mailbox_binding_id, e.detail.value)}
                         ></platform-palette-color-picker>
-                        ${!isRole && !binding.is_default ? html`
+                    </div>
+                    ${!isRole && !binding.is_default ? html`
+                        <div class="binding-actions">
                             <platform-button
                                 variant="ghost"
                                 @click=${() => this.dispatch(MAIL_EVENTS.DEFAULT_SET_REQUESTED, {
                                     mailbox_binding_id: binding.mailbox_binding_id,
                                 })}
                             >${this.t('set_default')}</platform-button>
-                        ` : nothing}
-                    </div>
+                        </div>
+                    ` : nothing}
                 </div>
             </div>
         `;
@@ -3444,10 +3468,10 @@ export class PlatformMailModal extends PlatformModal {
             ? mail.bindingMembers[binding.mailbox_binding_id]
             : [];
         return html`
-            <div class="settings-row-form">
+            <div class="settings-members">
                 <div class="settings-hint">${this.t('role_members_hint')}</div>
                 ${members.map((member) => html`
-                    <div class="settings-row-main">
+                    <div class="settings-member-row">
                         <platform-user-chip user-id=${member.user_id} size="sm"></platform-user-chip>
                         <platform-button
                             variant="ghost"
@@ -3458,30 +3482,32 @@ export class PlatformMailModal extends PlatformModal {
                         >${this.t('role_member_remove')}</platform-button>
                     </div>
                 `)}
-                <platform-field
-                    type="enum"
-                    .label=${this.t('role_member_add')}
-                    .value=${this._memberDraftUserId}
-                    .config=${{ values: memberOptions }}
-                    mode="edit"
-                    @change=${(e) => { this._memberDraftUserId = e.detail.value; }}
-                ></platform-field>
-                <platform-button
-                    variant="secondary"
-                    @click=${() => {
-                        const userId = this._memberDraftUserId.trim();
-                        if (!userId) {
-                            this.toast('assign_user_required', { type: 'warning' });
-                            return;
-                        }
-                        this.dispatch(MAIL_EVENTS.BINDING_MEMBER_ADD_REQUESTED, {
-                            mailbox_binding_id: binding.mailbox_binding_id,
-                            user_id: userId,
-                            role: 'member',
-                        });
-                        this._memberDraftUserId = '';
-                    }}
-                >${this.t('role_member_add')}</platform-button>
+                <div class="settings-row-form">
+                    <platform-field
+                        type="enum"
+                        .label=${this.t('role_member_add')}
+                        .value=${this._memberDraftUserId}
+                        .config=${{ values: memberOptions }}
+                        mode="edit"
+                        @change=${(e) => { this._memberDraftUserId = e.detail.value; }}
+                    ></platform-field>
+                    <platform-button
+                        variant="secondary"
+                        @click=${() => {
+                            const userId = this._memberDraftUserId.trim();
+                            if (!userId) {
+                                this.toast('assign_user_required', { type: 'warning' });
+                                return;
+                            }
+                            this.dispatch(MAIL_EVENTS.BINDING_MEMBER_ADD_REQUESTED, {
+                                mailbox_binding_id: binding.mailbox_binding_id,
+                                user_id: userId,
+                                role: 'member',
+                            });
+                            this._memberDraftUserId = '';
+                        }}
+                    >${this.t('role_member_add')}</platform-button>
+                </div>
             </div>
         `;
     }
@@ -3507,11 +3533,13 @@ export class PlatformMailModal extends PlatformModal {
                             ? html`<span class="att-badge">${this.t('default_badge')}</span>`
                             : nothing}
                     </div>
-                    <div class="binding-actions">
+                    <div class="binding-color">
                         <platform-palette-color-picker
                             .value=${binding.calendar_color || 'default'}
                             @change=${(e) => this._patchBindingColor(binding.mailbox_binding_id, e.detail.value)}
                         ></platform-palette-color-picker>
+                    </div>
+                    <div class="binding-actions">
                         ${assigned && !binding.is_default && !isRole ? html`
                             <platform-button
                                 variant="ghost"

@@ -30,6 +30,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-json-editor.js';
+import './flows-http-headers-editor.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 
@@ -48,8 +49,6 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         allowFallbacks: { type: Boolean, attribute: 'allow-fallbacks' },
         _showAdvanced: { state: true },
         _draggedFallbackIndex: { state: true },
-        /** @type {{ name: string, value: string }[]} */
-        _headerRows: { state: true },
     };
 
     static styles = [
@@ -146,17 +145,6 @@ export class FlowsLlmConfigEditor extends PlatformElement {
             }
             .extra {
                 margin-top: var(--space-1);
-            }
-            .header-pair-row {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
-                gap: var(--space-2);
-                align-items: end;
-                padding: var(--space-1) 0;
-                border-bottom: 1px solid var(--glass-border-subtle);
-            }
-            .header-pairs-add {
-                margin-top: var(--space-2);
             }
             .fallbacks {
                 display: flex;
@@ -287,7 +275,6 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this.allowFallbacks = true;
         this._showAdvanced = false;
         this._draggedFallbackIndex = null;
-        this._headerRows = [];
         this._models = this.useOp('flows/models_list');
         this._providers = this.useOp('flows/providers_list');
         this._loadedModelsKey = null;
@@ -307,11 +294,6 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         super.willUpdate(changed);
         if (changed.has('config')) {
             this._compositeNormalizeConsumed = false;
-            const cfgNorm = this._normalizeHeaderObject(this.config?.extra_request_headers);
-            const rowsNorm = this._headersObjectFromRows(this._headerRows);
-            if (!this._headerDictEqual(cfgNorm, rowsNorm)) {
-                this._headerRows = this._pairsFromConfig(this.config);
-            }
         }
     }
 
@@ -414,79 +396,20 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this.emit('change', { config: next });
     }
 
-    _normalizeHeaderObject(h) {
-        if (!h || typeof h !== 'object' || Array.isArray(h)) return {};
-        const out = {};
-        for (const k of Object.keys(h)) {
-            const v = h[k];
-            out[k] = typeof v === 'string' ? v : '';
+    _onExtraHeaders(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object' || !('value' in d)) {
+            throw new Error('flows-llm-config-editor: extra_request_headers detail.value');
         }
-        return out;
-    }
-
-    _headerDictEqual(a, b) {
-        const ka = Object.keys(a).sort();
-        const kb = Object.keys(b).sort();
-        if (ka.length !== kb.length) return false;
-        for (let i = 0; i < ka.length; i += 1) {
-            if (ka[i] !== kb[i]) return false;
-            if (a[ka[i]] !== b[kb[i]]) return false;
+        const headers = d.value;
+        if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+            throw new Error('flows-llm-config-editor: extra_request_headers must be an object');
         }
-        return true;
-    }
-
-    _pairsFromConfig(cfg) {
-        const h = cfg && typeof cfg === 'object' ? cfg.extra_request_headers : null;
-        const pairs = [];
-        if (h && typeof h === 'object' && !Array.isArray(h)) {
-            for (const k of Object.keys(h)) {
-                const v = h[k];
-                pairs.push({ name: k, value: typeof v === 'string' ? v : '' });
-            }
-        }
-        return pairs;
-    }
-
-    _headersObjectFromRows(rows) {
-        const out = {};
-        if (!Array.isArray(rows)) return out;
-        for (const r of rows) {
-            if (!r || typeof r !== 'object') continue;
-            const n = typeof r.name === 'string' ? r.name.trim() : '';
-            if (!n) continue;
-            out[n] = typeof r.value === 'string' ? r.value : '';
-        }
-        return out;
-    }
-
-    _emitExtraHeadersFromRows() {
-        const built = this._headersObjectFromRows(this._headerRows);
-        if (Object.keys(built).length === 0) {
+        if (Object.keys(headers).length === 0) {
             this._onJson('extra_request_headers', null);
-        } else {
-            this._onJson('extra_request_headers', built);
+            return;
         }
-    }
-
-    _onHeaderPairName(idx, e) {
-        const v = typeof e.detail?.value === 'string' ? e.detail.value : '';
-        this._headerRows = this._headerRows.map((r, i) => (i === idx ? { ...r, name: v } : r));
-        this._emitExtraHeadersFromRows();
-    }
-
-    _onHeaderPairValue(idx, e) {
-        const v = typeof e.detail?.value === 'string' ? e.detail.value : '';
-        this._headerRows = this._headerRows.map((r, i) => (i === idx ? { ...r, value: v } : r));
-        this._emitExtraHeadersFromRows();
-    }
-
-    _addHeaderPairRow() {
-        this._headerRows = [...this._headerRows, { name: '', value: '' }];
-    }
-
-    _removeHeaderPairRow(idx) {
-        this._headerRows = this._headerRows.filter((_, i) => i !== idx);
-        this._emitExtraHeadersFromRows();
+        this._onJson('extra_request_headers', headers);
     }
 
     _fallbackModels() {
@@ -527,7 +450,6 @@ export class FlowsLlmConfigEditor extends PlatformElement {
             ? this.config
             : {};
         if (this._isHumanitecLlmProvider(value)) {
-            this._headerRows = [];
             const next = {
                 ...base,
                 provider: HUMANITEC_LLM_PROVIDER,
@@ -1085,61 +1007,13 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                   .text=${this.t('llm_config_editor.extra_request_headers_hint')}
                                               ></platform-help-hint>
                                           </span>
-                                          ${(Array.isArray(this._headerRows) ? this._headerRows : []).map(
-                                              (row, idx) => html`
-                                                  <div class="header-pair-row">
-                                                      <platform-field
-                                                          mode=${fieldMode}
-                                                          type="string"
-                                                          .label=${this.t('llm_config_editor.extra_header_name')}
-                                                          .hint=${this._hint('extra_header_name')}
-                                                          .placeholder=${this.t('llm_config_editor.extra_header_name_placeholder')}
-                                                          .value=${typeof row.name === 'string' ? row.name : ''}
-                                                          @change=${this.readOnly
-                                                              ? nothing
-                                                              : (e) => this._onHeaderPairName(idx, e)}
-                                                      ></platform-field>
-                                                      <platform-field
-                                                          mode=${fieldMode}
-                                                          type="string"
-                                                          .label=${this.t('llm_config_editor.extra_header_value')}
-                                                          .hint=${this._hint('extra_header_value')}
-                                                          .placeholder=${this.t('llm_config_editor.extra_header_value_placeholder')}
-                                                          .value=${typeof row.value === 'string' ? row.value : ''}
-                                                          @change=${this.readOnly
-                                                              ? nothing
-                                                              : (e) => this._onHeaderPairValue(idx, e)}
-                                                      ></platform-field>
-                                                      ${this.readOnly
-                                                          ? ''
-                                                          : html`
-                                                                <platform-button
-                                                                    variant="ghost"
-                                                                    icon-only
-                                                                    density="dense"
-                                                                    danger
-                                                                    title=${this.t('llm_config_editor.extra_header_remove')}
-                                                                    @click=${() => this._removeHeaderPairRow(idx)}
-                                                                >
-                                                                    <platform-icon name="trash" .size=${16}></platform-icon>
-                                                                </platform-button>
-                                                            `}
-                                                  </div>
-                                              `,
-                                          )}
-                                          ${this.readOnly
-                                              ? ''
-                                              : html`
-                                                    <platform-button
-                                                        class="header-pairs-add"
-                                                        variant="ghost"
-                                                        density="compact"
-                                                        @click=${() => this._addHeaderPairRow()}
-                                                    >
-                                                        <platform-icon name="plus"></platform-icon>
-                                                        ${this.t('llm_config_editor.extra_header_add')}
-                                                    </platform-button>
-                                                `}
+                                          <flows-http-headers-editor
+                                              .value=${cfg.extra_request_headers && typeof cfg.extra_request_headers === 'object' && !Array.isArray(cfg.extra_request_headers)
+                                                  ? cfg.extra_request_headers
+                                                  : {}}
+                                              ?read-only=${this.readOnly}
+                                              @change=${this.readOnly ? nothing : this._onExtraHeaders}
+                                          ></flows-http-headers-editor>
                                       </div>
                                   `}
                         </div>

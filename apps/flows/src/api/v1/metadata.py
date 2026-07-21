@@ -69,7 +69,7 @@ _NODE_TYPES: list[JsonObject] = [
         "type": "remote_flow",
         "name": "Remote A2A",
         "icon": "cloud",
-        "description": "Внешний endpoint по A2A",
+        "description": "Внешний A2A ≥1.0 endpoint (URL + Skill ID)",
         "color": "#3b82f6",
         "inputs": 1,
         "outputs": 1,
@@ -120,7 +120,14 @@ _NODE_TYPES: list[JsonObject] = [
 # Resource-типы для отдельного раздела «Ресурсы» в редакторе. Runtime resources
 # остаются декларативными LLM-конфигами; sandbox code использует capabilities/tools.
 _RESOURCE_TYPES: list[JsonObject] = [
-    {"type": "llm",    "name": "LLM",    "icon": "bot",      "description": "LLM модель",                "color": "#ec4899"},
+    {"type": "llm", "name": "LLM", "icon": "bot", "description": "LLM модель", "color": "#ec4899"},
+    {
+        "type": "rag",
+        "name": "RAG",
+        "icon": "database",
+        "description": "База знаний (Namespace) для context layer и тулов rag_*",
+        "color": "#14b8a6",
+    },
 ]
 
 

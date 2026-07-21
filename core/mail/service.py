@@ -1175,18 +1175,21 @@ class MailService:
         )
         if not thread_rows:
             thread_rows = [anchor]
-        if anchor.unread:
-            _ = await self._message_repository.set_unread(
-                payload.mailbox_binding_id,
-                folder=payload.folder,
-                uid=int(payload.uid),
-                unread=False,
-            )
+        # Открытие треда = прочитаны все непрочитанные письма текущей папки в этом треде
+        # (не только якорь uid из UI).
+        marked_seen_uids: list[str] = []
         public_items: list[MailThreadMessagePublic] = []
         participants: set[str] = set()
         subject: str | None = anchor.subject if anchor.subject.strip() else None
         for row in thread_rows:
-            if row.folder == payload.folder and row.uid == int(payload.uid):
+            if row.folder == payload.folder and row.unread:
+                _ = await self._message_repository.set_unread(
+                    payload.mailbox_binding_id,
+                    folder=payload.folder,
+                    uid=row.uid,
+                    unread=False,
+                )
+                marked_seen_uids.append(str(row.uid))
                 row = row.model_copy(update={"unread": False})
             public = self._stored_to_public(row)
             public_items.append(to_thread_message_public(public, folder=row.folder))
@@ -1204,6 +1207,7 @@ class MailService:
             subject=subject,
             participant_emails=sorted(participants),
             items=public_items,
+            marked_seen_uids=marked_seen_uids,
         )
 
     async def mark_message_seen_local(

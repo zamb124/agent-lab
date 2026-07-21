@@ -44,7 +44,7 @@ class ContextFactory:
             company: Компания (может быть None для select-company)
             user: Пользователь (None для anonymous)
             token_data: Данные токена
-            platform: Платформа (telegram, whatsapp)
+            platform: Платформа (telegram)
             auth_token: JWT токен для межсервисной авторизации
             trace_id: ID трассировки для межсервисного взаимодействия
         """

@@ -45,10 +45,13 @@ const DEFAULT_LABELS = {
     tool_hint_result_label: 'Result:',
     show_tracing_title: 'Open tracing',
     show_logs_title: 'Open logs',
-    show_durable_history_title: 'Open durable history',
+    show_durable_history_title: 'Open execution history',
     interrupt_operator_banner: 'Waiting for an operator. The chat is on hold.',
     interrupt_oauth_banner: 'External service authorization required',
     interrupt_oauth_button: 'Authorize',
+    interrupt_oauth_workspace_banner: 'Google Workspace authorization required',
+    interrupt_oauth_workspace_question: 'Connect Google Workspace to continue with Docs and Sheets.',
+    interrupt_oauth_workspace_button: 'Connect Google Workspace',
     interrupt_handoff_banner: 'Control transferred to another agent',
     operator_reply_heading: 'Operator',
     streaming_placeholder: 'Generating a reply...',
@@ -58,6 +61,15 @@ const DEFAULT_LABELS = {
     skill_loaded: 'Skill «{name}»',
     skill_loads_aria: 'Activated skills: {names}',
     skill_load_hint: 'Agent Skill: {id}',
+    reflection_results_aria: 'Quality checks: {names}',
+    reflection_chip_passed: 'Check passed: {label}',
+    reflection_chip_revise: 'Needs revision: {label}',
+    reflection_chip_blocked: 'Blocked: {label}',
+    reflection_detail_summary: 'Summary',
+    reflection_detail_issues: 'Findings',
+    reflection_detail_reasons: 'Reasons',
+    reflection_expand: 'Show details',
+    reflection_collapse: 'Hide details',
 };
 
 function asArray(value) {
@@ -102,6 +114,7 @@ export class FlowsChatMessage extends PlatformElement {
         toolResults: { type: Array },
         browserPreviews: { type: Array },
         skillLoads: { type: Array },
+        reflectionResults: { type: Array },
         error: { type: String },
         errorI18nKey: { type: String },
         inputRequired: { type: Object },
@@ -594,6 +607,126 @@ export class FlowsChatMessage extends PlatformElement {
             color: var(--flows-chat-accent);
         }
 
+        .reflection-results {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .reflection-card {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-width: 0;
+            align-items: flex-start;
+        }
+
+        .reflection-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            max-width: 100%;
+            padding: 5px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--flows-chat-border);
+            background: var(--flows-chat-surface-subtle);
+            color: var(--flows-chat-secondary);
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.3;
+            cursor: pointer;
+        }
+
+        .reflection-chip[data-tone="success"] {
+            color: var(--success);
+            border-color: color-mix(in oklab, var(--success) 35%, var(--flows-chat-border));
+            background: color-mix(in oklab, var(--success) 12%, var(--flows-chat-surface-subtle));
+        }
+
+        .reflection-chip[data-tone="warning"] {
+            color: var(--warning);
+            border-color: color-mix(in oklab, var(--warning) 35%, var(--flows-chat-border));
+            background: color-mix(in oklab, var(--warning) 12%, var(--flows-chat-surface-subtle));
+        }
+
+        .reflection-chip[data-tone="error"] {
+            color: var(--error);
+            border-color: color-mix(in oklab, var(--error) 35%, var(--flows-chat-border));
+            background: color-mix(in oklab, var(--error) 12%, var(--flows-chat-surface-subtle));
+        }
+
+        .reflection-chip-inner {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .reflection-chip-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .reflection-detail {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
+            max-width: 28rem;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--flows-chat-border);
+            background: var(--flows-chat-surface-subtle);
+        }
+
+        .reflection-detail-title {
+            margin: 0;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--flows-chat-tertiary, var(--flows-chat-secondary));
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .reflection-detail-body {
+            margin: 0;
+            font-size: 13px;
+            color: var(--flows-chat-secondary);
+            line-height: 1.45;
+        }
+
+        .reflection-issues {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .reflection-issue {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 6px 8px;
+            border-radius: 8px;
+            background: color-mix(in oklab, var(--flows-chat-surface, #fff) 70%, transparent);
+        }
+
+        .reflection-issue-meta {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--flows-chat-tertiary, var(--flows-chat-secondary));
+        }
+
+        .reflection-issue-finding {
+            font-size: 13px;
+            color: var(--flows-chat-secondary);
+            line-height: 1.4;
+        }
+
         .thinking-row-compact {
             display: inline-flex;
             margin-top: 12px;
@@ -979,6 +1112,8 @@ export class FlowsChatMessage extends PlatformElement {
         this.toolResults = [];
         this.browserPreviews = [];
         this.skillLoads = [];
+        this.reflectionResults = [];
+        this._reflectionExpanded = {};
         this.error = '';
         this.errorI18nKey = '';
         this.inputRequired = null;
@@ -1154,6 +1289,7 @@ export class FlowsChatMessage extends PlatformElement {
             asArray(this.toolResults).length > 0 ||
             asArray(this.browserPreviews).length > 0 ||
             asArray(this.skillLoads).length > 0 ||
+            asArray(this.reflectionResults).length > 0 ||
             asArray(this.files).length > 0 ||
             asArray(this.blocks).length > 0
         );
@@ -1373,6 +1509,119 @@ export class FlowsChatMessage extends PlatformElement {
         `;
     }
 
+    _reflectionTone(row) {
+        if (row && row.approved === true) {
+            return 'success';
+        }
+        if (row && asString(row.decision) === 'needs_revision') {
+            return 'warning';
+        }
+        return 'error';
+    }
+
+    _reflectionChipKey(row) {
+        return `${asString(row.nodeId)}:${asString(row.exitId)}`;
+    }
+
+    _reflectionIsExpanded(row) {
+        const key = this._reflectionChipKey(row);
+        if (Object.hasOwn(this._reflectionExpanded, key)) {
+            return this._reflectionExpanded[key] === true;
+        }
+        return row.approved !== true;
+    }
+
+    _toggleReflectionExpanded(row) {
+        const key = this._reflectionChipKey(row);
+        const nextOpen = !this._reflectionIsExpanded(row);
+        this._reflectionExpanded = { ...this._reflectionExpanded, [key]: nextOpen };
+        this.requestUpdate();
+    }
+
+    _renderReflectionResults() {
+        const rows = asArray(this.reflectionResults).filter((row) => isPlainObject(row));
+        if (this.role !== 'assistant' || rows.length === 0) {
+            return nothing;
+        }
+        const names = rows
+            .map((row) => asString(row.exitLabel || row.exitId))
+            .filter((name) => name.length > 0)
+            .join(', ');
+        return html`
+            <div
+                class="reflection-results"
+                role="group"
+                aria-label=${this._label('reflection_results_aria', 'Quality checks: {names}', { names })}
+            >
+                ${rows.map((row) => this._renderReflectionCard(row))}
+            </div>
+        `;
+    }
+
+    _renderReflectionCard(row) {
+        const tone = this._reflectionTone(row);
+        const labelText = asString(row.exitLabel || row.exitId);
+        const chipLabel = tone === 'success'
+            ? this._label('reflection_chip_passed', 'Check passed: {label}', { label: labelText })
+            : tone === 'warning'
+              ? this._label('reflection_chip_revise', 'Needs revision: {label}', { label: labelText })
+              : this._label('reflection_chip_blocked', 'Blocked: {label}', { label: labelText });
+        const iconName = tone === 'success' ? 'check' : tone === 'warning' ? 'alert-triangle' : 'close';
+        const expanded = this._reflectionIsExpanded(row);
+        const summary = asString(row.summary);
+        const issues = asArray(row.issues).filter((item) => isPlainObject(item)).slice(0, 3);
+        const reasons = asArray(row.blockedReasons)
+            .filter((item) => typeof item === 'string' && item.length > 0)
+            .slice(0, 4);
+        const hasDetail = summary.length > 0 || issues.length > 0 || reasons.length > 0;
+        return html`
+            <div class="reflection-card">
+                <button
+                    type="button"
+                    class="reflection-chip"
+                    data-tone=${tone}
+                    aria-expanded=${expanded ? 'true' : 'false'}
+                    title=${expanded
+                        ? this._label('reflection_collapse', 'Hide details')
+                        : this._label('reflection_expand', 'Show details')}
+                    @click=${() => this._toggleReflectionExpanded(row)}
+                >
+                    <span class="reflection-chip-inner">
+                        <platform-icon name=${iconName} size="14"></platform-icon>
+                        <span class="reflection-chip-label">${chipLabel}</span>
+                    </span>
+                </button>
+                ${expanded && hasDetail ? html`
+                    <div class="reflection-detail">
+                        ${summary.length > 0 ? html`
+                            <p class="reflection-detail-title">${this._label('reflection_detail_summary', 'Summary')}</p>
+                            <p class="reflection-detail-body">${summary}</p>
+                        ` : nothing}
+                        ${issues.length > 0 ? html`
+                            <p class="reflection-detail-title">${this._label('reflection_detail_issues', 'Findings')}</p>
+                            <ul class="reflection-issues">
+                                ${issues.map((issue) => html`
+                                    <li class="reflection-issue">
+                                        <span class="reflection-issue-meta">
+                                            ${asString(issue.severity)}${asString(issue.criterionId)
+                                                ? html` · ${asString(issue.criterionId)}`
+                                                : nothing}
+                                        </span>
+                                        <span class="reflection-issue-finding">${asString(issue.finding)}</span>
+                                    </li>
+                                `)}
+                            </ul>
+                        ` : nothing}
+                        ${reasons.length > 0 ? html`
+                            <p class="reflection-detail-title">${this._label('reflection_detail_reasons', 'Reasons')}</p>
+                            <p class="reflection-detail-body">${reasons.join(' · ')}</p>
+                        ` : nothing}
+                    </div>
+                ` : nothing}
+            </div>
+        `;
+    }
+
     _renderAssistantError() {
         if (this.role !== 'assistant') {
             return nothing;
@@ -1406,13 +1655,26 @@ export class FlowsChatMessage extends PlatformElement {
         }
         const kind = asString(this.inputRequired.interruptKind);
         const workItemId = asString(this.inputRequired.workItemId);
-        const banner = kind === 'oauth_required'
-            ? this._label('interrupt_oauth_banner', 'External service authorization required')
-            : kind === 'operator_task'
-              ? this._label('interrupt_operator_banner', 'Waiting for an operator. The chat is on hold.')
-              : kind === 'handoff'
-                ? this._label('interrupt_handoff_banner', 'Control transferred to another agent')
-              : '';
+        const oauthService = asString(this.inputRequired.service);
+        const isWorkspaceOauth = kind === 'oauth_required' && oauthService === 'workspace';
+        const banner = isWorkspaceOauth
+            ? this._label('interrupt_oauth_workspace_banner', 'Google Workspace authorization required')
+            : kind === 'oauth_required'
+              ? this._label('interrupt_oauth_banner', 'External service authorization required')
+              : kind === 'operator_task'
+                ? this._label('interrupt_operator_banner', 'Waiting for an operator. The chat is on hold.')
+                : kind === 'handoff'
+                  ? this._label('interrupt_handoff_banner', 'Control transferred to another agent')
+                  : '';
+        const oauthQuestion = isWorkspaceOauth
+            ? this._label(
+                'interrupt_oauth_workspace_question',
+                'Connect Google Workspace to continue with Docs and Sheets.',
+            )
+            : asString(this.inputRequired.question);
+        const oauthButton = isWorkspaceOauth
+            ? this._label('interrupt_oauth_workspace_button', 'Connect Google Workspace')
+            : this._label('interrupt_oauth_button', 'Authorize');
         const targetFlowName = asString(this.inputRequired.targetFlowName);
         const handoffReason = asString(this.inputRequired.reason);
         const handoffDepth = this.inputRequired.depth;
@@ -1437,11 +1699,11 @@ export class FlowsChatMessage extends PlatformElement {
                         interactive
                     ></platform-work-item-badge>`
                     : nothing}
-                <div class="markdown">${this._markdownTemplate(asString(this.inputRequired.question))}</div>
+                <div class="markdown">${this._markdownTemplate(oauthQuestion)}</div>
                 ${kind === 'oauth_required' && authUrl
                     ? html`
                           <a class="oauth-auth-link" href=${authUrl} target="_blank" rel="noopener noreferrer">
-                              ${this._label('interrupt_oauth_button', 'Authorize')}
+                              ${oauthButton}
                           </a>
                       `
                     : nothing}
@@ -1797,8 +2059,8 @@ export class FlowsChatMessage extends PlatformElement {
                               type="button"
                               class="tracing-btn"
                               @click=${this._showDurableHistory}
-                              title=${this._label('show_durable_history_title', 'Open durable history')}
-                              aria-label=${this._label('show_durable_history_title', 'Open durable history')}
+                              title=${this._label('show_durable_history_title', 'Open execution history')}
+                              aria-label=${this._label('show_durable_history_title', 'Open execution history')}
                           >
                               <platform-icon name="trace-timeline" size="14"></platform-icon>
                           </button>
@@ -2022,6 +2284,7 @@ export class FlowsChatMessage extends PlatformElement {
                         ${this._renderOperatorFiles()}
                         ${this._renderActivity()}
                         ${this._renderSkillLoads()}
+                        ${this._renderReflectionResults()}
                         ${this._renderToolOrbs()}
                         ${this._renderReasoning()}
                         ${this._renderMainText(role, text)}

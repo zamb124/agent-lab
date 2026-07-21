@@ -151,9 +151,7 @@ export class GlassModal extends PlatformElement {
                 position: absolute;
                 inset: 0;
                 z-index: 0;
-                background: rgba(0, 0, 0, 0.3);
-                backdrop-filter: blur(var(--glass-blur-subtle, 20px)) saturate(180%);
-                -webkit-backdrop-filter: blur(var(--glass-blur-subtle, 20px)) saturate(180%);
+                background: rgba(0, 0, 0, 0.45);
             }
 
             /*
@@ -181,9 +179,6 @@ export class GlassModal extends PlatformElement {
 
                 background: var(--glass-solid-strong, rgba(40, 40, 40, 0.92));
                 border: 1px solid var(--glass-border-medium, rgba(255, 255, 255, 0.12));
-
-                backdrop-filter: blur(var(--glass-blur-medium, 40px)) saturate(180%);
-                -webkit-backdrop-filter: blur(var(--glass-blur-medium, 40px)) saturate(180%);
 
                 box-shadow: var(--glass-shadow-strong,
                     0 16px 48px rgba(0, 0, 0, 0.4),
@@ -569,9 +564,7 @@ export class GlassModal extends PlatformElement {
             }
 
             :host-context([data-theme="light"]) .modal-scrim {
-                background: rgba(100, 100, 120, 0.25);
-                backdrop-filter: blur(20px) saturate(120%);
-                -webkit-backdrop-filter: blur(20px) saturate(120%);
+                background: rgba(100, 100, 120, 0.4);
             }
 
             :host-context([data-theme="light"]) .modal {
@@ -622,9 +615,7 @@ export class GlassModal extends PlatformElement {
              * data-theme="dark" на хосте принудительно возвращает тёмный glass (лендинг и т.п.).
              */
             :host([data-theme="dark"]) .modal-scrim {
-                background: rgba(0, 0, 0, 0.3);
-                backdrop-filter: blur(var(--glass-blur-subtle, 20px)) saturate(180%);
-                -webkit-backdrop-filter: blur(var(--glass-blur-subtle, 20px)) saturate(180%);
+                background: rgba(0, 0, 0, 0.45);
             }
 
             :host([data-theme="dark"]) .modal {

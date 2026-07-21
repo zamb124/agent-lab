@@ -18,6 +18,7 @@ from core.a2a import (
 )
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 from .base import BaseChannelHandler
@@ -99,7 +100,9 @@ class WebhookChannelHandler(BaseChannelHandler):
         params: JsonObject,
         config: JsonObject,
         variables: JsonObject,
+        state: ExecutionState | JsonObject | None = None,
     ) -> JsonObject:
+        _ = state
         recipient = self._require_str_param(params, "recipient")
         if action == "send_payload":
             payload = require_json_object(params.get("payload"), "webhook.payload")

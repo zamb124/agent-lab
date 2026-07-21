@@ -2,6 +2,7 @@ import { fixture, fixtureCleanup, html, expect, aTimeout } from '../helpers/rend
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { collectFactories, registerFactory } from '@platform/lib/events/index.js';
 import { toolsAllOp, toolsResource } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
+import { toolTagGroupsOp } from '../../../../apps/flows/ui/events/resources/tool-tag-groups.resource.js';
 import {
     codeCompletionsOp,
     codeTemplatesOp,
@@ -15,6 +16,7 @@ import '../../../../apps/flows/ui/modals/flows-tool-create-modal.js';
 const FACTORIES = [
     toolsAllOp,
     toolsResource,
+    toolTagGroupsOp,
     codeCompletionsOp,
     codeTemplatesOp,
     codeParseSignatureOp,
@@ -196,9 +198,13 @@ describe('flows library picker code templates', () => {
         modal._modalKind = 'flows.tool_picker';
         expect(modal._pickModeRows().map((row) => row.tool_id)).to.include('browser_page_markdown');
 
-        modal._modalKind = 'flows.code_node_templates';
+        modal.pickMode = 'code_node';
+        modal._modalKind = 'flows.tool_picker';
         modal._codeLanguage = 'javascript';
-        expect(modal._toolRegistryRows().map((row) => row.tool_id)).to.include('browser_page_markdown');
+        modal._pickerItemsByCategory = new Map([
+            ['code', modal._toolsAll.lastResult.items],
+        ]);
+        expect(modal._codeNodePickRows().map((row) => row.tool_id)).to.include('browser_page_markdown');
 
         modal._commitTool(platformTool);
         await aTimeout(0);

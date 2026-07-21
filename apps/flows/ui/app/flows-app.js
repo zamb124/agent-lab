@@ -19,6 +19,8 @@ import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp
          branchRemoveOp, flowVoiceSessionQueryOp, flowPreviewShareOp } from '../events/resources/flows.resource.js';
 import { flowsVoiceCatalogLoadOp } from '../events/resources/voice-catalog.resource.js';
 import { toolsResource, toolsAllOp } from '../events/resources/tools.resource.js';
+import { toolTagGroupsOp } from '../events/resources/tool-tag-groups.resource.js';
+import { workQueuesResource } from '../events/resources/work-queues.resource.js';
 import {
     agentSkillsResource,
     agentSkillUpdateOp,
@@ -66,7 +68,19 @@ import { codeCompletionsOp, codeDocumentationOp, codeTemplatesOp,
 import { promptRenderOp } from '../events/resources/prompts.resource.js';
 import { dataflowInspectOp } from '../events/resources/dataflow.resource.js';
 import { llmContextResolveParentOp } from '../events/resources/llm-context.resource.js';
-import { integrationsListOp, integrationsRemoveOp } from '../events/resources/integrations.resource.js';
+import {
+    flowsRagNamespacesListOp,
+    flowsRagNamespacesCreateOp,
+    flowsRagSearchDefaultsOp,
+} from '../events/resources/rag-namespaces.resource.js';
+import {
+    integrationsListOp,
+    integrationsRemoveOp,
+    googleWorkspaceAuthorizeOp,
+    googleWorkspaceCompanyGetOp,
+    googleWorkspaceCompanyPutOp,
+    googleWorkspaceCompanyDeleteOp,
+} from '../events/resources/integrations.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import { apiConsoleRunOp } from '../events/resources/api-console.resource.js';
@@ -180,6 +194,8 @@ export class FlowsApp extends PlatformApp {
         flowPreviewShareOp,
         toolsResource,
         toolsAllOp,
+        toolTagGroupsOp,
+        workQueuesResource,
         agentSkillsResource,
         agentSkillUpdateOp,
         agentSkillImportOp,
@@ -247,9 +263,16 @@ export class FlowsApp extends PlatformApp {
         codeExecuteOp,
         dataflowInspectOp,
         llmContextResolveParentOp,
+        flowsRagNamespacesListOp,
+        flowsRagNamespacesCreateOp,
+        flowsRagSearchDefaultsOp,
         promptRenderOp,
         integrationsListOp,
         integrationsRemoveOp,
+        googleWorkspaceAuthorizeOp,
+        googleWorkspaceCompanyGetOp,
+        googleWorkspaceCompanyPutOp,
+        googleWorkspaceCompanyDeleteOp,
         platformFileCreateOp,
         platformVoiceDictationOp,
         apiConsoleRunOp,

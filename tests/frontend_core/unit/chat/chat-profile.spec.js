@@ -145,6 +145,19 @@ describe('resolveChatViewConfig: policy ∩ capabilities', () => {
         expect(enabled.showSkillLoads).toBe(true);
     });
 
+    it('spa уважает show_reflection из policy', () => {
+        const muted = resolveChatViewConfig(createChatProfile({ kind: 'spa' }), {
+            show_reflection: false,
+        });
+        expect(muted.showReflection).toBe(false);
+        const enabled = resolveChatViewConfig(createChatProfile({ kind: 'spa' }), null);
+        expect(enabled.showReflection).toBe(true);
+        const editor = resolveChatViewConfig(createChatProfile({ kind: 'editor_test' }), {
+            show_reflection: false,
+        });
+        expect(editor.showReflection).toBe(true);
+    });
+
     it('greeting и suggested_prompts проходят и в editor_test', () => {
         const view = resolveChatViewConfig(createChatProfile({ kind: 'editor_test' }), {
             greeting_message: 'Привет!',

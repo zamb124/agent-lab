@@ -6,7 +6,7 @@ import { flowsResource, flowStoreBundlesOp } from '../../../../apps/flows/ui/eve
 import { sessionsResource } from '../../../../apps/flows/ui/events/resources/sessions.resource.js';
 import { resourcesBundleResource } from '../../../../apps/flows/ui/events/resources/resources-bundle.resource.js';
 import { mcpServersResource } from '../../../../apps/flows/ui/events/resources/mcp.resource.js';
-import { toolsAllOp } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
+import { toolsResource, toolsAllOp } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
 import { integrationsListOp } from '../../../../apps/flows/ui/events/resources/integrations.resource.js';
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
 import { platformWorkItemCountsOp } from '@platform/lib/events/resources/platform-work-item.resource.js';
@@ -19,6 +19,7 @@ const FACTORIES = [
     sessionsResource,
     resourcesBundleResource,
     mcpServersResource,
+    toolsResource,
     toolsAllOp,
     integrationsListOp,
     secretsVariablesResource,

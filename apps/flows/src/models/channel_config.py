@@ -59,20 +59,11 @@ class ChannelNodeConfig(StrictBaseModel):
     """
     Конфигурация ChannelNode в графе агента.
 
-    Пример ноды:
-    {
-        "type": "channel",
-        "channel": "telegram",
-        "action": "send_message",
-        "channel_config": {
-            "bot_token": "@var:my_bot_token",
-            "parse_mode": "HTML"
-        },
-        "input_mapping": {
-            "recipient": "@state:triggers.my_trigger.context.chat_id",
-            "text": "@state:response"
-        }
-    }
+    Email: channel_config.delivery = mailbox|smtp;
+      mailbox → mailbox_binding_id; smtp → smtp_host/from_email/password (@var:);
+      сообщение в input_mapping (recipient, subject, text).
+
+    Telegram: channel_config.bot_token / parse_mode; recipient+text в input_mapping.
     """
 
     channel: ChannelType = Field(..., description="Тип канала")
@@ -80,7 +71,11 @@ class ChannelNodeConfig(StrictBaseModel):
 
     channel_config: JsonObject = Field(
         default_factory=dict,
-        description="Параметры канала (bot_token для Telegram, smtp для Email)"
+        description=(
+            "Параметры канала: bot_token для Telegram; "
+            "Email delivery=mailbox|smtp (+ mailbox_binding_id или smtp_*); "
+            "url/headers для webhook"
+        ),
     )
 
 

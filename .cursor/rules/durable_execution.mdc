@@ -302,6 +302,25 @@ Retry восстанавливает state через reducer на recoverable b
 
 Default для пользовательского time-travel — fork. Rewind same session — явная destructive UX-команда, но реализация всё равно append-only.
 
+Ответ branch-команд (`WorkflowBranchResult`) всегда содержит `effect: TimeTravelEffect`:
+
+- `activates_head` — стала ли новая branch active head сессии
+- `source_execution_branch_id` / `source_sequence` — якорь
+- `source_events_after_base` — сколько событий на исходной ветке с `sequence > base`
+- `instance_status` — статус instance после команды
+- `auto_resumes_run` — всегда `false` (продолжает следующее сообщение в чате / worker, не сама команда)
+
+### Time travel UX (модал `flows.durable_history`)
+
+Power-user панель отладки: [`apps/flows/ui/modals/flows-durable-history-modal.js`](apps/flows/ui/modals/flows-durable-history-modal.js).
+
+- Заголовок UI: «История выполнения» / Execution history (не «Durable history»).
+- Lineage: `WorkflowBranchRecord.parent_execution_branch_id` + reason + Active badge.
+- Journal: human title (`durable_history_modal.events.*`) + secondary mono `event_type`.
+- Inspector: summary → consequences → labeled actions (Fork / Make head / Retry) → Outcome после команды → Advanced JSON (payload / delta / state / hashes / command).
+- Rewind confirm обязан объяснить: head switch, старые события остаются на ветке, run не стартует сам, terminal point — warning.
+- Helper copy: [`apps/flows/ui/_helpers/flows-durable-event-copy.js`](apps/flows/ui/_helpers/flows-durable-event-copy.js).
+
 Control plane обязан быть branch-aware. Любой публичный метод, который читает старый state, должен принимать `execution_branch_id` или явно использовать active branch. Нельзя восстанавливать state "по sequence" без указания branch в местах, где уже возможны forks.
 
 Append event обязан использовать optimistic concurrency:

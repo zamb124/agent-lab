@@ -410,6 +410,7 @@ def _inspect_node(
     reads = _merge_config_reads(
         _inspect_config_reads(node, incoming, issues),
         _inspect_code_reads(node, incoming, issues),
+        _inspect_reflection_reads(node, incoming),
     )
     writes = _infer_node_writes(node_id, node, issues)
     observed_writes = _observed_writes(node_id, observation)
@@ -667,7 +668,108 @@ def _derive_required_inputs(
                 )
         return required
 
+    if node_type == "reflection":
+        target_path = _reflection_target_state_path(node)
+        if target_path is None:
+            return required
+        desc = incoming.get(target_path)
+        satisfied = (
+            desc is not None
+            and desc.availability == "guaranteed"
+            and len(desc.producers) > 0
+        )
+        required.append(
+            DataflowRequiredInput(
+                name=target_path,
+                origin="contract",
+                type=desc.type if desc is not None else "any",
+                satisfied=satisfied,
+                source=desc.producers[0] if satisfied and desc is not None else None,
+            )
+        )
+        if not satisfied:
+            issues.append(
+                _issue(
+                    "reflection_target_unavailable",
+                    "error",
+                    (
+                        f"Reflection target '{target_path}' is not guaranteed available "
+                        "before this node (no upstream producer, or only maybe on some paths)."
+                    ),
+                    path=target_path,
+                    target=target_path,
+                )
+            )
+        return required
+
+    if node_type == "channel" and node.get("channel") == "email":
+        for name, origin_note in (
+            ("recipient", "email.to"),
+            ("text", "email.body"),
+        ):
+            satisfied = name in mapped_targets
+            source = mapped_targets.get(name)
+            required.append(
+                DataflowRequiredInput(
+                    name=name,
+                    origin="contract",
+                    type="string",
+                    satisfied=satisfied,
+                    source=source,
+                )
+            )
+            if not satisfied:
+                issues.append(
+                    _issue(
+                        "missing_required_input",
+                        "error",
+                        (
+                            f"Email channel requires input_mapping.{name} "
+                            f"({origin_note}) before send."
+                        ),
+                        target=name,
+                    )
+                )
+        subject_satisfied = "subject" in mapped_targets
+        required.append(
+            DataflowRequiredInput(
+                name="subject",
+                origin="contract",
+                type="string",
+                satisfied=subject_satisfied,
+                source=mapped_targets.get("subject"),
+            )
+        )
+        if not subject_satisfied:
+            issues.append(
+                _issue(
+                    "missing_optional_input",
+                    "warning",
+                    "Email channel: map input_mapping.subject (empty string allowed).",
+                    target="subject",
+                )
+            )
+        return required
+
     return required
+
+
+def _reflection_target_state_path(node: JsonObject) -> str | None:
+    """State path, который reflection читает из critic_policy.target."""
+    raw_policy = node.get("critic_policy")
+    if not isinstance(raw_policy, dict):
+        return None
+    raw_target = raw_policy.get("target")
+    if not isinstance(raw_target, dict):
+        return None
+    kind = raw_target.get("kind")
+    if kind in {"response", "result", "validation"}:
+        return str(kind)
+    if kind == "state_path":
+        state_path = raw_target.get("state_path")
+        if isinstance(state_path, str) and state_path.strip() != "":
+            return state_path
+    return None
 
 
 def _schema_required_names(schema: JsonObject) -> list[str]:
@@ -716,6 +818,34 @@ def _inspect_config_reads(
                 )
             )
     return reads
+
+
+def _inspect_reflection_reads(
+    node: JsonObject,
+    incoming: dict[str, DataflowStateDescriptor],
+) -> list[DataflowConfigRead]:
+    if str(node.get("type") or "") != "reflection":
+        return []
+    target_path = _reflection_target_state_path(node)
+    if target_path is None:
+        return []
+    desc = incoming.get(target_path)
+    status: DataflowStatus = (
+        "ok"
+        if desc is not None
+        and desc.availability == "guaranteed"
+        and len(desc.producers) > 0
+        else "missing"
+    )
+    return [
+        DataflowConfigRead(
+            source_kind="state",
+            source_path=target_path,
+            config_path="critic_policy.target",
+            status=status,
+            type=desc.type if desc is not None else "any",
+        )
+    ]
 
 
 def _inspect_code_reads(
@@ -767,20 +897,17 @@ def _inspect_code_reads(
 
 
 def _merge_config_reads(
-    config_reads: list[DataflowConfigRead],
-    code_reads: list[DataflowConfigRead],
+    *read_groups: list[DataflowConfigRead],
 ) -> list[DataflowConfigRead]:
-    seen_state_paths = {
-        read.source_path
-        for read in config_reads
-        if read.source_kind == "state" and read.source_path
-    }
-    merged = list(config_reads)
-    for read in code_reads:
-        if read.source_path in seen_state_paths:
-            continue
-        merged.append(read)
-        seen_state_paths.add(read.source_path)
+    seen_state_paths: set[str] = set()
+    merged: list[DataflowConfigRead] = []
+    for group in read_groups:
+        for read in group:
+            if read.source_kind == "state" and read.source_path:
+                if read.source_path in seen_state_paths:
+                    continue
+                seen_state_paths.add(read.source_path)
+            merged.append(read)
     return merged
 
 
@@ -969,6 +1096,9 @@ def _infer_node_writes(
                 "Initial HITL execution interrupts the graph; response is written after operator resume.",
             )
         )
+    elif node_type == "reflection":
+        add("validation", "object", source="reflection.gate")
+        add("reflection_history", "array", source="reflection.history")
     elif node_type == "resource":
         pass
     elif output_mapping or schema_props:

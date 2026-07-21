@@ -12,6 +12,7 @@ from apps.flows.src.container import FlowContainer
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
+    PLATFORM_ASSISTANT_SEED_SKILL_IDS,
     seed_platform_assistant_skills,
 )
 from core.clients.llm.mock import MockLLM, MockLLMQueuedResponse
@@ -117,7 +118,7 @@ async def test_lara_a2a_stream_loads_skill_and_runs_crm_tool(
             container.files_service,
             "system",
         )
-        assert seeded == 24
+        assert seeded == len(PLATFORM_ASSISTANT_SEED_SKILL_IDS)
         flow = await container.flow_factory.get_flow("lara", branch_id="crm")
         assert flow is not None
         main_node = flow.nodes["main"]

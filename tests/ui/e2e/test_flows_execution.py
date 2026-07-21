@@ -19,15 +19,23 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_chat_click_clear,
     flows_chat_echo_payload,
     flows_chat_send_message,
+    flows_click_platform_button,
+    flows_close_floating_panel,
     flows_continue_breakpoint,
     flows_doc_flow_id,
+    flows_e2e_expect_reflection_chip,
+    flows_e2e_set_show_reflection,
     flows_execution_send_message,
+    flows_llm_with_reflection_payload,
     flows_open_chat_page,
     flows_open_durable_history_modal,
     flows_open_editor,
     flows_open_logs_from_chat,
+    flows_open_node_editor,
     flows_open_sessions_modal,
     flows_open_tracing_from_chat,
+    flows_publish_editor,
+    flows_seed_mock_llm,
     flows_switch_editor_mode,
     flows_toggle_breakpoint,
     flows_wait_breakpoint_hit,
@@ -173,6 +181,301 @@ async def test_flows_test_agent_in_chat(
             "again — the Green Garden Assistant dialog works.\n\n"
             f"**Summary.** You can open the {GREEN_GARDEN_STORE_EN} agent chat, send a "
             "question, and start a new conversation."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="flows",
+    tag="execution",
+    doc_slug="reflection-result-in-chat",
+    title="Как настроить проверку качества и увидеть вердикт в чате",
+    description=(
+        "**Для чего:** эта инструкция поможет настроить самопроверку ответа агента "
+        "и понять, что означает чип проверки в тестовом чате.\n\n"
+        "**Какие проблемы решает:** непонятно, какие поля в ноде проверки за что "
+        "отвечают, где включить показ результата покупателю и как по чипу понять, "
+        "что ответ одобрен, требует доработки или заблокирован.\n\n"
+        "**Результат:** вы настроили показ проверки качества и прочитали вердикт "
+        "с обоснованием прямо под ответом агента."
+    ),
+    title_en="Configure quality review and see the verdict in chat",
+    description_en=(
+        "**What for:** this guide helps you configure agent answer self-review and "
+        "understand what the quality-check chip means in the test chat.\n\n"
+        "**Problems it solves:** it is unclear what each review-node field does, where "
+        "to show the result to customers, and how the chip tells you the reply was "
+        "approved, needs revision, or was blocked.\n\n"
+        "**Result:** you enabled quality-check chips and read the verdict with a "
+        "rationale under the agent reply."
+    ),
+    timeout_seconds=180,
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(300)
+async def test_flows_reflection_result_in_chat(
+    scenario: ScenarioRecorder,
+    flows_ui: AppUI,
+    ui_page_system: Page,
+    auth_token_system: str,
+    unique_id: str,
+    flows_service,
+    taskiq_worker,
+) -> None:
+    _ = flows_service, taskiq_worker
+    reflection_node_id = "reflection_1"
+    summary_text = "Ответ слишком общий — нет сроков и зоны доставки."
+    agent_reply = "Доставка возможна в удобное для вас время."
+    flow_id = flows_doc_flow_id("refl_chat", unique_id)
+    await flows_api_create_flow(
+        flows_ui.origin,
+        auth_token_system,
+        flows_llm_with_reflection_payload(
+            flow_id,
+            name=GREEN_GARDEN_AGENT_NAME,
+            prompt="Отвечай покупателю «Зелёного сада» конкретно: сроки и зона доставки.",
+            reflection_node_id=reflection_node_id,
+        ),
+    )
+
+    page = ui_page_system
+    await flows_open_editor(page, flows_ui, flow_id)
+    reflection_node = page.locator(
+        f"flows-flow-canvas g.node[data-node-id='{reflection_node_id}']"
+    ).first
+    await expect(reflection_node).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Откройте агента с нодой проверки",
+        page,
+        screenshot_name="reflection-graph-opened",
+        label_en="Open the agent with a review node",
+        details=(
+            "В редакторе «Помощника Зелёного сада» после блока агента стоит нода "
+            "**Проверка**. Сначала модель пишет ответ, затем отдельный критик "
+            "оценивает его по вашим правилам. От результата проверки зависит, "
+            "какой путь на схеме пойдёт дальше (одобрено / заблокировано) и что "
+            "увидит человек в чате."
+        ),
+        details_en=(
+            "In the Green Garden Assistant editor, a **Review** node follows the "
+            "agent. The model drafts a reply first, then a separate critic scores it "
+            "against your rules. The review result chooses the next path on the graph "
+            "(approved / blocked) and what a person sees in chat."
+        ),
+    )
+
+    await flows_e2e_set_show_reflection(page, enabled=True)
+    reflection_field = page.locator(
+        'flows-flow-edit-modal platform-field[data-chat-field="show_reflection"]'
+    ).first
+    await expect(reflection_field).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Включите показ проверки в настройках чата",
+        page,
+        screenshot_name="chat-show-reflection-enabled",
+        label_en="Enable the quality-check chip in chat settings",
+        details=(
+            "Откройте **Настройки агента** → параметры чата и включите "
+            "**Показывать проверку качества**. Это отдельный рычаг от самой ноды "
+            "проверки: нода всегда работает в графе, а переключатель решает, видит "
+            "ли человек в чате чип с вердиктом. В тестовом режиме «Запуск» чип "
+            "показывается всегда — так удобно отлаживать. Для покупательского "
+            "чата оставьте переключатель включённым, если нужна прозрачность, "
+            "или выключите, если чипы мешают."
+        ),
+        details_en=(
+            "Open **Agent settings** → chat options and enable **Show quality "
+            "checks**. This toggle is separate from the review node itself: the "
+            "node always runs in the graph, while the switch controls whether chat "
+            "shows a verdict chip. In **Run** test mode the chip is always visible "
+            "for debugging. For customer chat keep it on for transparency, or turn "
+            "it off if chips are distracting."
+        ),
+    )
+
+    await flows_click_platform_button(
+        page.locator("flows-flow-edit-modal").first,
+        "Сохранить",
+        "Save",
+    )
+    await flows_publish_editor(page)
+
+    _ = await flows_open_node_editor(page, reflection_node_id)
+    editor = page.locator("flows-reflection-node-editor").first
+    await expect(editor).to_be_visible(timeout=10_000)
+    await expect(editor).to_contain_text(
+        re.compile(r"Что делает эта нода|What this node does", re.I),
+        timeout=10_000,
+    )
+    await expect(editor).to_contain_text(
+        re.compile(r"Критерии проверки|Review criteria|Criteria", re.I),
+        timeout=10_000,
+    )
+    await expect(editor).to_contain_text(
+        re.compile(r"Выходы на канве|Canvas exits|Exits", re.I),
+        timeout=10_000,
+    )
+    await scenario.step(
+        "Разберите поля политики проверки",
+        page,
+        screenshot_name="reflection-policy-fields",
+        label_en="Walk through the review policy fields",
+        details=(
+            "Откройте свойства ноды проверки. Кратко по блокам:\n\n"
+            "- **Шаблон проверки** — готовый набор для «финального ответа», "
+            "«транзакции» или «качества»; можно взять за основу и подправить.\n"
+            "- **Что проверяем** — обычно «Ответ агента» (текст, который уйдёт "
+            "покупателю). Можно указать другой срез, если проверяете черновик "
+            "в переменных.\n"
+            "- **Инструкция для LLM-критика** — подсказка модели-критику, не текст "
+            "для покупателя.\n"
+            "- **Критерии** — явные правила (например «должен быть срок доставки») "
+            "и уровень серьёзности замечания.\n"
+            "- **Мин. уверенность** и **Блокировать при severity** — если критик "
+            "не уверен или нашёл ошибку/критичное замечание, ответ не считается "
+            "одобренным.\n"
+            "- **Выходы на канве** — подписи портов вроде «Approved» / «Blocked»; "
+            "по ним строится ветвление после проверки.\n\n"
+            "В этом примере уже задана проверка финального ответа на ясность. "
+            "После просмотра полей можно закрыть панель — для тестового чата "
+            "достаточно уже опубликованной настройки."
+        ),
+        details_en=(
+            "Open the review node properties. Field-by-field:\n\n"
+            "- **Review template** — a starter for final answer, transaction, or "
+            "quality checks; use it as a base and edit.\n"
+            "- **What we check** — usually **Agent reply** (the text sent to the "
+            "customer). You can point at another state slice if you review a draft.\n"
+            "- **Instruction for the LLM critic** — guidance for the critic model, "
+            "not customer-facing copy.\n"
+            "- **Criteria** — explicit rules (for example “must include a delivery "
+            "date”) and how serious a finding is.\n"
+            "- **Min. confidence** and **Block on severity** — if the critic is "
+            "unsure or finds an error/critical issue, the reply is not approved.\n"
+            "- **Canvas exits** — port labels such as Approved / Blocked that drive "
+            "branching after the review.\n\n"
+            "This example already checks the final answer for clarity. After browsing "
+            "the fields you can close the panel — the published settings are enough "
+            "for the test chat."
+        ),
+    )
+
+    # Редактор ноды может пометить черновик «грязным»; для Run берём опубликованную
+    # версию с API (target=response), без повторной публикации локальных правок UI.
+    await flows_close_floating_panel(page)
+    await flows_open_editor(page, flows_ui, flow_id)
+    await flows_switch_editor_mode(page, "run")
+    run_chat = page.locator("flows-execution-panel platform-chat").first
+    await expect(run_chat).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Откройте тестовый чат в режиме Запуск",
+        page,
+        screenshot_name="reflection-test-chat-opened",
+        label_en="Open the test chat in Run mode",
+        details=(
+            "Переключитесь в **Запуск**. Справа откроется тот же чат, которым вы "
+            "проверяете агента перед публикацией для покупателей «Зелёного сада»."
+        ),
+        details_en=(
+            "Switch to **Run**. The same chat you use before publishing for Green "
+            "Garden customers opens on the right."
+        ),
+    )
+
+    await flows_seed_mock_llm(
+        [
+            {"type": "text", "content": agent_reply},
+            {
+                "type": "structured_output",
+                "data": {
+                    "decision": "blocked",
+                    "confidence": 0.97,
+                    "summary": summary_text,
+                    "issues": [
+                        {
+                            "criterion_id": "clarity",
+                            "severity": "error",
+                            "finding": "Нет конкретной даты доставки",
+                            "evidence": agent_reply,
+                            "required_action": "Указать срок и зону доставки.",
+                        }
+                    ],
+                },
+            },
+        ]
+    )
+    await flows_execution_send_message(page, "Когда доставка по Воронежу?")
+    await expect(run_chat.get_by_text(agent_reply, exact=False).first).to_be_visible(
+        timeout=120_000
+    )
+    chip = await flows_e2e_expect_reflection_chip(
+        page,
+        exit_label="Blocked",
+        chat=run_chat,
+    )
+    await expect(chip).to_contain_text(re.compile(r"Blocked|Заблокировано", re.I))
+    await expect(chip).to_have_attribute("data-tone", "error")
+    await scenario.step(
+        "Отправьте вопрос и прочитайте чип вердикта",
+        page,
+        screenshot_name="reflection-chip-visible",
+        label_en="Send a question and read the verdict chip",
+        details=(
+            "Задайте вопрос о доставке. Под ответом агента появится компактный чип "
+            "проверки качества. Цвет и подпись подсказывают итог:\n\n"
+            "- зелёный / «Проверка пройдена» — ответ одобрен;\n"
+            "- жёлтый / «Нужна доработка» — критик просит исправить;\n"
+            "- красный / «Заблокировано» — ответ не прошёл правила "
+            "(как в этом примере: слишком общий текст без сроков).\n\n"
+            "Подпись на чипе совпадает с названием выхода на канве "
+            "(здесь — Blocked)."
+        ),
+        details_en=(
+            "Ask about delivery. Under the agent reply a compact quality-check chip "
+            "appears. Color and label show the outcome:\n\n"
+            "- green / “Check passed” — the reply is approved;\n"
+            "- yellow / “Needs revision” — the critic asks for fixes;\n"
+            "- red / “Blocked” — the reply failed the rules (as in this example: "
+            "too vague, no delivery dates).\n\n"
+            "The chip label matches the canvas exit name (here — Blocked)."
+        ),
+    )
+
+    detail = run_chat.locator(".reflection-detail").first
+    await expect(detail).to_be_visible(timeout=15_000)
+    await expect(detail).to_contain_text(summary_text)
+    await expect(detail).to_contain_text(
+        re.compile(r"Нет конкретной даты доставки", re.I)
+    )
+    await scenario.step(
+        "Раскройте детали и исправьте ответ по замечаниям",
+        page,
+        screenshot_name="reflection-detail-summary",
+        label_en="Expand the details and fix the reply from the findings",
+        details=(
+            "**Демонстрация результата.** Если ответ не одобрен, карточка "
+            "раскрывается сама. Внутри три понятных блока:\n\n"
+            "- **Кратко** — общий вердикт критика;\n"
+            "- **Замечания** — отдельные находки (серьёзность и формулировка);\n"
+            "- **Причины** — технические причины блокировки для отладки.\n\n"
+            "По ним сразу видно, что дописать в промпте агента или в критериях "
+            "проверки, прежде чем отдавать сценарий покупателям.\n\n"
+            "**Итог.** Вы умеете настроить политику проверки и переключатель "
+            "показа в чате, а по чипу и деталям понять, прошёл ли ответ контроль "
+            "качества."
+        ),
+        details_en=(
+            "**Result demonstration.** When the reply is not approved, the card "
+            "opens automatically. Inside you get three clear blocks:\n\n"
+            "- **Summary** — the critic’s overall verdict;\n"
+            "- **Findings** — individual issues (severity and wording);\n"
+            "- **Reasons** — technical block reasons for debugging.\n\n"
+            "Use them to tighten the agent prompt or review criteria before "
+            "shipping the scenario to customers.\n\n"
+            "**Summary.** You can configure the review policy and the chat "
+            "visibility toggle, then read the chip and details to see whether the "
+            "reply passed quality control."
         ),
     )
 

@@ -781,15 +781,6 @@ class TelegramConfig(BaseModel):
     bots: dict[str, str] = Field(default_factory=dict)
 
 
-class WhatsAppConfig(BaseModel):
-    """Конфигурация WhatsApp интеграции"""
-
-    enabled: bool = True
-    verify_token: str | None = None
-    graph_api_version: str = "v18.0"
-    graph_api_url: str = "https://graph.facebook.com"
-
-
 class NanoBananaConfig(BaseModel):
     """Конфигурация image generation."""
 
@@ -1652,6 +1643,50 @@ class MailConfig(BaseModel):
     local_dev: MailLocalDevConfig = Field(default_factory=MailLocalDevConfig)
 
 
+class GoogleWorkspaceSystemConfig(BaseModel):
+    """Seed company-owned Google Workspace SA into integration_credentials for system."""
+
+    enabled: bool = False
+    service_account_json: str | None = None
+    impersonate_email: str | None = None
+
+
+class GoogleWorkspaceLiveTestConfig(BaseModel):
+    """Opt-in live тесты против реального Google API."""
+
+    enabled: bool = False
+    access_token: str | None = None
+    refresh_token: str | None = None
+
+
+class GoogleWorkspaceApiBases(BaseModel):
+    """
+    Override Google API endpoint bases (tests / local emulator).
+
+    None = production Google host for that surface.
+    """
+
+    sheets_base: str | None = None
+    docs_base: str | None = None
+    drive_base: str | None = None
+    drive_upload_base: str | None = None
+    token_uri: str | None = None
+
+
+class GoogleWorkspaceConfig(BaseModel):
+    """Google Workspace connector settings (credentials table, no extra schema)."""
+
+    system: GoogleWorkspaceSystemConfig = Field(
+        default_factory=GoogleWorkspaceSystemConfig
+    )
+    live_test: GoogleWorkspaceLiveTestConfig = Field(
+        default_factory=GoogleWorkspaceLiveTestConfig
+    )
+    api_bases: GoogleWorkspaceApiBases = Field(
+        default_factory=GoogleWorkspaceApiBases
+    )
+
+
 class OpenAIProviderConfig(BaseModel):
     """Конфигурация OpenAI провайдера"""
 
@@ -2005,12 +2040,12 @@ class MCPCatalogConfig(BaseModel):
         default="approved_only",
     )
     registry_base_url: str = Field(default="https://registry.modelcontextprotocol.io")
-    crawl_cron: str = Field(default="0 * * * *")
+    crawl_cron: str = Field(default="0 0 * * *")
     crawl_run_on_start: bool = Field(
         default=True,
         description="Запустить mcp_catalog_crawl_task сразу при старте scheduler-api",
     )
-    resync_tools_cron: str = Field(default="0 * * * *")
+    resync_tools_cron: str = Field(default="0 0 * * *")
     verify_timeout_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
     crawl_page_limit: int = Field(default=100, ge=1, le=500)
     max_verify_per_crawl: int = Field(default=100, ge=0, le=5000)

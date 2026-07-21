@@ -7,6 +7,7 @@ import httpx
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models.external_api import (
     ExternalAPIConfig,
+    HTTPMethod,
     ResponseStatus,
     ResponseType,
 )
@@ -73,7 +74,7 @@ class ExternalAPIClient:
 
         json_body: JsonObject | None = None
         data_body: JsonObject | None = None
-        if config.method.value != "GET":
+        if config.method != HTTPMethod.GET:
             body = self._build_json_body(config, state, variables, args)
             if config.request_content_type == "application/json":
                 json_body = body
@@ -168,7 +169,8 @@ class ExternalAPIClient:
             headers[key] = MappingResolver.resolve_http_header_value(value, state, variables)
 
         if config.request_content_type and "Content-Type" not in headers:
-            headers["Content-Type"] = config.request_content_type
+            if config.method != HTTPMethod.GET:
+                headers["Content-Type"] = config.request_content_type
 
         return headers
 

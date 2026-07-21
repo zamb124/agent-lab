@@ -16,8 +16,6 @@ export const mobileStickyHeaderPageHeaderShellStyles = css`
                 var(--platform-mobile-sticky-header-padding-bottom)
                 var(--platform-mobile-sticky-header-padding-left);
             background: var(--glass-solid-strong);
-            backdrop-filter: blur(var(--glass-blur-medium));
-            -webkit-backdrop-filter: blur(var(--glass-blur-medium));
             border-bottom: 1px solid var(--glass-border-subtle);
             box-sizing: border-box;
         }
@@ -57,8 +55,6 @@ export const mobileStickyHeaderSyncChatHostStyles = css`
             align-items: center;
             gap: var(--space-1);
             background: var(--glass-solid-strong);
-            backdrop-filter: blur(var(--glass-blur-medium));
-            -webkit-backdrop-filter: blur(var(--glass-blur-medium));
             border-bottom: 1px solid var(--glass-border-subtle);
             box-sizing: border-box;
         }

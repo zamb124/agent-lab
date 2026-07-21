@@ -29,6 +29,7 @@ from .tools import router as tools_router
 from .traces import router as traces_router
 from .triggers import router as triggers_router
 from .voice_providers_catalog import router as flows_voice_providers_catalog_router
+from .work_queues import router as work_queues_router
 
 api_v1_router = APIRouter()
 
@@ -55,6 +56,7 @@ api_v1_router.include_router(company_router)
 api_v1_router.include_router(mcp_router, prefix="/mcp")
 api_v1_router.include_router(resources_router, prefix="/resources")
 api_v1_router.include_router(hitl_conversation_router)
+api_v1_router.include_router(work_queues_router)
 api_v1_router.include_router(internal_work_items_router, prefix="/internal")
 api_v1_router.include_router(internal_employee_inbox_router, prefix="/internal")
 api_v1_router.include_router(internal_company_router, prefix="/internal")

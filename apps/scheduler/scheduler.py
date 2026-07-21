@@ -31,6 +31,7 @@ import apps.idle_worker.tasks.platform_schedules_gc_tasks as _idle_platform_sche
 import apps.idle_worker.tasks.push_notification_tasks as _idle_push_notification_tasks  # noqa: E402
 import apps.idle_worker.tasks.redis_inventory_tasks as _idle_redis_inventory_tasks  # noqa: E402
 import apps.idle_worker.tasks.span_billing_settlement_tasks as _idle_span_billing_settlement_tasks  # noqa: E402
+import apps.idle_worker.tasks.tool_tag_groups_tasks as _idle_tool_tag_groups_tasks  # noqa: E402
 import apps.rag_worker.tasks.maintenance_tasks as _rag_maintenance_tasks  # noqa: E402
 import apps.search_worker.tasks.crawl_tasks as _search_crawl_tasks  # noqa: E402
 from apps.crm.scheduled_integration_constants import (  # noqa: E402
@@ -67,6 +68,7 @@ _TASK_REGISTRATION_MODULES = (
     _idle_payment_sync_tasks,
     _idle_push_notification_tasks,
     _idle_span_billing_settlement_tasks,
+    _idle_tool_tag_groups_tasks,
     _rag_maintenance_tasks,
     _search_crawl_tasks,
 )
@@ -103,6 +105,7 @@ _IDLE_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "mcp_catalog_resync_tools_task",
     "platform_schedules_gc_tick",
     "redis_inventory_tick",
+    "tool_tag_groups_describe_tick",
 )
 
 _RAG_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (

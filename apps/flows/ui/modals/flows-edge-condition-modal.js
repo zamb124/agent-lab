@@ -18,15 +18,18 @@
  * но сохраняет новый `type=code`.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '../components/editors/flows-code-editor.js';
 import { getEdgeEndpoints } from '../_helpers/flows-resolvers.js';
+import {
+    listReflectionExits,
+    syncReflectionEdgeFromPort,
+} from '../_helpers/flows-reflection-defaults.js';
 import {
     FLOW_CODE_LANGUAGES,
     edgeConditionStarterCodeForLanguage,
@@ -105,7 +108,13 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) minmax(88px, 120px) minmax(0, 1fr);
                 gap: var(--space-3);
-                align-items: end;
+                align-items: start;
+            }
+            .builder-cell {
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
             }
 
             .python-mode { margin-top: var(--space-2); }
@@ -379,10 +388,36 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             this.closeAfterSave();
             return;
         }
-        edges[this.edgeIndex] = { ...edges[this.edgeIndex], condition };
+        edges[this.edgeIndex] = syncReflectionEdgeFromPort(
+            edges[this.edgeIndex],
+            condition,
+            this._reflectionAllowedExitIds(data, edges[this.edgeIndex]),
+        );
         this._editor.updateBranchData({ data: { ...data, edges } });
         this._editor.setDirty({ dirty: true });
         this.closeAfterSave();
+    }
+
+    _reflectionAllowedExitIds(branchData, edge) {
+        if (!edge || typeof edge !== 'object') {
+            return null;
+        }
+        const fromNodeId = typeof edge.from_node === 'string' ? edge.from_node : null;
+        if (!fromNodeId) {
+            return null;
+        }
+        const nodes = branchData && typeof branchData.nodes === 'object' ? branchData.nodes : null;
+        if (!nodes || typeof nodes !== 'object') {
+            return null;
+        }
+        const node = nodes[fromNodeId];
+        if (!node || typeof node !== 'object' || node.type !== 'reflection') {
+            return null;
+        }
+        const policy = node.critic_policy && typeof node.critic_policy === 'object'
+            ? node.critic_policy
+            : null;
+        return listReflectionExits(policy).map((item) => item.id);
     }
 
     _onModeChange(mode) {
@@ -605,32 +640,32 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         };
         return html`
             <div class="builder-row">
-                <div class="form-group">
-                    <label>${this.t('edge_condition_modal.label_variable')}</label>
+                <div class="builder-cell">
                     <platform-field
                         type="enum"
                         mode="edit"
+                        .label=${this.t('edge_condition_modal.label_variable')}
                         .value=${this._variable}
                         .config=${variableEnumConfig}
                         @change=${this._onVariableChange}
                     ></platform-field>
                     ${this.renderFieldError('variable')}
                 </div>
-                <div class="form-group">
-                    <label>${this.t('edge_condition_modal.label_operator')}</label>
+                <div class="builder-cell">
                     <platform-field
                         type="enum"
                         mode="edit"
+                        .label=${this.t('edge_condition_modal.label_operator')}
                         .value=${this._operator}
                         .config=${operatorEnumConfig}
                         @change=${this._onOperatorChange}
                     ></platform-field>
                 </div>
-                <div class="form-group">
-                    <label>${this.t('edge_condition_modal.label_value')}</label>
+                <div class="builder-cell">
                     <platform-field
                         type="string"
                         mode="edit"
+                        .label=${this.t('edge_condition_modal.label_value')}
                         .value=${this._value}
                         placeholder=${this.t('edge_condition_modal.value_placeholder')}
                         @change=${this._onValueInput}
@@ -669,14 +704,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
     }
 
     renderFooter() {
-        const errors = this.validateForm();
-        const disabled = Object.keys(errors).length > 0;
-        return html`
-            <platform-button @click=${() => this.close()}>${this.t('common.action_cancel')}</platform-button>
-            <platform-button variant="primary" ?disabled=${disabled} @click=${() => this._performSave()}>
-                ${this.t('edge_condition_modal.action_save')}
-            </platform-button>
-        `;
+        return nothing;
     }
 }
 

@@ -56,7 +56,7 @@ export class ProviderSelector extends PlatformElement {
                 background: var(--glass-solid-strong);
                 color: var(--text-tertiary);
             }
-            .badge.active { background: var(--accent); color: var(--text-inverse); }
+            .badge.active { background: var(--accent); color: var(--platform-btn-primary-text); }
             .switch-btn {
                 background: var(--glass-solid-strong);
                 border: 1px solid var(--glass-border-medium);

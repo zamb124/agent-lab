@@ -169,6 +169,7 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 "web-research",
                 "work-tracking",
                 "agent-planning",
+                "google-sheets",
             }
             work = _load_payload(
                 await load_agent_skill.run({"agent_skill_id": "work-tracking"}, state)

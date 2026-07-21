@@ -34,7 +34,7 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                 min-width: 0;
                 box-sizing: border-box;
                 --platform-namespace-add-background: var(--accent);
-                --platform-namespace-add-color: var(--text-inverse);
+                --platform-namespace-add-color: var(--platform-btn-primary-text);
                 --platform-namespace-edit-stroke: var(--border-subtle, rgba(255, 255, 255, 0.06));
                 --platform-namespace-edit-fg: var(--text-secondary);
                 --platform-namespace-edit-hover-bg: var(--accent-subtle);
@@ -149,7 +149,7 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                 border-radius: var(--radius-full);
                 cursor: pointer;
                 background: var(--accent);
-                color: var(--text-inverse);
+                color: var(--platform-btn-primary-text);
                 transition:
                     background var(--duration-fast),
                     opacity var(--duration-fast),

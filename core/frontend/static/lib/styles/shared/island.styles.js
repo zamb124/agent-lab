@@ -18,14 +18,12 @@ export const islandHostStyles = css`
         --island-bg: var(--glass-solid-subtle);
         --island-border: var(--glass-border-subtle);
         --island-shadow: var(--glass-shadow-subtle);
-        --island-blur: var(--glass-blur-subtle);
     }
 
     :host([variant="elevated"]) {
         --island-bg: var(--glass-solid-strong);
         --island-border: var(--glass-border-strong);
         --island-shadow: var(--glass-shadow-strong);
-        --island-blur: var(--glass-blur-strong);
     }
 `;
 
@@ -50,8 +48,6 @@ export const islandStyles = css`
         z-index: 0;
         pointer-events: none;
         background: var(--island-bg, var(--glass-solid-medium));
-        backdrop-filter: blur(var(--island-blur, var(--glass-blur-strong)));
-        -webkit-backdrop-filter: blur(var(--island-blur, var(--glass-blur-strong)));
         border: 1px solid var(--island-border, var(--glass-border-medium));
         border-radius: inherit;
         box-shadow: var(--island-shadow, var(--glass-shadow-medium)), var(--glass-inner-glow-subtle);
@@ -59,11 +55,6 @@ export const islandStyles = css`
         transform: translate3d(0, 0, 0);
         backface-visibility: hidden;
         contain: strict;
-    }
-
-    .island.is-scrolling .island-surface {
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
     }
 
     .island-header-glow {
@@ -114,7 +105,7 @@ export const islandStyles = css`
 
     /* Светлая тема */
     :host-context([data-theme="light"]) .island-surface {
-        background: rgba(255, 255, 255, 0.9);
+        background: rgba(255, 255, 255, 0.96);
         border-color: rgba(15, 23, 42, 0.08);
     }
 
@@ -230,8 +221,6 @@ export const panelHostStyles = css`
         width: var(--panel-width, 320px);
         min-width: var(--panel-width, 320px);
         background: var(--glass-solid-medium);
-        backdrop-filter: blur(var(--glass-blur-strong));
-        -webkit-backdrop-filter: blur(var(--glass-blur-strong));
         border: 1px solid var(--glass-border-medium);
         border-radius: var(--radius-2xl);
         overflow: hidden;
@@ -464,9 +453,8 @@ export const floatingPanelStyles = css`
     }
 
     .floating-panel-backdrop.visible {
-        background: rgba(0, 0, 0, 0.6);
+        background: rgba(0, 0, 0, 0.55);
         pointer-events: auto;
-        backdrop-filter: blur(4px);
     }
 
     .floating-panel-header {

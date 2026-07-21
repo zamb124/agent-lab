@@ -19,6 +19,7 @@ from .models import (  # noqa: F401
     FlowsVersions,
     Nodes,
     Tools,
+    ToolTagGroups,
     WorkflowEvents,
     WorkflowInstances,
     WorkflowSnapshots,
@@ -26,6 +27,7 @@ from .models import (  # noqa: F401
 from .node_repository import NodeRepository
 from .resource_repository import ResourceRepository
 from .tool_repository import ToolRepository
+from .tool_tag_group_repository import ToolTagGroupRepository
 
 __all__ = [
     "Storage",
@@ -36,9 +38,11 @@ __all__ = [
     "EvaluationLabRepository",
     "FlowRepository",
     "ToolRepository",
+    "ToolTagGroupRepository",
     "MCPServerRepository",
     "ResourceRepository",
     "AgentSkills",
+    "ToolTagGroups",
     "EvaluationSuites",
     "EvaluationCases",
     "EvaluationSuiteVersions",

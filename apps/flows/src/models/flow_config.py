@@ -139,6 +139,9 @@ class Edge(StrictBaseModel):
     Допустимые форматы condition:
       - `{"type": "simple", "variable": str, "operator": str, "value": Any}`;
       - `{"type": "code", "language": "python|javascript|typescript|go|csharp", "code": str}`.
+
+    from_port — именованный out-порт исходной ноды (UI + валидация).
+    Для reflection: `approved` | `blocked`. Runtime ветвит только по condition.
     """
 
     from_node: str = Field(..., description="ID исходной ноды")
@@ -146,6 +149,11 @@ class Edge(StrictBaseModel):
     condition: EdgeCondition | None = Field(
         default=None,
         description="Условие перехода: simple ({type, variable, operator, value}) или code ({type, language, code}).",
+    )
+    from_port: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Именованный out-порт исходной ноды (reflection: approved|blocked)",
     )
     contributes_to_join: bool = Field(
         default=True,

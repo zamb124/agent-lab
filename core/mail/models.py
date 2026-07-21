@@ -324,6 +324,8 @@ class MailThreadResult(StrictBaseModel):
     subject: str | None = None
     participant_emails: list[str] = Field(default_factory=list)
     items: list[MailThreadMessagePublic] = Field(default_factory=list)
+    # UID в payload.folder, которые локально помечены seen при открытии треда (для IMAP enqueue).
+    marked_seen_uids: list[str] = Field(default_factory=list)
 
 
 class CompanyMailConnectionPublic(StrictBaseModel):

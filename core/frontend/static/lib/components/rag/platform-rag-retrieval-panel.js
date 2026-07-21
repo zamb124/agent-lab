@@ -80,14 +80,13 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
      */
     _placeholderNumber(key) {
         const defaults = this._defaults();
-        if (!defaults) {
-            return '';
+        if (defaults) {
+            const raw = defaults[key];
+            if (typeof raw === 'number' && Number.isFinite(raw)) {
+                return String(raw);
+            }
         }
-        const raw = defaults[key];
-        if (typeof raw === 'number' && Number.isFinite(raw)) {
-            return String(raw);
-        }
-        return '';
+        return this.t('rag_retrieval_panel.placeholder_platform_default');
     }
 
     /**
@@ -207,6 +206,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         type="enum"
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.retrieval_mode')}
+                        .hint=${this.t('rag_retrieval_panel.hint_retrieval_mode')}
                         .value=${typeof panel.retrievalMode === 'string' ? panel.retrievalMode : 'platform'}
                         .config=${this._retrievalModeEnumConfig()}
                         ?disabled=${fieldsDisabled}
@@ -218,6 +218,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         type="string"
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.rrf_k')}
+                        .hint=${this.t('rag_retrieval_panel.hint_rrf_k')}
                         .value=${typeof panel.rrfK === 'string' ? panel.rrfK : ''}
                         .placeholder=${this._placeholderNumber('rrf_k')}
                         ?disabled=${fieldsDisabled}
@@ -229,6 +230,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         type="string"
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.per_channel_top_k')}
+                        .hint=${this.t('rag_retrieval_panel.hint_per_channel_top_k')}
                         .value=${typeof panel.perChannelTopK === 'string' ? panel.perChannelTopK : ''}
                         .placeholder=${this._placeholderNumber('per_channel_top_k')}
                         ?disabled=${fieldsDisabled}
@@ -240,6 +242,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         type="enum"
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.rerank')}
+                        .hint=${this.t('rag_retrieval_panel.hint_rerank')}
                         .value=${typeof panel.rerank === 'string' ? panel.rerank : ''}
                         .config=${this._rerankEnumConfig()}
                         ?disabled=${fieldsDisabled}
@@ -251,6 +254,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         type="string"
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.rerank_max_candidates')}
+                        .hint=${this.t('rag_retrieval_panel.hint_rerank_max_candidates')}
                         .value=${typeof panel.rerankMaxCandidates === 'string' ? panel.rerankMaxCandidates : ''}
                         .placeholder=${this._placeholderNumber('rerank_max_candidates')}
                         ?disabled=${fieldsDisabled}
@@ -262,6 +266,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         type="string"
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.freshness_weight')}
+                        .hint=${this.t('rag_retrieval_panel.hint_freshness_weight')}
                         .value=${typeof panel.freshnessWeight === 'string' ? panel.freshnessWeight : ''}
                         .placeholder=${this._placeholderNumber('freshness_weight')}
                         ?disabled=${fieldsDisabled}
@@ -273,6 +278,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         type="string"
                         mode="edit"
                         .label=${this.t('rag_retrieval_panel.freshness_half_life_days')}
+                        .hint=${this.t('rag_retrieval_panel.hint_freshness_half_life_days')}
                         .value=${typeof panel.freshnessHalfLifeDays === 'string' ? panel.freshnessHalfLifeDays : ''}
                         .placeholder=${this._placeholderNumber('freshness_half_life_days')}
                         ?disabled=${fieldsDisabled}

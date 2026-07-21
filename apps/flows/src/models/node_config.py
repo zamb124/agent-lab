@@ -335,9 +335,15 @@ class NodeConfig(StrictBaseModel):
     output_key: str | None = Field(default=None, description="Ключ результата ноды")
     llm_node_class: str | None = Field(default=None, description="Кастомный класс llm_node")
 
-    # Для вложенных и удалённых flow
-    flow_id: str | None = Field(default=None, description="ID вложенного или внешнего flow")
-    branch_id: str = Field(default="default", description="ID ветки вложенного или внешнего flow")
+    # Для вложенных flow (не для remote_flow — только url)
+    flow_id: str | None = Field(default=None, description="ID вложенного flow (NodeType.FLOW)")
+    branch_id: str = Field(
+        default="default",
+        description=(
+            "Ветка вложенного flow; для remote_flow — Skill ID "
+            "(A2A skills[].id / metadata.branch)"
+        ),
+    )
     config: JsonObject | None = Field(default=None, description="Вложенный config блока flow-ноды")
 
     # Для remote_flow / external_api / mcp
@@ -356,6 +362,13 @@ class NodeConfig(StrictBaseModel):
     )
     timeout: float | None = Field(default=None, description="Таймаут external_api в секундах")
     body_template: str | None = Field(default=None, description="JSON body template external_api")
+    metadata_template: str | None = Field(
+        default=None,
+        description=(
+            "JSON template для A2A SendMessage params.metadata "
+            "(remote_flow; @state: / @var: в строках)"
+        ),
+    )
     state_mapping: dict[str, str] = Field(
         default_factory=dict, description="Маппинг ответа в state"
     )
@@ -397,11 +410,18 @@ class NodeConfig(StrictBaseModel):
     )
     handoff_task_title: str | None = Field(
         default=None,
-        description="Заголовок задачи; можно переопределить input_mapping.task_title",
+        description=(
+            "Заголовок задачи; @state:path / @var:path (целая строка или токены в тексте); "
+            "можно переопределить input_mapping.task_title"
+        ),
     )
     handoff_user_message: str | None = Field(
         default=None,
-        description="Текст для пользователя; можно переопределить input_mapping.user_facing_message",
+        description=(
+            "Текст для пользователя (markdown); @state:path / @var:path "
+            "(целая строка или токены в тексте); "
+            "можно переопределить input_mapping.user_facing_message"
+        ),
     )
     critic_policy: CriticPolicy | None = Field(
         default=None,
@@ -595,6 +615,13 @@ class GraphNodeConfig(StrictBaseModel):
     response_schema: ResponseSchema | None = Field(default=None)
     timeout: float | None = Field(default=None)
     body_template: str | None = Field(default=None)
+    metadata_template: str | None = Field(
+        default=None,
+        description=(
+            "JSON template для A2A SendMessage params.metadata "
+            "(remote_flow; @state: / @var: в строках)"
+        ),
+    )
     state_mapping: dict[str, str] = Field(default_factory=dict)
     server_id: str | None = Field(default=None)
     tool_name: str | None = Field(default=None)

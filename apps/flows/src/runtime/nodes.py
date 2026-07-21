@@ -67,6 +67,7 @@ from apps.flows.src.runtime.llm_resource_config import (
     resolve_llm_config_with_resource_key,
 )
 from apps.flows.src.runtime.runners import LlmNodeRunner
+from apps.flows.src.runtime_helpers.state_utils import push_ui_event
 from apps.flows.src.services.hitl_work_item_service import HANDOFF_PREVIEW_MAX_LEN
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.src.state.interrupt_manager import InterruptManager
@@ -1284,6 +1285,7 @@ class LlmNode(BaseNode):
             node_resources_raw=node_resources_raw,
             resource_repository=container.resource_repository,
             rag_repository=container.rag_repository,
+            namespace_service=container.namespace_service,
             state=state,
         )
         if rag_registry is not None:
@@ -2038,7 +2040,7 @@ class FlowNode(BaseNode):
 
 
 class RemoteFlowNode(BaseNode):
-    """Внешний flow по A2A протоколу."""
+    """Внешний flow по A2A протоколу (только direct URL, без registry flow_id)."""
 
     node_type: ClassVar[NodeType | None] = NodeType.REMOTE_FLOW
 
@@ -2053,18 +2055,28 @@ class RemoteFlowNode(BaseNode):
         cfg = self.config
 
         self.url: str | None = _config_optional_string(cfg, "url")
-        self.remote_registry_flow_id: str | None = _config_optional_string(cfg, "flow_id")
         self.branch_id: str = _config_string(cfg, "branch_id", "default")
         self.headers_config: dict[str, str] = _config_string_map_default(cfg, "headers")
+        self.metadata_template: str = _config_string(cfg, "metadata_template", "{}")
 
     @override
     async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
         """Вызывает внешний flow по A2A."""
-        if not self.url and not self.remote_registry_flow_id:
-            raise ValueError("RemoteFlowNode requires 'url' or 'flow_id'")
+        url_raw = self.url
+        if not isinstance(url_raw, str) or not url_raw.strip():
+            raise ValueError("RemoteFlowNode requires non-empty 'url'")
 
-        container = self.container
-        url, req_headers = await self._resolve_connection(container, state)
+        variables = state.variables
+        url = MappingResolver.resolve_http_header_value(url_raw, state, variables)
+        req_headers = self._resolve_headers_dict(self.headers_config, state, variables)
+        metadata = require_json_object(
+            MappingResolver.parse_and_resolve_body_template(
+                self.metadata_template,
+                state,
+                variables,
+            ),
+            "remote_flow.metadata_template",
+        )
 
         content = inputs.get("content", state.content or "")
         if not isinstance(content, str):
@@ -2078,17 +2090,19 @@ class RemoteFlowNode(BaseNode):
                 "session_id": state.session_id,
                 "branch_id": self.branch_id,
                 "headers": req_headers,
+                "metadata": metadata,
                 "state_hash": self._state_hash_for_activity(state),
             },
             "remote_flow.activity_input",
         )
 
         async def invoke() -> NodeRunResult:
-            result = await container.a2a_client.send_task(
+            result = await self.container.a2a_client.send_task(
                 base_url=url,
                 content=content,
                 session_id=state.session_id,
                 branch_id=self.branch_id,
+                metadata=metadata,
                 headers=req_headers,
             )
 
@@ -2103,34 +2117,6 @@ class RemoteFlowNode(BaseNode):
             side_effect_policy=SideEffectPolicy.non_idempotent,
             invoke=invoke,
         )
-
-    async def _resolve_connection(
-        self,
-        container: FlowRuntimeContainer,
-        state: ExecutionState,
-    ) -> tuple[str, dict[str, str]]:
-        """Резолвит URL и HTTP-заголовки (@state: / @var: в строках)."""
-        variables = state.variables
-        if self.remote_registry_flow_id:
-            external_flow = await container.flow_discovery.get_flow(self.remote_registry_flow_id)
-            if external_flow is None:
-                raise ValueError(
-                    f"External flow '{self.remote_registry_flow_id}' not found in registry"
-                )
-            external_url = external_flow.url
-            if not isinstance(external_url, str) or not external_url.strip():
-                raise ValueError(
-                    f"External flow '{self.remote_registry_flow_id}' has no valid url"
-                )
-            return external_url, self._resolve_headers_dict(
-                external_flow.headers, state, variables
-            )
-
-        url_raw = self.url
-        if not isinstance(url_raw, str) or not url_raw.strip():
-            raise ValueError("RemoteFlowNode: url must be a non-empty string when flow_id is not set")
-        url = MappingResolver.resolve_http_header_value(url_raw, state, variables)
-        return url, self._resolve_headers_dict(self.headers_config, state, variables)
 
     def _resolve_headers_dict(
         self,
@@ -2368,7 +2354,7 @@ class ChannelNode(BaseNode):
     """
     Универсальная нода отправки сообщений в каналы.
 
-    Поддерживаемые каналы: telegram, email, webhook, whatsapp, sms.
+    Поддерживаемые каналы: telegram, email, webhook, sms.
 
     Конфигурация:
     {
@@ -2419,7 +2405,10 @@ class ChannelNode(BaseNode):
     async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
         """Отправляет сообщение через channel handler."""
         container = self.container
-        handler = container.channel_registry.get(self.channel)
+        handler = container.channel_registry.get(
+            self.channel,
+            mail_service=container.mail_service,
+        )
 
         # Собираем все переменные (flow, компании, системные)
         all_variables = require_json_object(
@@ -2461,6 +2450,7 @@ class ChannelNode(BaseNode):
                     params=params,
                     config=config,
                     variables=variables,
+                    state=state,
                 )
 
             state["channel_result"] = result
@@ -2490,6 +2480,24 @@ class HitlNode(BaseNode):
     """
 
     node_type: ClassVar[NodeType | None] = NodeType.HITL_NODE
+
+    def _hitl_local_variables(self) -> JsonObject | None:
+        raw = self.config.get("local_variables")
+        if raw is None:
+            return None
+        return require_json_object(raw, f"hitl_node.{self.node_id}.local_variables")
+
+    def _resolve_hitl_text(self, template: str, state: ExecutionState) -> str:
+        raw = template.strip()
+        if not raw:
+            raise ValueError(
+                f"hitl_node {self.node_id}: пустой шаблон title/message"
+            )
+        return MappingResolver.resolve_interpolated_string(
+            raw,
+            state,
+            variables=self._hitl_local_variables(),
+        )
 
     @override
     async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
@@ -2557,17 +2565,17 @@ class HitlNode(BaseNode):
                 + "или input_mapping.assignee_queue"
             )
 
-        title = inputs.get("task_title") or self.config.get("handoff_task_title")
-        if not title or not str(title).strip():
+        title_raw = inputs.get("task_title") or self.config.get("handoff_task_title")
+        if not title_raw or not str(title_raw).strip():
             raise ValueError(
                 f"hitl_node {self.node_id}: нужен task_title (input_mapping или handoff_task_title)"
             )
-        message = (
+        message_raw = (
             inputs.get("user_facing_message")
             or inputs.get("question")
             or self.config.get("handoff_user_message")
         )
-        if not message or not str(message).strip():
+        if not message_raw or not str(message_raw).strip():
             raise ValueError(
                 f"hitl_node {self.node_id}: нужен текст для пользователя "
                 + "(user_facing_message / question / handoff_user_message)"
@@ -2582,8 +2590,16 @@ class HitlNode(BaseNode):
 
         container = self.container
         svc = container.hitl_work_item_service
-        question = str(message).strip()
-        task_title = str(title).strip()
+        task_title = self._resolve_hitl_text(str(title_raw), state)
+        question = self._resolve_hitl_text(str(message_raw), state)
+        if not task_title:
+            raise ValueError(
+                f"hitl_node {self.node_id}: после резолва task_title пуст"
+            )
+        if not question:
+            raise ValueError(
+                f"hitl_node {self.node_id}: после резолва user message пуст"
+            )
         handoff_command = build_hitl_handoff_command(
             state=state,
             node_id=self.node_id,
@@ -2726,16 +2742,56 @@ class ReflectionNode(BaseNode):
             result.model_dump(mode="json"),
             "reflection.validation",
         )
+        self._push_reflection_resolved_ui_event(state, result)
         logger.info(
             "reflection.gate_completed",
             node_id=self.node_id,
             policy_id=result.policy_id,
             gate=result.gate,
             approved=result.approved,
+            exit_id=result.exit_id,
             session_id=state.session_id,
             execution_branch_id=execution_branch_id,
         )
         return None
+
+    def _push_reflection_resolved_ui_event(
+        self,
+        state: ExecutionState,
+        result: ReflectionGateResult,
+    ) -> None:
+        exit_label = result.exit_id
+        for exit_item in self.critic_policy.exits:
+            if exit_item.exit_id == result.exit_id:
+                exit_label = exit_item.label
+                break
+        issues_payload: list[JsonObject] = []
+        for issue in result.critique.issues[:5]:
+            issues_payload.append(
+                {
+                    "criterion_id": issue.criterion_id,
+                    "severity": issue.severity,
+                    "finding": issue.finding,
+                }
+            )
+        _ = push_ui_event(
+            state,
+            event_type="platform.reflection_resolved",
+            payload={
+                "node_id": self.node_id,
+                "policy_id": result.policy_id,
+                "gate": result.gate,
+                "exit_id": result.exit_id,
+                "exit_label": exit_label,
+                "approved": result.approved,
+                "decision": result.critique.decision,
+                "summary": result.critique.summary,
+                "blocked_reasons": list(result.blocked_reasons),
+                "issues": issues_payload,
+            },
+            source="reflection",
+            correlation_id=f"{self.node_id}:{result.exit_id}",
+        )
 
     def _resolve_target_snapshot(self, state: ExecutionState) -> ReflectionTargetSnapshot:
         target = self.critic_policy.target

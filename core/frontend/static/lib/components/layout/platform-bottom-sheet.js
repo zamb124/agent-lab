@@ -102,8 +102,6 @@ export class PlatformBottomSheet extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 background: var(--glass-solid-strong);
-                backdrop-filter: blur(var(--glass-blur-medium)) saturate(180%);
-                -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(180%);
                 border-top: 1px solid var(--glass-border-medium);
                 border-radius: var(--platform-bottom-sheet-radius) var(--platform-bottom-sheet-radius) 0 0;
                 box-shadow: var(--glass-shadow-strong), var(--glass-inner-glow-medium);

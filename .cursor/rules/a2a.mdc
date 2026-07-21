@@ -65,7 +65,7 @@ Capabilities согласованы с кодом: `streaming=true`, `pushNotifi
 
 - HTTP API: `apps/flows/src/api/a2a.py` + `A2AChannel`.
 - Chat UI: `core/frontend/static/lib/chat/runtime/a2a-stream.js`, `a2a-chat-runtime.js`.
-- Outbound: `core/clients/a2a_client.py`.
+- Outbound: `core/clients/a2a_client.py` (`RemoteFlowNode` — direct URL; Skill ID = `branch_id` → `metadata.branch`; `metadata_template` → `params.metadata` с `@state:`/`@var:`).
 - Internal platform `ExecutionTaskState` остаётся kebab-case; маппинг на wire — `core.a2a.task_states`.
 
 ## Tests

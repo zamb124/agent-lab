@@ -8,6 +8,8 @@ from apps.flows.src.models.enums import CodeMode
 from core.integrations.mcp import mcp_parameters_schema_hash, mcp_tool_reference_id
 from core.types import JsonObject
 
+_TOOLS_ALL_PAGE = 20
+
 
 def _empty_parameters_schema() -> JsonObject:
     return {
@@ -53,6 +55,54 @@ def _flow_config(flow_id: str) -> FlowConfig:
     )
 
 
+async def _fetch_tools_all_pages(
+    client,
+    *,
+    picker_category: str | None = None,
+) -> list[dict]:
+    items: list[dict] = []
+    offset = 0
+    while True:
+        path = f"/flows/api/v1/tools/all?limit={_TOOLS_ALL_PAGE}&offset={offset}"
+        if picker_category is not None:
+            path = f"{path}&picker_category={picker_category}"
+        response = await client.get(path)
+        assert response.status_code == 200
+        body = response.json()
+        page_items = body["items"]
+        assert isinstance(page_items, list)
+        assert body["limit"] == _TOOLS_ALL_PAGE
+        assert len(page_items) <= _TOOLS_ALL_PAGE
+        items.extend(page_items)
+        offset += len(page_items)
+        total = body["total"]
+        if len(page_items) == 0 or offset >= total:
+            break
+    return items
+
+
+@pytest.mark.asyncio
+async def test_tools_all_rejects_limit_above_page_max(client, app):
+    response = await client.get("/flows/api/v1/tools/all?limit=21&offset=0")
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_tools_all_q_filters_before_pagination(client, app, unique_id):
+    container = get_container()
+    tool_id = f"picker_search_{unique_id}"
+    await container.tool_repository.set(_inline_tool_reference(tool_id))
+
+    response = await client.get(
+        f"/flows/api/v1/tools/all?picker_category=code&limit=20&offset=0&q={tool_id}"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    ids = {item["tool_id"] for item in body["items"]}
+    assert tool_id in ids
+    assert body["total"] >= 1
+
+
 @pytest.mark.asyncio
 async def test_picker_category_flow_is_not_truncated_by_many_mcp_tools(client, app, unique_id):
     """Flows вкладка и picker_category=all сохраняют flow при большом числе MCP tools."""
@@ -68,18 +118,12 @@ async def test_picker_category_flow_is_not_truncated_by_many_mcp_tools(client, a
             _mcp_tool_reference(server_id, f"bulk_tool_{index}")
         )
 
-    flow_response = await client.get(
-        "/flows/api/v1/tools/all?picker_category=flow&limit=2000&offset=0"
-    )
-    assert flow_response.status_code == 200
-    flow_ids = {item["tool_id"] for item in flow_response.json()["items"]}
+    flow_items = await _fetch_tools_all_pages(client, picker_category="flow")
+    flow_ids = {item["tool_id"] for item in flow_items}
     assert flow_id in flow_ids
 
-    all_response = await client.get(
-        "/flows/api/v1/tools/all?picker_category=all&limit=2000&offset=0"
-    )
-    assert all_response.status_code == 200
-    all_ids = {item["tool_id"] for item in all_response.json()["items"]}
+    all_items = await _fetch_tools_all_pages(client, picker_category="all")
+    all_ids = {item["tool_id"] for item in all_items}
     assert flow_id in all_ids
 
 
@@ -89,12 +133,8 @@ async def test_picker_flow_item_contains_complete_flow_tool_schema(client, app, 
     flow_id = f"picker_contract_{unique_id}"
     await container.flow_repository.set(_flow_config(flow_id))
 
-    response = await client.get(
-        "/flows/api/v1/tools/all?picker_category=flow&limit=2000&offset=0"
-    )
-
-    assert response.status_code == 200
-    item = next(entry for entry in response.json()["items"] if entry["tool_id"] == flow_id)
+    items = await _fetch_tools_all_pages(client, picker_category="flow")
+    item = next(entry for entry in items if entry["tool_id"] == flow_id)
     assert item["item_type"] == "flow"
     assert item["parameters_schema"] == {
         "type": "object",
@@ -120,21 +160,14 @@ async def test_picker_category_filters_code_and_mcp(client, app, unique_id):
     await container.tool_repository.set(_inline_tool_reference(code_tool_id))
     await container.tool_repository.set(_mcp_tool_reference(server_id, mcp_tool_name))
 
-    code_response = await client.get(
-        "/flows/api/v1/tools/all?picker_category=code&limit=2000&offset=0"
-    )
-    assert code_response.status_code == 200
-    code_items = code_response.json()["items"]
+    code_items = await _fetch_tools_all_pages(client, picker_category="code")
     code_ids = {item["tool_id"] for item in code_items}
     assert code_tool_id in code_ids
     assert mcp_tool_reference_id(server_id, mcp_tool_name) not in code_ids
     assert all(item.get("item_type") != "flow" for item in code_items)
 
-    mcp_response = await client.get(
-        "/flows/api/v1/tools/all?picker_category=mcp&limit=2000&offset=0"
-    )
-    assert mcp_response.status_code == 200
-    mcp_ids = {item["tool_id"] for item in mcp_response.json()["items"]}
+    mcp_items = await _fetch_tools_all_pages(client, picker_category="mcp")
+    mcp_ids = {item["tool_id"] for item in mcp_items}
     assert mcp_tool_reference_id(server_id, mcp_tool_name) in mcp_ids
     assert code_tool_id not in mcp_ids
 
@@ -158,9 +191,6 @@ async def test_picker_category_all_skips_agent_toolkit_lookup(client, app, monke
         _fail_toolkit_lookup,
     )
 
-    response = await client.get(
-        "/flows/api/v1/tools/all?picker_category=all&limit=2000&offset=0"
-    )
-    assert response.status_code == 200
-    ids = {item["tool_id"] for item in response.json()["items"]}
+    items = await _fetch_tools_all_pages(client, picker_category="all")
+    ids = {item["tool_id"] for item in items}
     assert flow_id in ids

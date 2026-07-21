@@ -1,282 +1,259 @@
+"""Durable ReflectionNode tests: real container + MockLLM only."""
+
 from __future__ import annotations
 
-from types import SimpleNamespace
-from typing import cast
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import pytest
 
-import apps.flows.src.runtime.nodes as runtime_nodes
 from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.durable_execution import SideEffectPolicy
-from apps.flows.src.models import NodeConfig, NodeLLMConfig
-from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.nodes import ReflectionNode, create_node
-from core.reflection import (
-    CriticCriterion,
-    CriticPolicy,
-    ReflectionCritiqueIssue,
-    ReflectionCritiqueResult,
-    ReflectionTarget,
-)
+from core.clients.llm.mock import MockLLM
+from core.reflection import CriticSeverity, ReflectionTargetKind
 from core.state import ExecutionState
 from core.types import JsonObject
+from tests.flows.durable_runtime_harness import ensure_workflow_started, run_node, workflow_state
+from tests.flows.fixtures.reflection import (
+    critique_issue,
+    mock_critique_queue_item,
+    reflection_critique,
+    reflection_node_config,
+    reflection_policy,
+)
+
+MockLLMQueue = Callable[[list[Any]], MockLLM]
+MockLLMCapture = Callable[[], Awaitable[list[JsonObject]]]
 
 
-class RecordingWorkflowRuntime:
-    def __init__(self) -> None:
-        self.completed_result: JsonObject | None = None
-        self.scheduled: list[JsonObject] = []
-        self.started: list[str] = []
-        self.completed: list[JsonObject] = []
-
-    async def get_active_execution_position(self, session_id: str) -> SimpleNamespace:
-        _ = session_id
-        return SimpleNamespace(execution_branch_id="branch-1")
-
-    async def record_activity_scheduled(
-        self,
-        *,
-        session_id: str,
-        activity_id: str,
-        activity_type: str,
-        input_payload: JsonObject,
-        node_id: str | None = None,
-        tool_call_id: str | None = None,
-        idempotency_key: str | None = None,
-        side_effect_policy: SideEffectPolicy,
-    ) -> JsonObject | None:
-        self.scheduled.append(
-            {
-                "session_id": session_id,
-                "activity_id": activity_id,
-                "activity_type": activity_type,
-                "input_payload": input_payload,
-                "node_id": node_id,
-                "tool_call_id": tool_call_id,
-                "idempotency_key": idempotency_key,
-                "side_effect_policy": side_effect_policy.value,
-            }
-        )
-        return self.completed_result
-
-    async def record_activity_started(self, *, activity_id: str) -> bool:
-        self.started.append(activity_id)
-        return True
-
-    async def record_activity_completed(
-        self,
-        *,
-        activity_id: str,
-        result_json: JsonObject | None = None,
-        error: str | None = None,
-    ) -> bool:
-        self.completed.append(
-            {
-                "activity_id": activity_id,
-                "result_json": result_json,
-                "error": error,
-            }
-        )
-        if result_json is not None:
-            self.completed_result = result_json
-        return True
-
-
-class NoWorkflowRuntime(RecordingWorkflowRuntime):
-    async def get_active_execution_position(self, session_id: str) -> None:
-        _ = session_id
-        return None
-
-
-class RuntimeContainer:
-    def __init__(self, workflow_runtime: RecordingWorkflowRuntime) -> None:
-        self.workflow_runtime = workflow_runtime
-
-    @property
-    def redis_client(self):
-        from apps.flows.src.container import get_container
-
-        return get_container().redis_client
-
-
-class FakeCriticLLM:
-    def __init__(self, critique: ReflectionCritiqueResult) -> None:
-        self.critique = critique
-        self.calls: list[JsonObject] = []
-
-    async def chat(
-        self,
-        messages: object,
-        *,
-        response_model: type[ReflectionCritiqueResult],
-        llm_context: JsonObject,
-    ) -> ReflectionCritiqueResult:
-        self.calls.append(
-            {
-                "messages": str(messages),
-                "response_model": response_model.__name__,
-                "llm_context": llm_context,
-            }
-        )
-        return self.critique
-
-
-def _container(runtime: RecordingWorkflowRuntime) -> FlowRuntimeContainer:
-    return cast(FlowRuntimeContainer, RuntimeContainer(runtime))
-
-
-def _policy() -> CriticPolicy:
-    return CriticPolicy(
-        policy_id="final-answer-safety",
-        gate="final_answer",
-        target=ReflectionTarget(kind="response"),
-        instruction="Block unsafe or unsupported final answers.",
-        criteria=[
-            CriticCriterion(
-                criterion_id="safety",
-                description="The answer must not instruct destructive production actions.",
-                severity="critical",
-            ),
-            CriticCriterion(
-                criterion_id="evidence",
-                description="The answer must be supported by visible facts.",
-                severity="error",
-            ),
-        ],
-        min_confidence=0.8,
-        block_on_severities=["error", "critical"],
+async def _reflection_node(
+    container: FlowRuntimeContainer,
+    *,
+    config: JsonObject | None = None,
+) -> ReflectionNode:
+    node = await create_node(
+        "critic",
+        config or reflection_node_config(),
+        container=container,
     )
-
-
-def _node_config() -> JsonObject:
-    return {
-        "type": NodeType.REFLECTION.value,
-        "llm": {"model": "mock-gpt-4", "temperature": 0.0},
-        "critic_policy": _policy().model_dump(mode="json"),
-    }
-
-
-def _state() -> ExecutionState:
-    state = ExecutionState(
-        task_id="task",
-        context_id="ctx",
-        user_id="user",
-        session_id="reflection_flow:ctx",
-        response="Run destructive migration on production without approval.",
-    )
-    state.attach_durable_node_context(
-        execution_branch_id="branch-1",
-        node_schedule_sequence=7,
-        superstep_sequence=6,
-    )
-    return state
-
-
-def test_reflection_node_config_is_strict() -> None:
-    config = NodeConfig(
-        node_id="critic",
-        type=NodeType.REFLECTION,
-        name="Critic",
-        llm=NodeLLMConfig(model="mock-gpt-4"),
-        critic_policy=_policy(),
-    )
-
-    assert config.type is NodeType.REFLECTION
-    assert config.critic_policy is not None
-    assert config.critic_policy.policy_id == "final-answer-safety"
-
-    with pytest.raises(ValueError, match="critic_policy"):
-        _ = NodeConfig(
-            node_id="bad",
-            type=NodeType.REFLECTION,
-            name="Bad",
-            llm=NodeLLMConfig(model="mock-gpt-4"),
-        )
+    assert isinstance(node, ReflectionNode)
+    return node
 
 
 @pytest.mark.asyncio
-async def test_reflection_node_blocks_final_answer_gate_and_records_typed_result(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_reflection_blocks_and_records_typed_result(
+    container: FlowRuntimeContainer,
+    unique_id: str,
+    mock_llm_with_queue: MockLLMQueue,
 ) -> None:
-    critique = ReflectionCritiqueResult(
+    flow_id = f"refl-block-{unique_id}"
+    critique = reflection_critique(
         decision="blocked",
         confidence=0.98,
-        summary="The answer asks for destructive production action without approval.",
-        issues=[
-            ReflectionCritiqueIssue(
-                criterion_id="safety",
-                severity="critical",
-                finding="Destructive production migration is proposed.",
-                evidence="The response says to run destructive migration on production.",
-                required_action="Require explicit approval and a reversible migration plan.",
-            )
-        ],
+        summary="Destructive production action without approval.",
+        issues=[critique_issue()],
     )
-    fake_llm = FakeCriticLLM(critique)
-    monkeypatch.setattr(runtime_nodes, "create_llm_client_from_call_config", lambda *_, **__: fake_llm)
-    runtime = RecordingWorkflowRuntime()
-    node = ReflectionNode("critic", _node_config(), container=_container(runtime))
-    state = _state()
+    mock_llm_with_queue([mock_critique_queue_item(critique)])
+    node = await _reflection_node(container)
+    state = workflow_state(
+        flow_id=flow_id,
+        unique_id=unique_id,
+        response="Run destructive migration on production without approval.",
+    )
 
-    result = await node.run(state)
+    out = await run_node(container=container, node=node, state=state)
 
-    assert result is state
-    assert state.response == "Run destructive migration on production without approval."
-    assert state.validation is not None
-    assert state.validation["approved"] is False
-    assert state.validation["gate"] == "final_answer"
-    assert state.validation["critique"]["decision"] == "blocked"
-    assert state.reflection_history[0].result.approved is False
-    assert state.reflection_history[0].node_schedule_sequence == 7
-    assert len(fake_llm.calls) == 1
-    assert runtime.scheduled[0]["activity_type"] == "reflection"
-    assert runtime.scheduled[0]["idempotency_key"] == runtime.scheduled[0]["activity_id"]
-    assert runtime.scheduled[0]["side_effect_policy"] == SideEffectPolicy.idempotent.value
-    assert runtime.completed[0]["result_json"] is not None
-    assert sorted(runtime.completed[0]["result_json"].keys()) == ["result"]
+    assert out.response == "Run destructive migration on production without approval."
+    assert out.validation is not None
+    assert out.validation["approved"] is False
+    assert out.validation["gate"] == "final_answer"
+    assert out.validation["critique"]["decision"] == "blocked"
+    assert out.reflection_history[0].result.approved is False
+    assert out.reflection_history[0].node_id == "critic"
+    assert "issue:critical:safety" in out.validation["blocked_reasons"]
+    assert len(out.ui_events_pending) == 1
+    ui_event = out.ui_events_pending[0]
+    assert ui_event.event_type == "platform.reflection_resolved"
+    assert ui_event.payload["exit_id"] == "blocked"
+    assert ui_event.payload["approved"] is False
+    assert ui_event.payload["decision"] == "blocked"
+    assert ui_event.payload["exit_label"] == "Blocked"
+
+
+@pytest.mark.asyncio
+async def test_reflection_approves_clean_critique(
+    container: FlowRuntimeContainer,
+    unique_id: str,
+    mock_llm_with_queue: MockLLMQueue,
+) -> None:
+    flow_id = f"refl-ok-{unique_id}"
+    mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
+    node = await _reflection_node(container)
+    state = workflow_state(
+        flow_id=flow_id,
+        unique_id=unique_id,
+        response="Safe staged migration plan.",
+    )
+
+    out = await run_node(container=container, node=node, state=state)
+
+    assert out.validation is not None
+    assert out.validation["approved"] is True
+    assert out.validation["blocked_reasons"] == []
+    assert out.reflection_history[0].result.approved is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("target_kind", "state_path", "extra_state"),
+    [
+        ("response", None, {"response": "Answer text"}),
+        ("result", None, {"result": {"ok": True}}),
+        ("validation", None, {"validation": {"prior": True}}),
+        ("state_path", "variables.draft", {"variables": {"draft": "draft body"}}),
+    ],
+)
+async def test_reflection_resolves_targets(
+    container: FlowRuntimeContainer,
+    unique_id: str,
+    mock_llm_with_queue: MockLLMQueue,
+    target_kind: ReflectionTargetKind,
+    state_path: str | None,
+    extra_state: dict[str, object],
+) -> None:
+    flow_id = f"refl-tgt-{target_kind}-{unique_id}"
+    policy = reflection_policy(target_kind=target_kind, state_path=state_path)
+    mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
+    node = await _reflection_node(
+        container,
+        config=reflection_node_config(policy=policy),
+    )
+    state = workflow_state(flow_id=flow_id, unique_id=unique_id, **extra_state)
+
+    out = await run_node(container=container, node=node, state=state)
+
+    assert out.validation is not None
+    assert out.validation["approved"] is True
+    assert out.validation["target"]["kind"] == target_kind
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [None, "", "   "],
+)
+async def test_reflection_rejects_empty_response_target(
+    container: FlowRuntimeContainer,
+    unique_id: str,
+    mock_llm_with_queue: MockLLMQueue,
+    response: str | None,
+) -> None:
+    flow_id = f"refl-empty-{unique_id}"
+    mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
+    node = await _reflection_node(container)
+    if response is None:
+        state = workflow_state(flow_id=flow_id, unique_id=unique_id)
+    else:
+        state = workflow_state(flow_id=flow_id, unique_id=unique_id, response=response)
+
+    with pytest.raises(ValueError, match="empty"):
+        await run_node(container=container, node=node, state=state)
 
 
 @pytest.mark.asyncio
 async def test_reflection_activity_replays_without_second_llm_call(
-    monkeypatch: pytest.MonkeyPatch,
+    container: FlowRuntimeContainer,
+    unique_id: str,
+    mock_llm_with_queue: MockLLMQueue,
+    mock_llm_capture: MockLLMCapture,
 ) -> None:
-    critique = ReflectionCritiqueResult(
-        decision="approved",
-        confidence=0.95,
-        summary="The answer is supported and safe.",
-        issues=[],
+    flow_id = f"refl-replay-{unique_id}"
+    mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
+    node = await _reflection_node(container)
+    first_state = workflow_state(
+        flow_id=flow_id,
+        unique_id=unique_id,
+        response="Use staged migration.",
     )
-    fake_llm = FakeCriticLLM(critique)
-    monkeypatch.setattr(runtime_nodes, "create_llm_client_from_call_config", lambda *_, **__: fake_llm)
-    runtime = RecordingWorkflowRuntime()
-    node = await create_node("critic", _node_config(), container=_container(runtime))
-    assert isinstance(node, ReflectionNode)
+    first = await run_node(container=container, node=node, state=first_state)
+    record = first.reflection_history[0]
 
-    first_state = _state()
-    first_state.response = "Use the approved staged migration plan."
-    first_result = await node.run(first_state)
+    replay_state = workflow_state(
+        flow_id=flow_id,
+        unique_id=unique_id,
+        response="Use staged migration.",
+    )
+    replay_state = ExecutionState.model_validate(
+        {
+            **replay_state.model_dump(mode="python"),
+            "session_id": first.session_id,
+            "task_id": first.task_id,
+            "context_id": first.context_id,
+        }
+    )
+    await ensure_workflow_started(
+        container=container,
+        state=replay_state,
+        flow_id=flow_id,
+        branch_id=replay_state.branch_id,
+    )
+    replay_state.attach_durable_node_context(
+        execution_branch_id=record.execution_branch_id,
+        node_schedule_sequence=record.node_schedule_sequence,
+        superstep_sequence=0,
+    )
+    second = await node.run(replay_state)
 
-    second_state = _state()
-    second_state.response = "Use the approved staged migration plan."
-    second_result = await node.run(second_state)
-
-    assert first_result.validation == second_result.validation
-    assert first_result.reflection_history[0].result == second_result.reflection_history[0].result
-    assert len(fake_llm.calls) == 1
-    assert len(runtime.scheduled) == 2
-    assert len(runtime.started) == 1
-    assert len(runtime.completed) == 1
-    assert second_state.validation is not None
-    assert second_state.validation["approved"] is True
+    assert first.validation == second.validation
+    assert first.reflection_history[0].result == second.reflection_history[0].result
+    calls = await mock_llm_capture()
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio
-async def test_reflection_node_requires_durable_workflow_context() -> None:
-    node = ReflectionNode(
-        "critic",
-        _node_config(),
-        container=_container(NoWorkflowRuntime()),
+async def test_reflection_requires_durable_workflow_context(
+    container: FlowRuntimeContainer,
+    unique_id: str,
+    mock_llm_with_queue: MockLLMQueue,
+) -> None:
+    mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
+    node = await _reflection_node(container)
+    state = workflow_state(
+        flow_id=f"refl-nodurable-{unique_id}",
+        unique_id=unique_id,
+        response="x",
     )
+    with pytest.raises(RuntimeError, match="durable"):
+        await node.run(state)
 
-    with pytest.raises(RuntimeError, match="requires durable workflow instance"):
-        _ = await node.run(_state())
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("severity", ["error", "critical"])
+async def test_reflection_blocks_on_configured_severity(
+    container: FlowRuntimeContainer,
+    unique_id: str,
+    mock_llm_with_queue: MockLLMQueue,
+    severity: CriticSeverity,
+) -> None:
+    flow_id = f"refl-sev-{severity}-{unique_id}"
+    policy = reflection_policy(block_on_severities=[severity])
+    critique = reflection_critique(
+        issues=[critique_issue(criterion_id="c1", severity=severity)],
+    )
+    mock_llm_with_queue([mock_critique_queue_item(critique)])
+    node = await _reflection_node(
+        container,
+        config=reflection_node_config(policy=policy),
+    )
+    out = await run_node(
+        container=container,
+        node=node,
+        state=workflow_state(
+            flow_id=flow_id,
+            unique_id=unique_id,
+            response="Safe staged migration plan.",
+        ),
+    )
+    assert out.validation is not None
+    assert out.validation["approved"] is False
+    assert f"issue:{severity}:c1" in out.validation["blocked_reasons"]

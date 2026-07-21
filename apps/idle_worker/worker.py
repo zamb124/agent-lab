@@ -24,6 +24,7 @@ from apps.flows.config import get_settings  # noqa: E402
 from apps.idle_worker.broker import broker as worker_app, recovery_handler  # noqa: E402
 from apps.idle_worker.container import IdleWorkerContainer, get_container  # noqa: E402
 from apps.idle_worker.tasks.company_init_tasks import initialize_system_company_task  # noqa: E402
+from apps.idle_worker.tasks.tool_tag_groups_tasks import tool_tag_groups_describe_tick  # noqa: E402
 from core.clients.llm.mock import configure_mock_llm_redis, get_or_create_global_mock_llm  # noqa: E402
 from core.config.testing import is_testing  # noqa: E402
 from core.logging import get_logger  # noqa: E402
@@ -90,6 +91,12 @@ async def idle_worker_startup(state: TaskiqState) -> None:
             service="idle_worker",
             task_id=system_init_task.task_id,
         )
+        tag_groups_task = await tool_tag_groups_describe_tick.kiq()
+        logger.info(
+            "tool_tag_groups.describe_enqueued",
+            service="idle_worker",
+            task_id=tag_groups_task.task_id,
+        )
 
     logger.info("worker.container_initialized", service="idle_worker")
 
@@ -133,6 +140,7 @@ import apps.idle_worker.tasks.platform_schedules_gc_tasks as _platform_schedules
 import apps.idle_worker.tasks.redis_inventory_tasks as _redis_inventory_tasks  # noqa: E402
 import apps.idle_worker.tasks.push_notification_tasks as _push_notification_tasks  # noqa: E402
 import apps.idle_worker.tasks.span_billing_settlement_tasks as _span_billing_settlement_tasks  # noqa: E402
+import apps.idle_worker.tasks.tool_tag_groups_tasks as _tool_tag_groups_tasks  # noqa: E402
 
 _TASK_REGISTRATION_MODULES = (
     _file_retention_tasks,
@@ -150,6 +158,7 @@ _TASK_REGISTRATION_MODULES = (
     _payment_sync_tasks,
     _push_notification_tasks,
     _span_billing_settlement_tasks,
+    _tool_tag_groups_tasks,
 )
 
 __all__ = ["worker_app"]

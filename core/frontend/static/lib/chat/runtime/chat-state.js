@@ -171,6 +171,7 @@ function _newAssistantMessage(taskId, id, author = null) {
         toolResults: [],
         browserPreviews: [],
         skillLoads: [],
+        reflectionResults: [],
         files: [],
         streaming: true,
         taskId,
@@ -509,8 +510,12 @@ function _sessionInit(state, p) {
     };
 }
 
-function _sessionReset(state) {
+function _sessionReset(state, p) {
     const contextId = `${Date.now()}`;
+    const flowId =
+        p && typeof p === 'object' && typeof p.flowId === 'string' && p.flowId.length > 0
+            ? p.flowId
+            : state.currentFlowId;
     return {
         ...state,
         messagesByContextId: {
@@ -518,6 +523,7 @@ function _sessionReset(state) {
             [contextId]: { messages: EMPTY_LIST, taskId: null },
         },
         currentContextId: contextId,
+        currentFlowId: flowId,
         currentTaskId: null,
         streaming: false,
         sessionId: null,
@@ -531,7 +537,7 @@ function _sessionReset(state) {
         },
         activeAuthorByContextId: {
             ..._activeAuthorMap(state.activeAuthorByContextId),
-            [contextId]: normalizeChatAuthor({ kind: 'agent', flowId: state.currentFlowId }, 'assistant'),
+            [contextId]: normalizeChatAuthor({ kind: 'agent', flowId }, 'assistant'),
         },
     };
 }
@@ -1299,6 +1305,75 @@ function _skillLoaded(state, p) {
     }, ctxHint);
 }
 
+function _reflectionIssueRows(rawIssues) {
+    if (!Array.isArray(rawIssues)) {
+        return [];
+    }
+    const rows = [];
+    for (const item of rawIssues) {
+        if (!item || typeof item !== 'object') {
+            continue;
+        }
+        const criterionId = typeof item.criterion_id === 'string' ? item.criterion_id.trim() : '';
+        const severity = typeof item.severity === 'string' ? item.severity.trim() : '';
+        const finding = typeof item.finding === 'string' ? item.finding.trim() : '';
+        if (criterionId.length === 0 && finding.length === 0) {
+            continue;
+        }
+        rows.push({
+            criterionId,
+            severity,
+            finding,
+        });
+        if (rows.length >= 5) {
+            break;
+        }
+    }
+    return rows;
+}
+
+function _reflectionResolved(state, p) {
+    if (!p || typeof p !== 'object') return state;
+    const taskId = typeof p.task_id === 'string' ? p.task_id : null;
+    const nodeId = typeof p.node_id === 'string' ? p.node_id.trim() : '';
+    const exitId = typeof p.exit_id === 'string' ? p.exit_id.trim() : '';
+    if (!taskId || nodeId.length === 0 || exitId.length === 0) return state;
+    const ctxHint = typeof p.context_id === 'string' ? p.context_id : null;
+    const exitLabel = typeof p.exit_label === 'string' && p.exit_label.trim().length > 0
+        ? p.exit_label.trim()
+        : exitId;
+    const summary = typeof p.summary === 'string' ? p.summary.trim() : '';
+    const decision = typeof p.decision === 'string' ? p.decision.trim() : '';
+    const policyId = typeof p.policy_id === 'string' ? p.policy_id.trim() : '';
+    const gate = typeof p.gate === 'string' ? p.gate.trim() : '';
+    const approved = p.approved === true;
+    const blockedReasons = Array.isArray(p.blocked_reasons)
+        ? p.blocked_reasons.filter((item) => typeof item === 'string')
+        : [];
+    const entry = {
+        nodeId,
+        exitId,
+        exitLabel,
+        approved,
+        decision,
+        summary,
+        policyId,
+        gate,
+        blockedReasons,
+        issues: _reflectionIssueRows(p.issues),
+    };
+    return _applyToBucketMessages(state, taskId, (messages) => {
+        const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
+        return _replaceMessage(nextMsgs, idx, (m) => {
+            const existing = Array.isArray(m.reflectionResults) ? m.reflectionResults : [];
+            if (existing.some((row) => row && row.nodeId === nodeId && row.exitId === exitId)) {
+                return m;
+            }
+            return { ...m, reflectionResults: [...existing, entry] };
+        });
+    }, ctxHint);
+}
+
 /**
  * Применить одно chat-runtime событие к состоянию.
  *
@@ -1312,7 +1387,7 @@ export function applyChatRuntimeEvent(state, verb, payload) {
         case 'session_init':
             return _sessionInit(state, payload);
         case 'session_reset':
-            return _sessionReset(state);
+            return _sessionReset(state, payload);
         case 'session_loaded':
             return _sessionLoaded(state, payload);
         case 'trace_append':
@@ -1363,6 +1438,8 @@ export function applyChatRuntimeEvent(state, verb, payload) {
             return _handbackCompleted(state, payload);
         case 'skill_loaded':
             return _skillLoaded(state, payload);
+        case 'reflection_resolved':
+            return _reflectionResolved(state, payload);
         default:
             return state;
     }

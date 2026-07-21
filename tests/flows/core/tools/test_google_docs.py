@@ -39,7 +39,7 @@ async def _assert_requires_google_docs_oauth(tool: FunctionTool, args: ToolArgum
     assert interrupt.kind == InterruptKind.OAUTH_REQUIRED
     assert isinstance(interrupt, OAuthInterrupt)
     assert interrupt.provider == "google"
-    assert interrupt.service == "docs"
+    assert interrupt.service == "workspace"
 
 
 class TestGDocsCreateDocument:
@@ -150,11 +150,12 @@ class TestGDocsClientInit:
                 access_token="tok_abc",
             )
 
-    def test_access_token_mode(self):
+    @pytest.mark.asyncio
+    async def test_access_token_mode(self):
         from core.clients.google_docs_client import GoogleDocsClient
 
         client = GoogleDocsClient(access_token="tok_test_123")
-        headers = client._auth_headers()
+        headers = await client._auth_headers()
         assert headers["Authorization"] == "Bearer tok_test_123"
 
     def test_positional_args_rejected(self):

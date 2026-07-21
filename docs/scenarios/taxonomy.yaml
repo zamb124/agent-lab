@@ -108,6 +108,9 @@ learning_paths:
       - label_ru: Тест агента в чате
         label_en: Test the agent in chat
         href: scenarios/flows/test-agent-in-chat/
+      - label_ru: Как настроить проверку качества и увидеть вердикт в чате
+        label_en: Configure quality review and see the verdict in chat
+        href: scenarios/flows/reflection-result-in-chat/
       - label_ru: Активация Skill в чате
         label_en: Skill unlocks in chat
         href: scenarios/flows/skills-unlock-in-chat/

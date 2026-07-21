@@ -163,6 +163,33 @@ class AgentSkills(Base):
         return f"<AgentSkills(key='{self.key}', updated_at='{self.updated_at}')>"
 
 
+class ToolTagGroups(Base):
+    """
+    Platform-wide LLM descriptions for tool tag groups (picker).
+
+    Keys: tool_tag_group:{tag} (is_global, no company prefix).
+    """
+
+    __tablename__: str = "tool_tag_groups"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    value: Mapped[JsonObject] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+    __table_args__: tuple[UniqueConstraint | Index, ...] = (
+        UniqueConstraint("key", name="uq_tool_tag_groups_key"),
+        Index("ix_tool_tag_groups_key_prefix", "key"),
+        Index("ix_tool_tag_groups_updated_at", "updated_at"),
+        Index("ix_tool_tag_groups_expired_at", "expired_at"),
+    )
+
+    @override
+    def __repr__(self) -> str:
+        return f"<ToolTagGroups(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
 class WorkflowInstances(Base):
     """Current durable workflow head/projection."""
 

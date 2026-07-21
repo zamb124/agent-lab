@@ -200,6 +200,19 @@ class ResourceReference(BaseModel):
     config: JsonObject | None = Field(default=None, description="Конфигурация или override")
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
+    permission: list[str] = Field(
+        default_factory=list,
+        description="Группы с доступом для inline-ресурса. Пустой список = доступ для всех",
+    )
+
+    @field_validator("permission", mode="before")
+    @classmethod
+    def validate_reference_permission(cls, v: str | list[str] | None) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [v]
+        return v
 
     @model_validator(mode="after")
     def validate_reference_or_inline(self) -> "ResourceReference":

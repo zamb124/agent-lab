@@ -9,7 +9,7 @@ from typing import Literal
 from starlette.requests import Request
 
 RouteContextType = Literal["frontend", "api", "webhook", "anonymous", "a2a", "session"]
-WebhookPlatform = Literal["telegram", "whatsapp"]
+WebhookPlatform = Literal["telegram"]
 
 # Префиксы, для которых нельзя подменять ответ SPA (API и служебные пути)
 SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
@@ -235,7 +235,6 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/openapi.json", auth_required=False, context_type="anonymous"),
 
     # Вебхуки (без JWT, используют свою аутентификацию)
-    RouteRule("/flows/api/v1/webhook/whatsapp/*", auth_required=False, context_type="webhook", channel="whatsapp"),
     # Telegram Bot API: тот же путь, что в generate_webhook_url (setWebhook) — публичный POST без JWT
     RouteRule("/flows/api/v1/triggers/telegram/*", auth_required=False, context_type="anonymous"),
     RouteRule("/api/v1/payments/webhook/*", skip=True),

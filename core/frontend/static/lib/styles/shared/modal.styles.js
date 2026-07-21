@@ -19,13 +19,11 @@ export const modalStyles = css`
         justify-content: center;
     }
     
-    /* Backdrop с размытием фона */
+    /* Scrim без backdrop-filter — nested blur с panel даёт GPU flicker при scroll */
     .modal-backdrop {
         position: absolute;
         inset: 0;
-        background: rgba(0, 0, 0, 0.2);
-        backdrop-filter: blur(30px) saturate(200%);
-        -webkit-backdrop-filter: blur(30px) saturate(200%);
+        background: rgba(0, 0, 0, 0.45);
         z-index: -1;
         animation: backdropFadeIn var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out);
     }
@@ -46,10 +44,8 @@ export const modalStyles = css`
         border-radius: var(--radius-3xl, 28px);
         overflow: visible;
         
-        /* Liquid Glass Effect - темная тема */
+        /* Solid glass surface — без backdrop-filter (flicker-safe) */
         background: var(--glass-solid-strong, rgba(40, 40, 64, 0.92));
-        backdrop-filter: blur(var(--glass-blur-medium, 40px)) saturate(180%);
-        -webkit-backdrop-filter: blur(var(--glass-blur-medium, 40px)) saturate(180%);
         border: 1px solid var(--glass-border-medium, rgba(255, 255, 255, 0.12));
         
         /* Multi-layer shadows для глубины стекла */
@@ -163,7 +159,6 @@ export const modalStyles = css`
         transition: var(--motion-transition-interactive);
         font-size: var(--text-xs, 12px);
         font-weight: var(--font-semibold, 600);
-        backdrop-filter: blur(10px);
     }
     
     .modal-action-btn:hover {
@@ -221,9 +216,7 @@ export const modalStyles = css`
 
     /* Light Theme */
     :host-context([data-theme="light"]) .modal-backdrop {
-        background: rgba(100, 100, 120, 0.25);
-        backdrop-filter: blur(20px) saturate(120%);
-        -webkit-backdrop-filter: blur(20px) saturate(120%);
+        background: rgba(100, 100, 120, 0.4);
     }
 
     :host-context([data-theme="light"]) .modal-container {

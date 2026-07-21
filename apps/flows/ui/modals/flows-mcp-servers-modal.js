@@ -1,7 +1,7 @@
 /**
  * flows-mcp-servers-modal — управление MCP-серверами компании.
  *
- * Список в виде карточек; форма создания/редактирования: поля, Headers (JSON), пресеты.
+ * Список в виде карточек; форма создания/редактирования: поля, HTTP-заголовки (key/value), пресеты.
  * useResource('flows/mcp_servers'); update — flows/mcp_server_update; sync/test — useOp.
  */
 
@@ -21,10 +21,10 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-file-attachments.js';
 import '@platform/lib/components/platform-picker-card.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
-import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { renderMcpServerIcon } from '../_helpers/mcp-server-icon.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import '../components/editors/flows-http-headers-editor.js';
 
 const SERVER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{1,63}$/;
 const TRANSPORT_TYPES = Object.freeze(['http', 'sse']);
@@ -48,53 +48,15 @@ function normalizeMcpTransportType(raw) {
     return 'http';
 }
 
-const HEADER_PRESET_BEARER = '{\n  "Authorization": "Bearer @var:token"\n}';
-const HEADER_PRESET_API_KEY = '{\n  "X-API-Key": "@var:api_key"\n}';
-const HEADER_PRESET_BASIC = '{\n  "Authorization": "Basic @var:basic_credentials"\n}';
+const HEADER_PRESET_BEARER = Object.freeze({ Authorization: 'Bearer @var:token' });
+const HEADER_PRESET_API_KEY = Object.freeze({ 'X-API-Key': '@var:api_key' });
+const HEADER_PRESET_BASIC = Object.freeze({ Authorization: 'Basic @var:basic_credentials' });
 const HEADER_PRESET_OPTIONS = Object.freeze([
     Object.freeze({ id: 'bearer', titleKey: 'mcp_servers_modal.preset_bearer', icon: 'key' }),
     Object.freeze({ id: 'apikey', titleKey: 'mcp_servers_modal.preset_api_key', icon: 'key' }),
     Object.freeze({ id: 'basic', titleKey: 'mcp_servers_modal.preset_basic', icon: 'lock' }),
 ]);
 const PLATFORM_MCP_SLUGS = Object.freeze(['browser', 'search']);
-
-/**
- * @param {unknown} h
- * @returns {string}
- */
-function headersObjectToJsonString(h) {
-    if (!isPlainObject(h) || Object.keys(h).length === 0) {
-        return '{}';
-    }
-    return formatJsonPretty(h);
-}
-
-/**
- * @param {string} text
- * @returns {Record<string, string>}
- */
-function parseHeadersJson(text) {
-    if (typeof text !== 'string') {
-        throw new Error('mcp headers: string required');
-    }
-    const trimmed = text.trim();
-    if (trimmed.length === 0) {
-        return {};
-    }
-    const parsed = JSON.parse(trimmed);
-    if (!isPlainObject(parsed)) {
-        throw new Error('mcp headers: JSON must be an object');
-    }
-    const out = {};
-    for (const [k, v] of Object.entries(parsed)) {
-        if (typeof v === 'string') {
-            out[k] = v;
-        } else {
-            throw new Error('mcp headers: every value must be a string');
-        }
-    }
-    return out;
-}
 
 export class FlowsMcpServersModal extends PlatformModal {
     static modalKind = 'flows.mcp_servers';
@@ -528,7 +490,7 @@ export class FlowsMcpServersModal extends PlatformModal {
             url: '',
             transport_type: 'http',
             description: '',
-            headers_json: '{}',
+            headers: {},
         };
         this._formError = null;
         this._testFeedback = null;
@@ -1012,7 +974,7 @@ export class FlowsMcpServersModal extends PlatformModal {
             url: '',
             transport_type: 'http',
             description: '',
-            headers_json: '{}',
+            headers: {},
         };
     }
 
@@ -1040,14 +1002,14 @@ export class FlowsMcpServersModal extends PlatformModal {
         this._editing = s.server_id;
         this._formError = null;
         const h = s.headers;
-        const headersStr = isPlainObject(h) ? headersObjectToJsonString(h) : '{}';
+        const headers = isPlainObject(h) ? { ...h } : {};
         this._form = {
             server_id: s.server_id,
             name: s.name,
             url: s.url,
             transport_type: normalizeMcpTransportType(s.transport_type),
             description: asString(s.description),
-            headers_json: headersStr,
+            headers,
         };
     }
 
@@ -1114,13 +1076,17 @@ export class FlowsMcpServersModal extends PlatformModal {
         if (!this._formCanSave()) {
             return;
         }
-        let headers;
-        try {
-            headers = parseHeadersJson(f.headers_json);
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : 'mcp headers parse';
-            this._formError = msg;
-            return;
+        const headersRaw = f.headers;
+        if (!isPlainObject(headersRaw)) {
+            throw new Error('flows-mcp-servers-modal: form.headers must be an object');
+        }
+        /** @type {Record<string, string>} */
+        const headers = {};
+        for (const [key, val] of Object.entries(headersRaw)) {
+            if (typeof val !== 'string') {
+                throw new Error('flows-mcp-servers-modal: header values must be strings');
+            }
+            headers[key] = val;
         }
         this._formError = null;
         this._saving = true;
@@ -1284,11 +1250,11 @@ export class FlowsMcpServersModal extends PlatformModal {
 
     _applyPreset(preset) {
         if (preset === 'bearer') {
-            this._form = { ...this._form, headers_json: HEADER_PRESET_BEARER };
+            this._form = { ...this._form, headers: { ...HEADER_PRESET_BEARER } };
         } else if (preset === 'apikey') {
-            this._form = { ...this._form, headers_json: HEADER_PRESET_API_KEY };
+            this._form = { ...this._form, headers: { ...HEADER_PRESET_API_KEY } };
         } else if (preset === 'basic') {
-            this._form = { ...this._form, headers_json: HEADER_PRESET_BASIC };
+            this._form = { ...this._form, headers: { ...HEADER_PRESET_BASIC } };
         }
         this._formError = null;
     }
@@ -1686,7 +1652,6 @@ export class FlowsMcpServersModal extends PlatformModal {
         const phName = isEdit ? '' : this.t('mcp_servers_modal.placeholder_name');
         const phUrl = isEdit ? '' : this.t('mcp_servers_modal.placeholder_url');
         const phDesc = isEdit ? '' : this.t('mcp_servers_modal.placeholder_description');
-        const phHeaders = isEdit ? '' : this.t('mcp_servers_modal.placeholder_headers');
         const transportEnumConfig = {
             values: TRANSPORT_TYPES.map((t) => ({
                 value: t,
@@ -1806,20 +1771,21 @@ export class FlowsMcpServersModal extends PlatformModal {
                             `,
                         )}
                     </div>
-                    <platform-field
-                        type="text"
-                        mode="edit"
-                        .value=${f.headers_json}
-                        placeholder=${phHeaders}
+                    <flows-http-headers-editor
+                        .value=${isPlainObject(f.headers) ? f.headers : {}}
                         @change=${(e) => {
-                            const v = e.detail.value;
-                            if (typeof v !== 'string') {
-                                throw new TypeError('flows-mcp-servers-modal: headers_json expects string detail.value');
+                            const d = e.detail;
+                            if (d === null || typeof d !== 'object' || !('value' in d)) {
+                                throw new TypeError('flows-mcp-servers-modal: headers change detail.value');
                             }
-                            this._form = { ...this._form, headers_json: v };
+                            const headers = d.value;
+                            if (!isPlainObject(headers)) {
+                                throw new TypeError('flows-mcp-servers-modal: headers must be an object');
+                            }
+                            this._form = { ...this._form, headers };
                             this._formError = null;
                         }}
-                    ></platform-field>
+                    ></flows-http-headers-editor>
                 </div>
                 ${this._formError
                     ? html`<div class="mcp-form-err" role="alert">${this._formError}</div>`

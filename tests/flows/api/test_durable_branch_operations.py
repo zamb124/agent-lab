@@ -50,6 +50,10 @@ def _assert_branch_result(body: JsonObject, *, expected_reason: ExecutionBranchR
     assert result.execution_branch_id
     assert result.state_hash
     assert result.snapshot_id
+    assert result.effect.source_execution_branch_id
+    assert result.effect.source_sequence >= 0
+    assert result.effect.source_events_after_base >= 0
+    assert result.effect.auto_resumes_run is False
     return result
 
 
@@ -176,6 +180,12 @@ async def test_fork_returns_200_with_branch_result(
         _branch_response_payload(response, "fork response"),
         expected_reason=ExecutionBranchReason.fork,
     )
+    fork_result = WorkflowBranchResult.model_validate(
+        _branch_response_payload(response, "fork response")
+    )
+    assert fork_result.effect.activates_head is False
+    assert fork_result.effect.source_sequence == 1
+    assert fork_result.effect.source_events_after_base == 2
 
 
 async def test_rewind_returns_200_with_branch_result(
@@ -201,6 +211,10 @@ async def test_rewind_returns_200_with_branch_result(
         _branch_response_payload(response, "rewind response"),
         expected_reason=ExecutionBranchReason.rewind,
     )
+    assert body.effect.activates_head is True
+    assert body.effect.source_sequence == 2
+    assert body.effect.source_events_after_base == 1
+    assert body.effect.instance_status.value == "running"
 
     with_system_context()
     try:

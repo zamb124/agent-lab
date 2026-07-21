@@ -120,6 +120,59 @@ describe('flows-chat A2A runtime', () => {
         expect(mapped.events[2].payload.event.payload.file_id).toBe('f1');
     });
 
+    it('maps platform.reflection_resolved ui_event to reflection_resolved verb', () => {
+        const mapped = mapA2aResultToChatRuntimeEvents(
+            {
+                artifactUpdate: {
+                    taskId: 't-refl',
+                    contextId: 'ctx-refl',
+                    artifact: {
+                        name: 'ui_event',
+                        parts: [
+                            {
+                                data: {
+                                    id: 'ev-refl',
+                                    type: 'platform.reflection_resolved',
+                                    payload: {
+                                        node_id: 'reflection_1',
+                                        exit_id: 'blocked',
+                                        exit_label: 'Blocked',
+                                        approved: false,
+                                        decision: 'blocked',
+                                        summary: 'Unsafe answer',
+                                        blocked_reasons: ['decision:blocked'],
+                                        issues: [{
+                                            criterion_id: 'clarity',
+                                            severity: 'error',
+                                            finding: 'Too vague',
+                                        }],
+                                    },
+                                    timestamp: '2026-07-21T00:00:00Z',
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+            { contextId: 'ctx-refl', currentTaskId: null, taskPrimed: false },
+        );
+
+        expect(mapped.events.map((e) => e.type)).toEqual([
+            'task_started',
+            'ui_event',
+            'reflection_resolved',
+        ]);
+        expect(mapped.events[2].payload).toMatchObject({
+            task_id: 't-refl',
+            context_id: 'ctx-refl',
+            node_id: 'reflection_1',
+            exit_id: 'blocked',
+            exit_label: 'Blocked',
+            approved: false,
+            summary: 'Unsafe answer',
+        });
+    });
+
     it('normalizes input-required interrupt details for all chat hosts', () => {
         const details = inputRequiredFieldsFromA2a(
             { parts: [{ text: 'Authorize please' }] },

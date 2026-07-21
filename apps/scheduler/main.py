@@ -47,7 +47,9 @@ PLATFORM_SCHEDULES_GC_TASK_NAME = "platform_schedules_gc_tick"
 REDIS_INVENTORY_TASK_NAME = "redis_inventory_tick"
 MCP_CATALOG_CRAWL_TASK_NAME = "mcp_catalog_crawl_task"
 MCP_CATALOG_RESYNC_TOOLS_TASK_NAME = "mcp_catalog_resync_tools_task"
+TOOL_TAG_GROUPS_DESCRIBE_TASK_NAME = "tool_tag_groups_describe_tick"
 CRM_RECONCILE_DAILY_SUMMARY_CRON = "0 * * * *"
+TOOL_TAG_GROUPS_DESCRIBE_CRON = "0 3 * * *"
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
 LLM_MODELS_SYNC_PAYLOAD_MARKER = "llm_models_background_sync"
 PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER = "platform_free_models_background_sync"
@@ -592,6 +594,13 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         task_name=MCP_CATALOG_RESYNC_TOOLS_TASK_NAME,
         cron=settings.mcp_catalog.resync_tools_cron,
         log_label="MCP catalog resync tools",
+    )
+    await _ensure_calendar_schedule(
+        container=container,
+        config_enabled=not is_testing(),
+        task_name=TOOL_TAG_GROUPS_DESCRIBE_TASK_NAME,
+        cron=TOOL_TAG_GROUPS_DESCRIBE_CRON,
+        log_label="Tool tag groups describe",
     )
     cfg = settings.rag.ttl
     await _ensure_rag_ttl_cleanup_schedule(

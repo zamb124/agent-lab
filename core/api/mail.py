@@ -269,12 +269,13 @@ async def get_mail_thread(
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
             raise MailConfigError("active_company is required for mail operations")
-        await enqueue_mail_mark_seen(
-            company_id=ctx.active_company.company_id,
-            mailbox_binding_id=payload.mailbox_binding_id,
-            folder=payload.folder,
-            uid=payload.uid,
-        )
+        for uid in result.marked_seen_uids:
+            await enqueue_mail_mark_seen(
+                company_id=ctx.active_company.company_id,
+                mailbox_binding_id=payload.mailbox_binding_id,
+                folder=payload.folder,
+                uid=uid,
+            )
         return result
     except Exception as exc:
         _raise_http_for_mail_error(exc)

@@ -1280,6 +1280,8 @@ class TestChannelRegistry:
         registry = create_default_channel_registry()
         assert registry.has(ChannelType.TELEGRAM)
         assert registry.has(ChannelType.WEBHOOK)
+        assert registry.has(ChannelType.EMAIL)
+        assert registry.has(ChannelType.SMS)
 
     def test_get_telegram_handler(self):
         """Можно получить TelegramChannelHandler."""
@@ -1300,14 +1302,24 @@ class TestChannelRegistry:
         assert isinstance(handler, TelegramChannelHandler)
         assert registry.has("telegram")
 
-    def test_unknown_channel_raises(self):
-        """Неизвестный канал вызывает ошибку."""
-        from apps.flows.src.channels import create_default_channel_registry
+    def test_get_sms_handler(self):
+        """Можно получить SmsChannelHandler."""
+        from apps.flows.src.channels import SmsChannelHandler, create_default_channel_registry
         from apps.flows.src.models.enums import ChannelType
 
         registry = create_default_channel_registry()
+        handler = registry.get(ChannelType.SMS)
+        assert isinstance(handler, SmsChannelHandler)
+        assert handler.channel_type == ChannelType.SMS
+
+    def test_unknown_channel_raises(self):
+        """Неизвестный канал вызывает ошибку."""
+        from apps.flows.src.channels import ChannelRegistry
+        from apps.flows.src.models.enums import ChannelType
+
+        registry = ChannelRegistry()
         with pytest.raises(ValueError, match="Unknown channel"):
-            registry.get(ChannelType.SMS)
+            registry.get(ChannelType.TELEGRAM)
 
 
 class TestOutputAction:

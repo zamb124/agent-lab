@@ -15,6 +15,7 @@ from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
+    PLATFORM_ASSISTANT_SEED_SKILL_IDS,
     seed_platform_assistant_skills,
 )
 from core.clients.llm.mock import MockLLM, MockLLMQueuedResponse
@@ -115,7 +116,7 @@ async def _seed_lara_skills(container: FlowContainer) -> None:
         container.files_service,
         "system",
     )
-    assert seeded == 23
+    assert seeded == len(PLATFORM_ASSISTANT_SEED_SKILL_IDS)
 
 
 async def _run_lara(

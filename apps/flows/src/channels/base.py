@@ -1,7 +1,7 @@
 """
 BaseChannel - абстрактный базовый класс для каналов коммуникации.
 
-Каждый канал (A2A, Telegram, WhatsApp) реализует этот интерфейс.
+Каждый канал (A2A, Telegram и др.) реализует этот интерфейс.
 Содержит основную логику выполнения задач и стриминга событий.
 """
 
@@ -185,11 +185,11 @@ class BaseChannel(ABC):
     """
     Абстрактный базовый класс канала коммуникации.
 
-    Определяет интерфейс для всех каналов: A2A, Telegram, WhatsApp и др.
+    Определяет интерфейс для всех каналов: A2A, Telegram и др.
     Содержит основную логику выполнения задач.
     """
 
-    name: str  # Имя канала: "a2a", "telegram", "whatsapp"
+    name: str  # Имя канала: "a2a", "telegram", …
 
     def __init__(
         self,
@@ -2090,6 +2090,7 @@ class BaseChannelHandler(ABC):
         params: JsonObject,
         config: JsonObject,
         variables: JsonObject,
+        state: ExecutionState | JsonObject | None = None,
     ) -> JsonObject:
         """
         Универсальный диспетчер действий.
@@ -2101,10 +2102,12 @@ class BaseChannelHandler(ABC):
             params: Параметры действия (recipient, text, photo, etc)
             config: Конфигурация канала
             variables: Переменные для резолвинга
+            state: ExecutionState (или mapping) — нужен SMS для @state: в body_template
 
         Возвращает:
             Результат выполнения действия
         """
+        _ = state
         recipient = self._require_str_param(params, "recipient")
         if action == "send_message":
             text = self._require_str_param(params, "text")

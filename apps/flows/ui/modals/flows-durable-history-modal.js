@@ -1,5 +1,5 @@
 /**
- * flows-durable-history-modal — ledger durable workflow, ветки и команды time-travel.
+ * flows-durable-history-modal — журнал durable workflow, lineage веток и time-travel.
  */
 
 import { html, css, nothing } from 'lit';
@@ -13,6 +13,15 @@ import '@platform/lib/components/platform-work-item-badge.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/editors/flows-code-editor.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
+import {
+    durableBranchReasonKey,
+    durableEventPhase,
+    durableEventSubtitleFromPayload,
+    durableEventTitleKey,
+    formatDurableBranchLabel,
+    isDurableFailedEventType,
+    isDurableTerminalEventType,
+} from '../_helpers/flows-durable-event-copy.js';
 
 const NODE_FAILED_EVENT_TYPE = 'NodeFailed';
 
@@ -75,6 +84,16 @@ function optionalHash(value, context) {
     return value;
 }
 
+function optionalParentBranchId(value) {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    if (typeof value !== 'string' || value.length === 0) {
+        throw new Error('flows-durable-history-modal: parent_execution_branch_id string or null required');
+    }
+    return value;
+}
+
 function durableEvent(value) {
     const row = requireRecord(value, 'durable event');
     return {
@@ -94,6 +113,7 @@ function durableBranch(value) {
     const row = requireRecord(value, 'durable branch');
     return {
         execution_branch_id: requireString(row.execution_branch_id, 'branch execution_branch_id'),
+        parent_execution_branch_id: optionalParentBranchId(row.parent_execution_branch_id),
         base_sequence: requireInteger(row.base_sequence, 'branch base_sequence'),
         reason: optionalString(row.reason, 'branch reason'),
         is_active: row.is_active === true,
@@ -128,24 +148,76 @@ function commandExecutionBranchId(value) {
     return optionalString(record.execution_branch_id, 'command execution_branch_id');
 }
 
-function formatBranchLabel(branchId) {
-    if (branchId.length <= 14) {
-        return branchId;
+function commandEffect(value) {
+    const record = optionalResultRecord(value, 'command result');
+    if (record === null) {
+        return null;
     }
-    return `${branchId.slice(0, 8)}...${branchId.slice(-4)}`;
+    const effect = record.effect;
+    if (effect === null || effect === undefined) {
+        return null;
+    }
+    const row = requireRecord(effect, 'command effect');
+    return {
+        activates_head: row.activates_head === true,
+        source_execution_branch_id: requireString(
+            row.source_execution_branch_id,
+            'effect source_execution_branch_id',
+        ),
+        source_sequence: requireInteger(row.source_sequence, 'effect source_sequence'),
+        source_events_after_base: requireInteger(
+            row.source_events_after_base,
+            'effect source_events_after_base',
+        ),
+        instance_status: optionalString(row.instance_status, 'effect instance_status'),
+        auto_resumes_run: row.auto_resumes_run === true,
+    };
 }
 
-function nonEmptyField(source, keys) {
-    for (const key of keys) {
-        const value = source[key];
-        if (typeof value === 'string' && value.length > 0) {
-            return value;
+/**
+ * Order branches as a forest walk: roots first, then children by created order in list.
+ * @param {ReturnType<typeof durableBranch>[]} branches
+ */
+function orderBranchesLineage(branches) {
+    const byId = new Map();
+    for (const branch of branches) {
+        byId.set(branch.execution_branch_id, branch);
+    }
+    const children = new Map();
+    const roots = [];
+    for (const branch of branches) {
+        const parentId = branch.parent_execution_branch_id;
+        if (parentId === null || !byId.has(parentId)) {
+            roots.push(branch);
+            continue;
         }
-        if (Number.isInteger(value)) {
-            return String(value);
+        const list = children.get(parentId);
+        if (list === undefined) {
+            children.set(parentId, [branch]);
+        } else {
+            list.push(branch);
         }
     }
-    return '';
+    const ordered = [];
+    const visit = (branch, depth) => {
+        ordered.push({ branch, depth });
+        const kids = children.get(branch.execution_branch_id);
+        if (kids === undefined) {
+            return;
+        }
+        for (const child of kids) {
+            visit(child, depth + 1);
+        }
+    };
+    for (const root of roots) {
+        visit(root, 0);
+    }
+    for (const branch of branches) {
+        if (!ordered.some((row) => row.branch.execution_branch_id === branch.execution_branch_id)) {
+            ordered.push({ branch, depth: 0 });
+        }
+    }
+    return ordered;
 }
 
 export class FlowsDurableHistoryModal extends PlatformModal {
@@ -161,6 +233,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         _stateJson: { type: Object, state: true },
         _stateEditText: { type: String, state: true },
         _lastCommandResult: { type: Object, state: true },
+        _showOutcome: { type: Boolean, state: true },
     };
 
     static styles = [
@@ -168,21 +241,23 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         css`
             :host {
                 --modal-width: min(1480px, calc(100vw - 24px));
+                --durable-json-min-height: min(560px, 55vh);
+                --durable-main-min-height: min(720px, 70vh);
             }
             :host .modal.full .modal-content,
             :host .modal.fullscreen .modal-content {
-                display: flex;
-                flex-direction: column;
+                display: block;
                 min-height: 0;
-                overflow: hidden;
+                overflow-x: hidden;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
             }
             .durable-history-body {
-                flex: 1 1 auto;
-                min-height: 0;
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
-                overflow: hidden;
+                min-height: 0;
+                overflow: visible;
             }
             .durable-history-loading,
             .durable-history-empty,
@@ -200,18 +275,27 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 white-space: pre-wrap;
                 overflow-wrap: anywhere;
             }
-            .durable-toolbar {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) auto;
-                gap: var(--space-3);
-                align-items: start;
+            .lineage-panel {
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--glass-solid-subtle);
+                padding: var(--space-3);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
                 min-width: 0;
             }
-            .branch-strip {
+            .lineage-head {
                 display: flex;
                 align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+            }
+            .lineage-list {
+                display: flex;
                 flex-wrap: wrap;
                 gap: var(--space-2);
+                align-items: center;
                 min-width: 0;
             }
             article.branch-chip,
@@ -220,20 +304,18 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 font: inherit;
                 box-sizing: border-box;
             }
-
             .branch-chip {
                 display: inline-flex;
                 align-items: center;
                 gap: var(--space-1);
-                max-width: 240px;
-                min-height: 32px;
+                max-width: 280px;
+                min-height: 34px;
                 padding: 0 var(--space-2);
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
+                background: var(--glass-solid-medium);
                 color: var(--text-secondary);
                 cursor: pointer;
-                font-family: var(--font-mono);
                 font-size: var(--text-xs);
             }
             .branch-chip:hover,
@@ -242,53 +324,74 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 color: var(--text-primary);
                 background: color-mix(in srgb, var(--accent) 11%, var(--glass-solid-subtle));
             }
+            .branch-chip__indent {
+                color: var(--text-tertiary);
+                font-family: var(--font-mono);
+                letter-spacing: -0.04em;
+            }
             .branch-chip__label {
                 min-width: 0;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
+                font-family: var(--font-mono);
             }
             .branch-chip__meta {
                 color: var(--text-tertiary);
                 font-family: var(--font-sans);
+                white-space: nowrap;
             }
             .branch-chip__active {
-                width: 7px;
-                height: 7px;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 0 6px;
+                min-height: 18px;
+                border-radius: var(--radius-full);
+                background: color-mix(in srgb, var(--success) 22%, transparent);
+                color: var(--success);
+                font-size: 10px;
+                font-weight: var(--font-semibold);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            .branch-chip__active-dot {
+                width: 6px;
+                height: 6px;
                 border-radius: var(--radius-full);
                 background: var(--success);
-                flex: 0 0 auto;
             }
             .durable-summary {
-                display: flex;
-                align-items: center;
-                justify-content: flex-end;
-                gap: var(--space-2);
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
-                text-align: right;
-                min-width: 0;
+                white-space: nowrap;
             }
             .durable-main {
-                flex: 1 1 auto;
-                min-height: 0;
                 display: grid;
-                grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.35fr);
+                grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.4fr);
                 gap: var(--space-3);
-                overflow: hidden;
+                align-items: start;
+                min-height: var(--durable-main-min-height);
+                overflow: visible;
             }
             .timeline-panel,
             .detail-panel {
                 min-width: 0;
-                min-height: 0;
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-lg);
                 background: var(--glass-solid-subtle);
-                overflow: hidden;
-            }
-            .timeline-panel {
+                overflow: visible;
                 display: flex;
                 flex-direction: column;
+            }
+            .timeline-panel {
+                position: sticky;
+                top: 0;
+                max-height: calc(100vh - 120px);
+                overflow: hidden;
+            }
+            .detail-panel {
+                min-height: var(--durable-main-min-height);
             }
             .timeline-head,
             .detail-head {
@@ -323,7 +426,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             .event-row {
                 width: 100%;
                 display: grid;
-                grid-template-columns: 58px minmax(0, 1fr);
+                grid-template-columns: 52px minmax(0, 1fr);
                 gap: var(--space-2);
                 padding: 10px var(--space-3);
                 border: none;
@@ -358,12 +461,48 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 flex-direction: column;
                 gap: 2px;
             }
-            .event-type {
+            .event-title-row {
+                display: flex;
+                align-items: baseline;
+                gap: var(--space-2);
+                min-width: 0;
+                flex-wrap: wrap;
+            }
+            .event-title {
                 color: var(--text-primary);
                 font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 line-height: 1.35;
-                overflow-wrap: anywhere;
+            }
+            .event-type-tech {
+                color: var(--text-tertiary);
+                font-family: var(--font-mono);
+                font-size: var(--text-xs);
+            }
+            .event-phase {
+                display: inline-flex;
+                align-items: center;
+                min-height: 18px;
+                padding: 0 6px;
+                border-radius: var(--radius-sm);
+                background: var(--glass-tint-subtle);
+                color: var(--text-secondary);
+                font-size: 10px;
+                font-weight: var(--font-semibold);
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+            }
+            .event-phase--fail {
+                color: var(--error);
+                background: color-mix(in srgb, var(--error) 14%, transparent);
+            }
+            .event-phase--terminal {
+                color: var(--success);
+                background: color-mix(in srgb, var(--success) 14%, transparent);
+            }
+            .event-phase--branch {
+                color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 14%, transparent);
             }
             .event-subtitle {
                 color: var(--text-secondary);
@@ -376,26 +515,92 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 font-size: var(--text-xs);
                 line-height: 1.3;
             }
-            .detail-panel {
+            .inspector-scroll {
                 display: flex;
                 flex-direction: column;
+                gap: var(--space-3);
+                padding: var(--space-3);
+                overflow: visible;
             }
-            .detail-actions {
-                display: inline-flex;
-                flex-wrap: wrap;
-                justify-content: flex-end;
+            .info-card {
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-medium);
+                padding: var(--space-3);
+                display: flex;
+                flex-direction: column;
                 gap: var(--space-2);
             }
-            .detail-tabs {
-                padding: var(--space-2) var(--space-3);
-                border-bottom: 1px solid var(--border-subtle);
+            .info-card--warning {
+                border-color: color-mix(in srgb, var(--warning) 45%, var(--border-subtle));
+                background: color-mix(in srgb, var(--warning) 8%, var(--glass-solid-medium));
+            }
+            .info-card--success {
+                border-color: color-mix(in srgb, var(--success) 40%, var(--border-subtle));
+            }
+            .info-card__title {
+                color: var(--text-primary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            .info-card__body {
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                line-height: 1.45;
+                white-space: pre-wrap;
+            }
+            .info-card__list {
+                margin: 0;
+                padding-left: 1.1em;
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                line-height: 1.5;
+            }
+            .action-rail {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+            .action-rail__row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                align-items: stretch;
+            }
+            .action-rail platform-button {
+                flex: 0 1 auto;
+            }
+            .action-hint {
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                line-height: 1.35;
+            }
+            .advanced-block {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                min-height: var(--durable-json-min-height);
+                flex: 1 1 auto;
+            }
+            .advanced-block__title {
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
             }
             .detail-content {
                 flex: 1 1 auto;
-                min-height: 0;
+                min-height: var(--durable-json-min-height);
+                height: var(--durable-json-min-height);
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
             }
             .state-empty {
                 flex: 1 1 auto;
@@ -412,28 +617,22 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 font-family: var(--font-mono);
             }
             @media (max-width: 920px) {
-                .durable-toolbar {
-                    grid-template-columns: 1fr;
-                }
-                .durable-summary {
-                    justify-content: flex-start;
-                    text-align: left;
-                }
                 .durable-main {
                     grid-template-columns: 1fr;
+                    min-height: 0;
+                }
+                .timeline-panel {
+                    position: static;
+                    max-height: min(420px, 45vh);
+                }
+                .detail-panel {
+                    min-height: 0;
                 }
             }
             @media (max-width: 620px) {
                 .event-row {
                     grid-template-columns: 44px minmax(0, 1fr);
                     padding: 9px var(--space-2);
-                }
-                .detail-head {
-                    flex-direction: column;
-                    align-items: stretch;
-                }
-                .detail-actions {
-                    justify-content: flex-start;
                 }
             }
         `,
@@ -449,6 +648,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         this._stateJson = null;
         this._stateEditText = '';
         this._lastCommandResult = null;
+        this._showOutcome = false;
         this._historyOp = this.useOp('flows/durable_history');
         this._branchesOp = this.useOp('flows/durable_branches');
         this._stateAtOp = this.useOp('flows/durable_state_at');
@@ -470,6 +670,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             this._stateJson = null;
             this._stateEditText = '';
             this._lastCommandResult = null;
+            this._showOutcome = false;
             void this._loadAll();
         }
     }
@@ -511,6 +712,20 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             return this._selectedBranchId;
         }
         return this._activeBranchId();
+    }
+
+    _eventsAfterSelected() {
+        const event = this._selectedEvent();
+        if (event === null) {
+            return 0;
+        }
+        let count = 0;
+        for (const row of this._historyEvents()) {
+            if (row.sequence > event.sequence) {
+                count += 1;
+            }
+        }
+        return count;
     }
 
     async _loadAll() {
@@ -593,6 +808,18 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         this._selectedTab = 'payload';
         this._stateJson = null;
         this._stateEditText = '';
+        this._showOutcome = false;
+    }
+
+    _setBranch(branch) {
+        const row = durableBranch(branch);
+        this._selectedBranchId = row.execution_branch_id;
+        this._selectedEventId = '';
+        this._selectedTab = 'payload';
+        this._stateJson = null;
+        this._stateEditText = '';
+        this._showOutcome = false;
+        void this._loadHistory();
     }
 
     _eventWorkItemId(event) {
@@ -605,15 +832,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
     }
 
     _eventSubtitle(event) {
-        return nonEmptyField(event.payload, [
-            'node_id',
-            'node_type',
-            'activity_id',
-            'activity_type',
-            'child_session_id',
-            'handoff_command_id',
-            'source_execution_branch_id',
-        ]);
+        return durableEventSubtitleFromPayload(event.payload);
     }
 
     _formatCreatedAt(event) {
@@ -632,14 +851,24 @@ export class FlowsDurableHistoryModal extends PlatformModal {
     }
 
     _eventClass(event, selectedEventId) {
-        const eventType = event.event_type;
-        const eventId = event.event_id;
         let cls = 'event-row';
-        if (eventId.length > 0 && eventId === selectedEventId) {
+        if (event.event_id.length > 0 && event.event_id === selectedEventId) {
             cls += ' event-row--selected';
         }
-        if (eventType.endsWith('Failed') || eventType === NODE_FAILED_EVENT_TYPE) {
+        if (isDurableFailedEventType(event.event_type)) {
             cls += ' event-row--failed';
+        }
+        return cls;
+    }
+
+    _phaseClass(phase) {
+        let cls = 'event-phase';
+        if (phase === 'fail') {
+            cls += ' event-phase--fail';
+        } else if (phase === 'terminal') {
+            cls += ' event-phase--terminal';
+        } else if (phase === 'branch') {
+            cls += ' event-phase--branch';
         }
         return cls;
     }
@@ -648,22 +877,29 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         return event.event_type === NODE_FAILED_EVENT_TYPE;
     }
 
+    _isLastEvent(event) {
+        const events = this._historyEvents();
+        if (events.length === 0) {
+            return false;
+        }
+        return events[events.length - 1].event_id === event.event_id;
+    }
+
     async _loadSelectedState() {
         const event = this._selectedEvent();
         if (event === null) {
             return;
         }
-        const sequence = event.sequence;
-        const executionBranchId = event.execution_branch_id;
         const result = await this._stateAtOp.run({
             session_id: this._sessionId(),
-            sequence,
-            execution_branch_id: executionBranchId,
+            sequence: event.sequence,
+            execution_branch_id: event.execution_branch_id,
         });
         const state = requireRecord(result, 'state projection');
         this._stateJson = state;
         this._stateEditText = formatJsonPretty(state);
         this._selectedTab = 'state';
+        this._showOutcome = false;
     }
 
     _onStateEdit(e) {
@@ -700,14 +936,28 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         }
     }
 
+    async _applyCommandResult(result, toastKey) {
+        this._lastCommandResult = result;
+        this._showOutcome = true;
+        this._selectedTab = 'command';
+        const branchId = commandExecutionBranchId(result);
+        if (branchId.length > 0) {
+            this._selectedBranchId = branchId;
+        }
+        await this._loadAll();
+        this.toast(toastKey, { type: 'success' });
+    }
+
     async _forkSelected() {
         const event = this._selectedEvent();
         if (event === null) {
             return;
         }
+        const eventsAfter = this._eventsAfterSelected();
         const ok = await platformConfirm(
             this.t('durable_history_modal.confirm_fork_message', {
                 sequence: String(event.sequence),
+                eventsAfter: String(eventsAfter),
             }),
             {
                 title: this.t('durable_history_modal.confirm_fork_title'),
@@ -724,14 +974,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             execution_branch_id: event.execution_branch_id,
             activate: false,
         });
-        this._lastCommandResult = result;
-        const branchId = commandExecutionBranchId(result);
-        if (branchId.length > 0) {
-            this._selectedBranchId = branchId;
-        }
-        this._selectedTab = 'command';
-        await this._loadAll();
-        this.toast('flows:durable_history_modal.toast_fork_created', { type: 'success' });
+        await this._applyCommandResult(result, 'flows:durable_history_modal.toast_fork_created');
     }
 
     async _rewindSelected() {
@@ -739,9 +982,16 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         if (event === null) {
             return;
         }
+        const eventsAfter = this._eventsAfterSelected();
+        const terminalWarning = isDurableTerminalEventType(event.event_type) && this._isLastEvent(event)
+            ? this.t('durable_history_modal.confirm_rewind_terminal_warning')
+            : '';
         const ok = await platformConfirm(
             this.t('durable_history_modal.confirm_rewind_message', {
                 sequence: String(event.sequence),
+                sequencePlus: String(event.sequence + 1),
+                eventsAfter: String(eventsAfter),
+                terminalWarning,
             }),
             {
                 title: this.t('durable_history_modal.confirm_rewind_title'),
@@ -759,14 +1009,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             sequence: event.sequence,
             execution_branch_id: event.execution_branch_id,
         });
-        this._lastCommandResult = result;
-        const branchId = commandExecutionBranchId(result);
-        if (branchId.length > 0) {
-            this._selectedBranchId = branchId;
-        }
-        this._selectedTab = 'command';
-        await this._loadAll();
-        this.toast('flows:durable_history_modal.toast_rewind_done', { type: 'success' });
+        await this._applyCommandResult(result, 'flows:durable_history_modal.toast_rewind_done');
     }
 
     async _retrySelectedFailure() {
@@ -792,14 +1035,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             failed_sequence: event.sequence,
             execution_branch_id: event.execution_branch_id,
         });
-        this._lastCommandResult = result;
-        const branchId = commandExecutionBranchId(result);
-        if (branchId.length > 0) {
-            this._selectedBranchId = branchId;
-        }
-        this._selectedTab = 'command';
-        await this._loadAll();
-        this.toast('flows:durable_history_modal.toast_retry_created', { type: 'success' });
+        await this._applyCommandResult(result, 'flows:durable_history_modal.toast_retry_created');
     }
 
     async _manualPatchSelected() {
@@ -807,9 +1043,9 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         if (event === null || this._stateJson === null) {
             return;
         }
-        let state;
+        let parsed;
         try {
-            state = JSON.parse(this._stateEditText);
+            parsed = JSON.parse(this._stateEditText);
         } catch (err) {
             this.toast('flows:durable_history_modal.toast_patch_invalid', {
                 type: 'error',
@@ -817,7 +1053,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             });
             return;
         }
-        if (!isRecord(state)) {
+        if (!isRecord(parsed)) {
             this.toast('flows:durable_history_modal.toast_patch_invalid', {
                 type: 'error',
                 vars: { detail: this.t('durable_history_modal.patch_requires_object') },
@@ -842,55 +1078,106 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             session_id: this._sessionId(),
             sequence: event.sequence,
             execution_branch_id: event.execution_branch_id,
-            state,
+            state: parsed,
             activate: true,
         });
-        this._lastCommandResult = result;
-        const branchId = commandExecutionBranchId(result);
-        if (branchId.length > 0) {
-            this._selectedBranchId = branchId;
+        await this._applyCommandResult(result, 'flows:durable_history_modal.toast_patch_applied');
+    }
+
+    _detailTabItems() {
+        return [
+            { value: 'payload', label: this.t('durable_history_modal.tab_payload') },
+            { value: 'delta', label: this.t('durable_history_modal.tab_delta') },
+            { value: 'state', label: this.t('durable_history_modal.tab_state') },
+            { value: 'hashes', label: this.t('durable_history_modal.tab_hashes') },
+            { value: 'command', label: this.t('durable_history_modal.tab_command') },
+        ];
+    }
+
+    _detailJsonValue() {
+        const event = this._selectedEvent();
+        if (this._selectedTab === 'state') {
+            return this._stateJson;
         }
-        this._selectedTab = 'command';
-        await this._loadAll();
-        this.toast('flows:durable_history_modal.toast_patch_applied', { type: 'success' });
+        if (this._selectedTab === 'command') {
+            return this._lastCommandResult;
+        }
+        if (event === null) {
+            return null;
+        }
+        if (this._selectedTab === 'delta') {
+            return event.state_delta;
+        }
+        if (this._selectedTab === 'hashes') {
+            return {
+                prev_state_hash: event.prev_state_hash,
+                next_state_hash: event.next_state_hash,
+                execution_branch_id: event.execution_branch_id,
+                sequence: event.sequence,
+            };
+        }
+        return {
+            event_id: event.event_id,
+            session_id: this._sessionId(),
+            execution_branch_id: event.execution_branch_id,
+            sequence: event.sequence,
+            event_type: event.event_type,
+            created_at: event.created_at,
+            prev_state_hash: event.prev_state_hash,
+            next_state_hash: event.next_state_hash,
+            payload: event.payload,
+        };
     }
 
-    _setBranch(branch) {
-        const branchId = durableBranch(branch).execution_branch_id;
-        this._selectedBranchId = branchId;
-        this._selectedEventId = '';
-        this._selectedTab = 'payload';
-        this._stateJson = null;
-        this._stateEditText = '';
-        void this._loadHistory();
-    }
-
-    _renderBranches() {
+    _renderLineage() {
         const branches = this._branches();
         const selectedBranchId = this._selectedBranchOrActive();
         if (branches.length === 0) {
             return nothing;
         }
+        const ordered = orderBranchesLineage(branches);
         return html`
-            <div class="branch-strip">
-                ${branches.map((branch) => {
-                    const selected = branch.execution_branch_id === selectedBranchId;
-                    return html`
-                        <article
-                            tabindex="0"
-                            role="button"
-                            class=${selected ? 'branch-chip branch-chip--selected' : 'branch-chip'}
-                            title=${branch.execution_branch_id}
-                            @click=${() => this._setBranch(branch)}
-                            @keydown=${(event) => this._onSelectableKeydown(event, () => this._setBranch(branch))}
-                        >
-                            ${branch.is_active === true ? html`<span class="branch-chip__active"></span>` : nothing}
-                            <span class="branch-chip__label">${formatBranchLabel(branch.execution_branch_id)}</span>
-                            <span class="branch-chip__meta">${branch.reason} @${branch.base_sequence}</span>
-                        </article>
-                    `;
-                })}
-            </div>
+            <section class="lineage-panel" aria-label=${this.t('durable_history_modal.lineage_title')}>
+                <div class="lineage-head">
+                    <div class="panel-title">${this.t('durable_history_modal.lineage_title')}</div>
+                    <div class="durable-summary">
+                        ${this.t('durable_history_modal.summary_events', {
+                            count: String(this._historyTotal(this._historyEvents())),
+                        })}
+                    </div>
+                </div>
+                <div class="lineage-list">
+                    ${ordered.map(({ branch, depth }) => {
+                        const selected = branch.execution_branch_id === selectedBranchId;
+                        const reasonKey = durableBranchReasonKey(branch.reason);
+                        const indent = depth > 0 ? `${'·'.repeat(Math.min(depth, 4))} ` : '';
+                        return html`
+                            <article
+                                tabindex="0"
+                                role="button"
+                                class=${selected ? 'branch-chip branch-chip--selected' : 'branch-chip'}
+                                title=${branch.execution_branch_id}
+                                @click=${() => this._setBranch(branch)}
+                                @keydown=${(event) => this._onSelectableKeydown(event, () => this._setBranch(branch))}
+                            >
+                                ${branch.is_active === true
+                                    ? html`<span class="branch-chip__active">
+                                        <span class="branch-chip__active-dot"></span>
+                                        ${this.t('durable_history_modal.active_badge')}
+                                    </span>`
+                                    : nothing}
+                                ${indent.length > 0
+                                    ? html`<span class="branch-chip__indent">${indent}</span>`
+                                    : nothing}
+                                <span class="branch-chip__label">${formatDurableBranchLabel(branch.execution_branch_id)}</span>
+                                <span class="branch-chip__meta"
+                                    >${this.t(reasonKey)} @${branch.base_sequence}</span
+                                >
+                            </article>
+                        `;
+                    })}
+                </div>
+            </section>
         `;
     }
 
@@ -906,6 +1193,8 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 ${events.map((event) => {
                     const subtitle = this._eventSubtitle(event);
                     const workItemId = this._eventWorkItemId(event);
+                    const phase = durableEventPhase(event.event_type);
+                    const titleKey = durableEventTitleKey(event.event_type);
                     return html`
                         <article
                             tabindex="0"
@@ -916,7 +1205,13 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                         >
                             <div class="event-seq">#${event.sequence}</div>
                             <div class="event-main">
-                                <div class="event-type">${event.event_type}</div>
+                                <div class="event-title-row">
+                                    <span class=${this._phaseClass(phase)}
+                                        >${this.t(`durable_history_modal.phase_${phase}`)}</span
+                                    >
+                                    <span class="event-title">${this.t(titleKey)}</span>
+                                    <span class="event-type-tech">${event.event_type}</span>
+                                </div>
                                 ${workItemId.length > 0
                                     ? html`<platform-work-item-badge
                                         work-item-id=${workItemId}
@@ -937,53 +1232,183 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         `;
     }
 
-    _detailJsonValue() {
-        const event = this._selectedEvent();
-        if (this._selectedTab === 'state') {
-            return this._stateJson;
-        }
-        if (this._selectedTab === 'command') {
-            return this._lastCommandResult;
-        }
-        if (event === null) {
-            return null;
-        }
-        if (this._selectedTab === 'delta') {
-            return event.state_delta;
-        }
-        return {
-            event_id: event.event_id,
-            session_id: this._sessionId(),
-            execution_branch_id: event.execution_branch_id,
-            sequence: event.sequence,
-            event_type: event.event_type,
-            created_at: event.created_at,
-            prev_state_hash: event.prev_state_hash,
-            next_state_hash: event.next_state_hash,
-            payload: event.payload,
-        };
+    _renderSummaryCard(event) {
+        const titleKey = durableEventTitleKey(event.event_type);
+        const subtitle = this._eventSubtitle(event);
+        return html`
+            <section class="info-card">
+                <div class="info-card__title">${this.t('durable_history_modal.summary_heading')}</div>
+                <div class="info-card__body">
+                    <strong>${this.t(titleKey)}</strong>
+                    <span class="mono"> #${event.sequence}</span>
+                    · <span class="mono">${event.event_type}</span>
+                    ${subtitle.length > 0 ? html`<div>${subtitle}</div>` : nothing}
+                </div>
+            </section>
+        `;
     }
 
-    _detailTabItems() {
-        return [
-            { value: 'payload', label: this.t('durable_history_modal.tab_payload') },
-            { value: 'delta', label: this.t('durable_history_modal.tab_delta') },
-            { value: 'state', label: this.t('durable_history_modal.tab_state') },
-            { value: 'command', label: this.t('durable_history_modal.tab_command') },
-        ];
+    _renderConsequencesCard(event) {
+        const eventsAfter = this._eventsAfterSelected();
+        const terminalPoint = isDurableTerminalEventType(event.event_type) && this._isLastEvent(event);
+        return html`
+            <section class=${terminalPoint ? 'info-card info-card--warning' : 'info-card'}>
+                <div class="info-card__title">${this.t('durable_history_modal.consequences_heading')}</div>
+                <ul class="info-card__list">
+                    <li>
+                        ${this.t('durable_history_modal.consequence_fork', {
+                            sequence: String(event.sequence),
+                        })}
+                    </li>
+                    <li>
+                        ${this.t('durable_history_modal.consequence_rewind', {
+                            sequence: String(event.sequence),
+                            eventsAfter: String(eventsAfter),
+                        })}
+                    </li>
+                    ${this._isRetryableEvent(event)
+                        ? html`<li>${this.t('durable_history_modal.consequence_retry')}</li>`
+                        : nothing}
+                    ${terminalPoint
+                        ? html`<li>${this.t('durable_history_modal.consequence_terminal_point')}</li>`
+                        : nothing}
+                </ul>
+            </section>
+        `;
+    }
+
+    _renderOutcomeCard() {
+        if (!this._showOutcome || this._lastCommandResult === null) {
+            return nothing;
+        }
+        const effect = commandEffect(this._lastCommandResult);
+        const branchId = commandExecutionBranchId(this._lastCommandResult);
+        return html`
+            <section class="info-card info-card--success">
+                <div class="info-card__title">${this.t('durable_history_modal.outcome_heading')}</div>
+                <ul class="info-card__list">
+                    ${effect === null
+                        ? nothing
+                        : html`
+                            <li>
+                                ${effect.activates_head
+                                    ? this.t('durable_history_modal.outcome_activates_yes')
+                                    : this.t('durable_history_modal.outcome_activates_no')}
+                            </li>
+                            <li>
+                                ${this.t('durable_history_modal.outcome_base', {
+                                    sequence: String(effect.source_sequence),
+                                })}
+                            </li>
+                            <li>
+                                ${this.t('durable_history_modal.outcome_events_after', {
+                                    count: String(effect.source_events_after_base),
+                                })}
+                            </li>
+                            ${effect.instance_status.length > 0
+                                ? html`<li>
+                                    ${this.t('durable_history_modal.outcome_status', {
+                                        status: effect.instance_status,
+                                    })}
+                                </li>`
+                                : nothing}
+                            <li>${this.t('durable_history_modal.outcome_no_auto_resume')}</li>
+                        `}
+                    ${branchId.length > 0
+                        ? html`<li class="mono">
+                            ${this.t('durable_history_modal.outcome_branch_id', {
+                                branchId: formatDurableBranchLabel(branchId),
+                            })}
+                        </li>`
+                        : nothing}
+                </ul>
+                <div class="action-rail__row">
+                    <platform-button variant="primary" @click=${() => this.close()}>
+                        ${this.t('durable_history_modal.action_continue_chat')}
+                    </platform-button>
+                </div>
+            </section>
+        `;
+    }
+
+    _renderActionRail(event) {
+        const canRetry = this._isRetryableEvent(event);
+        const commandBusy = this._commandBusy();
+        const canPatch = this._stateJson !== null;
+        return html`
+            <section class="action-rail">
+                <div class="action-rail__row">
+                    <platform-button
+                        variant="secondary"
+                        title=${this.t('durable_history_modal.action_fork_help')}
+                        ?disabled=${commandBusy}
+                        @click=${() => this._forkSelected()}
+                    >
+                        <platform-icon name="git-branch" size="16"></platform-icon>
+                        ${this.t('durable_history_modal.action_fork')}
+                    </platform-button>
+                    <platform-button
+                        variant="danger"
+                        title=${this.t('durable_history_modal.action_rewind_help')}
+                        ?disabled=${commandBusy}
+                        @click=${() => this._rewindSelected()}
+                    >
+                        <platform-icon name="rotate-ccw" size="16"></platform-icon>
+                        ${this.t('durable_history_modal.action_rewind')}
+                    </platform-button>
+                    <platform-button
+                        variant="primary"
+                        title=${canRetry
+                            ? this.t('durable_history_modal.action_retry_help')
+                            : this.t('durable_history_modal.action_retry_disabled')}
+                        ?disabled=${!canRetry || commandBusy}
+                        @click=${() => this._retrySelectedFailure()}
+                    >
+                        <platform-icon name="play" size="16"></platform-icon>
+                        ${this.t('durable_history_modal.action_retry')}
+                    </platform-button>
+                </div>
+                <div class="action-hint">${this.t('durable_history_modal.action_fork_help')}</div>
+                <div class="action-hint">${this.t('durable_history_modal.action_rewind_help')}</div>
+                <div class="action-rail__row">
+                    <platform-button
+                        variant="secondary"
+                        title=${this.t('durable_history_modal.action_state_help')}
+                        ?disabled=${this._stateAtOp.busy}
+                        @click=${() => this._loadSelectedState()}
+                    >
+                        <platform-icon name="trace-json" size="16"></platform-icon>
+                        ${this.t('durable_history_modal.action_state')}
+                    </platform-button>
+                    <platform-button
+                        variant="secondary"
+                        title=${canPatch
+                            ? this.t('durable_history_modal.action_patch_help')
+                            : this.t('durable_history_modal.action_patch_disabled')}
+                        ?disabled=${!canPatch || commandBusy}
+                        @click=${() => this._manualPatchSelected()}
+                    >
+                        <platform-icon name="save" size="16"></platform-icon>
+                        ${this.t('durable_history_modal.action_patch')}
+                    </platform-button>
+                    <platform-button
+                        variant="ghost"
+                        title=${this.t('durable_history_modal.action_copy_anchor_help')}
+                        @click=${() => this._copySelectedAnchor()}
+                    >
+                        <platform-icon name="copy" size="16"></platform-icon>
+                        ${this.t('durable_history_modal.action_copy_anchor')}
+                    </platform-button>
+                </div>
+            </section>
+        `;
     }
 
     _renderDetailContent() {
         if (this._selectedTab === 'state' && this._stateJson === null) {
-            if (this._stateAtOp.busy) {
-                return html`<div class="state-empty"><glass-spinner></glass-spinner></div>`;
-            }
             return html`
                 <div class="state-empty">
-                    <platform-button
-                        variant="primary"
-                        @click=${() => this._loadSelectedState()}
-                    >
+                    <platform-button variant="secondary" @click=${() => this._loadSelectedState()}>
                         ${this.t('durable_history_modal.action_load_state')}
                     </platform-button>
                 </div>
@@ -995,7 +1420,6 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                     language="json"
                     fill-parent
                     .showToolbar=${false}
-                    .readonly=${false}
                     .value=${this._stateEditText}
                     @change=${this._onStateEdit}
                 ></flows-code-editor>
@@ -1019,87 +1443,29 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         if (event === null) {
             return html`<div class="durable-history-empty">${this.t('durable_history_modal.empty')}</div>`;
         }
-        const canRetry = this._isRetryableEvent(event);
-        const commandBusy = this._commandBusy();
-        const canPatch = this._stateJson !== null;
         return html`
             <section class="detail-panel">
                 <div class="detail-head">
-                    <div class="panel-title">
-                        ${event.event_type}
-                        <span class="mono">#${event.sequence}</span>
-                    </div>
-                    <div class="detail-actions">
-                        <platform-button
-                            icon-only
-                            variant="secondary"
-                            title=${this.t('durable_history_modal.action_state')}
-                            aria-label=${this.t('durable_history_modal.action_state')}
-                            ?disabled=${this._stateAtOp.busy}
-                            @click=${() => this._loadSelectedState()}
-                        >
-                            <platform-icon name="trace-json" size="16"></platform-icon>
-                        </platform-button>
-                        <platform-button
-                            icon-only
-                            variant="secondary"
-                            title=${this.t('durable_history_modal.action_patch')}
-                            aria-label=${this.t('durable_history_modal.action_patch')}
-                            ?disabled=${!canPatch || commandBusy}
-                            @click=${() => this._manualPatchSelected()}
-                        >
-                            <platform-icon name="save" size="16"></platform-icon>
-                        </platform-button>
-                        <platform-button
-                            icon-only
-                            variant="secondary"
-                            title=${this.t('durable_history_modal.action_copy_anchor')}
-                            aria-label=${this.t('durable_history_modal.action_copy_anchor')}
-                            @click=${() => this._copySelectedAnchor()}
-                        >
-                            <platform-icon name="copy" size="16"></platform-icon>
-                        </platform-button>
-                        <platform-button
-                            icon-only
-                            variant="secondary"
-                            title=${this.t('durable_history_modal.action_fork')}
-                            aria-label=${this.t('durable_history_modal.action_fork')}
-                            ?disabled=${commandBusy}
-                            @click=${() => this._forkSelected()}
-                        >
-                            <platform-icon name="git-branch" size="16"></platform-icon>
-                        </platform-button>
-                        <platform-button
-                            icon-only
-                            variant="danger"
-                            title=${this.t('durable_history_modal.action_rewind')}
-                            aria-label=${this.t('durable_history_modal.action_rewind')}
-                            ?disabled=${commandBusy}
-                            @click=${() => this._rewindSelected()}
-                        >
-                            <platform-icon name="rotate-ccw" size="16"></platform-icon>
-                        </platform-button>
-                        <platform-button
-                            icon-only
-                            variant="primary"
-                            title=${this.t('durable_history_modal.action_retry')}
-                            aria-label=${this.t('durable_history_modal.action_retry')}
-                            ?disabled=${!canRetry || commandBusy}
-                            @click=${() => this._retrySelectedFailure()}
-                        >
-                            <platform-icon name="play" size="16"></platform-icon>
-                        </platform-button>
+                    <div class="panel-title">${this.t('durable_history_modal.inspector_title')}</div>
+                    <div class="panel-meta mono">#${event.sequence}</div>
+                </div>
+                <div class="inspector-scroll">
+                    ${this._renderSummaryCard(event)}
+                    ${this._renderConsequencesCard(event)}
+                    ${this._renderOutcomeCard()}
+                    ${this._renderActionRail(event)}
+                    <div class="advanced-block">
+                        <div class="advanced-block__title">${this.t('durable_history_modal.advanced_heading')}</div>
+                        <platform-segmented-control
+                            density="compact"
+                            .value=${this._selectedTab}
+                            .items=${this._detailTabItems()}
+                            aria-label=${this.t('durable_history_modal.detail_tabs_aria')}
+                            @change=${(e) => { this._selectedTab = e.detail.value; }}
+                        ></platform-segmented-control>
+                        <div class="detail-content">${this._renderDetailContent()}</div>
                     </div>
                 </div>
-                <platform-segmented-control
-                    class="detail-tabs"
-                    density="compact"
-                    .value=${this._selectedTab}
-                    .items=${this._detailTabItems()}
-                    aria-label=${this.t('durable_history_modal.detail_tabs_aria')}
-                    @change=${(e) => { this._selectedTab = e.detail.value; }}
-                ></platform-segmented-control>
-                <div class="detail-content">${this._renderDetailContent()}</div>
             </section>
         `;
     }
@@ -1141,21 +1507,13 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         if (this._historyOp.busy && events.length === 0) {
             return html`<div class="durable-history-loading"><glass-spinner></glass-spinner></div>`;
         }
-        const totalLabel = String(this._historyTotal(events));
         return html`
             <div class="durable-history-body">
-                <div class="durable-toolbar">
-                    ${this._renderBranches()}
-                    <div class="durable-summary">
-                        <span>${this.t('durable_history_modal.summary_events', { count: totalLabel })}</span>
-                        <span class="mono">${this._selectedBranchOrActive()}</span>
-                    </div>
-                </div>
+                ${this._renderLineage()}
                 <div class="durable-main">
                     <section class="timeline-panel">
                         <div class="timeline-head">
                             <div class="panel-title">${this.t('durable_history_modal.timeline_title')}</div>
-                            <div class="panel-meta">${events.length}</div>
                         </div>
                         ${this._renderTimeline()}
                     </section>
@@ -1166,5 +1524,6 @@ export class FlowsDurableHistoryModal extends PlatformModal {
     }
 }
 
-customElements.define('flows-durable-history-modal', FlowsDurableHistoryModal);
 registerModalKind(FlowsDurableHistoryModal.modalKind, 'flows-durable-history-modal');
+
+customElements.define('flows-durable-history-modal', FlowsDurableHistoryModal);

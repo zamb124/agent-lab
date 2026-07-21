@@ -51,16 +51,14 @@ export class PlatformPaletteColorPicker extends PlatformElement {
             }
             .swatches {
                 display: flex;
-                flex-wrap: nowrap;
+                flex-wrap: wrap;
                 align-items: center;
                 gap: var(--space-2);
                 flex: 1;
                 min-width: 0;
-                overflow-x: auto;
-                overflow-y: hidden;
-                padding-bottom: 2px;
+                /* Кольцо active (box-shadow 4px) не должно обрезаться overflow. */
+                padding: 6px 2px;
                 scrollbar-width: thin;
-                -webkit-overflow-scrolling: touch;
             }
             .swatch {
                 width: 22px;

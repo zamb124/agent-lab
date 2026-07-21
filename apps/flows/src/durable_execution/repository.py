@@ -29,6 +29,7 @@ from apps.flows.src.durable_execution.models import (
     ExecutionStateDelta,
     RetryScheduledPayload,
     SideEffectPolicy,
+    TimeTravelEffect,
     WorkflowAppendResult,
     WorkflowBranchRecord,
     WorkflowBranchResult,
@@ -666,6 +667,7 @@ class DurableWorkflowRepository:
         snapshot_id = str(uuid4())
         event_id = str(uuid4())
         event_sequence = source_sequence + 1
+        source_events_after_base = 0
         if event_type == WorkflowEventType.retry_scheduled:
             if retry_failed_sequence is None or retry_failed_nodes is None:
                 raise ValueError("Retry branch transition requires retry failure payload")
@@ -711,6 +713,18 @@ class DurableWorkflowRepository:
                         "Source execution branch not found: "
                         + f"{resolved_source_branch_id!r}"
                     )
+
+                events_after_result = await session.execute(
+                    select(sa_func.count())
+                    .select_from(WorkflowEvents)
+                    .where(
+                        WorkflowEvents.company_id == company_id,
+                        WorkflowEvents.session_id == session_id,
+                        WorkflowEvents.execution_branch_id == resolved_source_branch_id,
+                        WorkflowEvents.sequence > source_sequence,
+                    )
+                )
+                source_events_after_base = int(events_after_result.scalar_one())
 
                 now = utc_now()
                 session.add(
@@ -776,6 +790,7 @@ class DurableWorkflowRepository:
                     locked_instance.last_event_at = now
                     locked_instance.updated_at = now
 
+        instance_status = status if activate else WorkflowStatus(instance.status)
         return WorkflowBranchResult(
             execution_branch_id=branch_id,
             parent_execution_branch_id=resolved_source_branch_id,
@@ -786,6 +801,14 @@ class DurableWorkflowRepository:
             sequence=event_sequence,
             state_hash=next_state_hash,
             snapshot_id=snapshot_id,
+            effect=TimeTravelEffect(
+                activates_head=activate,
+                source_execution_branch_id=resolved_source_branch_id,
+                source_sequence=source_sequence,
+                source_events_after_base=source_events_after_base,
+                instance_status=instance_status,
+                auto_resumes_run=False,
+            ),
         )
 
     async def load_state_at_head(

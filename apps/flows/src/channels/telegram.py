@@ -12,6 +12,7 @@ from apps.flows.src.models.enums import ChannelType
 from core.config import get_settings
 from core.http.client import HttpRequestKwargs, ProxyStrategy, request_with_strategy
 from core.logging import get_logger
+from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, parse_json_object
 
 from .base import BaseChannelHandler
@@ -98,7 +99,9 @@ class TelegramChannelHandler(BaseChannelHandler):
         params: JsonObject,
         config: JsonObject,
         variables: JsonObject,
+        state: ExecutionState | JsonObject | None = None,
     ) -> JsonObject:
+        _ = state
         recipient = self._require_str_or_int_param(params, "recipient")
         if action == "send_message":
             text = self._require_str_param(params, "text")

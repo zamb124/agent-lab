@@ -436,10 +436,21 @@ class TestToolsAPI:
     @pytest.mark.asyncio
     async def test_list_all_tools_includes_builtin_registry_tools(self, client, app):
         """Общий picker должен видеть platform tools из ToolRegistry."""
-        response = await client.get("/flows/api/v1/tools/all?limit=2000&offset=0")
-        assert response.status_code == 200
-        page = response.json()
-        ids = {item["tool_id"] for item in page["items"]}
+        ids: set[str] = set()
+        offset = 0
+        page_limit = 20
+        while True:
+            response = await client.get(
+                f"/flows/api/v1/tools/all?limit={page_limit}&offset={offset}"
+            )
+            assert response.status_code == 200
+            page = response.json()
+            assert page["limit"] == page_limit
+            for item in page["items"]:
+                ids.add(item["tool_id"])
+            offset += len(page["items"])
+            if len(page["items"]) == 0 or offset >= page["total"]:
+                break
         assert "browser_page_markdown" in ids
         assert "schedule_one_time_task" in ids
 

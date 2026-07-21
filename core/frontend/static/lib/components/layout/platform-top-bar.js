@@ -54,8 +54,6 @@ export class PlatformTopBar extends PlatformElement {
                     top: 0;
                     z-index: var(--platform-top-bar-z-index);
                     background: var(--glass-solid-strong);
-                    backdrop-filter: blur(var(--glass-blur-medium)) saturate(160%);
-                    -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(160%);
                     border-bottom: 1px solid var(--glass-border-subtle);
                     padding: max(var(--space-2), env(safe-area-inset-top, 0px))
                         max(var(--space-3), env(safe-area-inset-right, 0px))

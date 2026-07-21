@@ -1,5 +1,5 @@
 """
-Обработчики для платформ (Telegram, WhatsApp).
+Обработчики для платформ (Telegram webhook).
 """
 
 from abc import ABC, abstractmethod
@@ -34,35 +34,6 @@ class TelegramWebhookPayload(FlexibleBaseModel):
     message: TelegramWebhookMessage
 
 
-class WhatsAppWebhookMessage(FlexibleBaseModel):
-    from_phone: str = Field(alias="from", min_length=1)
-
-
-class WhatsAppWebhookContactProfile(FlexibleBaseModel):
-    name: str = Field(min_length=1)
-
-
-class WhatsAppWebhookContact(FlexibleBaseModel):
-    profile: WhatsAppWebhookContactProfile
-
-
-class WhatsAppWebhookValue(FlexibleBaseModel):
-    messages: list[WhatsAppWebhookMessage] = Field(min_length=1)
-    contacts: list[WhatsAppWebhookContact] = Field(min_length=1)
-
-
-class WhatsAppWebhookChange(FlexibleBaseModel):
-    value: WhatsAppWebhookValue
-
-
-class WhatsAppWebhookEntry(FlexibleBaseModel):
-    changes: list[WhatsAppWebhookChange] = Field(min_length=1)
-
-
-class WhatsAppWebhookPayload(FlexibleBaseModel):
-    entry: list[WhatsAppWebhookEntry] = Field(min_length=1)
-
-
 class PlatformHandler(ABC):
     """Базовый обработчик платформы"""
 
@@ -75,7 +46,7 @@ class PlatformHandler(ABC):
         if not path.startswith(prefix):
             raise HTTPException(status_code=400, detail=f"Invalid webhook path: {path}")
 
-        flow_key = path[len(prefix):]
+        flow_key = path[len(prefix) :]
         parts = flow_key.split(":")
 
         if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
@@ -94,6 +65,7 @@ class PlatformHandler(ABC):
         self, request: Request, company: Company
     ) -> tuple[User, JsonObject]:
         raise NotImplementedError
+
 
 class TelegramHandler(PlatformHandler):
     """Обработчик Telegram webhook"""
@@ -135,46 +107,9 @@ class TelegramHandler(PlatformHandler):
 
         return user, metadata
 
-class WhatsAppHandler(PlatformHandler):
-    """Обработчик WhatsApp webhook"""
-
-    @override
-    async def create_user_from_request(
-        self, request: Request, company: Company
-    ) -> tuple[User, JsonObject]:
-        """Создает пользователя из WhatsApp webhook данных"""
-        body = await request.body()
-        try:
-            payload = WhatsAppWebhookPayload.model_validate_json(body)
-        except ValidationError as exc:
-            raise HTTPException(status_code=400, detail="Invalid WhatsApp webhook payload") from exc
-
-        value = payload.entry[0].changes[0].value
-        phone_number = value.messages[0].from_phone
-        profile_name = value.contacts[0].profile.name
-
-        user = User(
-            user_id=f"whatsapp_{phone_number}",
-            name=profile_name,
-            status=UserStatus.ACTIVE,
-            groups=["user"],
-            companies={company.company_id: ["user"]},
-            active_company_id=company.company_id,
-            phones=[phone_number],
-            messengers={"whatsapp": phone_number},
-        )
-
-        metadata: JsonObject = {
-            "whatsapp_phone": phone_number,
-            "profile_name": profile_name,
-        }
-
-        return user, metadata
 
 def get_platform_handler(platform: WebhookPlatform, container: BaseContainer) -> PlatformHandler:
     """Возвращает обработчик для платформы"""
     if platform == "telegram":
         return TelegramHandler(container)
-    if platform == "whatsapp":
-        return WhatsAppHandler(container)
     assert_never(platform)

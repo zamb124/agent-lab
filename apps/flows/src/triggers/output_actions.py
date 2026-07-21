@@ -46,7 +46,10 @@ class OutputActionExecutor:
             params = self._resolve_mapping(action.mapping, state, original_payload)
             params.update(action.config)
 
-            handler = self.container.channel_registry.get(action.channel)
+            handler = self.container.channel_registry.get(
+                action.channel,
+                mail_service=self.container.mail_service,
+            )
             channel_config: JsonObject = {**trigger_config, **action.config}
 
             try:
@@ -55,6 +58,7 @@ class OutputActionExecutor:
                     params=params,
                     config=channel_config,
                     variables=variables,
+                    state=state,
                 )
                 ch_label = action.channel.value
                 logger.info(f"Output action {ch_label}:{action.action} executed")

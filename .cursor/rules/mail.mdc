@@ -93,6 +93,7 @@ Rail (`<platform-mail-calendar-rail>`): user + role bindings (role mark); Mail�
 
 Reading:
 - list/thread local; Refresh → `SYNC_REQUESTED`; empty → `needs_sync` + auto sync;
+- `POST /messages/thread` — local read + **все** unread в текущей папке треда → seen (не только якорь uid); IMAP `mark_seen` enqueue на каждый `marked_seen_uids`;
 - search → `POST /messages/search`; load more → cursor;
 - triage: star / archive / trash / delete forever; shortcuts E / # / S;
 - drafts folder open → compose; compose autosave draft.

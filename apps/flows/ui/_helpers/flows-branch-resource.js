@@ -60,6 +60,7 @@ export function resolveResourceForPanel(selectedId, editorState, catalogItems) {
                 name: typeof ref.name === 'string' && ref.name.length > 0 ? ref.name : selectedId,
                 description: typeof ref.description === 'string' ? ref.description : '',
                 tags: Array.isArray(ref.tags) ? ref.tags : [],
+                permission: Array.isArray(ref.permission) ? ref.permission : [],
                 config: isPlainObject(ref.config) ? ref.config : {},
             },
         };
@@ -69,6 +70,7 @@ export function resolveResourceForPanel(selectedId, editorState, catalogItems) {
         const baseCfg = cat && isPlainObject(cat.config) ? cat.config : {};
         const ov = isPlainObject(ref.config) ? ref.config : {};
         const catType = cat && typeof cat.type === 'string' ? cat.type : '';
+        const catPermission = cat && Array.isArray(cat.permission) ? cat.permission : [];
         return {
             storage: 'branch',
             resource: {
@@ -81,6 +83,7 @@ export function resolveResourceForPanel(selectedId, editorState, catalogItems) {
                     ? ref.description
                     : (cat && typeof cat.description === 'string' ? cat.description : ''),
                 tags: Array.isArray(ref.tags) ? ref.tags : (cat && Array.isArray(cat.tags) ? cat.tags : []),
+                permission: Array.isArray(ref.permission) ? ref.permission : catPermission,
                 config: { ...baseCfg, ...ov },
             },
         };

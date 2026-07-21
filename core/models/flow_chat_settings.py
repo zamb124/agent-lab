@@ -43,6 +43,10 @@ class FlowChatSettings(StrictBaseModel):
         default=True,
         description="Показывать в чате события активации Agent Skill (load_agent_skill)",
     )
+    show_reflection: bool = Field(
+        default=True,
+        description="Показывать в чате результат reflection gate (platform.reflection_resolved)",
+    )
     errors_display: ChatErrorsDisplay = Field(
         default="generic",
         description="Ошибки выполнения: generic (обезличенный текст) или detailed (текст ошибки)",
@@ -101,6 +105,10 @@ class EmbedChatPolicyOverride(StrictBaseModel):
     show_skill_loads: bool | None = Field(
         default=None,
         description="Переопределить показ активации Agent Skills; None — наследовать",
+    )
+    show_reflection: bool | None = Field(
+        default=None,
+        description="Переопределить показ reflection gate в чате; None — наследовать",
     )
     errors_display: ChatErrorsDisplay | None = Field(
         default=None,

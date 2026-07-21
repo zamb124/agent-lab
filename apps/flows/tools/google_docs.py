@@ -1,14 +1,8 @@
 """
 Платформенные тулы Google Docs: создание, чтение, редактирование, шаринг.
 
-Переменные агента (state.variables) для авторизации:
-  google_service_account   — JSON ключ Service Account
-  google_access_token      — статичный OAuth2 Bearer-токен
-  google_impersonate_email — email для domain-wide delegation (только с SA)
-
-Если ни одна переменная не задана — per-user OAuth:
-  платформа предлагает пользователю авторизоваться, flow ставится на паузу,
-  после OAuth callback автоматически продолжается.
+Auth: resolve_google_workspace_auth (variables → user workspace OAuth →
+prior docs/sheets credentials → company SA → OAuthInterrupt Connect Google).
 
 Безопасность: тулы НЕ используют get_container().
 Доступ к сервисам только через trusted-фасады flows-сервиса.
@@ -20,7 +14,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.services.platform_facades import get_file_bytes, get_google_oauth_token
+from apps.flows.src.services.platform_facades import get_file_bytes, resolve_google_workspace_auth
 from apps.flows.src.tools.decorator import tool
 from core.clients.google_docs_client import GoogleDocsClient
 from core.logging import get_logger
@@ -31,10 +25,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 JsonDict = JsonObject
-
-
-def _optional_state_string(value: object) -> str | None:
-    return value if isinstance(value, str) and value else None
 
 
 # ── описания ─────────────────────────────────────────────────────
@@ -177,17 +167,11 @@ def _require_state(state: ExecutionState | None) -> ExecutionState:
 
 async def _get_docs_client(state: ExecutionState | None) -> GoogleDocsClient:
     execution_state = _require_state(state)
-    credentials_json = _optional_state_string(execution_state.variables.get("google_service_account"))
-    access_token = _optional_state_string(execution_state.variables.get("google_access_token"))
-    subject = _optional_state_string(execution_state.variables.get("google_impersonate_email"))
-
-    if not credentials_json and not access_token:
-        access_token = await get_google_oauth_token(execution_state, service="docs")
-
+    material = await resolve_google_workspace_auth(execution_state)
     return GoogleDocsClient(
-        credentials_json=credentials_json,
-        access_token=access_token,
-        subject=subject,
+        credentials_json=material.credentials_json,
+        access_token=material.access_token,
+        subject=material.subject,
     )
 
 

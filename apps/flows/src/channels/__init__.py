@@ -4,7 +4,7 @@ Channels - каналы коммуникации и отправки сообщ�
 Содержит:
 1. BaseChannel - базовый класс каналов коммуникации (A2A, WebSocket, Telegram)
 2. BaseChannelHandler - базовый класс для отправки сообщений в каналы
-3. Конкретные реализации: TelegramChannelHandler, WebhookChannelHandler
+3. Конкретные реализации: TelegramChannelHandler, WebhookChannelHandler, EmailChannelHandler, SmsChannelHandler
 4. ChannelRegistry - реестр handlers для отправки
 
 Используется:
@@ -15,7 +15,9 @@ Channels - каналы коммуникации и отправки сообщ�
 
 # Существующие классы каналов коммуникации
 from .base import BaseChannel, BaseChannelHandler, PermissionDenied
+from .email import EmailChannelHandler
 from .registry import ChannelRegistry, create_default_channel_registry
+from .sms import SmsChannelHandler
 from .telegram import TelegramChannelHandler
 from .webhook import WebhookChannelHandler
 
@@ -28,5 +30,7 @@ __all__ = [
     "ChannelRegistry",
     "TelegramChannelHandler",
     "WebhookChannelHandler",
+    "EmailChannelHandler",
+    "SmsChannelHandler",
     "create_default_channel_registry",
 ]

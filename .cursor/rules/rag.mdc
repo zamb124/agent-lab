@@ -37,6 +37,7 @@ globs:
 4. **Async-индексация** — mutating-операции в воркере через TaskIQ (`process_document_upload`, `index_rag_document_s3_task`, `delete_document_task` в `apps/rag_worker/tasks/indexing_tasks.py` и связанные задачи). Синхронный `parse_document` в API — запрещён. В индекс только категории из `core/rag/indexable.py::RAG_INDEXABLE_FILE_CATEGORIES`; `signature`/archive/unknown — skip (не `failed`).
 5. **Доступ к namespace** — для `ingest-text` и `search` обязательна проверка `namespace_repository.get(id)` + совпадение `company_id` с контекстом; иначе 404/403. Для `POST /rag/api/v1/search` проверка для каждого `namespace_ids[i]`.
 6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `index_file`, `delete_namespace_document`, `get_document_processing_status`, `get_documents_processing_statuses` (`POST /rag/api/v1/documents/statuses`), `search`, `global_search`. Не плодить `ServiceClient("rag", path=...)` в peer-сервисах в обход `RagClient`.
+7. **Flows resource `type: rag`** — bind к platform Namespace (`RagResourceBindParams`), не отдельный пайплайн; DX/runtime — `flows.mdc` § Resources.
 
 ## TTL документов и retention
 

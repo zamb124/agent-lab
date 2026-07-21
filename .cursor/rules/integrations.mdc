@@ -84,14 +84,19 @@ external_flow = await container.flow_discovery.register_agent(
 )
 ```
 
-`RemoteFlowNode` в FlowConfig:
+`RemoteFlowNode` в FlowConfig — только direct A2A URL (registry `flow_id` запрещён):
 
 ```json
-{"type": "remote_flow", "flow_id": "external_flow",
- "input_mapping": {"content": "@state:user_query"}, "branch_id": "default"}
+{"type": "remote_flow", "url": "https://partner.example/flows/api/v1/agent",
+ "input_mapping": {"content": "@state:user_query"}, "branch_id": "default",
+ "metadata_template": "{\"variables\": {\"order_id\": \"@state:order.id\", \"token\": \"@var:api_token\"}}"}
 ```
 
-Требования к внешнему endpoint (A2A 1.0): `GET /.well-known/agent-card.json` (Card с `supportedInterfaces` / `protocolVersion: "1.0"`), JSON-RPC `SendMessage` (PascalCase).
+`branch_id` — Skill ID из Agent Card `skills[]` (у платформенного flow = `branch_id` удалённого графа); в wire уходит как `params.metadata.branch` если не `default`.
+
+`metadata_template` — JSON-объект → `SendMessage params.metadata` после `MappingResolver` (`@state:` / `@var:` как у `body_template`). У peer платформы ключ `variables` мержится в variables flow.
+
+Требования к внешнему endpoint (A2A 1.0): header `A2A-Version: 1.0`, `GET /.well-known/agent-card.json` (Card с `supportedInterfaces` / `protocolVersion: "1.0"` / `skills[]`), JSON-RPC `SendMessage` (PascalCase).
 
 ## External API node
 
@@ -124,6 +129,8 @@ external_flow = await container.flow_discovery.register_agent(
 |---|---|
 | `core/integrations/models.py` | `IntegrationProvider`, `IntegrationCredential`, `OAuthProviderConfig` |
 | `core/integrations/repository.py` | `IntegrationCredentialRepository` — CRUD для `integration_credentials` (shared БД) |
+| `core/integrations/constants.py` | `COMPANY_INTEGRATION_USER_ID`, `TOKEN_TYPE_SERVICE_ACCOUNT` |
+| `core/integrations/company_credentials.py` | Company-owned SA credentials (Google Workspace и аналоги) |
 | `core/integrations/oauth_service.py` | `OAuthService.build_auth_url`, `complete_oauth`, `refresh_token`, `get_valid_token` |
 | `core/api/integrations.py` | OAuth callback `GET /{server.name}/api/v1/integrations/oauth/callback` (flows: `/flows/api/v1/...`). Дефолтный `redirect_uri` в `OAuthService.build_auth_url` совпадает с этим путём; после успеха — редирект на `post_auth_redirect_origin` + `return_path` (если в state был допустимый `return_origin` при старте, см. `core.utils.domain.is_allowed_integration_return_origin`), иначе — `platform_public_base_url` + `return_path` |
 | `core/integrations/guided_integration_error.py` | `GuidedIntegrationError` / `GuidedIntegrationLink` — структурированная ошибка OAuth post-save (CRM и др.), текст RU/EN |
@@ -133,11 +140,34 @@ external_flow = await container.flow_discovery.register_agent(
 
 `BaseContainer` предоставляет `oauth_service` и `integration_credential_repository` для всех сервисов.
 
-### Приоритет credentials в тулах
+### Канон коннекторов (без per-vendor таблиц)
 
-1. **Company-level** — `state.variables` (SA JSON, static token) — преднастроено админом.
-2. **Per-user OAuth** — `integration_credentials` в БД — `company_id` и `user_id` из `get_context()`, **не** из state.
-3. **Нет ничего** — тул бросает `FlowInterrupt(body=OAuthInterrupt(...))`, flow ставится на паузу; после OAuth callback — автоматический resume.
+Единственное хранилище внешних подключений — **`integration_credentials`** + `OAuthService` / `IntegrationCredentialRepository`. Ключ: `(company_id, user_id, provider, service)`.
+
+| Слой | Как |
+|---|---|
+| User OAuth | `user_id=<user>`, обычный OAuth |
+| Company SA / shared | `user_id=COMPANY_INTEGRATION_USER_ID` (`__company__`), `token_type=service_account`, SA JSON Fernet в `access_token`, `metadata.impersonate_email` |
+| system | Seed из conf → тот же company-credential для `company_id=system`; UI PUT запрещён, только reconcile |
+
+Не плодить per-vendor таблицы (`company_*_connections`) для OAuth/SA коннекторов. Исключение — mail (IMAP/SMTP домен + bindings), см. `mail.mdc`.
+
+Константа: `COMPANY_INTEGRATION_USER_ID` в `core/integrations/constants.py`.
+
+API company Google Workspace SA: `GET/PUT/DELETE .../integrations/credentials/google/workspace/company` (admin). System: `POST .../integrations/google/workspace/system/reconcile`.
+
+Google Docs/Sheets: один Connect — `service=workspace` (scopes documents+spreadsheets+drive.file). Prior `docs`/`sheets` credentials — только чтение существующих записей. Facade: `resolve_google_workspace_auth(state)` в `platform_facades.py`.
+
+Proactive user Connect (без interrupt): `GET .../credentials/google/workspace/authorize` → `{authorize_url}`; UI — `flows.integrations` modal (`flows/google_workspace_authorize`). Company SA status/admin form — те же company endpoints через `flows/google_workspace_company_*`.
+
+`google_workspace.api_bases` (`GoogleWorkspaceApiBases`) — override Sheets/Docs/Drive/token URL только для test/dev (эмулятор); прод без override = официальные Google REST bases.
+
+### Приоритет credentials (Google Workspace tools)
+
+1. **`state.variables`** — `google_service_account` / `google_access_token` / `google_impersonate_email` (override для тестов/админ-flows).
+2. **Per-user OAuth** — `service=workspace`, затем prior `docs`/`sheets`; `company_id`/`user_id` из `get_context()`.
+3. **Company SA** — credential `user_id=__company__`, `service=workspace`.
+4. **Нет ничего** — `FlowInterrupt(body=OAuthInterrupt(..., service=workspace))`, pause + auto-resume после callback.
 
 ### Auto-resume после OAuth
 
@@ -145,12 +175,12 @@ external_flow = await container.flow_discovery.register_agent(
 - `build_auth_url(..., flow_context=...)` сохраняет в OAuth state (Storage) контекст flow: `flow_id`, `session_id`, `task_id`, `context_id`, `branch_id`, `channel`, `context_data`.
 - OAuth callback после `complete_oauth` — если `flow_context` есть, вызывает `process_flow_task.kiq(is_resume=True, content="oauth_completed:...")`.
 - SSE: `emit_interrupt` для `OAUTH_REQUIRED` шлёт `statusUpdate` с `TASK_STATE_INPUT_REQUIRED` и `metadata.platform_oauth_continue=true` (без `final` на wire) — SSE остаётся открытым.
-- UI: `interruptKind === 'oauth_required'` — кнопка/ссылка авторизации (`target=_blank`); юзер авторизуется в новой вкладке → flow продолжается автоматически.
+- UI: `interruptKind === 'oauth_required'` — кнопка/ссылка авторизации (`target=_blank`); после закрытия `SendStreamingMessage` chat поднимает `SubscribeToTask` (`findActiveOauthPause` / `syncHitlLiveTail`), как HITL. Question/кнопка для `service=workspace` — i18n `platform_chat.interrupt_oauth_workspace_*`.
 
 ### Безопасность и прозрачность
 
 - `company_id` для чтения/записи credentials — **только** из `get_context().active_company.company_id`. Разработчик flow не может подменить через `input_mapping` или `state.variables`.
-- Вся логика авторизации **явно в коде тула**: переменные, OAuth-проверка, создание клиента. Никаких скрытых resolver-ов; разработчик flow видит каждый шаг.
+- Google Docs/Sheets auth — единый facade `resolve_google_workspace_auth`; тулы не дублируют цепочку credentials. Другие интеграции — явная логика в туле/сервисе без скрытых глобальных резолверов.
 
 ### CalendarService
 

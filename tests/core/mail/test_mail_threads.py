@@ -135,5 +135,20 @@ async def test_get_thread_merges_inbox_and_sent_marks_inbox_seen(
     assert len(result.items) == 3
     assert [item.uid for item in result.items] == ["1", "10", "3"]
     assert [item.folder for item in result.items] == ["INBOX", "Sent", "INBOX"]
-    anchor = next(item for item in result.items if item.uid == "3")
-    assert anchor.unread is False
+    inbox_items = [item for item in result.items if item.folder == "INBOX"]
+    assert all(item.unread is False for item in inbox_items)
+    assert sorted(result.marked_seen_uids) == ["1", "3"]
+
+    message_repo = mail_service._message_repository
+    if message_repo is None:
+        raise RuntimeError("mail_message_repository required")
+    stored_root = await message_repo.get_by_uid(
+        binding.mailbox_binding_id, folder="INBOX", uid=1
+    )
+    stored_anchor = await message_repo.get_by_uid(
+        binding.mailbox_binding_id, folder="INBOX", uid=3
+    )
+    if stored_root is None or stored_anchor is None:
+        raise RuntimeError("expected persisted thread messages")
+    assert stored_root.unread is False
+    assert stored_anchor.unread is False

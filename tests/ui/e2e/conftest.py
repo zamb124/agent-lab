@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import pytest
+import pytest_asyncio
 
 from core.logging import get_logger
 from tests.ui.e2e_worker import bind_ui_e2e_worker_scope
+from tests.ui.perf.collector import (
+    UiPerfCollector,
+    reset_current_collector,
+    set_current_collector,
+)
+from tests.ui.perf.report import rebuild_summary
 
 _AGENT_SETTINGS_EMPTY_STATE_TESTS = frozenset({
     "test_f3_settings_agent_devices_empty",
@@ -92,6 +99,29 @@ def platform_test_scope():
     """Per-worker MockLLM scope (`test_e2e_gwN`); браузер шлёт тот же X-Test-Scope."""
     with bind_ui_e2e_worker_scope() as scope:
         yield scope
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def ui_perf_collector(request: pytest.FixtureRequest):
+    """Собирает сеть/navigation/long tasks в artifacts/ui-perf/ на каждый UI E2E тест."""
+    if not _is_ui_e2e_item(request.node):
+        yield None
+        return
+    collector = UiPerfCollector(request.node.nodeid)
+    token = set_current_collector(collector)
+    try:
+        yield collector
+    finally:
+        try:
+            await collector.finalize()
+        finally:
+            reset_current_collector(token)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Пересобирает SUMMARY.md из всех per-test JSON (xdist: last writer wins)."""
+    _ = session, exitstatus
+    rebuild_summary()
 
 
 @pytest.fixture

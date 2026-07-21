@@ -56,6 +56,10 @@ import { sanitizeToolName } from '@platform/lib/utils/sanitize-tool-name.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import { buildPromptVariableContext } from '../../_helpers/prompt-variable-catalog.js';
+import {
+    buildExecutionStatePreview,
+    collectStatePathsFromDataflow,
+} from '@platform/lib/variables/variable-refs.js';
 
 const REACT_LOOP_MODES = Object.freeze(['auto', 'explicit']);
 
@@ -292,7 +296,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 --platform-btn-secondary-bg-hover: color-mix(in srgb, var(--accent) 16%, transparent);
             }
             .chip .chip-call-type[data-call-type='handoff'] {
-                --platform-btn-secondary-text: var(--text-on-accent, white);
+                --platform-btn-secondary-text: var(--text-on-accent);
                 --platform-btn-secondary-bg: var(--accent);
                 --platform-btn-secondary-bg-hover: color-mix(in srgb, var(--accent) 88%, black);
             }
@@ -1194,6 +1198,8 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 .enableVariables=${true}
                 .variables=${variableContext.values}
                 .variableCatalog=${variableContext.catalog}
+                .statePreview=${buildExecutionStatePreview(this.previewExecutionState)}
+                .statePaths=${collectStatePathsFromDataflow(this.dataflowNode)}
                 .label=${this.t('llm_node_editor.section_prompt')}
                 .hint=${this.t('llm_node_editor.prompt_help')}
                 .minHeight=${this.focusMode === true ? 420 : 240}

@@ -3982,7 +3982,6 @@
         "enum": [
           "telegram",
           "email",
-          "whatsapp",
           "sms",
           "webhook"
         ],
@@ -21885,6 +21884,9 @@
           "snapshot_id": {
             "type": "string",
             "title": "Snapshot Id"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/TimeTravelEffect"
           }
         },
         "additionalProperties": false,
@@ -21898,7 +21900,8 @@
           "event_id",
           "sequence",
           "state_hash",
-          "snapshot_id"
+          "snapshot_id",
+          "effect"
         ],
         "title": "WorkflowBranchResult"
       },
@@ -22164,6 +22167,46 @@
           "offset"
         ],
         "title": "WorkflowHistoryResponse"
+      },
+      "TimeTravelEffect": {
+        "properties": {
+          "activates_head": {
+            "type": "boolean",
+            "title": "Activates Head"
+          },
+          "source_execution_branch_id": {
+            "type": "string",
+            "title": "Source Execution Branch Id"
+          },
+          "source_sequence": {
+            "type": "integer",
+            "title": "Source Sequence"
+          },
+          "source_events_after_base": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Source Events After Base"
+          },
+          "instance_status": {
+            "$ref": "#/components/schemas/WorkflowStatus"
+          },
+          "auto_resumes_run": {
+            "type": "boolean",
+            "title": "Auto Resumes Run",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "activates_head",
+          "source_execution_branch_id",
+          "source_sequence",
+          "source_events_after_base",
+          "instance_status",
+          "auto_resumes_run"
+        ],
+        "title": "TimeTravelEffect"
       }
     }
   },

@@ -130,9 +130,14 @@ class RAGResource:
         context = get_context()
         if context is None or context.active_company is None:
             raise ValueError("RAGResource.add_document: контекст с active_company обязателен")
-        _ = await self._container.namespace_service.get_or_create(self._bind.namespace)
+        _ = await self._container.namespace_service.get_or_create(
+            self._bind.namespace,
+            description=self._bind.namespace_description,
+        )
         doc_metadata: RAGMetadata = dict(metadata) if metadata is not None else {}
         doc_metadata["document_id"] = document_id
+        if self._bind.default_ttl_seconds is not None and "ttl_seconds" not in doc_metadata:
+            doc_metadata["ttl_seconds"] = self._bind.default_ttl_seconds
 
         ipc_from_meta = doc_metadata.get("index_profile_config")
         if not isinstance(ipc_from_meta, dict):

@@ -28,6 +28,19 @@ describe('chat-state: session lifecycle', () => {
         expect(s.streaming).toBe(false);
     });
 
+    it('session_reset переключает на пустой contextId и обновляет currentFlowId', () => {
+        const s = reduce(
+            ['session_init', { flowId: 'flow-a', contextId: 'ctx-a' }],
+            ['user_message_added', { contextId: 'ctx-a', message: { id: 'u1', role: 'user', content: 'old' } }],
+            ['session_reset', { flowId: 'flow-b' }],
+        );
+        expect(s.currentFlowId).toBe('flow-b');
+        expect(s.currentContextId).not.toBe('ctx-a');
+        expect(s.messagesByContextId[s.currentContextId].messages).toEqual([]);
+        expect(s.sessionId).toBeNull();
+        expect(s.streaming).toBe(false);
+    });
+
     it('user_message_added добавляет сообщение в текущий контекст', () => {
         const s = reduce(
             ['session_init', { flowId: 'demo', contextId: 'ctx1' }],
@@ -587,6 +600,92 @@ describe('chat-state: handoff', () => {
                 name: 'Flows Editor',
                 depth: 0,
                 toolsUnlocked: [],
+            },
+        ]);
+    });
+
+    it('reflection_resolved добавляет chip на assistant bubble без дублей', () => {
+        const s = reduce(
+            ['session_init', { flowId: 'demo', contextId: 'ctx1' }],
+            ['task_started', { task_id: 'tsk1', context_id: 'ctx1' }],
+            ['reflection_resolved', {
+                task_id: 'tsk1',
+                context_id: 'ctx1',
+                node_id: 'critic',
+                exit_id: 'blocked',
+                exit_label: 'Blocked',
+                approved: false,
+                decision: 'blocked',
+                summary: 'Unsafe side effect',
+                policy_id: 'final_answer_quality_gate',
+                gate: 'final_answer',
+                blocked_reasons: ['decision:blocked'],
+                issues: [{
+                    criterion_id: 'safety',
+                    severity: 'critical',
+                    finding: 'Destructive action',
+                }],
+            }],
+            ['reflection_resolved', {
+                task_id: 'tsk1',
+                context_id: 'ctx1',
+                node_id: 'critic',
+                exit_id: 'blocked',
+                exit_label: 'Blocked',
+                approved: false,
+                decision: 'blocked',
+                summary: 'Unsafe side effect',
+                policy_id: 'final_answer_quality_gate',
+                gate: 'final_answer',
+                blocked_reasons: ['decision:blocked'],
+                issues: [],
+            }],
+            ['reflection_resolved', {
+                task_id: 'tsk1',
+                context_id: 'ctx1',
+                node_id: 'critic',
+                exit_id: 'approved',
+                exit_label: 'Approved',
+                approved: true,
+                decision: 'approved',
+                summary: 'Looks good',
+                policy_id: 'final_answer_quality_gate',
+                gate: 'final_answer',
+                blocked_reasons: [],
+                issues: [],
+            }],
+        );
+        const assistant = s.messagesByContextId.ctx1.messages.find(
+            (m) => m.role === 'assistant' && m.taskId === 'tsk1',
+        );
+        expect(assistant.reflectionResults).toEqual([
+            {
+                nodeId: 'critic',
+                exitId: 'blocked',
+                exitLabel: 'Blocked',
+                approved: false,
+                decision: 'blocked',
+                summary: 'Unsafe side effect',
+                policyId: 'final_answer_quality_gate',
+                gate: 'final_answer',
+                blockedReasons: ['decision:blocked'],
+                issues: [{
+                    criterionId: 'safety',
+                    severity: 'critical',
+                    finding: 'Destructive action',
+                }],
+            },
+            {
+                nodeId: 'critic',
+                exitId: 'approved',
+                exitLabel: 'Approved',
+                approved: true,
+                decision: 'approved',
+                summary: 'Looks good',
+                policyId: 'final_answer_quality_gate',
+                gate: 'final_answer',
+                blockedReasons: [],
+                issues: [],
             },
         ]);
     });

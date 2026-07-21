@@ -45,8 +45,17 @@ alwaysApply: false
 - Text: `summarize_text`, `format_text_markdown`.
 - Scheduling: `schedule_*`, `list_scheduled_tasks`, `cancel_scheduled_task`.
 - Google Docs: `gdocs_*`.
+- Google Sheets: `sheets_*` (OAuth `service=workspace`, shared with Docs).
 - Browser: `browser_*`.
 - CRM/Lara: `crm_*`, `push_embed_blocks`.
 - Agent handoff: `handoff_to_flow`, `handback_to_parent` (`apps/flows/src/tools/handoff_tools.py` → **`handoff.mdc`**).
+
+## Tag groups (tool picker)
+
+- Группа в UI picker = **tag** tool (`BaseTool.tags` / `ToolReference.tags`). Тул может входить в несколько групп.
+- Платформенные LLM-описания групп: `ToolTagGroup` (`tool_tag_group:{tag}`, table `tool_tag_groups`, `is_global=True`) — `description_ru` / `description_en` + `content_hash`.
+- API: `GET /flows/api/v1/tools/tag-groups`; UI factory `flows/tool_tag_groups`.
+- Idle: `tool_tag_groups_describe_tick` — daily cron (`0 3 * * *`) + enqueue из `idle_worker_startup` на релизе; skip LLM если `content_hash` не изменился.
+- Не путать с `AgentSkill` (methodology packs) и `AgentToolkit` (desktop MCP extensions).
 
 Новый platform API для пользовательского кода добавляется не как Python namespace helper, а как capability в `apps/capability_gateway/services/registry.py`.

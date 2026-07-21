@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import json
 import socket
 
 import pytest
@@ -96,6 +97,14 @@ async def remote_flow_server():
         data = await request.json()
         assert data["method"] == "SendMessage"
         content = data["params"]["message"]["parts"][0]["text"]
+        metadata = data["params"].get("metadata")
+        if metadata is None:
+            response_text = f"Remote response: {content}"
+        else:
+            response_text = (
+                f"Remote response: {content}\n"
+                f"METADATA:{json.dumps(metadata, ensure_ascii=False, sort_keys=True)}"
+            )
 
         return web.json_response({
             "jsonrpc": "2.0",
@@ -107,7 +116,7 @@ async def remote_flow_server():
                 "artifacts": [
                     {
                         "artifactId": "remote-1",
-                        "parts": [{"text": f"Remote response: {content}"}],
+                        "parts": [{"text": response_text}],
                     }
                 ],
             },
@@ -988,8 +997,48 @@ class TestRemoteFlowNode:
         assert "response" in data["output_state"]
 
     @pytest.mark.asyncio
-    async def test_remote_flow_input_mapping_content(self, client, app, remote_flow_server):
-        """input_mapping с @state:content."""
+    async def test_remote_flow_metadata_template_resolved(self, client, app, remote_flow_server):
+        """metadata_template: @state: / @var: → params.metadata; Skill ID → branch."""
+        state = {
+            "content": "Hello meta",
+            "order_id": "ord-42",
+            "variables": {"api_token": "tok-secret"},
+        }
+
+        response = await client.post(
+            "/flows/api/v1/code/execute",
+            json={
+                "node_type": "remote_flow",
+                "node_config": {
+                    "url": remote_flow_server,
+                    "branch_id": "custom_skill",
+                    "metadata_template": json.dumps(
+                        {
+                            "variables": {
+                                "order_id": "@state:order_id",
+                                "token": "@var:api_token",
+                            },
+                            "branch": "should_be_overridden",
+                            "flag": True,
+                        }
+                    ),
+                },
+                "state": state,
+            },
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert_execute_response(data, expected_success=True)
+        response_text = data["output_state"]["response"]
+        assert "Hello meta" in response_text
+        assert "METADATA:" in response_text
+        metadata_json = response_text.split("METADATA:", 1)[1]
+        metadata = json.loads(metadata_json)
+        assert metadata["branch"] == "custom_skill"
+        assert metadata["flag"] is True
+        assert metadata["variables"]["order_id"] == "ord-42"
+        assert metadata["variables"]["token"] == "tok-secret"
         state = {"content": "Mapped content"}
 
         response = await client.post(
@@ -1115,8 +1164,27 @@ class TestRemoteFlowNode:
         assert response.status_code == 200
 
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="url или flow_id обязателен")
+        assert_execute_response(data, expected_success=False, expected_error="url обязателен")
 
+    @pytest.mark.asyncio
+    async def test_remote_flow_registry_flow_id_rejected(self, client, app):
+        """registry flow_id без url — reject."""
+        response = await client.post(
+            "/flows/api/v1/code/execute",
+            json={
+                "node_type": "remote_flow",
+                "node_config": {"flow_id": "external_agent"},
+                "state": {},
+            },
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert_execute_response(
+            data,
+            expected_success=False,
+            expected_error="не поддерживает registry flow_id",
+        )
     @pytest.mark.asyncio
     async def test_remote_flow_connection_error(self, client, app):
         """Недоступный URL."""

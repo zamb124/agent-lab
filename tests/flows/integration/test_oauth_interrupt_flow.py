@@ -6,7 +6,7 @@
   2. MockLLM вызывает tool -> _resolve_gdocs_client бросает FlowInterrupt(OAuthInterrupt)
   3. Проверяем state.interrupt
   4. Эмулируем callback: вставляем credential в БД
-  5. Resume flow (state.content="oauth_completed:google:docs")
+  5. Resume flow (state.content="oauth_completed:google:workspace")
   6. MockLLM снова вызывает tool -> credential найден -> GoogleDocsClient мокнут
   7. MockLLM возвращает финальный текст
 
@@ -105,12 +105,13 @@ class TestOAuthInterruptFlow:
         _patch_oauth_config(monkeypatch)
         context_user_id = "test_user"
 
-        await credential_repository.delete_by_user_provider_service(
-            company_id="system",
-            user_id=context_user_id,
-            provider=IntegrationProvider.GOOGLE,
-            service="docs",
-        )
+        for service in ("workspace", "docs", "sheets"):
+            await credential_repository.delete_by_user_provider_service(
+                company_id="system",
+                user_id=context_user_id,
+                provider=IntegrationProvider.GOOGLE,
+                service=service,
+            )
 
         mock_llm_with_queue([
             {
@@ -140,7 +141,7 @@ class TestOAuthInterruptFlow:
         assert result.interrupt is not None, "state.interrupt должен быть установлен"
         assert result.interrupt.body.kind == InterruptKind.OAUTH_REQUIRED
         assert result.interrupt.body.provider == "google"
-        assert result.interrupt.body.service == "docs"
+        assert result.interrupt.body.service == "workspace"
         assert "accounts.google.com" in result.interrupt.body.auth_url
 
     @pytest.mark.asyncio
@@ -157,12 +158,13 @@ class TestOAuthInterruptFlow:
         """
         _patch_oauth_config(monkeypatch)
 
-        await credential_repository.delete_by_user_provider_service(
-            company_id="system",
-            user_id="test_user",
-            provider=IntegrationProvider.GOOGLE,
-            service="docs",
-        )
+        for service in ("workspace", "docs", "sheets"):
+            await credential_repository.delete_by_user_provider_service(
+                company_id="system",
+                user_id="test_user",
+                provider=IntegrationProvider.GOOGLE,
+                service=service,
+            )
 
         mock_llm_with_queue([
             {
@@ -207,7 +209,7 @@ class TestOAuthInterruptFlow:
             company_id=context_company_id,
             user_id=context_user_id,
             provider=IntegrationProvider.GOOGLE,
-            service="docs",
+            service="workspace",
             access_token="test-access-token-for-resume",
             refresh_token="test-refresh-token",
             expires_at=now + timedelta(hours=1),
@@ -221,7 +223,7 @@ class TestOAuthInterruptFlow:
             _fake_create_document,
         )
 
-        result.content = "oauth_completed:google:docs"
+        result.content = "oauth_completed:google:workspace"
 
         resumed = await run_flow(container=container, flow=flow, state=result)
 
@@ -230,9 +232,10 @@ class TestOAuthInterruptFlow:
         assert resumed.response is not None
         assert "Resume Doc" in resumed.response or "Документ создан" in resumed.response
 
-        await credential_repository.delete_by_user_provider_service(
-            company_id=context_company_id,
-            user_id=context_user_id,
-            provider=IntegrationProvider.GOOGLE,
-            service="docs",
-        )
+        for service in ("workspace", "docs", "sheets"):
+            await credential_repository.delete_by_user_provider_service(
+                company_id=context_company_id,
+                user_id=context_user_id,
+                provider=IntegrationProvider.GOOGLE,
+                service=service,
+            )

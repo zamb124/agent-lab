@@ -1,7 +1,10 @@
 /**
  * platform-segmented-control — pill segmented selector (tabs / mode toggle).
  *
- * Items: { value, label?, icon?, title?, disabled?, indicator?, closable? }
+ * Items: { value, label?, icon?, iconSrc?, iconFallback?, colored?, title?, tone?, disabled?, indicator?, closable? }
+ * iconSrc — прямой SVG/img asset (brand logos); при error → iconFallback text
+ * colored — brand/logo SVG через <platform-icon colored> (без monochrome fill override)
+ * tone ∈ success | warning | error | info | accent | accent-secondary | accent-tertiary
  * Events: change { value }, segment-close { value }
  */
 
@@ -9,9 +12,19 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 
+const SEGMENT_TONES = Object.freeze([
+    'success',
+    'warning',
+    'error',
+    'info',
+    'accent',
+    'accent-secondary',
+    'accent-tertiary',
+]);
+
 /**
  * @param {unknown} item
- * @returns {{ value: string, label: string, icon: string, title: string, disabled: boolean, indicator: boolean, closable: boolean } | null}
+ * @returns {{ value: string, label: string, icon: string, iconSrc: string, iconFallback: string, colored: boolean, title: string, tone: string, disabled: boolean, indicator: boolean, closable: boolean } | null}
  */
 function _normalizeItem(item) {
     if (!item || typeof item !== 'object') {
@@ -23,14 +36,22 @@ function _normalizeItem(item) {
     }
     const label = typeof item.label === 'string' ? item.label : '';
     const icon = typeof item.icon === 'string' ? item.icon : '';
+    const iconSrc = typeof item.iconSrc === 'string' ? item.iconSrc : '';
+    const iconFallback = typeof item.iconFallback === 'string' ? item.iconFallback : '';
     const title = typeof item.title === 'string' && item.title.length > 0
         ? item.title
         : (label.length > 0 ? label : value);
+    const toneRaw = typeof item.tone === 'string' ? item.tone : '';
+    const tone = SEGMENT_TONES.includes(toneRaw) ? toneRaw : '';
     return {
         value,
         label,
         icon,
+        iconSrc,
+        iconFallback,
+        colored: Boolean(item.colored),
         title,
+        tone,
         disabled: Boolean(item.disabled),
         indicator: Boolean(item.indicator),
         closable: Boolean(item.closable),
@@ -48,6 +69,9 @@ export class PlatformSegmentedControl extends PlatformElement {
         fullWidth: { type: Boolean, attribute: 'full-width', reflect: true },
         orientation: { type: String, reflect: true },
         ariaLabel: { type: String, attribute: 'aria-label' },
+        /** (item) => TemplateResult — кастомная иконка вместо platform-icon / iconSrc */
+        renderIcon: { attribute: false },
+        _failedIconSrc: { state: true },
     };
 
     static styles = [
@@ -152,12 +176,59 @@ export class PlatformSegmentedControl extends PlatformElement {
             }
             .segment:hover:not(:disabled) {
                 background: var(--glass-solid-medium);
+            }
+            .segment:hover:not(:disabled):not([data-tone]) {
                 color: var(--text-primary);
+            }
+            .segment:hover:not(:disabled):not([data-active='true'])[data-tone] {
+                background: var(--glass-solid-medium);
             }
             .segment[data-active='true'] {
                 background: var(--accent-subtle);
                 color: var(--accent);
                 box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+            }
+            .segment[data-tone='success'] { color: var(--success); }
+            .segment[data-tone='warning'] { color: var(--warning); }
+            .segment[data-tone='error'] { color: var(--error); }
+            .segment[data-tone='info'] { color: var(--info); }
+            .segment[data-tone='accent'] { color: var(--accent); }
+            .segment[data-tone='accent-secondary'] { color: var(--accent-secondary); }
+            .segment[data-tone='accent-tertiary'] { color: var(--accent-tertiary); }
+            .segment[data-active='true'][data-tone='success'] {
+                background: var(--success-bg);
+                color: var(--success);
+                box-shadow: inset 0 0 0 1px var(--success-border);
+            }
+            .segment[data-active='true'][data-tone='warning'] {
+                background: var(--warning-bg);
+                color: var(--warning);
+                box-shadow: inset 0 0 0 1px var(--warning-border);
+            }
+            .segment[data-active='true'][data-tone='error'] {
+                background: var(--error-bg);
+                color: var(--error);
+                box-shadow: inset 0 0 0 1px var(--error-border);
+            }
+            .segment[data-active='true'][data-tone='info'] {
+                background: var(--info-bg);
+                color: var(--info);
+                box-shadow: inset 0 0 0 1px var(--info-border);
+            }
+            .segment[data-active='true'][data-tone='accent'] {
+                background: var(--accent-subtle);
+                color: var(--accent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+            }
+            .segment[data-active='true'][data-tone='accent-secondary'] {
+                background: var(--accent-secondary-subtle);
+                color: var(--accent-secondary);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 35%, transparent);
+            }
+            .segment[data-active='true'][data-tone='accent-tertiary'] {
+                background: var(--accent-tertiary-subtle);
+                color: var(--accent-tertiary);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-tertiary) 35%, transparent);
             }
             .segment:disabled {
                 opacity: 0.45;
@@ -166,6 +237,26 @@ export class PlatformSegmentedControl extends PlatformElement {
             .segment-label {
                 overflow: hidden;
                 text-overflow: ellipsis;
+            }
+            .segment-icon-img {
+                display: block;
+                width: 14px;
+                height: 14px;
+                object-fit: contain;
+                flex-shrink: 0;
+            }
+            .segment-icon-fallback {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 14px;
+                height: 14px;
+                font-size: 9px;
+                font-weight: var(--font-bold);
+                letter-spacing: 0;
+                line-height: 1;
+                color: var(--text-primary);
+                white-space: nowrap;
             }
             .indicator {
                 position: absolute;
@@ -211,6 +302,9 @@ export class PlatformSegmentedControl extends PlatformElement {
         this.fullWidth = false;
         this.orientation = 'horizontal';
         this.ariaLabel = '';
+        this.renderIcon = null;
+        /** @type {ReadonlySet<string>} */
+        this._failedIconSrc = new Set();
     }
 
     _normalizedItems() {
@@ -237,6 +331,48 @@ export class PlatformSegmentedControl extends PlatformElement {
         this.emit('segment-close', { value: item.value });
     }
 
+    /**
+     * @param {string} iconSrc
+     */
+    _onIconSrcError(iconSrc) {
+        if (typeof iconSrc !== 'string' || iconSrc.length === 0) {
+            return;
+        }
+        if (this._failedIconSrc.has(iconSrc)) {
+            return;
+        }
+        const next = new Set(this._failedIconSrc);
+        next.add(iconSrc);
+        this._failedIconSrc = next;
+    }
+
+    _renderSegmentIcon(item) {
+        if (typeof this.renderIcon === 'function') {
+            return this.renderIcon(item);
+        }
+        if (item.iconSrc.length > 0) {
+            if (this._failedIconSrc.has(item.iconSrc)) {
+                const fallback = item.iconFallback.length > 0 ? item.iconFallback : item.title;
+                return html`<span class="segment-icon-fallback">${fallback}</span>`;
+            }
+            return html`<img
+                class="segment-icon-img"
+                src=${item.iconSrc}
+                alt=""
+                draggable="false"
+                @error=${() => this._onIconSrcError(item.iconSrc)}
+            >`;
+        }
+        if (!item.icon) {
+            return nothing;
+        }
+        return html`<platform-icon
+            name=${item.icon}
+            size="14"
+            ?colored=${item.colored}
+        ></platform-icon>`;
+    }
+
     render() {
         const items = this._normalizedItems();
         const groupLabel = typeof this.ariaLabel === 'string' && this.ariaLabel.length > 0
@@ -252,15 +388,14 @@ export class PlatformSegmentedControl extends PlatformElement {
                                 type="button"
                                 class="segment"
                                 data-active=${active ? 'true' : 'false'}
+                                data-tone=${item.tone.length > 0 ? item.tone : nothing}
                                 title=${item.title}
                                 aria-label=${item.title}
                                 aria-pressed=${active ? 'true' : 'false'}
                                 ?disabled=${item.disabled}
                                 @click=${() => this._select(item)}
                             >
-                                ${item.icon
-                                    ? html`<platform-icon name=${item.icon} size="14"></platform-icon>`
-                                    : nothing}
+                                ${this._renderSegmentIcon(item)}
                                 ${!this.iconOnly && item.label
                                     ? html`<span class="segment-label">${item.label}</span>`
                                     : nothing}

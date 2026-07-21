@@ -444,37 +444,37 @@ export const sidebarNavItemStyles = css`
 
     .nav-item-icon.gradient-emerald {
         background: var(--accent-gradient);
-        color: var(--text-inverse);
+        color: var(--platform-btn-primary-text);
         box-shadow: var(--crm-nav-entities-shadow);
     }
 
     .nav-item-icon.gradient-blue {
         background: var(--crm-nav-entities-gradient);
-        color: var(--text-inverse);
+        color: var(--platform-btn-primary-text);
         box-shadow: var(--crm-nav-entities-shadow);
     }
 
     .nav-item-icon.gradient-purple {
         background: var(--crm-nav-graph-gradient);
-        color: var(--text-inverse);
+        color: var(--platform-btn-primary-text);
         box-shadow: var(--crm-nav-graph-shadow);
     }
 
     .nav-item-icon.gradient-orange {
         background: var(--crm-nav-notes-gradient);
-        color: var(--text-inverse);
+        color: var(--platform-btn-primary-text);
         box-shadow: var(--crm-nav-notes-shadow);
     }
 
     .nav-item-icon.gradient-green {
         background: var(--crm-nav-tasks-gradient);
-        color: var(--text-inverse);
+        color: var(--platform-btn-primary-text);
         box-shadow: var(--crm-nav-tasks-shadow);
     }
 
     .nav-item-icon.gradient-red {
         background: var(--crm-nav-calendar-gradient);
-        color: var(--text-inverse);
+        color: var(--platform-btn-primary-text);
         box-shadow: var(--crm-nav-calendar-shadow);
     }
 

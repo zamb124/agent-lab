@@ -119,7 +119,11 @@ MINIMAL_NODE_CONFIGS: dict[str, dict[str, object]] = {
         "code": "async def run(args, state):\n    return {}",
     },
     NodeType.FLOW.value: {"type": "flow", "flow_id": "nested_flow"},
-    NodeType.REMOTE_FLOW.value: {"type": "remote_flow", "flow_id": "remote_1"},
+    NodeType.REMOTE_FLOW.value: {
+        "type": "remote_flow",
+        "url": "https://example.test/a2a",
+        "branch_id": "default",
+    },
     NodeType.EXTERNAL_API.value: {"type": "external_api", "url": "https://example.test", "method": "GET"},
     NodeType.MCP.value: {"type": "mcp", "server_id": "srv", "tool_name": "tool"},
     NodeType.CHANNEL.value: {"type": "channel", "channel": "telegram", "action": "send"},

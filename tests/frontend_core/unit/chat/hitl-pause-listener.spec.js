@@ -3,7 +3,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { findActiveHitlPause } from '../../../../core/frontend/static/lib/chat/runtime/hitl-pause-listener.js';
+import {
+    findActiveHitlPause,
+    findActiveOauthPause,
+    findActiveLiveTailPause,
+} from '../../../../core/frontend/static/lib/chat/runtime/hitl-pause-listener.js';
 import {
     applyChatRuntimeEvent,
     createInitialChatRuntimeState,
@@ -48,6 +52,48 @@ function stateWithHitlPause({ workItemId = 'wi1', taskId = 'tsk1', contextId = '
     return state;
 }
 
+function stateWithOauthPause({
+    taskId = 'tsk-oauth',
+    contextId = 'ctx-oauth',
+    flowId = 'flow-oauth',
+    authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
+} = {}) {
+    let state = createInitialChatRuntimeState();
+    state = applyChatRuntimeEvent(state, 'session_loaded', {
+        sessionId: `${flowId}:${contextId}`,
+        flowId,
+        contextId,
+        taskId,
+        messages: [
+            {
+                id: 'u1',
+                role: 'user',
+                content: 'sheets',
+                timestamp: new Date().toISOString(),
+                taskId,
+            },
+        ],
+    });
+    state = applyChatRuntimeEvent(state, 'input_required', {
+        task_id: taskId,
+        context_id: contextId,
+        message: { parts: [{ text: 'oauth' }] },
+        result_metadata: {
+            platform_interrupt: {
+                question: 'oauth_required.google.workspace',
+                body: {
+                    kind: 'oauth_required',
+                    question: 'oauth_required.google.workspace',
+                    auth_url: authUrl,
+                    provider: 'google',
+                    service: 'workspace',
+                },
+            },
+        },
+    });
+    return state;
+}
+
 describe('findActiveHitlPause', () => {
     it('returns pause when operator_task inputRequired is present', () => {
         const pause = findActiveHitlPause(stateWithHitlPause());
@@ -62,6 +108,36 @@ describe('findActiveHitlPause', () => {
 
     it('returns null without operator_task', () => {
         expect(findActiveHitlPause(createInitialChatRuntimeState())).toBeNull();
+    });
+});
+
+describe('findActiveOauthPause', () => {
+    it('returns pause when oauth_required with authUrl is present', () => {
+        const pause = findActiveOauthPause(stateWithOauthPause());
+        expect(pause).toEqual({
+            taskId: 'tsk-oauth',
+            contextId: 'ctx-oauth',
+            flowId: 'flow-oauth',
+            sessionId: 'flow-oauth:ctx-oauth',
+            authUrl: 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
+        });
+    });
+
+    it('returns null without oauth pause', () => {
+        expect(findActiveOauthPause(createInitialChatRuntimeState())).toBeNull();
+    });
+});
+
+describe('findActiveLiveTailPause', () => {
+    it('prefers HITL over oauth', () => {
+        const pause = findActiveLiveTailPause(stateWithHitlPause());
+        expect(pause?.kind).toBe('operator_task');
+    });
+
+    it('returns oauth when no HITL', () => {
+        const pause = findActiveLiveTailPause(stateWithOauthPause());
+        expect(pause?.kind).toBe('oauth_required');
+        expect(pause?.taskId).toBe('tsk-oauth');
     });
 });
 

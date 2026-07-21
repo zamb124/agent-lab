@@ -201,7 +201,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 border: none;
                 border-radius: var(--radius-full);
                 background: var(--crm-daily-notes-cta-bg);
-                color: var(--text-inverse);
+                color: var(--platform-btn-primary-text);
                 font-size: var(--text-base);
                 font-weight: 500;
                 padding: 0 var(--space-5);
@@ -1037,7 +1037,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 border: none;
                 border-radius: var(--radius-full);
                 background: var(--crm-daily-notes-cta-bg);
-                color: var(--text-inverse);
+                color: var(--platform-btn-primary-text);
                 font-size: var(--text-sm);
                 font-weight: 500;
                 padding: 0 var(--space-5);

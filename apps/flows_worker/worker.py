@@ -124,6 +124,13 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
             set_span_repository(container.span_repository)
         logger.info("worker.tracing_initialized", service=service_name)
 
+    logger.info(
+        "worker.testing_flag",
+        service=service_name,
+        testing=is_testing(),
+        testing_env=os.environ.get("TESTING"),
+        pytest_current_test=os.environ.get("PYTEST_CURRENT_TEST"),
+    )
     if is_testing():
         _ = get_or_create_global_mock_llm("mock-gpt-4")
         _ = configure_mock_llm_redis(container.redis_client)

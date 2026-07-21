@@ -12,9 +12,15 @@ export const baseStyles = css`
 
     /*
      * reset.css (button/input font: inherit) не действует внутри Shadow DOM.
-     * Без этого UA stylesheet задаёт button font-family (Arial) поверх platform tokens.
+     * Без font: inherit UA stylesheet задаёт button font-family (Arial) поверх platform tokens.
+     * color: inherit на :host button запрещён: специфичность (0,1,1) перебивает
+     * .btn-primary / .cta-btn (0,1,0) и в light theme даёт тёмный --text-primary на violet CTA.
+     * Цвет кнопки — только variant-токены (--platform-btn-*-text) или локальный class.
      */
-    :host button,
+    :host button {
+        font: inherit;
+    }
+
     :host input,
     :host textarea,
     :host select {

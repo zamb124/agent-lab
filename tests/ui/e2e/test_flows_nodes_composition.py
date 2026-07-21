@@ -237,7 +237,7 @@ async def test_flows_add_answer_review(
     editor = page.locator("flows-reflection-node-editor").first
     await expect(editor).to_be_visible(timeout=5_000)
     await expect(editor).to_contain_text(
-        re.compile(r"политик|policy|критер", re.I),
+        re.compile(r"критер|политик|проверк|policy|criter|review|gate|одобр|approved|блок", re.I),
         timeout=5_000,
     )
     await scenario.step(

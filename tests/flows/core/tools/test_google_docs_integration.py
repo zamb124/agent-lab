@@ -3,26 +3,24 @@
 
 ПРАВИЛО: мок только LLM. Tools, state, flow — реальные. Google API — реальный.
 
-Для тулов, которым нужен document_id (read, append, insert, find_replace,
-delete_range, share), документ создаётся ПЕРЕД flow через GoogleDocsClient напрямую,
-чтобы document_id был известен для MockLLM очереди.
-
-Требует:
-  - файл google_service_account.json в корне проекта (gitignored)
-  - env GOOGLE_IMPERSONATE_EMAIL — email пользователя Google Workspace
-    для domain-wide delegation (SA работает от его имени)
-
-Без файла `google_service_account.json` и `GOOGLE_IMPERSONATE_EMAIL` тесты пропускаются (`pytest.skip`).
+Auth (один из путей):
+  - OAuth: google_workspace.live_test.access_token или GOOGLE_ACCESS_TOKEN
+  - SA: google_service_account.json + GOOGLE_IMPERSONATE_EMAIL (Workspace DWD)
 
 Запуск:
-    GOOGLE_IMPERSONATE_EMAIL=user@domain.ru \\
-      uv run pytest tests/flows/core/tools/test_google_docs_integration.py -v -s
+  GOOGLE_ACCESS_TOKEN=ya29... \\
+    uv run pytest tests/flows/core/tools/test_google_docs_integration.py -m network -v -s
+
+CI default — emulator suites: test_google_docs_emulator*.py
 """
 
-import os
-from pathlib import Path
+from __future__ import annotations
+
+import json
+from typing import Any
 
 import pytest
+from a2a.helpers.proto_helpers import get_message_text
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
@@ -37,14 +35,15 @@ from apps.flows.tools.google_docs import (
 )
 from core.clients.google_docs_client import GoogleDocsClient
 from core.state import ExecutionState
+from core.types import JsonObject, require_json_object
+from tests.fixtures.google_sheets_live import (
+    google_sheets_live_auth_material,
+    require_google_sheets_live_credentials,
+    sheets_execution_variables,
+)
+from tests.flows.durable_runtime_harness import ensure_workflow_started
 
-_CREDS_PATH = Path(__file__).resolve().parents[4] / "google_service_account.json"
-
-_creds_json: str | None = None
-if _CREDS_PATH.exists():
-    _creds_json = _CREDS_PATH.read_text(encoding="utf-8")
-
-_impersonate_email: str | None = os.environ.get("GOOGLE_IMPERSONATE_EMAIL")
+pytestmark = [pytest.mark.network, pytest.mark.timeout(180)]
 
 _ALL_GDOCS_TOOLS = [
     gdocs_create_document,
@@ -56,59 +55,81 @@ _ALL_GDOCS_TOOLS = [
     gdocs_share_document,
 ]
 
-_skip_reason_parts: list[str] = []
-if _creds_json is None:
-    _skip_reason_parts.append(f"файл {_CREDS_PATH} не найден")
-if _impersonate_email is None:
-    _skip_reason_parts.append("env GOOGLE_IMPERSONATE_EMAIL не задан")
-
 
 @pytest.fixture(autouse=True)
-def _require_google_docs_credentials() -> None:
-    if _skip_reason_parts:
-        pytest.skip("; ".join(_skip_reason_parts))
-
-
-@pytest.fixture()
-def gdocs_real_mode():
-    """Временно снимает mock_response с gdocs тулов — TESTING=true не мешает."""
-    saved = {}
-    for t in _ALL_GDOCS_TOOLS:
-        saved[t.name] = t._mock_response
-        t._mock_response = None
-    yield
-    for t in _ALL_GDOCS_TOOLS:
-        t._mock_response = saved[t.name]
+def _require_live_docs() -> None:
+    require_google_sheets_live_credentials()
 
 
 @pytest.fixture()
 def gdocs_client() -> GoogleDocsClient:
-    """Клиент для pre-setup документов перед flow (с delegation)."""
+    material = google_sheets_live_auth_material()
     return GoogleDocsClient(
-        credentials_json=_creds_json,
-        subject=_impersonate_email,
+        credentials_json=material.credentials_json,
+        access_token=material.access_token,
+        subject=material.subject,
     )
 
 
-def _make_state(unique_id: str, flow_id: str, content: str = "Выполни") -> ExecutionState:
+def _make_state(unique_id: str, flow_id: str) -> ExecutionState:
     context_id = f"ctx-gdocs-{unique_id}"
     return ExecutionState(
         task_id=f"task-gdocs-{unique_id}",
         context_id=context_id,
         user_id=f"user-gdocs-{unique_id}",
         session_id=f"{flow_id}:{context_id}",
-        content=content,
-        variables={
-            "google_service_account": _creds_json,
-            "google_impersonate_email": _impersonate_email,
-        },
+        content="Выполни",
+        variables=sheets_execution_variables(),
     )
 
 
-def _tool_results_from_state(state: ExecutionState) -> list[str]:
-    """Извлекает content всех tool-результатов из state.messages."""
+def _parse_tool_payload(content: object) -> JsonObject:
+    if isinstance(content, dict):
+        return require_json_object(content, "gdocs.tool_message")
+    if isinstance(content, str):
+        return require_json_object(json.loads(content), "gdocs.tool_message")
+    raise TypeError(f"unexpected tool content type: {type(content).__name__}")
+
+
+def _metadata_tool_call_id(metadata: object) -> object | None:
+    """tool_call_id из dict или protobuf Struct (A2A Message.metadata)."""
+    if metadata is None:
+        return None
+    if isinstance(metadata, dict):
+        return metadata.get("tool_call_id")
+    try:
+        if "tool_call_id" not in metadata:
+            return None
+        return metadata["tool_call_id"]
+    except TypeError:
+        return None
+
+
+def _message_is_tool(message: object) -> bool:
+    # A2A Message: и tool-result, и финальный assistant text могут иметь один role —
+    # отличить можно только по metadata.tool_call_id.
+    if isinstance(message, dict):
+        if _metadata_tool_call_id(message.get("metadata")):
+            return True
+        return message.get("role") == "tool"
+    return _metadata_tool_call_id(getattr(message, "metadata", None)) is not None
+
+
+
+def _message_text(message: object) -> str:
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        return ""
+    return get_message_text(message)
+
+
+def _tool_payloads_from_state(state: ExecutionState) -> list[JsonObject]:
     return [
-        m.get("content", "") for m in state.messages if m.get("role") == "tool"
+        _parse_tool_payload(_message_text(message))
+        for message in state.messages
+        if _message_is_tool(message)
     ]
 
 
@@ -117,10 +138,9 @@ async def _run_single_tool_flow(
     flow_suffix: str,
     tool_ids: list[str],
     tool_call_name: str,
-    tool_call_args: dict,
-    mock_llm_with_queue,
-) -> tuple[dict, ExecutionState]:
-    """Создаёт flow с одной llm_node, подаёт один tool_call, возвращает (result, state)."""
+    tool_call_args: dict[str, Any],
+    mock_llm_with_queue: Any,
+) -> tuple[dict[str, Any], ExecutionState]:
     flow_id = f"gdocs_{flow_suffix}_{unique_id}"
     container = get_container()
 
@@ -139,220 +159,222 @@ async def _run_single_tool_flow(
     )
     await container.flow_repository.set(flow_config)
 
-    mock_llm_with_queue([
-        {"type": "tool_call", "tool": tool_call_name, "args": tool_call_args},
-        {"type": "text", "content": "Готово."},
-    ])
+    mock_llm_with_queue(
+        [
+            {"type": "tool_call", "tool": tool_call_name, "args": tool_call_args},
+            {"type": "text", "content": "Готово."},
+        ]
+    )
 
     flow = await container.flow_factory.get_flow(flow_id)
     state = _make_state(unique_id, flow_id)
-    result = await flow.run(state)
+    await ensure_workflow_started(
+        container=container,
+        state=state,
+        flow_id=flow_id,
+        branch_id=state.branch_id,
+    )
+    final_state = await flow.run(state)
 
     await container.flow_repository.delete(flow_id)
-    return result, state
+    return final_state, final_state
 
 
-# ── Тесты ─────────────────────────────────────────────────────────
+def test_all_gdocs_tools_are_registered_in_suite() -> None:
+    names = {tool.name for tool in _ALL_GDOCS_TOOLS}
+    assert names == {
+        "gdocs_create_document",
+        "gdocs_read_document",
+        "gdocs_append_text",
+        "gdocs_insert_text",
+        "gdocs_find_replace",
+        "gdocs_delete_range",
+        "gdocs_share_document",
+    }
 
 
-class TestGDocsCreateViaAgent:
-    """gdocs_create_document через LlmNode — создание пустого документа."""
-
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_create_document(
-        self, app, unique_id, mock_llm_with_queue, gdocs_real_mode
-    ):
-        result, state = await _run_single_tool_flow(
-            unique_id,
-            flow_suffix="create",
-            tool_ids=["gdocs_create_document"],
-            tool_call_name="gdocs_create_document",
-            tool_call_args={"title": f"Agent Create {unique_id}"},
-            mock_llm_with_queue=mock_llm_with_queue,
-        )
-        assert result["response"] == "Готово."
-
-        tool_contents = _tool_results_from_state(state)
-        assert len(tool_contents) == 1
-        assert "success" in tool_contents[0]
-        assert "document_id" in tool_contents[0]
+@pytest.mark.asyncio
+async def test_create_document_via_llm_node(
+    app: object, unique_id: str, mock_llm_with_queue: Any
+) -> None:
+    _ = app
+    result, state = await _run_single_tool_flow(
+        unique_id,
+        flow_suffix="create",
+        tool_ids=["gdocs_create_document"],
+        tool_call_name="gdocs_create_document",
+        tool_call_args={"title": f"Agent Create {unique_id}"},
+        mock_llm_with_queue=mock_llm_with_queue,
+    )
+    assert result["response"] == "Готово."
+    payload = _tool_payloads_from_state(state)[0]
+    assert payload["success"] is True
+    assert isinstance(payload["document_id"], str)
 
 
-class TestGDocsReadViaAgent:
-    """gdocs_read_document через LlmNode — чтение реального документа."""
+@pytest.mark.asyncio
+async def test_read_document_via_llm_node(
+    app: object,
+    unique_id: str,
+    mock_llm_with_queue: Any,
+    gdocs_client: GoogleDocsClient,
+) -> None:
+    _ = app
+    doc = await gdocs_client.create_document(f"Read Target {unique_id}")
+    doc_id = str(doc["documentId"])
+    await gdocs_client.append_text(doc_id, "Контент для чтения.")
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_read_document(
-        self, app, unique_id, mock_llm_with_queue, gdocs_real_mode, gdocs_client
-    ):
-        doc = await gdocs_client.create_document(f"Read Target {unique_id}")
-        doc_id = doc["documentId"]
-        await gdocs_client.append_text(doc_id, "Контент для чтения.")
-
-        result, state = await _run_single_tool_flow(
-            unique_id,
-            flow_suffix="read",
-            tool_ids=["gdocs_read_document"],
-            tool_call_name="gdocs_read_document",
-            tool_call_args={"document_id": doc_id},
-            mock_llm_with_queue=mock_llm_with_queue,
-        )
-        assert result["response"] == "Готово."
-
-        tool_contents = _tool_results_from_state(state)
-        assert len(tool_contents) == 1
-        assert "Контент для чтения" in tool_contents[0]
+    result, state = await _run_single_tool_flow(
+        unique_id,
+        flow_suffix="read",
+        tool_ids=["gdocs_read_document"],
+        tool_call_name="gdocs_read_document",
+        tool_call_args={"document_id": doc_id},
+        mock_llm_with_queue=mock_llm_with_queue,
+    )
+    assert result["response"] == "Готово."
+    assert "Контент для чтения" in str(_tool_payloads_from_state(state)[0]["text"])
 
 
-class TestGDocsAppendViaAgent:
-    """gdocs_append_text через LlmNode — добавление текста в конец."""
+@pytest.mark.asyncio
+async def test_append_text_via_llm_node(
+    app: object,
+    unique_id: str,
+    mock_llm_with_queue: Any,
+    gdocs_client: GoogleDocsClient,
+) -> None:
+    _ = app
+    doc = await gdocs_client.create_document(f"Append Target {unique_id}")
+    doc_id = str(doc["documentId"])
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_append_text(
-        self, app, unique_id, mock_llm_with_queue, gdocs_real_mode, gdocs_client
-    ):
-        doc = await gdocs_client.create_document(f"Append Target {unique_id}")
-        doc_id = doc["documentId"]
-
-        result, state = await _run_single_tool_flow(
-            unique_id,
-            flow_suffix="append",
-            tool_ids=["gdocs_append_text"],
-            tool_call_name="gdocs_append_text",
-            tool_call_args={
-                "document_id": doc_id,
-                "text": "Добавленный текст из агента.\n",
-            },
-            mock_llm_with_queue=mock_llm_with_queue,
-        )
-        assert result["response"] == "Готово."
-
-        text = await gdocs_client.read_as_text(doc_id)
-        assert "Добавленный текст из агента." in text
-
-
-class TestGDocsInsertViaAgent:
-    """gdocs_insert_text через LlmNode — вставка в начало."""
-
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_insert_text(
-        self, app, unique_id, mock_llm_with_queue, gdocs_real_mode, gdocs_client
-    ):
-        doc = await gdocs_client.create_document(f"Insert Target {unique_id}")
-        doc_id = doc["documentId"]
-        await gdocs_client.append_text(doc_id, "Второй.\n")
-
-        result, state = await _run_single_tool_flow(
-            unique_id,
-            flow_suffix="insert",
-            tool_ids=["gdocs_insert_text"],
-            tool_call_name="gdocs_insert_text",
-            tool_call_args={
-                "document_id": doc_id,
-                "text": "Первый.\n",
-                "index": 1,
-            },
-            mock_llm_with_queue=mock_llm_with_queue,
-        )
-        assert result["response"] == "Готово."
-
-        text = await gdocs_client.read_as_text(doc_id)
-        assert text.startswith("Первый.")
-        assert "Второй." in text
+    result, _state = await _run_single_tool_flow(
+        unique_id,
+        flow_suffix="append",
+        tool_ids=["gdocs_append_text"],
+        tool_call_name="gdocs_append_text",
+        tool_call_args={
+            "document_id": doc_id,
+            "text": "Добавленный текст из агента.\n",
+        },
+        mock_llm_with_queue=mock_llm_with_queue,
+    )
+    assert result["response"] == "Готово."
+    text = await gdocs_client.read_as_text(doc_id)
+    assert "Добавленный текст из агента." in text
 
 
-class TestGDocsFindReplaceViaAgent:
-    """gdocs_find_replace через LlmNode — поиск и замена."""
+@pytest.mark.asyncio
+async def test_insert_text_via_llm_node(
+    app: object,
+    unique_id: str,
+    mock_llm_with_queue: Any,
+    gdocs_client: GoogleDocsClient,
+) -> None:
+    _ = app
+    doc = await gdocs_client.create_document(f"Insert Target {unique_id}")
+    doc_id = str(doc["documentId"])
+    await gdocs_client.append_text(doc_id, "Второй.\n")
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_find_replace(
-        self, app, unique_id, mock_llm_with_queue, gdocs_real_mode, gdocs_client
-    ):
-        doc = await gdocs_client.create_document(f"FR Target {unique_id}")
-        doc_id = doc["documentId"]
-        await gdocs_client.append_text(doc_id, "Старая версия документа.\n")
-
-        result, state = await _run_single_tool_flow(
-            unique_id,
-            flow_suffix="fr",
-            tool_ids=["gdocs_find_replace"],
-            tool_call_name="gdocs_find_replace",
-            tool_call_args={
-                "document_id": doc_id,
-                "find": "Старая",
-                "replace": "Новая",
-            },
-            mock_llm_with_queue=mock_llm_with_queue,
-        )
-        assert result["response"] == "Готово."
-
-        tool_contents = _tool_results_from_state(state)
-        assert "occurrences_changed" in tool_contents[0]
-
-        text = await gdocs_client.read_as_text(doc_id)
-        assert "Новая версия" in text
-        assert "Старая" not in text
+    result, _state = await _run_single_tool_flow(
+        unique_id,
+        flow_suffix="insert",
+        tool_ids=["gdocs_insert_text"],
+        tool_call_name="gdocs_insert_text",
+        tool_call_args={
+            "document_id": doc_id,
+            "text": "Первый.\n",
+            "index": 1,
+        },
+        mock_llm_with_queue=mock_llm_with_queue,
+    )
+    assert result["response"] == "Готово."
+    text = await gdocs_client.read_as_text(doc_id)
+    assert text.startswith("Первый.")
+    assert "Второй." in text
 
 
-class TestGDocsDeleteRangeViaAgent:
-    """gdocs_delete_range через LlmNode — удаление диапазона."""
+@pytest.mark.asyncio
+async def test_find_replace_via_llm_node(
+    app: object,
+    unique_id: str,
+    mock_llm_with_queue: Any,
+    gdocs_client: GoogleDocsClient,
+) -> None:
+    _ = app
+    doc = await gdocs_client.create_document(f"FR Target {unique_id}")
+    doc_id = str(doc["documentId"])
+    await gdocs_client.append_text(doc_id, "Старая версия документа.\n")
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_delete_range(
-        self, app, unique_id, mock_llm_with_queue, gdocs_real_mode, gdocs_client
-    ):
-        doc = await gdocs_client.create_document(f"Del Target {unique_id}")
-        doc_id = doc["documentId"]
-        await gdocs_client.append_text(doc_id, "ABCDEFGHIJ")
-
-        result, state = await _run_single_tool_flow(
-            unique_id,
-            flow_suffix="delrange",
-            tool_ids=["gdocs_delete_range"],
-            tool_call_name="gdocs_delete_range",
-            tool_call_args={
-                "document_id": doc_id,
-                "start_index": 1,
-                "end_index": 4,
-            },
-            mock_llm_with_queue=mock_llm_with_queue,
-        )
-        assert result["response"] == "Готово."
-
-        text = await gdocs_client.read_as_text(doc_id)
-        assert not text.startswith("ABC")
+    result, state = await _run_single_tool_flow(
+        unique_id,
+        flow_suffix="fr",
+        tool_ids=["gdocs_find_replace"],
+        tool_call_name="gdocs_find_replace",
+        tool_call_args={
+            "document_id": doc_id,
+            "find": "Старая",
+            "replace": "Новая",
+        },
+        mock_llm_with_queue=mock_llm_with_queue,
+    )
+    assert result["response"] == "Готово."
+    assert "occurrences_changed" in _tool_payloads_from_state(state)[0]
+    text = await gdocs_client.read_as_text(doc_id)
+    assert "Новая версия" in text
+    assert "Старая" not in text
 
 
-class TestGDocsShareViaAgent:
-    """gdocs_share_document через LlmNode — расшаривание по ссылке."""
+@pytest.mark.asyncio
+async def test_delete_range_via_llm_node(
+    app: object,
+    unique_id: str,
+    mock_llm_with_queue: Any,
+    gdocs_client: GoogleDocsClient,
+) -> None:
+    _ = app
+    doc = await gdocs_client.create_document(f"Del Target {unique_id}")
+    doc_id = str(doc["documentId"])
+    await gdocs_client.append_text(doc_id, "ABCDEFGHIJ")
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_share_anyone(
-        self, app, unique_id, mock_llm_with_queue, gdocs_real_mode, gdocs_client
-    ):
-        doc = await gdocs_client.create_document(f"Share Target {unique_id}")
-        doc_id = doc["documentId"]
+    result, _state = await _run_single_tool_flow(
+        unique_id,
+        flow_suffix="delrange",
+        tool_ids=["gdocs_delete_range"],
+        tool_call_name="gdocs_delete_range",
+        tool_call_args={
+            "document_id": doc_id,
+            "start_index": 1,
+            "end_index": 4,
+        },
+        mock_llm_with_queue=mock_llm_with_queue,
+    )
+    assert result["response"] == "Готово."
+    text = await gdocs_client.read_as_text(doc_id)
+    assert not text.startswith("ABC")
 
-        result, state = await _run_single_tool_flow(
-            unique_id,
-            flow_suffix="share",
-            tool_ids=["gdocs_share_document"],
-            tool_call_name="gdocs_share_document",
-            tool_call_args={
-                "document_id": doc_id,
-                "anyone": True,
-                "role": "reader",
-            },
-            mock_llm_with_queue=mock_llm_with_queue,
-        )
-        assert result["response"] == "Готово."
 
-        tool_contents = _tool_results_from_state(state)
-        assert "success" in tool_contents[0]
+@pytest.mark.asyncio
+async def test_share_anyone_via_llm_node(
+    app: object,
+    unique_id: str,
+    mock_llm_with_queue: Any,
+    gdocs_client: GoogleDocsClient,
+) -> None:
+    _ = app
+    doc = await gdocs_client.create_document(f"Share Target {unique_id}")
+    doc_id = str(doc["documentId"])
+
+    result, state = await _run_single_tool_flow(
+        unique_id,
+        flow_suffix="share",
+        tool_ids=["gdocs_share_document"],
+        tool_call_name="gdocs_share_document",
+        tool_call_args={
+            "document_id": doc_id,
+            "anyone": True,
+            "role": "reader",
+        },
+        mock_llm_with_queue=mock_llm_with_queue,
+    )
+    assert result["response"] == "Готово."
+    assert _tool_payloads_from_state(state)[0]["success"] is True

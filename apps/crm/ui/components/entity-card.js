@@ -814,13 +814,13 @@ export class CRMEntityCard extends PlatformElement {
                 font-weight: 500;
                 cursor: pointer;
             }
-            .btn:hover { background: var(--crm-surface); color: var(--text-primary); }
+            .btn:not(.btn-primary):not(.btn-danger):hover { background: var(--crm-surface); color: var(--text-primary); }
             .btn-primary {
                 background: var(--accent);
-                color: var(--text-inverse, #fff);
+                color: var(--platform-btn-primary-text);
                 border-color: transparent;
             }
-            .btn-primary:hover { filter: brightness(1.05); }
+            .btn-primary:hover { filter: brightness(1.05); color: var(--platform-btn-primary-text); }
             .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
             .actions-bar-lead {

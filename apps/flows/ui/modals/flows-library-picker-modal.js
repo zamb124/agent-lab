@@ -1,14 +1,14 @@
 /**
- * Единая модалка библиотеки: выбор tool/flow (LLM, дроп subflow/MCP) и шаблонов code-ноды.
- * Различается только источником данных и фильтрами (`_modalKind` из стека модалок).
+ * Единая модалка библиотеки: tool/flow/MCP (LLM, canvas drop) и шаблоны code-ноды.
+ * Один body: tag-groups (`_renderBodyToolPick`) или MCP grouped layout.
  *
- * kinds: `flows.tool_picker` | `flows.code_node_templates` → один tagName.
- * `flows.tool_picker`: `pickMode` = `all` | `flow_only` | `mcp_only`; при `all` — вкладки
- * Все / Code / Flows / MCP (фильтр по `flows/tools_all` без лишних запросов).
+ * kinds: `flows.tool_picker` | `flows.code_node_templates` (alias → pickMode code_node).
+ * `pickMode`: `all` | `flow_only` | `mcp_only` | `code_node`.
+ * При `all` — вкладки Все / Code / Flows / MCP (`flows/tools_all`).
+ * При `code_node` — каталог `flows/code_templates` + registry code tools, commit через `onCommit`.
  */
 
 import { html, css, nothing } from 'lit';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-modal-search-field.js';
@@ -17,19 +17,19 @@ import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-picker-card.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
-import '../components/common/flows-code-language-icon.js';
-import { flowsChatMarkdownToHtml } from '@platform/lib/chat/markdown.js';
+import '../components/common/flows-code-language-segment.js';
 import { registryItemIconName, registryItemTitle } from '../_helpers/flows-registry-item-icon.js';
 import { renderMcpServerIcon } from '../_helpers/mcp-server-icon.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from '../_helpers/flows-mcp-tool-registry.js';
+import { buildToolTagGroups } from '../_helpers/flows-tool-tag-groups.js';
+import { fetchToolsAllPage, TOOLS_ALL_PAGE_LIMIT } from '../_helpers/flows-tools-all-pages.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
-import {
-    FLOW_CODE_LANGUAGES,
-    flowCodeLanguageLabel,
-    normalizeFlowCodeLanguage,
-} from '../_helpers/flows-code-languages.js';
+import { hueFromString } from '@platform/lib/utils/hash-string.js';
+import { normalizeFlowCodeLanguage } from '../_helpers/flows-code-languages.js';
+
+const SEARCH_DEBOUNCE_MS = 280;
 
 function _templatesFromResult(result) {
     if (result && typeof result === 'object' && Array.isArray(result.templates)) {
@@ -182,13 +182,15 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         onCommit: { type: Object, attribute: false },
         pickMode: { type: String, attribute: 'pick-mode' },
         _search: { state: true },
-        _sourceTab: { state: true },
-        _activeTag: { state: true },
         _toolCategoryTab: { state: true },
         _codeLanguage: { state: true },
         _testFeedback: { state: true },
         _testingServerId: { state: true },
         _syncingServerId: { state: true },
+        _selectedToolIds: { state: true },
+        _tagGroupDescriptions: { state: true },
+        _collapsedTags: { state: true },
+        _pickerLoadingMore: { state: true },
     };
 
     static styles = [
@@ -244,7 +246,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 gap: var(--space-2);
                 margin: calc(var(--space-2) * -1) 0 var(--space-3);
             }
-            .code-language-row platform-segmented-control {
+            .code-language-row platform-segmented-control,
+            .code-language-row flows-code-language-segment {
                 flex: 1 1 auto;
                 min-width: 0;
             }
@@ -553,6 +556,171 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 text-align: center;
                 color: var(--text-tertiary);
             }
+            .tag-groups {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-4);
+            }
+            .picker-scroll-sentinel {
+                height: 1px;
+                width: 100%;
+                pointer-events: none;
+            }
+            .tag-group {
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-xl);
+                background: var(--glass-solid);
+                overflow: hidden;
+                box-shadow: var(--shadow-sm);
+            }
+            .tag-group-head {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: var(--space-3);
+                padding: var(--space-4);
+                border-bottom: 1px solid var(--border-subtle);
+                background: color-mix(in srgb, var(--tag-group-accent, var(--accent)) 8%, var(--glass-solid));
+            }
+            .tag-group-head-main {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-3);
+                min-width: 0;
+                flex: 1 1 auto;
+            }
+            .tag-group-icon {
+                width: 44px;
+                height: 44px;
+                border-radius: var(--radius-lg);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                color: var(--text-inverse);
+                background: hsl(var(--tag-group-hue, 210) 42% 42%);
+            }
+            .tag-group-titles {
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .tag-group-titles h3 {
+                margin: 0;
+                font-size: var(--text-lg);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+                line-height: 1.25;
+            }
+            .tag-group-blurb {
+                margin: 0;
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                line-height: 1.4;
+            }
+            .tag-group-meta {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .tag-group-actions {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                flex-shrink: 0;
+            }
+            .tag-group-tools {
+                display: flex;
+                flex-direction: column;
+                padding: var(--space-2);
+                gap: 2px;
+            }
+            .tag-tool-row {
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr) auto;
+                align-items: start;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+                cursor: pointer;
+                text-align: left;
+                border: 1px solid transparent;
+                background: transparent;
+                color: inherit;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .tag-tool-row:hover {
+                background: var(--glass-tint-medium);
+            }
+            .tag-tool-row[data-selected='true'] {
+                border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+                background: color-mix(in srgb, var(--accent) 10%, transparent);
+            }
+            .tag-tool-check {
+                width: 18px;
+                height: 18px;
+                margin-top: 2px;
+                border-radius: 4px;
+                border: 1.5px solid var(--border-strong);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                color: var(--accent);
+                background: var(--glass-solid);
+            }
+            .tag-tool-row[data-selected='true'] .tag-tool-check {
+                border-color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 18%, var(--glass-solid));
+            }
+            .tag-tool-main {
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            .tag-tool-title {
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                color: var(--text-primary);
+                word-break: break-word;
+            }
+            .tag-tool-id {
+                font-size: 11px;
+                color: var(--text-tertiary);
+                font-family: var(--font-mono);
+            }
+            .tag-tool-desc {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                line-height: 1.35;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                overflow: hidden;
+            }
+            .tag-tool-add-one {
+                opacity: 0.55;
+            }
+            .tag-tool-row:hover .tag-tool-add-one {
+                opacity: 1;
+            }
+            .picker-footer {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                width: 100%;
+            }
+            .picker-footer-count {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+            }
+            .picker-footer-actions {
+                display: flex;
+                gap: var(--space-2);
+            }
         `,
     ];
 
@@ -563,32 +731,95 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this.onCommit = null;
         this.pickMode = 'all';
         this._search = '';
-        this._sourceTab = 'catalog';
-        this._activeTag = '';
         this._toolCategoryTab = 'all';
         this._codeLanguage = 'python';
         this._testFeedback = null;
         this._testingServerId = null;
         this._syncingServerId = null;
+        this._selectedToolIds = [];
+        this._tagGroupDescriptions = {};
+        this._collapsedTags = {};
         this._pickerItemsByCategory = new Map();
+        this._pickerNextOffsetByCategory = new Map();
+        this._pickerHasMoreByCategory = new Map();
         this._pickerErrorByCategory = new Map();
         this._pickerLoadingCategory = null;
+        this._pickerLoadingMore = false;
+        this._pickerActiveQuery = '';
+        this._searchDebounceTimer = null;
+        this._scrollObserver = null;
+        this._observedSentinel = null;
         this._toolsAll = this.useOp('flows/tools_all');
+        this._toolTagGroups = this.useOp('flows/tool_tag_groups');
         this._codeTemplates = this.useOp('flows/code_templates');
         this._codeParseSignature = this.useOp('flows/code_parse_signature');
         this._mcpServers = this.useResource('flows/mcp_servers', { autoload: false });
         this._syncOp = this.useOp('flows/mcp_server_sync');
         this._testOp = this.useOp('flows/mcp_server_test');
+        this._localeSelect = this.select((s) => s.i18n.locale);
     }
 
     _isCodeNodeTemplates() {
-        return this._modalKind === 'flows.code_node_templates';
+        return this.pickMode === 'code_node'
+            || this._modalKind === 'flows.code_node_templates';
     }
 
     _resetPickerCache() {
         this._pickerItemsByCategory = new Map();
+        this._pickerNextOffsetByCategory = new Map();
+        this._pickerHasMoreByCategory = new Map();
         this._pickerErrorByCategory = new Map();
         this._pickerLoadingCategory = null;
+        this._pickerLoadingMore = false;
+        this._pickerActiveQuery = '';
+    }
+
+    _teardownScrollObserver() {
+        if (this._scrollObserver !== null) {
+            this._scrollObserver.disconnect();
+        }
+        this._scrollObserver = null;
+        this._observedSentinel = null;
+    }
+
+    disconnectedCallback() {
+        if (this._searchDebounceTimer !== null) {
+            clearTimeout(this._searchDebounceTimer);
+            this._searchDebounceTimer = null;
+        }
+        this._teardownScrollObserver();
+        super.disconnectedCallback();
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        this._syncScrollObserver();
+    }
+
+    _syncScrollObserver() {
+        if (!this.open) {
+            this._teardownScrollObserver();
+            return;
+        }
+        const sentinel = this.renderRoot.querySelector('[data-picker-scroll-sentinel]');
+        if (!(sentinel instanceof Element)) {
+            this._teardownScrollObserver();
+            return;
+        }
+        if (this._scrollObserver !== null && this._observedSentinel === sentinel) {
+            return;
+        }
+        this._teardownScrollObserver();
+        this._scrollObserver = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    void this._loadMorePickerItems();
+                }
+            },
+            { root: null, rootMargin: '120px', threshold: 0 },
+        );
+        this._scrollObserver.observe(sentinel);
+        this._observedSentinel = sentinel;
     }
 
     _currentPickerCategory() {
@@ -605,8 +836,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     _isPickerCategoryLoading(category) {
-        return this._pickerLoadingCategory === category
-            || (this._toolsAll.busy && !this._pickerItemsByCategory.has(category));
+        return this._pickerLoadingCategory === category;
+    }
+
+    _pickerHasMore(category) {
+        return this._pickerHasMoreByCategory.get(category) === true;
     }
 
     _pickerLoadErrorMessage(category) {
@@ -617,38 +851,96 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return null;
     }
 
-    async _ensurePickerCategoryLoaded(category) {
+    _pickerSearchQuery() {
+        return typeof this._search === 'string' ? this._search.trim() : '';
+    }
+
+    async _ensurePickerCategoryLoaded(category, { append = false } = {}) {
         if (typeof category !== 'string' || category.length === 0) {
             throw new Error('flows-library-picker-modal: picker category required');
         }
-        if (this._pickerItemsByCategory.has(category)) {
+        const q = this._pickerSearchQuery();
+        if (this._pickerActiveQuery !== q) {
+            this._pickerItemsByCategory.delete(category);
+            this._pickerNextOffsetByCategory.delete(category);
+            this._pickerHasMoreByCategory.delete(category);
+            this._pickerActiveQuery = q;
+            append = false;
+        }
+        if (!append && this._pickerItemsByCategory.has(category)) {
             return;
         }
-        if (this._pickerLoadingCategory === category) {
+        if (append && this._pickerHasMoreByCategory.get(category) !== true) {
             return;
         }
-        this._pickerLoadingCategory = category;
-        this._pickerErrorByCategory.delete(category);
+        if (append) {
+            if (this._pickerLoadingMore || this._pickerLoadingCategory === category) {
+                return;
+            }
+            this._pickerLoadingMore = true;
+        } else {
+            if (this._pickerLoadingCategory === category) {
+                return;
+            }
+            this._pickerLoadingCategory = category;
+            this._pickerErrorByCategory.delete(category);
+        }
         this.requestUpdate();
-        const result = await this._toolsAll.run({
-            limit: 2000,
-            offset: 0,
-            picker_category: category,
-        });
-        this._pickerLoadingCategory = null;
-        if (result !== null && isPlainObject(result) && Array.isArray(result.items)) {
-            this._pickerItemsByCategory.set(
-                category,
-                result.items.filter((x) => isPlainObject(x)),
+        const offset = append
+            ? (this._pickerNextOffsetByCategory.get(category) || 0)
+            : 0;
+        try {
+            const page = await fetchToolsAllPage(
+                (payload) => this._toolsAll.run(payload),
+                {
+                    offset,
+                    picker_category: category,
+                    q: q.length > 0 ? q : undefined,
+                },
             );
+            const prev = append && Array.isArray(this._pickerItemsByCategory.get(category))
+                ? this._pickerItemsByCategory.get(category)
+                : [];
+            const seen = new Set(
+                prev
+                    .map((item) => (isPlainObject(item) && typeof item.tool_id === 'string' ? item.tool_id : ''))
+                    .filter((id) => id.length > 0),
+            );
+            const merged = [...prev];
+            for (const item of page.items) {
+                const toolId = typeof item.tool_id === 'string' ? item.tool_id : '';
+                if (toolId.length > 0 && seen.has(toolId)) {
+                    continue;
+                }
+                if (toolId.length > 0) {
+                    seen.add(toolId);
+                }
+                merged.push(item);
+            }
+            this._pickerItemsByCategory.set(category, merged);
+            this._pickerNextOffsetByCategory.set(category, offset + page.items.length);
+            this._pickerHasMoreByCategory.set(category, page.hasMore);
+            this._pickerLoadingCategory = null;
+            this._pickerLoadingMore = false;
             this.requestUpdate();
-            return;
+        } catch (err) {
+            this._pickerLoadingCategory = null;
+            this._pickerLoadingMore = false;
+            const fromOp = typeof this._toolsAll.error === 'string' && this._toolsAll.error.length > 0
+                ? this._toolsAll.error
+                : null;
+            const fromErr = err instanceof Error && typeof err.message === 'string' && err.message.length > 0
+                ? err.message
+                : null;
+            const errorMessage = fromOp || fromErr || 'flows-library-picker-modal: tools_all failed';
+            this._pickerErrorByCategory.set(category, errorMessage);
+            this.requestUpdate();
         }
-        const errorMessage = typeof this._toolsAll.error === 'string' && this._toolsAll.error.length > 0
-            ? this._toolsAll.error
-            : 'flows-library-picker-modal: tools_all failed';
-        this._pickerErrorByCategory.set(category, errorMessage);
-        this.requestUpdate();
+    }
+
+    async _loadMorePickerItems() {
+        const category = this._currentPickerCategory();
+        await this._ensurePickerCategoryLoaded(category, { append: true });
     }
 
     _onToolCategoryTabChange(nextTab) {
@@ -663,25 +955,66 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         super.willUpdate(changed);
         if (changed.has('open') && this.open) {
             this._search = '';
-            this._activeTag = '';
-            this._sourceTab = 'catalog';
             this._toolCategoryTab = 'all';
             this._codeLanguage = 'python';
             this._testFeedback = null;
             this._testingServerId = null;
             this._syncingServerId = null;
+            this._selectedToolIds = [];
+            this._collapsedTags = {};
             this._resetPickerCache();
             this.size = 'full';
             if (this._isCodeNodeTemplates()) {
+                if (this.pickMode !== 'code_node') {
+                    this.pickMode = 'code_node';
+                }
                 void this._loadCodeTemplates();
                 void this._ensurePickerCategoryLoaded('code');
+                void this._loadTagGroupDescriptions();
                 return;
             }
             void this._ensurePickerCategoryLoaded(this._currentPickerCategory());
+            void this._loadTagGroupDescriptions();
             if (this._usesMcpGroupedLayout()) {
                 void this._mcpServers.load();
             }
         }
+        if (changed.has('open') && !this.open) {
+            this._teardownScrollObserver();
+            if (this._searchDebounceTimer !== null) {
+                clearTimeout(this._searchDebounceTimer);
+                this._searchDebounceTimer = null;
+            }
+        }
+    }
+
+    async _loadTagGroupDescriptions() {
+        /** @type {Record<string, { description_ru: string, description_en: string }>} */
+        const map = {};
+        let offset = 0;
+        while (true) {
+            const result = await this._toolTagGroups.run({
+                limit: TOOLS_ALL_PAGE_LIMIT,
+                offset,
+            });
+            if (result === null || !isPlainObject(result) || !Array.isArray(result.items)) {
+                break;
+            }
+            for (const item of result.items) {
+                if (!isPlainObject(item) || typeof item.tag !== 'string' || item.tag.length === 0) {
+                    continue;
+                }
+                map[item.tag] = {
+                    description_ru: typeof item.description_ru === 'string' ? item.description_ru : '',
+                    description_en: typeof item.description_en === 'string' ? item.description_en : '',
+                };
+            }
+            if (result.items.length < TOOLS_ALL_PAGE_LIMIT) {
+                break;
+            }
+            offset += result.items.length;
+        }
+        this._tagGroupDescriptions = map;
     }
 
     _usesMcpGroupedLayout() {
@@ -713,101 +1046,100 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return _templatesFromResult(this._codeTemplates.lastResult);
     }
 
-    _toolRegistryRows() {
-        const list = this._toolsAllItems().filter((t) => {
-            if (t.item_type === 'flow') {
-                return false;
-            }
-            return true;
-        });
-        const tagF = this._activeTag;
-        const q = _lower(this._search);
+    /**
+     * Каталожный шаблон → форма registry item для tag-groups.
+     * @param {Record<string, unknown>} t
+     * @returns {Record<string, unknown> | null}
+     */
+    _normalizeCatalogTemplate(t) {
+        if (!isPlainObject(t)) {
+            return null;
+        }
+        const id = typeof t.id === 'string' ? t.id : '';
+        if (id.length === 0) {
+            return null;
+        }
+        const name = typeof t.name === 'string' && t.name.length > 0 ? t.name : id;
+        return {
+            tool_id: id,
+            title: name,
+            description: typeof t.description === 'string' ? t.description : '',
+            tags: _tagsFromItem(t),
+            language: t.language,
+            code: t.code,
+            parameters_schema: t.parameters_schema,
+            item_type: 'tool',
+            _pickerSource: 'catalog',
+            id,
+            name,
+        };
+    }
+
+    /**
+     * Объединённый список: каталог code-templates + registry code tools.
+     * @returns {Record<string, unknown>[]}
+     */
+    _codeNodePickRows() {
         const wantedLanguage = normalizeFlowCodeLanguage(this._codeLanguage);
-        return list.filter((t) => {
+        const catalog = [];
+        for (const raw of this._templateListRaw()) {
+            const normalized = this._normalizeCatalogTemplate(raw);
+            if (normalized === null) {
+                continue;
+            }
+            if (normalizeFlowCodeLanguage(normalized.language) !== wantedLanguage) {
+                continue;
+            }
+            catalog.push(normalized);
+        }
+        const registry = [];
+        for (const t of this._toolsAllItems()) {
+            if (!isPlainObject(t) || t.item_type === 'flow') {
+                continue;
+            }
             if (
-                this._isCodeNodeTemplates()
-                && _hasInlineCode(t)
+                _hasInlineCode(t)
                 && normalizeFlowCodeLanguage(t.language) !== wantedLanguage
             ) {
-                return false;
+                continue;
             }
-            if (tagF.length > 0) {
-                const tags = _tagsFromItem(t);
-                if (!tags.includes(tagF)) {
-                    return false;
-                }
-            }
-            if (q.length === 0) {
-                return true;
-            }
-            const id = typeof t.tool_id === 'string' ? t.tool_id : '';
-            const title = typeof t.title === 'string' ? t.title : '';
-            const desc = typeof t.description === 'string' ? t.description : '';
-            return _lower(title).indexOf(q) >= 0
-                || _lower(desc).indexOf(q) >= 0
-                || _lower(id).indexOf(q) >= 0;
-        });
-    }
-
-    _filterCatalogRows() {
-        const list = this._templateListRaw();
-        const tagF = this._activeTag;
-        const q = _lower(this._search);
-        return list.filter((t) => {
-            if (!isPlainObject(t)) {
-                return false;
-            }
-            if (tagF.length > 0) {
-                const tags = _tagsFromItem(t);
-                if (!tags.includes(tagF)) {
-                    return false;
-                }
-            }
-            if (q.length === 0) {
-                return true;
-            }
-            const id = typeof t.id === 'string' ? t.id : '';
-            const name = typeof t.name === 'string' ? t.name : '';
-            const desc = typeof t.description === 'string' ? t.description : '';
-            return _lower(name).indexOf(q) >= 0
-                || _lower(desc).indexOf(q) >= 0
-                || _lower(id).indexOf(q) >= 0;
-        });
-    }
-
-    _allTagSet() {
-        const s = new Set();
-        for (const t of this._templateListRaw()) {
-            if (isPlainObject(t)) {
-                for (const x of _tagsFromItem(t)) {
-                    s.add(x);
-                }
-            }
+            registry.push({ ...t, _pickerSource: 'registry' });
         }
-        for (const t of this._toolsAllItems()) {
-            if (isPlainObject(t) && t.item_type !== 'flow') {
-                for (const x of _tagsFromItem(t)) {
-                    s.add(x);
-                }
+        const seen = new Set();
+        const rows = [];
+        for (const item of [...catalog, ...registry]) {
+            const toolId = typeof item.tool_id === 'string' ? item.tool_id : '';
+            if (toolId.length === 0 || seen.has(toolId)) {
+                continue;
             }
+            seen.add(toolId);
+            rows.push(item);
         }
-        return Array.from(s).sort((a, b) => a.localeCompare(b));
+        return rows;
     }
 
     _pickModeRows() {
-        const list = this._toolsAllItems();
-        const q = _lower(this._search);
-        if (q.length === 0) {
-            return list;
+        if (this._isCodeNodeTemplates()) {
+            const list = this._codeNodePickRows();
+            const q = _lower(this._pickerSearchQuery());
+            if (q.length === 0) {
+                return list;
+            }
+            // Каталог шаблонов — client filter; registry уже отфильтрован серверным q.
+            return list.filter((t) => {
+                if (t._pickerSource === 'registry') {
+                    return true;
+                }
+                const id = typeof t.tool_id === 'string' ? t.tool_id : '';
+                const title = typeof t.title === 'string' ? t.title : '';
+                const desc = typeof t.description === 'string' ? t.description : '';
+                return _lower(id).indexOf(q) >= 0
+                    || _lower(title).indexOf(q) >= 0
+                    || _lower(desc).indexOf(q) >= 0;
+            });
         }
-        return list.filter((t) => {
-            const id = typeof t.tool_id === 'string' ? t.tool_id : '';
-            const title = typeof t.title === 'string' ? t.title : '';
-            const desc = typeof t.description === 'string' ? t.description : '';
-            return _lower(id).indexOf(q) >= 0
-                || _lower(title).indexOf(q) >= 0
-                || _lower(desc).indexOf(q) >= 0;
-        });
+        // Server-side q уже применён при загрузке страниц.
+        return this._toolsAllItems();
     }
 
     _mcpServerIdFromTool(item) {
@@ -866,13 +1198,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             }
         }
 
+        // Порядок с API: platform → yaml allowlist → manual → прочий catalog.
         const activeServers = asArray(this._mcpServers.items)
-            .filter((s) => isPlainObject(s) && s.is_active === true)
-            .sort((a, b) => {
-                const an = typeof a.name === 'string' ? a.name : a.server_id;
-                const bn = typeof b.name === 'string' ? b.name : b.server_id;
-                return String(an).localeCompare(String(bn));
-            });
+            .filter((s) => isPlainObject(s) && s.is_active === true);
 
         const knownServerIds = new Set();
         const groups = [];
@@ -961,16 +1289,27 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             }
             flat.push({ tool, server });
         }
+        const serverOrder = new Map();
+        for (const [index, server] of asArray(this._mcpServers.items).entries()) {
+            if (typeof server.server_id === 'string' && server.server_id.length > 0) {
+                serverOrder.set(server.server_id, index);
+            }
+        }
         flat.sort((left, right) => {
+            const leftServerId = typeof left.server.server_id === 'string' ? left.server.server_id : '';
+            const rightServerId = typeof right.server.server_id === 'string' ? right.server.server_id : '';
+            const leftOrder = serverOrder.has(leftServerId)
+                ? serverOrder.get(leftServerId)
+                : Number.MAX_SAFE_INTEGER;
+            const rightOrder = serverOrder.has(rightServerId)
+                ? serverOrder.get(rightServerId)
+                : Number.MAX_SAFE_INTEGER;
+            if (leftOrder !== rightOrder) {
+                return leftOrder - rightOrder;
+            }
             const leftTitle = registryItemTitle(left.tool);
             const rightTitle = registryItemTitle(right.tool);
-            const byTitle = leftTitle.localeCompare(rightTitle, undefined, { sensitivity: 'base' });
-            if (byTitle !== 0) {
-                return byTitle;
-            }
-            const leftServer = typeof left.server.name === 'string' ? left.server.name : '';
-            const rightServer = typeof right.server.name === 'string' ? right.server.name : '';
-            return leftServer.localeCompare(rightServer, undefined, { sensitivity: 'base' });
+            return leftTitle.localeCompare(rightTitle, undefined, { sensitivity: 'base' });
         });
         return flat;
     }
@@ -1019,6 +1358,14 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             return html`
                 ${showTabs ? this._renderToolCategoryTabs() : nothing}
                 <div class="lib-empty">${this.t('tool_picker_modal.mcp_empty_search')}</div>
+                ${this._pickerHasMore(this._currentPickerCategory())
+                    ? html`
+                        <div data-picker-scroll-sentinel class="picker-scroll-sentinel" aria-hidden="true"></div>
+                        ${this._pickerLoadingMore
+                            ? html`<glass-spinner></glass-spinner>`
+                            : nothing}
+                    `
+                    : nothing}
             `;
         }
         return html`
@@ -1027,6 +1374,14 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             <div class="mcp-picker-tools-grid" role="list">
                 ${flat.map((entry) => this._renderMcpFlatToolCard(entry))}
             </div>
+            ${this._pickerHasMore(this._currentPickerCategory())
+                ? html`
+                    <div data-picker-scroll-sentinel class="picker-scroll-sentinel" aria-hidden="true"></div>
+                    ${this._pickerLoadingMore
+                        ? html`<glass-spinner></glass-spinner>`
+                        : nothing}
+                `
+                : nothing}
         `;
     }
 
@@ -1314,6 +1669,14 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             <div class="mcp-picker-servers">
                 ${groups.map((group) => this._renderMcpServerSection(group))}
             </div>
+            ${this._pickerHasMore(this._currentPickerCategory())
+                ? html`
+                    <div data-picker-scroll-sentinel class="picker-scroll-sentinel" aria-hidden="true"></div>
+                    ${this._pickerLoadingMore
+                        ? html`<glass-spinner></glass-spinner>`
+                        : nothing}
+                `
+                : nothing}
         `;
     }
 
@@ -1330,54 +1693,24 @@ export class FlowsLibraryPickerModal extends PlatformModal {
 
     _onSearchInput(e) {
         this._search = typeof e.detail?.value === 'string' ? e.detail.value : '';
-    }
-
-    _setTag(t) {
-        if (this._activeTag === t) {
-            this._activeTag = '';
-        } else {
-            this._activeTag = t;
+        if (this._searchDebounceTimer !== null) {
+            clearTimeout(this._searchDebounceTimer);
         }
-    }
-
-    _iconKindAttr(item) {
-        if (item.item_type === 'flow') {
-            return 'flow';
-        }
-        if (this._isCodeNodeTemplates()) {
-            return 'code';
-        }
-        if (isMcpToolRegistryItem(item)) {
-            return 'mcp';
-        }
-        if (_hasInlineCode(item)) {
-            return 'code';
-        }
-        return 'tool';
-    }
-
-    /**
-     * Описания в Markdown. `marked` по сырой строке (см. `index.html`); иначе кавычки в JSON/примерах
-     * уезжают в `&quot;` из-за `escapeHtml` в `flowsChatMarkdownToHtml`. Fallback — общий flows-chat helper.
-     */
-    _mdDescription(text) {
-        if (typeof text !== 'string' || text.length === 0) {
-            return nothing;
-        }
-        const marked = globalThis.marked;
-        if (marked && typeof marked.parse === 'function') {
-            return html`<div class="lib-md">${unsafeHTML(
-                marked.parse(text, { breaks: true, gfm: true }),
-            )}</div>`;
-        }
-        const htmlStr = flowsChatMarkdownToHtml(text);
-        if (htmlStr.length === 0) {
-            return nothing;
-        }
-        return html`<div class="lib-md">${unsafeHTML(htmlStr)}</div>`;
+        this._searchDebounceTimer = setTimeout(() => {
+            this._searchDebounceTimer = null;
+            const category = this._currentPickerCategory();
+            this._pickerItemsByCategory.delete(category);
+            this._pickerNextOffsetByCategory.delete(category);
+            this._pickerHasMoreByCategory.delete(category);
+            this._pickerActiveQuery = '';
+            void this._ensurePickerCategoryLoaded(category);
+        }, SEARCH_DEBOUNCE_MS);
     }
 
     _showToolCategoryTabs() {
+        if (this._isCodeNodeTemplates()) {
+            return false;
+        }
         const m = this.pickMode;
         return m !== 'flow_only' && m !== 'mcp_only';
     }
@@ -1413,7 +1746,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             return;
         }
         this._codeLanguage = normalized;
-        this._activeTag = '';
         void this._loadCodeTemplates();
     }
 
@@ -1423,56 +1755,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         }
         const current = normalizeFlowCodeLanguage(this._codeLanguage);
         return html`
-            <div class="code-language-row">
-                <platform-segmented-control
-                    icon-only
-                    density="compact"
-                    .value=${current}
-                    .items=${FLOW_CODE_LANGUAGES.map((lang) => ({
-                        value: lang.value,
-                        icon: lang.icon,
-                        title: lang.label,
-                    }))}
-                    aria-label=${this.t('code_workbench.language_aria')}
-                    @change=${(e) => this._setCodeLanguage(e.detail.value)}
-                ></platform-segmented-control>
-            </div>
-        `;
-    }
-
-    _renderFilterBar() {
-        const isCode = this._isCodeNodeTemplates();
-        const tagRow = isCode
-            ? html`
-                <div
-                    class="tag-strip"
-                    role="group"
-                    aria-label=${this.t('code_node_templates_modal.tags_aria')}
-                >
-                    ${this._allTagSet().map(
-                        (tag) => html`
-                            <platform-button
-                                variant=${this._activeTag === tag ? 'secondary' : 'ghost'}
-                                density="dense"
-                                @click=${() => this._setTag(tag)}
-                            >#${tag}</platform-button>
-                        `,
-                    )}
-                </div>
-            `
-            : html`<div class="tag-strip tag-strip--filler" role="presentation" aria-hidden="true"></div>`;
-        return html`
-            <div class="bar">
-                ${tagRow}
-                <div class="search-wrap">
-                    <platform-modal-search-field
-                        layout="toolbar"
-                        .value=${this._search}
-                        placeholder=${this.t('tool_picker_modal.search_placeholder')}
-                        @change=${this._onSearchInput}
-                    ></platform-modal-search-field>
-                </div>
-            </div>
+            <flows-code-language-segment
+                class="source-segment"
+                .value=${current}
+                aria-label=${this.t('code_workbench.language_aria')}
+                @change=${(e) => this._setCodeLanguage(e.detail.value)}
+            ></flows-code-language-segment>
         `;
     }
 
@@ -1490,6 +1778,14 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     _renderToolPickerToolbar() {
+        if (this._isCodeNodeTemplates()) {
+            return html`
+                <div class="tool-picker-toolbar">
+                    ${this._renderCodeLanguageSegment()}
+                    ${this._renderSearchField('search-wrap--tool')}
+                </div>
+            `;
+        }
         if (this._usesMcpGroupedLayout()) {
             if (!this._showToolCategoryTabs()) {
                 return nothing;
@@ -1508,47 +1804,25 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
-    _renderRegistryCard(t, { onSelect, plainDescription = false }) {
-        const icon = registryItemIconName(t);
-        const kindAttr = this._iconKindAttr(t);
-        const cardLanguage = _hasInlineCode(t) ? t.language : this._codeLanguage;
-        const cardIcon = kindAttr === 'code'
-            ? html`<flows-code-language-icon language=${cardLanguage} size="38"></flows-code-language-icon>`
-            : html`<platform-icon name=${icon} size="26"></platform-icon>`;
-        const title = registryItemTitle(t);
-        const desc = typeof t.description === 'string' ? t.description : '';
-        const id = typeof t.tool_id === 'string' ? t.tool_id : '';
-        const descriptionNode = plainDescription
-            ? (desc.length > 0 ? html`<div class="lib-plain-desc">${_truncateText(desc)}</div>` : nothing)
-            : html`<div class="lib-md">${this._mdDescription(desc)}</div>`;
-        return html`
-            <platform-picker-card
-                value=${id.length > 0 ? id : title}
-                title=${title}
-                @select=${onSelect}
-            >
-                <div slot="icon">
-                    <div class="lib-card-icon" data-kind=${kindAttr}>
-                        ${cardIcon}
-                    </div>
-                </div>
-                ${descriptionNode}
-                <div class="lib-card-meta">
-                    ${id.length > 0 ? html`<span class="lib-chip">${id}</span>` : null}
-                    ${kindAttr === 'code'
-                        ? html`<span class="lib-chip">${flowCodeLanguageLabel(cardLanguage)}</span>`
-                        : nothing}
-                    ${_tagsFromItem(t).map((g) => html`<span class="lib-chip">${g}</span>`)}
-                </div>
-            </platform-picker-card>
-        `;
-    }
-
     _mcpBulkAddEnabled() {
+        if (this._isCodeNodeTemplates()) {
+            return false;
+        }
         return typeof this.onPickBatch === 'function';
     }
 
     _pickToolLike(t) {
+        if (this._isCodeNodeTemplates()) {
+            if (!isPlainObject(t)) {
+                return;
+            }
+            if (t._pickerSource === 'catalog') {
+                void this._commitTemplate(t);
+                return;
+            }
+            this._commitTool(t);
+            return;
+        }
         const fn = this.onPick;
         if (typeof fn !== 'function') {
             this.close();
@@ -1665,107 +1939,345 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 ${loadError}
             `;
         }
-        const loading = this._isPickerCategoryLoading(category) && !this._pickerItemsByCategory.has(category);
-        const rows = this._pickModeRows();
-        if (loading) {
+        const templatesLoading = this._isCodeNodeTemplates()
+            && this._codeTemplates.busy
+            && this._templateListRaw().length === 0;
+        const toolsLoading = this._isPickerCategoryLoading(category)
+            && !this._pickerItemsByCategory.has(category);
+        if (templatesLoading || toolsLoading) {
             return html`
                 ${this._renderToolPickerToolbar()}
                 <glass-spinner></glass-spinner>
             `;
         }
+        const rows = this._pickModeRows();
+        const emptyKey = this._isCodeNodeTemplates()
+            ? 'code_node_templates_modal.empty'
+            : 'tool_picker_modal.empty';
         if (rows.length === 0) {
             return html`
                 ${this._renderToolPickerToolbar()}
-                <div class="lib-empty">${this.t('tool_picker_modal.empty')}</div>
+                <div class="lib-empty">${this.t(emptyKey)}</div>
             `;
         }
+        const locale = this._pickerLocale();
+        const groups = buildToolTagGroups(rows, {
+            search: this._search,
+            descriptionsByTag: this._tagGroupDescriptions,
+            locale,
+        });
+        if (groups.length === 0) {
+            return html`
+                ${this._renderToolPickerToolbar()}
+                <div class="lib-empty">${this.t(emptyKey)}</div>
+            `;
+        }
+        const searchActive = _lower(this._pickerSearchQuery()).length > 0;
+        const hasMore = this._pickerHasMore(category);
         return html`
             ${this._renderToolPickerToolbar()}
-            <div class="lib-grid" role="list">
-                ${rows.map((t) => this._renderRegistryCard(t, {
-                    onSelect: () => this._pickToolLike(t),
-                    plainDescription: true,
-                }))}
+            <div class="tag-groups" role="list">
+                ${groups.map((group) => this._renderTagGroupCard(group, { forceExpand: searchActive }))}
             </div>
+            ${hasMore
+                ? html`
+                    <div data-picker-scroll-sentinel class="picker-scroll-sentinel" aria-hidden="true"></div>
+                    ${this._pickerLoadingMore
+                        ? html`<glass-spinner></glass-spinner>`
+                        : nothing}
+                `
+                : nothing}
         `;
     }
 
-    _renderBodyCodeNode() {
-        const rowCatalog = this._filterCatalogRows();
-        const rowTools = this._toolRegistryRows();
-        return html`
-            ${this._renderFilterBar()}
-            ${this._renderCodeLanguageSegment()}
-            <platform-segmented-control
-                class="source-segment"
-                density="compact"
-                .value=${this._sourceTab}
-                .items=${[
-                    { value: 'catalog', label: this.t('code_node_templates_modal.tab_catalog') },
-                    { value: 'registry', label: this.t('code_node_templates_modal.tab_registry') },
-                ]}
-                aria-label=${this.t('code_node_templates_modal.source_tabs_aria')}
-                @change=${(e) => { this._sourceTab = e.detail.value; }}
-            ></platform-segmented-control>
-            ${this._sourceTab === 'catalog' ? this._renderCatalogBlock(rowCatalog) : this._renderCodeRegistryBlock(rowTools)}
-        `;
+    _tagGroupTitle(tag) {
+        const knownKeys = {
+            math: 'tool_picker_modal.tag_groups.math',
+            crm: 'tool_picker_modal.tag_groups.crm',
+            browser: 'tool_picker_modal.tag_groups.browser',
+            mcp: 'tool_picker_modal.tag_groups.mcp',
+            planning: 'tool_picker_modal.tag_groups.planning',
+            misc: 'tool_picker_modal.tag_groups.misc',
+            files: 'tool_picker_modal.tag_groups.files',
+            documents: 'tool_picker_modal.tag_groups.documents',
+            office: 'tool_picker_modal.tag_groups.office',
+            catalog: 'tool_picker_modal.tag_groups.catalog',
+            viz: 'tool_picker_modal.tag_groups.viz',
+            text: 'tool_picker_modal.tag_groups.text',
+            scheduling: 'tool_picker_modal.tag_groups.scheduling',
+            rag: 'tool_picker_modal.tag_groups.rag',
+            search: 'tool_picker_modal.tag_groups.search',
+            docs: 'tool_picker_modal.tag_groups.docs',
+            sync: 'tool_picker_modal.tag_groups.sync',
+            worktracker: 'tool_picker_modal.tag_groups.worktracker',
+            flows: 'tool_picker_modal.tag_groups.flows',
+            handoff: 'tool_picker_modal.tag_groups.handoff',
+            agent_skills: 'tool_picker_modal.tag_groups.agent_skills',
+            linnex_agent: 'tool_picker_modal.tag_groups.linnex_agent',
+            device: 'tool_picker_modal.tag_groups.device',
+            google_docs: 'tool_picker_modal.tag_groups.google_docs',
+            law: 'tool_picker_modal.tag_groups.law',
+            knowledge: 'tool_picker_modal.tag_groups.knowledge',
+            codegen: 'tool_picker_modal.tag_groups.codegen',
+            sandbox: 'tool_picker_modal.tag_groups.sandbox',
+            validation: 'tool_picker_modal.tag_groups.validation',
+            reasoning: 'tool_picker_modal.tag_groups.reasoning',
+            hitl: 'tool_picker_modal.tag_groups.hitl',
+            ai: 'tool_picker_modal.tag_groups.ai',
+            lara: 'tool_picker_modal.tag_groups.lara',
+            flow: 'tool_picker_modal.tag_groups.flow',
+            web: 'tool_picker_modal.tag_groups.web',
+        };
+        const key = knownKeys[tag];
+        if (typeof key === 'string') {
+            return this.t(key);
+        }
+        return `#${tag}`;
     }
 
-    _renderCatalogBlock(rows) {
-        if (this._codeTemplates.busy && this._templateListRaw().length === 0) {
-            return html`<glass-spinner></glass-spinner>`;
+    _pickerLocale() {
+        const locale = this._localeSelect?.value;
+        if (typeof locale === 'string' && locale.length > 0) {
+            return locale;
         }
-        if (rows.length === 0) {
-            return html`<div class="lib-empty">${this.t('code_node_templates_modal.empty')}</div>`;
+        return 'ru';
+    }
+
+    _isToolSelected(toolId) {
+        return this._selectedToolIds.includes(toolId);
+    }
+
+    _toggleToolSelection(toolId) {
+        if (typeof toolId !== 'string' || toolId.length === 0) {
+            return;
         }
+        if (this._selectedToolIds.includes(toolId)) {
+            this._selectedToolIds = this._selectedToolIds.filter((id) => id !== toolId);
+            return;
+        }
+        this._selectedToolIds = [...this._selectedToolIds, toolId];
+    }
+
+    _toggleGroupSelection(tools) {
+        const ids = tools
+            .map((t) => (isPlainObject(t) && typeof t.tool_id === 'string' ? t.tool_id : ''))
+            .filter((id) => id.length > 0);
+        if (ids.length === 0) {
+            return;
+        }
+        const allSelected = ids.every((id) => this._selectedToolIds.includes(id));
+        if (allSelected) {
+            const remove = new Set(ids);
+            this._selectedToolIds = this._selectedToolIds.filter((id) => !remove.has(id));
+            return;
+        }
+        const next = new Set(this._selectedToolIds);
+        for (const id of ids) {
+            next.add(id);
+        }
+        this._selectedToolIds = [...next];
+    }
+
+    _groupAllSelected(tools) {
+        const ids = tools
+            .map((t) => (isPlainObject(t) && typeof t.tool_id === 'string' ? t.tool_id : ''))
+            .filter((id) => id.length > 0);
+        return ids.length > 0 && ids.every((id) => this._selectedToolIds.includes(id));
+    }
+
+    _toggleTagCollapsed(tag) {
+        const next = { ...this._collapsedTags };
+        next[tag] = !next[tag];
+        this._collapsedTags = next;
+    }
+
+    _confirmSelectedTools() {
+        const selectedSet = new Set(this._selectedToolIds);
+        const items = this._pickModeRows().filter(
+            (t) => isPlainObject(t) && typeof t.tool_id === 'string' && selectedSet.has(t.tool_id),
+        );
+        if (items.length === 0) {
+            return;
+        }
+        if (typeof this.onPickBatch === 'function') {
+            this.close();
+            queueMicrotask(() => {
+                this.onPickBatch({ kind: 'tool', items });
+            });
+            return;
+        }
+        if (items.length === 1) {
+            this._pickToolLike(items[0]);
+        }
+    }
+
+    _renderTagGroupCard(group, { forceExpand = false } = {}) {
+        const tag = group.tag;
+        const tools = group.tools;
+        const collapsed = forceExpand ? false : this._collapsedTags[tag] === true;
+        const hue = hueFromString(tag);
+        const allSelected = this._groupAllSelected(tools);
+        const batchEnabled = this._mcpBulkAddEnabled();
         return html`
-            <div class="lib-grid">
-                ${rows.map((t) => html`
-                    <platform-picker-card
-                        value=${typeof t.id === 'string' ? t.id : (typeof t.name === 'string' ? t.name : 'template')}
-                        title=${typeof t.name === 'string' ? t.name : t.id}
-                        @select=${() => this._commitTemplate(t)}
-                    >
-                        <div slot="icon">
-                            <div class="lib-card-icon" data-kind="code">
-                                <flows-code-language-icon language=${t.language} size="38"></flows-code-language-icon>
+            <section
+                class="tag-group"
+                style=${`--tag-group-hue: ${hue}`}
+                aria-labelledby=${`tag-group-${tag}`}
+                data-tag=${tag}
+            >
+                <div class="tag-group-head">
+                    <div class="tag-group-head-main">
+                        <div class="tag-group-icon" aria-hidden="true">
+                            <platform-icon name="layers" size="22"></platform-icon>
+                        </div>
+                        <div class="tag-group-titles">
+                            <h3 id=${`tag-group-${tag}`}>${this._tagGroupTitle(tag)}</h3>
+                            ${group.description.length > 0
+                                ? html`<p class="tag-group-blurb">${group.description}</p>`
+                                : nothing}
+                            <div class="tag-group-meta">
+                                ${this.t('tool_picker_modal.tag_group_tools_count', { n: tools.length })}
                             </div>
                         </div>
-                        <div class="lib-md">${this._mdDescription(
-                            typeof t.description === 'string' ? t.description : '',
-                        )}</div>
-                        <div class="lib-card-meta">
-                            ${typeof t.language === 'string' && t.language.length > 0
-                                ? html`<span class="lib-chip">${flowCodeLanguageLabel(t.language)}</span>`
-                                : nothing}
-                            ${typeof t.id === 'string' && t.id.length > 0
-                                ? html`<span class="lib-chip">${t.id}</span>`
-                                : nothing}
-                            ${(Array.isArray(t.tags) ? t.tags : [])
-                                .filter((g) => typeof g === 'string' && g.length > 0)
-                                .map((g) => html`<span class="lib-chip">${g}</span>`)}
+                    </div>
+                    <div class="tag-group-actions">
+                        ${batchEnabled
+                            ? html`
+                                <platform-button
+                                    variant=${allSelected ? 'secondary' : 'ghost'}
+                                    density="dense"
+                                    title=${this.t('tool_picker_modal.tag_group_select_all_aria')}
+                                    aria-label=${this.t('tool_picker_modal.tag_group_select_all_aria')}
+                                    @click=${(e) => {
+                                        e.stopPropagation();
+                                        this._toggleGroupSelection(tools);
+                                    }}
+                                >
+                                    <platform-icon name="list-checks" size="16"></platform-icon>
+                                </platform-button>
+                            `
+                            : nothing}
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            title=${collapsed
+                                ? this.t('tool_picker_modal.tag_group_expand_aria')
+                                : this.t('tool_picker_modal.tag_group_collapse_aria')}
+                            aria-label=${collapsed
+                                ? this.t('tool_picker_modal.tag_group_expand_aria')
+                                : this.t('tool_picker_modal.tag_group_collapse_aria')}
+                            @click=${(e) => {
+                                e.stopPropagation();
+                                this._toggleTagCollapsed(tag);
+                            }}
+                        >
+                            <platform-icon name=${collapsed ? 'chevron-down' : 'chevron-up'} size="16"></platform-icon>
+                        </platform-button>
+                    </div>
+                </div>
+                ${collapsed
+                    ? nothing
+                    : html`
+                        <div class="tag-group-tools" role="list">
+                            ${tools.map((t) => this._renderTagToolRow(t, { batchEnabled }))}
                         </div>
-                    </platform-picker-card>
-                `)}
-            </div>
+                    `}
+            </section>
         `;
     }
 
-    _renderCodeRegistryBlock(rows) {
-        const category = this._currentPickerCategory();
-        const loadError = this._renderPickerLoadError(category);
-        if (loadError !== nothing) {
-            return loadError;
-        }
-        if (this._isPickerCategoryLoading(category) && !this._pickerItemsByCategory.has(category)) {
-            return html`<glass-spinner></glass-spinner>`;
-        }
-        if (rows.length === 0) {
-            return html`<div class="lib-empty">${this.t('code_node_templates_modal.empty_registry')}</div>`;
-        }
+    _renderTagToolRow(t, { batchEnabled }) {
+        const toolId = typeof t.tool_id === 'string' ? t.tool_id : '';
+        const title = registryItemTitle(t);
+        const desc = typeof t.description === 'string' ? _truncateText(t.description, 140) : '';
+        const selected = this._isToolSelected(toolId);
         return html`
-            <div class="lib-grid">
-                ${rows.map((t) => this._renderRegistryCard(t, { onSelect: () => this._commitTool(t) }))}
+            <article
+                class="tag-tool-row"
+                role="button"
+                tabindex="0"
+                data-selected=${selected ? 'true' : 'false'}
+                @click=${() => {
+                    if (batchEnabled) {
+                        this._toggleToolSelection(toolId);
+                        return;
+                    }
+                    this._pickToolLike(t);
+                }}
+                @keydown=${(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') {
+                        return;
+                    }
+                    e.preventDefault();
+                    if (batchEnabled) {
+                        this._toggleToolSelection(toolId);
+                        return;
+                    }
+                    this._pickToolLike(t);
+                }}
+            >
+                <span class="tag-tool-check" aria-hidden="true">
+                    ${selected
+                        ? html`<platform-icon name="check" size="12"></platform-icon>`
+                        : nothing}
+                </span>
+                <span class="tag-tool-main">
+                    <span class="tag-tool-title">${title}</span>
+                    ${toolId.length > 0 && toolId !== title
+                        ? html`<span class="tag-tool-id">${toolId}</span>`
+                        : nothing}
+                    ${desc.length > 0 ? html`<span class="tag-tool-desc">${desc}</span>` : nothing}
+                </span>
+                ${batchEnabled
+                    ? html`
+                        <platform-button
+                            class="tag-tool-add-one"
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            title=${this.t('tool_picker_modal.tag_tool_add_one_aria')}
+                            aria-label=${this.t('tool_picker_modal.tag_tool_add_one_aria')}
+                            @click=${(e) => {
+                                e.stopPropagation();
+                                this._pickToolLike(t);
+                            }}
+                        >
+                            <platform-icon name="plus" size="14"></platform-icon>
+                        </platform-button>
+                    `
+                    : nothing}
+            </article>
+        `;
+    }
+
+    renderFooter() {
+        if (this._isCodeNodeTemplates() || this._usesMcpGroupedLayout()) {
+            return html``;
+        }
+        if (!this._mcpBulkAddEnabled()) {
+            return html``;
+        }
+        const count = this._selectedToolIds.length;
+        return html`
+            <div class="picker-footer">
+                <span class="picker-footer-count">
+                    ${this.t('tool_picker_modal.selected_count', { n: count })}
+                </span>
+                <div class="picker-footer-actions">
+                    <platform-button
+                        variant="ghost"
+                        density="compact"
+                        ?disabled=${count === 0}
+                        @click=${() => { this._selectedToolIds = []; }}
+                    >${this.t('tool_picker_modal.clear_selection')}</platform-button>
+                    <platform-button
+                        variant="primary"
+                        density="compact"
+                        ?disabled=${count === 0}
+                        @click=${() => this._confirmSelectedTools()}
+                    >${this.t('tool_picker_modal.add_selected')}</platform-button>
+                </div>
             </div>
         `;
     }
@@ -1791,9 +2303,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     renderBody() {
-        if (this._isCodeNodeTemplates()) {
-            return this._renderBodyCodeNode();
-        }
         return this._renderBodyToolPick();
     }
 }

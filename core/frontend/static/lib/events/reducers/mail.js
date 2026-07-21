@@ -470,12 +470,22 @@ export function mailReducer(state = initialMailState, event) {
             const selectedMessage = focus
                 ? Object.freeze({ ...focus, unread: false })
                 : null;
+            const threadMessages = items.map((item) => {
+                if (
+                    item
+                    && item.folder === folderName
+                    && item.unread === true
+                ) {
+                    return Object.freeze({ ...item, unread: false });
+                }
+                return Object.freeze(item);
+            });
             return {
                 ...state,
                 messageLoading: false,
                 pendingOpenUid: null,
                 selectedThreadId: threadId,
-                selectedThreadMessages: Object.freeze(items.map((item) => Object.freeze(item))),
+                selectedThreadMessages: Object.freeze(threadMessages),
                 selectedMessage,
                 selectedUid: selectedMessage && typeof selectedMessage.uid === 'string'
                     ? selectedMessage.uid

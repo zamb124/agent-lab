@@ -26,8 +26,13 @@ export class PlatformIcon extends PlatformElement {
                 color: inherit;
             }
             svg { width: 100%; height: 100%; }
+            /* Monochrome only when not brand/logo. [colored] keeps asset presentation fills. */
             :host(:not([colored]):not([file-icon])) svg { fill: currentColor; }
             :host(:not([colored]):not([file-icon])) svg path { fill: currentColor; }
+            :host([colored]:not([file-icon])) {
+                /* Brand/logo mode: do not force currentColor onto SVG paints. */
+                color: inherit;
+            }
         `,
     ];
 

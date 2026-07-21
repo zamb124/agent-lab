@@ -57,6 +57,11 @@ export class FlowsCodeLanguageIcon extends PlatformElement {
                 height: 82%;
                 border-radius: calc(var(--flows-code-language-icon-size) * 0.16);
             }
+            .icon[data-language='go'] img {
+                width: 100%;
+                height: 72%;
+                object-fit: contain;
+            }
             .fallback {
                 display: inline-flex;
                 align-items: center;

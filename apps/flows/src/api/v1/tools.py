@@ -67,6 +67,7 @@ class ToolResponse(StrictBaseModel):
 
 
 _TOOLS_MAX_LIMIT = 2000
+_TOOLS_ALL_HTTP_MAX_LIMIT = 20
 
 
 class PickerCategory(str, Enum):
@@ -207,13 +208,30 @@ async def _list_picker_tools_and_flows(
     picker_category: PickerCategory,
     limit: int,
     offset: int,
+    q: str | None = None,
 ) -> OffsetPage[ToolResponse]:
+    needle = q.strip().lower() if isinstance(q, str) and q.strip() else None
+
+    def _match(item: ToolResponse) -> bool:
+        if needle is None:
+            return True
+        hay = " ".join(
+            part
+            for part in (
+                item.tool_id,
+                item.title or "",
+                item.description or "",
+            )
+        ).lower()
+        return needle in hay
+
     if picker_category == PickerCategory.FLOW:
-        flow_items, flows_count = await _collect_picker_flow_items(container)
-        page = flow_items[offset : offset + limit]
+        flow_items, _flows_count = await _collect_picker_flow_items(container)
+        filtered = [item for item in flow_items if _match(item)]
+        page = filtered[offset : offset + limit]
         return OffsetPage[ToolResponse](
             items=page,
-            total=flows_count,
+            total=len(filtered),
             limit=limit,
             offset=offset,
         )
@@ -224,10 +242,11 @@ async def _list_picker_tools_and_flows(
             include_mcp=True,
             mcp_only=True,
         )
-        page = tool_items[offset : offset + limit]
+        filtered = [item for item in tool_items if _match(item)]
+        page = filtered[offset : offset + limit]
         return OffsetPage[ToolResponse](
             items=page,
-            total=len(tool_items),
+            total=len(filtered),
             limit=limit,
             offset=offset,
         )
@@ -238,25 +257,26 @@ async def _list_picker_tools_and_flows(
             include_mcp=False,
             mcp_only=False,
         )
-        page = tool_items[offset : offset + limit]
+        filtered = [item for item in tool_items if _match(item)]
+        page = filtered[offset : offset + limit]
         return OffsetPage[ToolResponse](
             items=page,
-            total=len(tool_items),
+            total=len(filtered),
             limit=limit,
             offset=offset,
         )
 
-    flow_items, flows_count = await _collect_picker_flow_items(container)
+    flow_items, _flows_count = await _collect_picker_flow_items(container)
     tool_items = await _collect_picker_tool_items(
         container,
         include_mcp=True,
         mcp_only=False,
     )
-    merged_items = flow_items + tool_items
+    merged_items = [item for item in (flow_items + tool_items) if _match(item)]
     page = merged_items[offset : offset + limit]
     return OffsetPage[ToolResponse](
         items=page,
-        total=flows_count + len(tool_items),
+        total=len(merged_items),
         limit=limit,
         offset=offset,
     )
@@ -292,12 +312,20 @@ async def list_all_tools_and_flows(
     container: ContainerDep,
     limit: Annotated[
         int,
-        Query(ge=1, le=_TOOLS_MAX_LIMIT, description="Максимум tools+flows вместе"),
-    ] = 500,
+        Query(
+            ge=1,
+            le=_TOOLS_ALL_HTTP_MAX_LIMIT,
+            description="Максимум tools+flows на страницу (пагинация offset)",
+        ),
+    ] = _TOOLS_ALL_HTTP_MAX_LIMIT,
     offset: Annotated[int, Query(ge=0, description="Смещение для пагинации")] = 0,
     picker_category: Annotated[
         PickerCategory | None,
         Query(description="Категория для tool picker: all, code, flow, mcp"),
+    ] = None,
+    q: Annotated[
+        str | None,
+        Query(description="Поиск по tool_id / title / description"),
     ] = None,
 ) -> OffsetPage[ToolResponse]:
     """Список tools и flows для picker с общим лимитом."""
@@ -307,6 +335,7 @@ async def list_all_tools_and_flows(
             picker_category=picker_category,
             limit=limit,
             offset=offset,
+            q=q,
         )
 
     tools_list, flows_list, tools_count, flows_count = await asyncio.gather(
@@ -339,10 +368,71 @@ async def list_all_tools_and_flows(
         flow_item = _flow_response(flow_row)
         items.append(flow_item.model_copy(update={"agent_toolkit_ids": flow_toolkit_ids}))
 
+    needle = q.strip().lower() if isinstance(q, str) and q.strip() else None
+    if needle is not None:
+        filtered: list[ToolResponse] = []
+        for item in items:
+            hay = " ".join(
+                part
+                for part in (
+                    item.tool_id,
+                    item.title or "",
+                    item.description or "",
+                )
+            ).lower()
+            if needle in hay:
+                filtered.append(item)
+        page = filtered[offset : offset + limit]
+        return OffsetPage[ToolResponse](
+            items=page,
+            total=len(filtered),
+            limit=limit,
+            offset=offset,
+        )
+
     page = items[offset : offset + limit]
     return OffsetPage[ToolResponse](
         items=page,
         total=tools_count + flows_count + registry_only_count,
+        limit=limit,
+        offset=offset,
+    )
+
+
+class ToolTagGroupResponse(StrictBaseModel):
+    """Платформенное LLM-описание tag-группы tools."""
+
+    tag: str
+    description_ru: str
+    description_en: str
+    updated_at: str
+    content_hash: str
+
+
+@router.get("/tag-groups", response_model=OffsetPage[ToolTagGroupResponse])
+async def list_tool_tag_groups(
+    container: ContainerDep,
+    limit: Annotated[int, Query(ge=1, le=_TOOLS_ALL_HTTP_MAX_LIMIT)] = _TOOLS_ALL_HTTP_MAX_LIMIT,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> OffsetPage[ToolTagGroupResponse]:
+    """Список платформенных описаний групп tools по тегам."""
+    groups = await container.tool_tag_group_service.list_groups(limit=limit, offset=offset)
+    items = [
+        ToolTagGroupResponse(
+            tag=group.tag,
+            description_ru=group.description_ru,
+            description_en=group.description_en,
+            updated_at=group.updated_at.isoformat(),
+            content_hash=group.content_hash,
+        )
+        for group in groups
+    ]
+    # list_groups returns one page; total for OffsetPage is page+offset when short page ends.
+    page_len = len(items)
+    total = offset + page_len if page_len < limit else offset + page_len + 1
+    return OffsetPage[ToolTagGroupResponse](
+        items=items,
+        total=total,
         limit=limit,
         offset=offset,
     )

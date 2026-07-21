@@ -625,6 +625,12 @@ function _artifactDataEvents(out, artifact, contextId, taskId) {
                     payload: { task_id: taskId, context_id: contextId, ...(d.payload || {}) },
                 });
             }
+            if (d.type === 'platform.reflection_resolved') {
+                out.events.push({
+                    type: 'reflection_resolved',
+                    payload: { task_id: taskId, context_id: contextId, ...(d.payload || {}) },
+                });
+            }
             out.traceEntries.push({
                 context_id: contextId,
                 task_id: taskId,

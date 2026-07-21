@@ -252,11 +252,31 @@ def _granian_reload_enabled(service: str) -> bool:
     return service not in GRANIAN_RELOAD_DISABLED_SERVICES
 
 
+def _granian_reload_apps_path(service: str) -> str:
+    """Каталог apps/<pkg> для watch: из module path SERVICES[service].app.
+
+    Нельзя watch'ить весь apps/: правка flows UI иначе релоадит rag/crm/...
+    и может оставить granian без живого worker (LISTEN без HTTP).
+    """
+    config = SERVICES[service]
+    app_ref = config.get("app")
+    if not isinstance(app_ref, str) or not app_ref:
+        raise ValueError(f"SERVICES[{service!r}].app must be non-empty str for reload-paths")
+    module_path = app_ref.split(":", 1)[0]
+    parts = module_path.split(".")
+    if len(parts) < 2 or parts[0] != "apps":
+        raise ValueError(
+            f"SERVICES[{service!r}].app must be apps.<pkg>...., got {app_ref!r}"
+        )
+    return f"apps/{parts[1]}"
+
+
 def _append_granian_reload_args(cmd: list[str], *, service: str) -> None:
     if not _granian_reload_enabled(service):
         return
     cmd.append("--reload")
-    for path in ("apps", "core"):
+    # Per-service apps/<pkg> + shared core — не весь apps/.
+    for path in (_granian_reload_apps_path(service), "core"):
         cmd += ["--reload-paths", path]
     for ignore_dir in GRANIAN_RELOAD_IGNORE_DIRS:
         cmd += ["--reload-ignore-dirs", ignore_dir]

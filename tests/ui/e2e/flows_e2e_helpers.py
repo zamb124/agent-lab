@@ -9,7 +9,8 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 import httpx
-from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeoutError, expect
+from playwright.async_api import Locator, Page, expect
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.ui.e2e.ui_e2e_pwa import ui_e2e_dismiss_pwa_install_banner
 from tests.ui.harness import AppUI
@@ -214,6 +215,18 @@ def flows_llm_with_reflection_payload(
             ],
             "min_confidence": 0.8,
             "block_on_severities": ["error", "critical"],
+            "exits": [
+                {
+                    "exit_id": "approved",
+                    "label": "Approved",
+                    "when": {"kind": "approved_true"},
+                },
+                {
+                    "exit_id": "blocked",
+                    "label": "Blocked",
+                    "when": {"kind": "approved_false"},
+                },
+            ],
         },
     }
     agent = nodes["agent"]
@@ -222,6 +235,28 @@ def flows_llm_with_reflection_payload(
         agent["pos_y"] = 120
     payload["edges"] = [
         {"from_node": "agent", "to_node": reflection_node_id},
+        {
+            "from_node": reflection_node_id,
+            "to_node": None,
+            "from_port": "approved",
+            "condition": {
+                "type": "simple",
+                "variable": "validation.exit_id",
+                "operator": "==",
+                "value": "approved",
+            },
+        },
+        {
+            "from_node": reflection_node_id,
+            "to_node": None,
+            "from_port": "blocked",
+            "condition": {
+                "type": "simple",
+                "variable": "validation.exit_id",
+                "operator": "==",
+                "value": "blocked",
+            },
+        },
     ]
     return payload
 
@@ -2611,20 +2646,8 @@ async def flows_ensure_channel_node_telegram(page: Page) -> None:
 async def flows_set_remote_flow_url(page: Page, url: str, *, branch_id: str = "default") -> None:
     editor = page.locator("flows-remote-flow-editor").first
     await expect(editor).to_be_visible(timeout=5_000)
-    mode_control = editor.locator("platform-segmented-control").first
-    await mode_control.evaluate(
-        """
-        (el) => {
-            el.value = 'url';
-            el.dispatchEvent(
-                new CustomEvent('change', {
-                    detail: { value: 'url' },
-                    bubbles: true,
-                    composed: true,
-                })
-            );
-        }
-        """
+    await expect(editor.locator("[data-testid='remote-flow-protocol-panel']")).to_be_visible(
+        timeout=5_000
     )
     endpoint_fields = editor.locator(".remote-flow-endpoint-stack platform-field")
     url_field = endpoint_fields.first
@@ -3053,6 +3076,33 @@ async def flows_e2e_expect_skill_load_chip(page: Page, skill_name: str) -> Locat
     return chip
 
 
+async def flows_e2e_expect_reflection_chip(
+    page: Page,
+    *,
+    exit_label: str = "Blocked",
+    chat: Locator | None = None,
+) -> Locator:
+    """Чип резолюции reflection gate на assistant-bubble."""
+    host = chat
+    if host is None:
+        host = page.locator("flows-execution-panel platform-chat").first
+        if await host.count() == 0:
+            host = page.locator("chat-page platform-chat").first
+        if await host.count() == 0:
+            host = page.locator("platform-chat").first
+    group = host.get_by_role(
+        "group",
+        name=re.compile(
+            rf"(?:Quality checks|Проверки качества):\s*.*{re.escape(exit_label)}",
+            re.I,
+        ),
+    ).first
+    await expect(group).to_be_visible(timeout=120_000)
+    chip = group.locator("button.reflection-chip").first
+    await expect(chip).to_be_visible(timeout=15_000)
+    return chip
+
+
 async def flows_e2e_open_lara_chat(page: Page, flows_ui: AppUI) -> None:
     """Открывает глобальный drawer Lara через FAB на главной Flows."""
     await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
@@ -3078,6 +3128,26 @@ async def flows_e2e_open_chat_settings(page: Page) -> Locator:
 async def flows_e2e_set_show_skill_loads(page: Page, *, enabled: bool) -> None:
     settings = await flows_e2e_open_chat_settings(page)
     field = settings.locator('platform-field[data-chat-field="show_skill_loads"]').first
+    await expect(field).to_be_visible(timeout=15_000)
+    await field.evaluate(
+        """
+        (el, enabled) => {
+            el.value = enabled;
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+            el.dispatchEvent(new CustomEvent('change', {
+                detail: { value: enabled },
+                bubbles: true,
+                composed: true,
+            }));
+        }
+        """,
+        enabled,
+    )
+
+
+async def flows_e2e_set_show_reflection(page: Page, *, enabled: bool) -> None:
+    settings = await flows_e2e_open_chat_settings(page)
+    field = settings.locator('platform-field[data-chat-field="show_reflection"]').first
     await expect(field).to_be_visible(timeout=15_000)
     await field.evaluate(
         """

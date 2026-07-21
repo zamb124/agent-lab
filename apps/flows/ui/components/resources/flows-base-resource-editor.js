@@ -7,6 +7,7 @@
  *   - name
  *   - description
  *   - tags (platform-field type=array)
+ *   - permission (группы; пусто = всем)
  *
  * Slot 'settings' — поля, специфичные для типа (`config: dict`).
  *
@@ -15,7 +16,7 @@
  * или в панели ресурса.
  *
  * Эмитит наружу `change { resourceId, patch }` — patch содержит изменённые
- * top-level поля ресурса (name, description, tags) или config (от слота).
+ * top-level поля ресурса (name, description, tags, permission) или config (от слота).
  */
 
 import { html, css } from 'lit';
@@ -66,6 +67,11 @@ export class FlowsBaseResourceEditor extends PlatformElement {
             }
             .field { display: flex; flex-direction: column; gap: var(--space-1); }
             .field label { font-size: var(--text-sm); color: var(--text-secondary); }
+            .permission-hint {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                margin: 0;
+            }
         `,
     ];
 
@@ -126,6 +132,26 @@ export class FlowsBaseResourceEditor extends PlatformElement {
         this._emitPatch({ tags });
     }
 
+    _onPermission(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-base-resource-editor: permission change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-base-resource-editor: permission detail.value');
+        }
+        const permission = d.value;
+        if (!Array.isArray(permission)) {
+            throw new Error('flows-base-resource-editor: permission must be array');
+        }
+        for (const item of permission) {
+            if (typeof item !== 'string') {
+                throw new Error('flows-base-resource-editor: permission items must be strings');
+            }
+        }
+        this._emitPatch({ permission });
+    }
+
     render() {
         if (!this.resource) return html`<div>${this.t('property_panel.select_resource')}</div>`;
         if (this.compactHeader) {
@@ -134,6 +160,7 @@ export class FlowsBaseResourceEditor extends PlatformElement {
         const name = typeof this.resource.name === 'string' ? this.resource.name : this.resourceId;
         const description = typeof this.resource.description === 'string' ? this.resource.description : '';
         const tags = Array.isArray(this.resource.tags) ? this.resource.tags : [];
+        const permission = Array.isArray(this.resource.permission) ? this.resource.permission : [];
         let type;
         if (typeof this.resourceType === 'string' && this.resourceType.length > 0) {
             type = this.resourceType;
@@ -173,6 +200,16 @@ export class FlowsBaseResourceEditor extends PlatformElement {
                     .config=${{ preserve_case: true }}
                     @change=${this._onTags}
                 ></platform-field>
+                <platform-field
+                    type="array"
+                    mode="edit"
+                    .label=${this.t('base_resource_editor.permission')}
+                    .placeholder=${this.t('base_resource_editor.permission_placeholder')}
+                    .value=${permission}
+                    .config=${{ preserve_case: true }}
+                    @change=${this._onPermission}
+                ></platform-field>
+                <p class="permission-hint">${this.t('base_resource_editor.permission_hint')}</p>
             </div>
             <slot name="settings"></slot>
         `;

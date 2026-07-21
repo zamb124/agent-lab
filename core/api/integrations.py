@@ -5,16 +5,19 @@ Endpoints (в приложении под префиксом /{server.name}, н�
   GET  .../api/v1/integrations/oauth/callback — OAuth redirect после авторизации
   GET  .../api/v1/integrations/credentials     — список подключённых интеграций пользователя
   DELETE .../api/v1/integrations/credentials/{provider}/{service} — отключить интеграцию
+  GET  .../credentials/google/workspace/authorize — proactive user OAuth URL (Docs/Sheets)
+  GET/PUT/DELETE .../credentials/google/workspace/company — company SA (admin)
+  POST .../google/workspace/system/reconcile — seed system SA из conf
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Annotated, ClassVar, Protocol
+from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Protocol
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from core.api.integration_oauth_error_html import (
@@ -25,8 +28,21 @@ from core.api.integration_oauth_error_html import (
     resolve_oauth_integration_locale,
 )
 from core.app_state import require_platform_app_state
+from core.clients.google_workspace_scopes import (
+    GOOGLE_OAUTH_SERVICE_CANONICAL,
+    scopes_for_google_service,
+)
 from core.config import get_settings
 from core.context import get_context
+from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.integrations.company_credentials import (
+    CompanyIntegrationConfigError,
+    CompanyIntegrationPermissionError,
+    CompanyIntegrationReadOnlyError,
+    GoogleWorkspaceCompanyCredentialPublic,
+    GoogleWorkspaceCompanyCredentialPut,
+    GoogleWorkspaceSystemReconcileResult,
+)
 from core.integrations.guided_integration_error import GuidedIntegrationError
 from core.integrations.models import CredentialInfo, IntegrationProvider
 from core.logging import get_logger
@@ -154,6 +170,163 @@ async def delete_credential(
     if not deleted:
         raise HTTPException(status_code=404, detail="Credential not found")
     return {"deleted": True}
+
+
+def _raise_http_for_company_integration_error(exc: Exception) -> NoReturn:
+    if isinstance(exc, CompanyIntegrationPermissionError):
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if isinstance(exc, CompanyIntegrationReadOnlyError):
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if isinstance(exc, CompanyIntegrationConfigError):
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    raise exc
+
+
+class GoogleWorkspaceAuthorizeResponse(BaseModel):
+    """Proactive Connect: URL для OAuth Google Workspace (Docs/Sheets)."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    authorize_url: str = Field(..., min_length=1)
+
+
+@router.get(
+    "/credentials/google/workspace/authorize",
+    response_model=GoogleWorkspaceAuthorizeResponse,
+)
+async def authorize_google_workspace(
+    request: Request,
+    return_path: Annotated[
+        str,
+        Query(description="Путь на платформе после OAuth (внутри origin)"),
+    ] = "/",
+    return_origin: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Origin вкладки для редиректа после OAuth "
+                "(тот же кластер, что platform_public_base_url)"
+            )
+        ),
+    ] = None,
+) -> GoogleWorkspaceAuthorizeResponse:
+    """
+    Proactive user OAuth для Google Workspace (без FlowInterrupt).
+
+    Без flow_context — после callback credential пишется, resume flow не нужен.
+    """
+    if not return_path.startswith("/") or return_path.startswith("//"):
+        raise HTTPException(status_code=422, detail="return_path must be a single-segment path")
+    ctx = get_context()
+    if not ctx or not ctx.user or not ctx.active_company:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    oauth = _integration_container(request).oauth_service
+    oauth_locale = resolve_oauth_integration_locale(
+        request.headers.get("accept-language"),
+        language_cookie=request.cookies.get("language"),
+    )
+    brand_host = request.headers.get("host")
+    try:
+        authorize_url = await oauth.build_auth_url(
+            provider=IntegrationProvider.GOOGLE,
+            service=GOOGLE_OAUTH_SERVICE_CANONICAL,
+            scopes=scopes_for_google_service(GOOGLE_OAUTH_SERVICE_CANONICAL),
+            user_id=ctx.user.user_id,
+            company_id=ctx.active_company.company_id,
+            return_path=return_path,
+            return_origin=return_origin,
+            oauth_ui_locale=oauth_locale,
+            brand_host=brand_host,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return GoogleWorkspaceAuthorizeResponse(authorize_url=authorize_url)
+
+
+@router.get(
+    "/credentials/google/workspace/company",
+    response_model=GoogleWorkspaceCompanyCredentialPublic,
+)
+async def get_google_workspace_company_credential(
+    request: Request,
+) -> GoogleWorkspaceCompanyCredentialPublic:
+    """Публичный статус company Google Workspace SA (без секретов)."""
+    ctx = get_context()
+    if not ctx or not ctx.user or not ctx.active_company:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    service = _integration_container(request).company_integration_credential_service
+    return await service.get_google_workspace_company_public(ctx.active_company.company_id)
+
+
+@router.put(
+    "/credentials/google/workspace/company",
+    response_model=GoogleWorkspaceCompanyCredentialPublic,
+)
+async def put_google_workspace_company_credential(
+    request: Request,
+    payload: GoogleWorkspaceCompanyCredentialPut,
+) -> GoogleWorkspaceCompanyCredentialPublic:
+    """Admin: upsert company-owned Google Workspace Service Account credential."""
+    ctx = get_context()
+    if not ctx or not ctx.user or not ctx.active_company:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    service = _integration_container(request).company_integration_credential_service
+    try:
+        return await service.upsert_google_workspace_service_account(
+            ctx.active_company.company_id,
+            payload,
+        )
+    except Exception as exc:
+        _raise_http_for_company_integration_error(exc)
+
+
+@router.delete("/credentials/google/workspace/company")
+async def delete_google_workspace_company_credential(
+    request: Request,
+) -> dict[str, bool]:
+    """Admin: удалить company Google Workspace SA credential."""
+    ctx = get_context()
+    if not ctx or not ctx.user or not ctx.active_company:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    service = _integration_container(request).company_integration_credential_service
+    try:
+        deleted = await service.delete_google_workspace_service_account(
+            ctx.active_company.company_id,
+        )
+    except Exception as exc:
+        _raise_http_for_company_integration_error(exc)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Company credential not found")
+    return {"deleted": True}
+
+
+@router.post(
+    "/google/workspace/system/reconcile",
+    response_model=GoogleWorkspaceSystemReconcileResult,
+)
+async def reconcile_google_workspace_system(
+    request: Request,
+) -> GoogleWorkspaceSystemReconcileResult:
+    """Seed system company Google Workspace SA from conf (admin @ system)."""
+    ctx = get_context()
+    if ctx is None or ctx.active_company is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if ctx.active_company.company_id != SYSTEM_COMPANY_ID:
+        raise HTTPException(
+            status_code=403,
+            detail="system reconcile requires company_id=system",
+        )
+    user_roles = ctx.user.companies.get(SYSTEM_COMPANY_ID, [])
+    if "admin" not in user_roles:
+        raise HTTPException(
+            status_code=403,
+            detail="system reconcile requires admin role",
+        )
+    service = _integration_container(request).company_integration_credential_service
+    try:
+        return await service.reconcile_system_google_workspace()
+    except Exception as exc:
+        _raise_http_for_company_integration_error(exc)
 
 
 @router.get("/oauth/callback", response_model=None)

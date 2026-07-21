@@ -61,7 +61,7 @@ def get_channel(
     Получить канал по имени.
 
     Аргументы:
-        name: Имя канала ("a2a", "telegram", "whatsapp")
+        name: Имя канала ("a2a", "telegram", "webhook")
         flow_id: ID агента для канала
         context: Context с данными пользователя (опционально)
 

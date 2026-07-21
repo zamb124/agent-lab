@@ -5,12 +5,33 @@ Playwright E2E для SPA платформы. Сценарии с `@pytest.mark.
 ## Запуск
 
 ```bash
-make test-ui          # test-up + pytest tests/ui/e2e -n5 --dist=loadfile
+make test-ui          # test-up + pytest tests/ui/e2e -n5 --dist=loadfile (+ perf SUMMARY)
 make test-ui-doc      # test-ui + make doc
 UI_E2E_WORKERS=1 make test-ui   # serial (отладка)
 ```
 
 Бюджет тела теста — **15 с** (`tests/ui/e2e/conftest.py`). Дольше только через `scenario(timeout_seconds=N)`.
+
+### UI perf
+
+На **каждый** прогон `tests/ui/e2e` (включая `make test-ui` / `make test-ui-chat`) collector автоматически пишет подробный отчёт — без флагов и без правок тел тестов.
+
+Собирается:
+
+- HTTP: method, path, status, duration_ms, resource_type, service prefix
+- Navigation Timing (DCL / load)
+- Long tasks (`PerformanceObserver`)
+
+Артефакты:
+
+```text
+artifacts/ui-perf/
+├── SUMMARY.md                 # slowest tests, API paths, long tasks, errors
+└── gw0/
+    └── tests_ui_e2e_....json  # per-test отчёт
+```
+
+Метрики относительные (headless + xdist + MockLLM) — для поиска hotspots, не SLA. CI-gate по порогам в v1 нет.
 
 ### Параллель и изоляция
 

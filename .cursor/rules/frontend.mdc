@@ -220,7 +220,8 @@ export class FooApp extends PlatformApp {
 - Hardcoded `font-family: 'Fira Sans'`, `'Onest'`, `'SF Pro Display'`, `'Geist'` в `apps/**` и `core/frontend/static/lib/**` — только `var(--font-sans)` / `var(--font-mono)`.
 - Fallback-стеки `var(--font-sans, …)` / `var(--font-mono, …)` — только голый `var(--font-sans)` / `var(--font-mono)`.
 - Legacy tokens `--font-main`, `--font-condensed`, bundle `fira-sans*` — удалены, CI fail.
-- `PlatformElement` baseStyles: `:host { font-family: var(--font-sans) }` + `button/input/textarea/select { font: inherit }` — shadow reset (document `reset.css` в closed shadow не действует).
+- `PlatformElement` baseStyles: `:host { font-family: var(--font-sans) }` + `button { font: inherit }` / `input/textarea/select { font: inherit; color: inherit }` — shadow reset (document `reset.css` в closed shadow не действует). **Не** ставить `color: inherit` на `:host button` — специфичность (0,1,1) перебивает `.btn-primary` / `.cta-btn` и в light theme даёт тёмный `--text-primary` на violet CTA.
+- Текст на solid primary/accent fill — только `--platform-btn-primary-text` / `--platform-btn-accent-text` / `--text-on-accent` (alias) или `<platform-button>`. `--text-inverse` — контраст к ambient surface, не on-accent.
 - Отдельные condensed/display font-family — `--text-display-*`, `--tracking-tight`, `--font-semibold`.
 - CI: `scripts/check_platform_typography.py` (п.33 `check_ui_canon.sh`), unit: `platform-typography.spec.js`.
 
@@ -379,7 +380,7 @@ WS-эффект форвардит фрейм, фронт диспатчит к�
 
 - Токены: `core/frontend/static/assets/css/tokens.css` — `--marketing-*`, `--accent`, `--glass-*`, `--text-*`, `--space-*`.
 - Shared layouts: `core/frontend/static/lib/styles/shared/marketing-section.styles.js`.
-- CTA: `<platform-button variant="primary">`; карточки: `.glass-medium.glass-interactive`.
+- CTA: `<platform-button variant="primary">` (текст = `--platform-btn-primary-text`, не `--text-inverse`); карточки: `.glass-medium.glass-interactive`.
 - Страницы продуктов: `ProductLandingPage` + декларативный config в `apps/frontend/ui/pages/products/*`.
 - `apps/frontend/ui/styles/landing.css` — **deprecated alias layer** для legacy landing-секций главной `/`; новый код не добавляет `--landing-*` и локальные brand hex.
 - Gap в визуале marketing → PR в `core/frontend/` (токен или shared style), не inline CSS в `apps/frontend`.

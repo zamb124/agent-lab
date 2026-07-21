@@ -19,6 +19,9 @@ import {
     htmlToPlainText,
     MARKDOWN_EDITOR_MAX_ATTACHMENT_BYTES,
 } from '../utils/markdown-html.js';
+import { createVariableExtensions, refreshVariableDecorations } from '../codemirror/variable-extensions.js';
+import { lookupPreviewValue } from '../variables/variable-refs.js';
+import { variableRefsStyles } from '../styles/shared/variable-refs.styles.js';
 
 export { sanitizeMarkdownEditorHtml, htmlToMarkdown, MARKDOWN_EDITOR_MAX_ATTACHMENT_BYTES } from '../utils/markdown-html.js';
 
@@ -27,6 +30,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        variableRefsStyles,
         css`
             :host {
                 display: flex;
@@ -275,116 +279,6 @@ export class PlatformMarkdownEditor extends PlatformElement {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 border-top: 1px solid var(--border-subtle);
-            }
-            
-            /* Подсветка переменных */
-            .cm-variable-required {
-                color: #a78bfa;
-                font-weight: 500;
-            }
-            
-            .cm-variable-optional {
-                color: #22d3ee;
-                font-weight: 500;
-            }
-            
-            .cm-variable-default {
-                color: var(--accent);
-            }
-            
-            .cm-for-keyword {
-                color: #f59e0b;
-                font-weight: 600;
-            }
-            
-            .cm-ref-var {
-                color: #f472b6;
-                font-weight: 500;
-            }
-            
-            .cm-ref-state {
-                color: #fbbf24;
-                font-weight: 500;
-            }
-            
-            .cm-variable-undefined {
-                color: #ef4444;
-                text-decoration: wavy underline;
-                text-underline-offset: 3px;
-            }
-            
-            .cm-loop-var {
-                color: #a78bfa;
-                font-style: italic;
-            }
-            
-            /* Tooltip стили */
-            .cm-tooltip {
-                background: var(--glass-solid-strong) !important;
-                border: 1px solid var(--border-default) !important;
-                border-radius: var(--radius-md) !important;
-                box-shadow: var(--glass-shadow-medium) !important;
-                padding: var(--space-2) var(--space-3) !important;
-                font-family: var(--font-sans) !important;
-                font-size: var(--text-sm) !important;
-                color: var(--text-primary) !important;
-                max-width: 300px !important;
-            }
-            
-            .variable-tooltip {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-1);
-            }
-            
-            .variable-tooltip-name {
-                font-weight: var(--font-semibold);
-                color: var(--accent);
-            }
-            
-            .variable-tooltip-value {
-                font-family: var(--font-mono);
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-                word-break: break-all;
-            }
-            
-            .variable-tooltip-undefined {
-                color: var(--error);
-                font-style: italic;
-            }
-            
-            /* Светлая тема */
-            :host-context([data-theme="light"]) .cm-variable-required {
-                color: #7c3aed;
-            }
-            
-            :host-context([data-theme="light"]) .cm-variable-optional {
-                color: #0891b2;
-            }
-            
-            :host-context([data-theme="light"]) .cm-variable-default {
-                color: #7c8af4;
-            }
-            
-            :host-context([data-theme="light"]) .cm-for-keyword {
-                color: #d97706;
-            }
-            
-            :host-context([data-theme="light"]) .cm-ref-var {
-                color: #db2777;
-            }
-            
-            :host-context([data-theme="light"]) .cm-ref-state {
-                color: #ca8a04;
-            }
-            
-            :host-context([data-theme="light"]) .cm-variable-undefined {
-                color: #dc2626;
-            }
-            
-            :host-context([data-theme="light"]) .cm-loop-var {
-                color: #7c3aed;
             }
             
             /* Split mode */
@@ -924,6 +818,16 @@ export class PlatformMarkdownEditor extends PlatformElement {
         enableVoiceDictation: { type: Boolean, attribute: 'enable-voice-dictation' },
         primaryDisabled: { type: Boolean, attribute: 'primary-disabled' },
         enableVariables: { type: Boolean, attribute: 'enable-variables' },
+        /**
+         * Синтаксис вставок при enableVariables:
+         * - brace — LLM-промпты ({var}, циклы);
+         * - at-ref — поля flows (@state: / @var:), как platform-variable-input.
+         */
+        variableSyntax: { type: String, attribute: 'variable-syntax' },
+        /** Preview map for `@state:` hover (from previewExecutionState). */
+        statePreview: { type: Object, attribute: false },
+        /** Known `@state:` paths for autocomplete (dataflow incoming_state). */
+        statePaths: { type: Array, attribute: false },
         enableMentions: { type: Boolean, attribute: 'enable-mentions' },
         minHeight: { type: Number, attribute: 'min-height' },
         /** Не растягиваться на свободную высоту родителя (короткие поля в форме). */
@@ -960,6 +864,9 @@ export class PlatformMarkdownEditor extends PlatformElement {
         this.enableVoiceDictation = true;
         this.primaryDisabled = false;
         this.enableVariables = false;
+        this.variableSyntax = 'brace';
+        this.statePreview = {};
+        this.statePaths = [];
         this.enableMentions = false;
         this.minHeight = 150;
         this.compact = false;
@@ -1057,16 +964,9 @@ export class PlatformMarkdownEditor extends PlatformElement {
         if (!this._editorView) {
             return;
         }
-        const doc = this._editorView.state.doc;
-        const docLength = doc.length;
         this._variablesRefreshInProgress = true;
         try {
-            this._editorView.dispatch({
-                changes: { from: docLength, to: docLength, insert: ' ' },
-            });
-            this._editorView.dispatch({
-                changes: { from: docLength, to: docLength + 1, insert: '' },
-            });
+            refreshVariableDecorations(this._editorView);
         } finally {
             this._variablesRefreshInProgress = false;
         }
@@ -1101,10 +1001,21 @@ export class PlatformMarkdownEditor extends PlatformElement {
             });
         }
         
-        if (this.enableVariables && (changedProperties.has('variables') || changedProperties.has('variableCatalog')) && this._editorView) {
+        if (
+            this.enableVariables
+            && (
+                changedProperties.has('variables')
+                || changedProperties.has('variableCatalog')
+                || changedProperties.has('statePreview')
+                || changedProperties.has('statePaths')
+            )
+            && this._editorView
+        ) {
             const nextFingerprint = this._variablesFingerprintValue(this.variables);
             const nextCatalogFingerprint = JSON.stringify(this.variableCatalog || []);
-            const combinedFingerprint = `${nextFingerprint}|${nextCatalogFingerprint}`;
+            const nextStateFingerprint = JSON.stringify(this.statePreview || {});
+            const nextPathsFingerprint = JSON.stringify(this.statePaths || []);
+            const combinedFingerprint = `${nextFingerprint}|${nextCatalogFingerprint}|${nextStateFingerprint}|${nextPathsFingerprint}`;
             if (combinedFingerprint !== this._variablesFingerprint) {
                 this._variablesFingerprint = combinedFingerprint;
                 this._refreshVariableHighlighting();
@@ -1138,6 +1049,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
     async _initCodeMirror() {
         const cm = await import('/static/core/assets/codemirror/codemirror-bundle.js');
         
+        this._cmBundle = cm;
         this._cmModules = {
             EditorState: cm.EditorState,
             Compartment: cm.Compartment,
@@ -1153,9 +1065,6 @@ export class PlatformMarkdownEditor extends PlatformElement {
             lineNumbers: cm.lineNumbers,
             highlightActiveLine: cm.highlightActiveLine,
             highlightActiveLineGutter: cm.highlightActiveLineGutter,
-            Decoration: cm.Decoration,
-            ViewPlugin: cm.ViewPlugin,
-            hoverTooltip: cm.hoverTooltip,
         };
 
         this._createEditor();
@@ -1170,9 +1079,20 @@ export class PlatformMarkdownEditor extends PlatformElement {
         
         this._readonlyCompartment = new cm.Compartment();
         
-        const variableHighlighter = this.enableVariables ? this._createVariableHighlighter(cm) : null;
-        const variableTooltip = this.enableVariables ? this._createVariableTooltip(cm) : null;
-        const completionSource = this.enableVariables ? this._createCompletionSource() : null;
+        const variableExtensions = this.enableVariables
+            ? createVariableExtensions(this._cmBundle, {
+                syntax: this.variableSyntax === 'at-ref' ? 'at-ref' : 'both',
+                getValues: () => (this.variables && typeof this.variables === 'object' ? this.variables : {}),
+                getStatePreview: () => (this.statePreview && typeof this.statePreview === 'object' ? this.statePreview : {}),
+                getCatalog: () => (Array.isArray(this.variableCatalog) ? this.variableCatalog : []),
+                getStatePaths: () => (Array.isArray(this.statePaths) ? this.statePaths : []),
+                t: (key) => {
+                    if (key === 'undefined') return this.t('markdown_editor.var_undefined');
+                    if (key === 'runtime_value') return this.t('markdown_editor.runtime_value');
+                    throw new Error(`platform-markdown-editor: unknown variable tooltip key ${key}`);
+                },
+            })
+            : [];
 
         const themeExtensions = isDarkTheme 
             ? [cm.oneDark]
@@ -1192,13 +1112,11 @@ export class PlatformMarkdownEditor extends PlatformElement {
             cm.highlightActiveLineGutter(),
             cm.EditorView.lineWrapping,
             this._readonlyCompartment.of(cm.EditorState.readOnly.of(this.readonly)),
-            ...(completionSource ? [cm.autocompletion({ override: [completionSource] })] : []),
             cm.keymap.of([
                 ...cm.defaultKeymap,
                 ...cm.historyKeymap,
             ]),
-            ...(variableHighlighter ? [variableHighlighter] : []),
-            ...(variableTooltip ? [variableTooltip] : []),
+            ...variableExtensions,
             ...themeExtensions,
             cm.EditorView.updateListener.of((update) => {
                 if (update.docChanged && !this._variablesRefreshInProgress) {
@@ -1225,7 +1143,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
             }),
             parent: container
         });
-        this._variablesFingerprint = `${this._variablesFingerprintValue(this.variables)}|${JSON.stringify(this.variableCatalog || [])}`;
+        this._variablesFingerprint = `${this._variablesFingerprintValue(this.variables)}|${JSON.stringify(this.variableCatalog || [])}|${JSON.stringify(this.statePreview || {})}|${JSON.stringify(this.statePaths || [])}`;
         this._syncFileDropListeners();
     }
 
@@ -1266,331 +1184,18 @@ export class PlatformMarkdownEditor extends PlatformElement {
         };
     }
 
-    _createVariableHighlighter(cm) {
-        const self = this;
-        
-        const decoClasses = {
-            required: cm.Decoration.mark({ class: "cm-variable-required" }),
-            optional: cm.Decoration.mark({ class: "cm-variable-optional" }),
-            default: cm.Decoration.mark({ class: "cm-variable-default" }),
-            undefined: cm.Decoration.mark({ class: "cm-variable-undefined" }),
-            forKeyword: cm.Decoration.mark({ class: "cm-for-keyword" }),
-            loopVar: cm.Decoration.mark({ class: "cm-loop-var" }),
-            refVar: cm.Decoration.mark({ class: "cm-ref-var" }),
-            refState: cm.Decoration.mark({ class: "cm-ref-state" }),
-        };
-
-        return cm.ViewPlugin.fromClass(class {
-            constructor(view) {
-                this.decorations = this.buildDecorations(view);
-            }
-
-            update(update) {
-                if (update.docChanged || update.viewportChanged) {
-                    this.decorations = this.buildDecorations(update.view);
-                }
-            }
-
-            buildDecorations(view) {
-                const builder = [];
-                const doc = view.state.doc.toString();
-                const loopVars = this.extractLoopVariables(doc);
-                
-                const forRegex = /\{for\s+(\w+)\s+in\s+([\w.]+)\}/g;
-                let match;
-                while ((match = forRegex.exec(doc)) !== null) {
-                    builder.push(decoClasses.forKeyword.range(match.index, match.index + match[0].length));
-                    
-                    const listVar = match[2];
-                    if (!self._variableExists(listVar) && !loopVars.has(listVar)) {
-                        builder.push(decoClasses.undefined.range(match.index, match.index + match[0].length));
-                    }
-                }
-                
-                const endforRegex = /\{endfor\}/g;
-                while ((match = endforRegex.exec(doc)) !== null) {
-                    builder.push(decoClasses.forKeyword.range(match.index, match.index + match[0].length));
-                }
-                
-                const refVarRegex = /@var:([\w.]+)/g;
-                while ((match = refVarRegex.exec(doc)) !== null) {
-                    const varName = match[1];
-                    builder.push(decoClasses.refVar.range(match.index, match.index + match[0].length));
-                    if (!self._variableExists(varName)) {
-                        builder.push(decoClasses.undefined.range(match.index, match.index + match[0].length));
-                    }
-                }
-                
-                const refStateRegex = /@state:([\w.]+)/g;
-                while ((match = refStateRegex.exec(doc)) !== null) {
-                    builder.push(decoClasses.refState.range(match.index, match.index + match[0].length));
-                }
-                
-                const optionalWithDefaultRegex = /\{\?([\w.]+)\|([^}]+)\}/g;
-                while ((match = optionalWithDefaultRegex.exec(doc)) !== null) {
-                    builder.push(decoClasses.optional.range(match.index, match.index + match[0].length));
-                }
-                
-                const optionalRegex = /\{\?([\w.]+)\}/g;
-                while ((match = optionalRegex.exec(doc)) !== null) {
-                    builder.push(decoClasses.optional.range(match.index, match.index + match[0].length));
-                }
-                
-                const defaultRegex = /\{([\w.]+)\|([^}]+)\}/g;
-                while ((match = defaultRegex.exec(doc)) !== null) {
-                    const varName = match[1];
-                    builder.push(decoClasses.default.range(match.index, match.index + match[0].length));
-                    if (!self._variableExists(varName) && !loopVars.has(varName) && !this.isLoopProperty(varName, loopVars)) {
-                        builder.push(decoClasses.undefined.range(match.index, match.index + match[0].length));
-                    }
-                }
-                
-                const requiredRegex = /\{([\w.]+)\}/g;
-                while ((match = requiredRegex.exec(doc)) !== null) {
-                    const varName = match[1];
-                    if (varName === 'endfor' || varName.startsWith('for ') || varName.startsWith('?')) continue;
-                    
-                    const isLoopVar = loopVars.has(varName) || this.isLoopProperty(varName, loopVars);
-                    
-                    if (isLoopVar) {
-                        builder.push(decoClasses.loopVar.range(match.index, match.index + match[0].length));
-                    } else if (self._variableExists(varName)) {
-                        builder.push(decoClasses.required.range(match.index, match.index + match[0].length));
-                    } else {
-                        builder.push(decoClasses.undefined.range(match.index, match.index + match[0].length));
-                    }
-                }
-                
-                builder.sort((a, b) => a.from - b.from);
-                return cm.Decoration.set(builder, true);
-            }
-            
-            extractLoopVariables(doc) {
-                const loopVars = new Set();
-                const forRegex = /\{for\s+(\w+)\s+in\s+[\w.]+\}/g;
-                let match;
-                while ((match = forRegex.exec(doc)) !== null) {
-                    loopVars.add(match[1]);
-                }
-                return loopVars;
-            }
-            
-            isLoopProperty(varName, loopVars) {
-                const parts = varName.split('.');
-                return loopVars.has(parts[0]);
-            }
-        }, {
-            decorations: v => v.decorations
-        });
-    }
-    
-    _variableExists(path) {
-        const root = path.split('.', 1)[0];
-        if (Array.isArray(this.variableCatalog) && this.variableCatalog.some((entry) => entry?.name === root)) {
-            return true;
-        }
-        if (!this.variables) return false;
-        
-        const parts = path.split('.');
-        let value = this.variables;
-        
-        for (const part of parts) {
-            if (value === null || value === undefined) return false;
-            if (typeof value !== 'object') return false;
-            
-            if (typeof value[part] === 'object' && value[part] !== null && 'value' in value[part]) {
-                value = value[part].value;
-            } else if (part in value) {
-                value = value[part];
-            } else {
-                return false;
-            }
-        }
-        
-        return true;
-    }
-
-    _createVariableTooltip(cm) {
-        const self = this;
-        
-        return cm.hoverTooltip((view, pos) => {
-            const doc = view.state.doc.toString();
-            
-            const patterns = [
-                { regexp: /\{\??[\w.]+(?:\|[^}]*)?\}/g, type: 'variable' },
-                { regexp: /@var:[\w.]+/g, type: 'var_ref' },
-                { regexp: /@state:[\w.]+/g, type: 'state_ref' },
-            ];
-            
-            for (const { regexp, type } of patterns) {
-                regexp.lastIndex = 0;
-                let match;
-                while ((match = regexp.exec(doc)) !== null) {
-                    const start = match.index;
-                    const end = start + match[0].length;
-                    
-                    if (pos >= start && pos <= end) {
-                        let varName = match[0];
-                        
-                        if (type === 'variable') {
-                            varName = varName.replace(/^\{\??/, '').replace(/(\|[^}]*)?\}$/, '');
-                        } else if (type === 'var_ref') {
-                            varName = varName.replace(/^@var:/, '');
-                        } else if (type === 'state_ref') {
-                            varName = varName.replace(/^@state:/, '');
-                        }
-                        
-                        return {
-                            pos: start,
-                            end: end,
-                            above: true,
-                            create() {
-                                const dom = document.createElement('div');
-                                dom.className = 'variable-tooltip';
-                                
-                                const nameEl = document.createElement('div');
-                                nameEl.className = 'variable-tooltip-name';
-                                nameEl.textContent = varName;
-                                dom.appendChild(nameEl);
-                                
-                                const valueEl = document.createElement('div');
-                                const value = self._getVariableValue(varName, type);
-                                
-                                if (value !== undefined) {
-                                    valueEl.className = 'variable-tooltip-value';
-                                    if (typeof value === 'object') {
-                                        valueEl.textContent = JSON.stringify(value, null, 2);
-                                    } else {
-                                        valueEl.textContent = String(value);
-                                    }
-                                } else {
-                                    valueEl.className = 'variable-tooltip-undefined';
-                                    valueEl.textContent = self.t('markdown_editor.var_undefined');
-                                }
-                                dom.appendChild(valueEl);
-                                
-                                return { dom };
-                            }
-                        };
-                    }
-                }
-            }
-            
-            return null;
-        });
-    }
-
     _getVariableValue(path, type) {
-        if (type === 'state_ref') {
-            return undefined;
+        const kind = type === 'state_ref' ? 'state' : type === 'var_ref' ? 'var' : 'brace';
+        const preview = lookupPreviewValue(path, {
+            kind,
+            values: this.variables,
+            statePreview: this.statePreview,
+            catalog: this.variableCatalog,
+        });
+        if (preview.status === 'resolved') {
+            return preview.value;
         }
-        
-        if (!this.variables) return undefined;
-        
-        const parts = path.split('.');
-        let value = this.variables;
-        
-        for (const part of parts) {
-            if (value === null || value === undefined) return undefined;
-            if (typeof value !== 'object') return undefined;
-            
-            if (typeof value[part] === 'object' && value[part] !== null && 'value' in value[part]) {
-                value = value[part].value;
-            } else {
-                value = value[part];
-            }
-        }
-        
-        return value;
-    }
-
-    _createCompletionSource() {
-        const self = this;
-        
-        return (context) => {
-            const beforeCursor = context.matchBefore(/\{[\w.]*$/);
-            if (beforeCursor) {
-                const partial = beforeCursor.text.replace(/^\{/, '');
-                const options = self._buildVariableCompletions(partial);
-                
-                if (options.length > 0) {
-                    return {
-                        from: beforeCursor.from + 1,
-                        options
-                    };
-                }
-            }
-            
-            const varRefMatch = context.matchBefore(/@var:[\w.]*$/);
-            if (varRefMatch) {
-                const partial = varRefMatch.text.replace(/^@var:/, '');
-                const options = self._buildVariableCompletions(partial, '@var:');
-                
-                if (options.length > 0) {
-                    return {
-                        from: varRefMatch.from + 5,
-                        options
-                    };
-                }
-            }
-            
-            return null;
-        };
-    }
-
-    _buildVariableCompletions(partial, prefix = '') {
-        void prefix;
-        const options = [];
-        const seen = new Set();
-        const lowerPartial = partial.toLowerCase();
-        
-        const addVariable = (name, value, path = '') => {
-            const fullPath = path ? `${path}.${name}` : name;
-            
-            if (fullPath.toLowerCase().startsWith(lowerPartial)) {
-                let displayValue = value;
-                if (typeof value === 'object' && value !== null && 'value' in value) {
-                    displayValue = value.value;
-                }
-                
-                let detail = typeof displayValue;
-                if (typeof displayValue === 'string') {
-                    detail = displayValue.length > 30 ? displayValue.substring(0, 30) + '...' : displayValue;
-                } else if (typeof displayValue === 'object') {
-                    detail = 'object';
-                }
-                
-                options.push({
-                    label: fullPath,
-                    type: 'variable',
-                    detail: detail,
-                });
-                seen.add(fullPath);
-            }
-            
-            const actualValue = typeof value === 'object' && value !== null && 'value' in value ? value.value : value;
-            if (typeof actualValue === 'object' && actualValue !== null && !Array.isArray(actualValue)) {
-                for (const [key, val] of Object.entries(actualValue)) {
-                    addVariable(key, val, fullPath);
-                }
-            }
-        };
-        
-        for (const [name, value] of Object.entries(this.variables || {})) {
-            addVariable(name, value);
-        }
-
-        for (const entry of Array.isArray(this.variableCatalog) ? this.variableCatalog : []) {
-            if (!entry || typeof entry.name !== 'string' || seen.has(entry.name)) continue;
-            if (!entry.name.toLowerCase().startsWith(lowerPartial)) continue;
-            options.push({
-                label: entry.name,
-                type: 'variable',
-                detail: `${entry.type || 'any'} · ${entry.source || 'runtime'}`,
-            });
-        }
-        
-        return options;
+        return undefined;
     }
 
     _togglePreview() {
@@ -1661,8 +1266,9 @@ export class PlatformMarkdownEditor extends PlatformElement {
             return value !== undefined ? this._formatValue(value) : this._missingPreviewValue(match, varName);
         });
         
-        result = result.replace(/@state:([\w.]+)/g, (match) => {
-            return `📍${match}`;
+        result = result.replace(/@state:([\w.]+)/g, (match, varName) => {
+            const value = this._getVariableValue(varName, 'state_ref');
+            return value !== undefined ? this._formatValue(value) : `📍${match}`;
         });
         
         return result;
@@ -2234,12 +1840,21 @@ export class PlatformMarkdownEditor extends PlatformElement {
                         </div>
                         ${this.enableVariables ? html`
                         <div class="tool-group">
+                            ${this.variableSyntax === 'at-ref' ? html`
+                            <button type="button" class="tool-btn mono" ?disabled=${this.readonly}
+                                @click=${() => this.insertTextAtCursor('@state:path')}
+                                title=${this.t('markdown_editor.insert_state_ref')}>${'@state:path'}</button>
+                            <button type="button" class="tool-btn mono" ?disabled=${this.readonly}
+                                @click=${() => this.insertTextAtCursor('@var:name')}
+                                title=${this.t('markdown_editor.insert_var_ref')}>${'@var:name'}</button>
+                            ` : html`
                             <button type="button" class="tool-btn mono" ?disabled=${this.readonly}
                                 @click=${() => this.insertTextAtCursor('{variable}')}>${'{variable}'}</button>
                             <button type="button" class="tool-btn mono" ?disabled=${this.readonly}
                                 @click=${() => this.insertTextAtCursor('{?optional}')}>${'{?optional}'}</button>
                             <button type="button" class="tool-btn mono" ?disabled=${this.readonly}
                                 @click=${() => this.insertTextAtCursor('{for item in list}\n{item}\n{endfor}')}>${this.t('markdown_editor.insert_loop')}</button>
+                            `}
                         </div>
                         ` : nothing}
                         ` : nothing}
@@ -2283,8 +1898,14 @@ export class PlatformMarkdownEditor extends PlatformElement {
                                         data-source=${entry.source || 'system'}
                                         title=${this._variableChipTitle(entry)}
                                         ?disabled=${this.readonly}
-                                        @click=${() => this.insertTextAtCursor(`{${entry.name}}`)}
-                                    >{${entry.name}}</button>
+                                        @click=${() => this.insertTextAtCursor(
+                                            this.variableSyntax === 'at-ref'
+                                                ? `@var:${entry.name}`
+                                                : `{${entry.name}}`
+                                        )}
+                                    >${this.variableSyntax === 'at-ref'
+                                        ? `@var:${entry.name}`
+                                        : `{${entry.name}}`}</button>
                                 `)
                                 : html`<span class="editor-status">${this.t('markdown_editor.no_available_variables')}</span>`}
                         </div>

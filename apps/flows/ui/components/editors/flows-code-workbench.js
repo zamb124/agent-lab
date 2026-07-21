@@ -13,6 +13,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '../common/flows-code-language-segment.js';
 import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import {
@@ -430,21 +431,14 @@ export class FlowsCodeWorkbench extends PlatformElement {
     _renderLanguageSegment() {
         const current = this._normalizedLanguage();
         return html`
-            <platform-segmented-control
-                icon-only
-                density="compact"
+            <flows-code-language-segment
                 .value=${current}
-                .items=${FLOW_CODE_LANGUAGES.map((lang) => ({
-                    value: lang.value,
-                    icon: lang.icon,
-                    title: lang.label,
-                }))}
                 aria-label=${this.t('code_workbench.language_aria')}
                 @change=${(e) => {
                     e.stopPropagation();
                     this._emitLanguageChange(e.detail.value);
                 }}
-            ></platform-segmented-control>
+            ></flows-code-language-segment>
         `;
     }
 

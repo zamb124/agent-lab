@@ -2,6 +2,7 @@ import { fixture, fixtureCleanup, html, expect, aTimeout, waitUntil } from '../h
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { collectFactories, registerFactory } from '@platform/lib/events/index.js';
 import { toolsAllOp, toolsResource } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
+import { toolTagGroupsOp } from '../../../../apps/flows/ui/events/resources/tool-tag-groups.resource.js';
 import {
     codeCompletionsOp,
     codeTemplatesOp,
@@ -13,6 +14,7 @@ import '../../../../apps/flows/ui/modals/flows-library-picker-modal.js';
 const FACTORIES = [
     toolsAllOp,
     toolsResource,
+    toolTagGroupsOp,
     codeCompletionsOp,
     codeTemplatesOp,
     codeParseSignatureOp,
@@ -55,13 +57,19 @@ describe('flows library picker tabs', () => {
         window.fetch = async (url) => {
             const href = String(url);
             requests.push(href);
+            if (href.includes('/flows/api/v1/tools/tag-groups')) {
+                return jsonResponse({ items: [], total: 0, limit: 20, offset: 0 });
+            }
             if (href.includes('/flows/api/v1/tools/all')) {
                 const parsed = new URL(href, 'http://localhost');
                 const category = parsed.searchParams.get('picker_category');
+                const limit = Number(parsed.searchParams.get('limit'));
+                expect(limit).to.be.at.most(20);
+                expect(Number(parsed.searchParams.get('offset') || '0')).to.equal(0);
                 return jsonResponse({
                     items: [],
                     total: 0,
-                    limit: 2000,
+                    limit,
                     offset: 0,
                     category,
                 });
@@ -101,9 +109,12 @@ describe('flows library picker tabs', () => {
                 return jsonResponse({
                     items: [{ tool_id: 'calculator', title: 'calculator', item_type: 'tool' }],
                     total: 1,
-                    limit: 2000,
+                    limit: 20,
                     offset: 0,
                 });
+            }
+            if (href.includes('/flows/api/v1/tools/tag-groups')) {
+                return jsonResponse({ items: [], total: 0, limit: 20, offset: 0 });
             }
             throw new Error(`unexpected fetch: ${href}`);
         };

@@ -1,10 +1,14 @@
 /**
- * platform-variable-input — string input with @var:NAME autocomplete from company variables + system catalog.
+ * platform-variable-input — field-pill with single-line CodeMirror:
+ * highlight / hover / autocomplete for `@var:` and `@state:`.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
+import { fieldPillStyles } from '../styles/shared/field-pill.styles.js';
+import { variableRefsStyles } from '../styles/shared/variable-refs.styles.js';
 import { listSystemVariableKeys } from './variables/platform-system-variables-catalog.js';
+import { createVariableExtensions, refreshVariableDecorations } from '../codemirror/variable-extensions.js';
 
 /**
  * @param {unknown} value
@@ -31,86 +35,90 @@ function _asArray(value) {
     return value;
 }
 
-/**
- * @param {{ source: string, secret?: boolean, expression?: boolean, scoped?: boolean }} item
- * @returns {string}
- */
-function _badgeLabel(item) {
-    if (item.source === 'system') {
-        return 'system';
-    }
-    if (item.secret) {
-        return 'secret';
-    }
-    if (item.expression) {
-        return 'expr';
-    }
-    if (item.scoped) {
-        return 'scoped';
-    }
-    return '';
-}
-
 export class PlatformVariableInput extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         value: { type: String },
+        label: { type: String },
         placeholder: { type: String },
-        _suggestions: { state: true },
+        /** Live `@var:` / brace preview map from parent (flow variables). */
+        previewValues: { type: Object, attribute: false },
+        /** Live `@state:` preview map from previewExecutionState. */
+        statePreview: { type: Object, attribute: false },
+        /** Catalog entries `{ name, type?, source?, hasValue? }`. */
+        variableCatalog: { type: Array, attribute: false },
+        /** Known `@state:` paths for autocomplete. */
+        statePaths: { type: Array, attribute: false },
     };
 
     static styles = [
         PlatformElement.styles,
+        fieldPillStyles,
+        variableRefsStyles,
         css`
             :host {
                 display: block;
                 position: relative;
+                min-width: 0;
             }
-            input {
+
+            #cm-host {
                 width: 100%;
-                box-sizing: border-box;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--field-pill-border, var(--glass-border-subtle));
-                background: var(--field-pill-bg, var(--glass-solid-subtle));
-                color: var(--text-primary);
-                font: inherit;
+                min-width: 0;
+                position: relative;
             }
-            input:focus {
-                border-color: var(--accent);
-                box-shadow: var(--focus-ring);
+
+            .cm-wrap {
+                position: relative;
+                width: 100%;
+                min-width: 0;
+            }
+
+            #cm-host .cm-editor {
+                background: transparent;
+                font-family: inherit;
+                font-size: var(--field-pill-input-size);
+                font-weight: var(--field-pill-input-weight);
+                line-height: var(--field-pill-input-line);
+                color: var(--field-pill-input-color);
+            }
+
+            #cm-host .cm-scroller {
+                font-family: inherit;
+                overflow-x: auto;
+                overflow-y: hidden;
+            }
+
+            #cm-host .cm-content {
+                padding: 0;
+                caret-color: var(--accent);
+                min-height: var(--field-pill-input-line);
+            }
+
+            #cm-host .cm-line {
+                padding: 0;
+            }
+
+            #cm-host .cm-focused {
                 outline: none;
             }
-            .suggestions {
+
+            #cm-host .cm-gutters {
+                display: none;
+            }
+
+            .cm-placeholder-overlay {
                 position: absolute;
-                top: 100%;
-                left: 0;
-                right: 0;
-                background: var(--glass-solid-strong);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
-                z-index: 10;
-                max-height: 200px;
-                overflow-y: auto;
-            }
-            .suggestion {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                padding: var(--space-1) var(--space-2);
-                cursor: pointer;
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-            }
-            .suggestion:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-            .badge {
-                font-size: var(--text-xs);
-                padding: 1px 5px;
-                border-radius: var(--radius-sm);
-                border: 1px solid var(--glass-border-subtle);
-                color: var(--text-tertiary);
+                inset: 0;
+                pointer-events: none;
+                color: var(--text-disabled);
+                font-size: var(--field-pill-input-size);
+                font-weight: var(--font-normal);
+                line-height: var(--field-pill-input-line);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
         `,
     ];
@@ -118,84 +126,233 @@ export class PlatformVariableInput extends PlatformElement {
     constructor() {
         super();
         this.value = '';
+        this.label = '';
         this.placeholder = '';
-        this._suggestions = [];
+        this.previewValues = {};
+        this.statePreview = {};
+        this.variableCatalog = [];
+        this.statePaths = [];
+        /** @type {object | null} */
+        this._cmBundle = null;
+        /** @type {object | null} */
+        this._editorView = null;
+        this._variablesRefreshInProgress = false;
+        this._previewFingerprint = '';
         this._variables = this.useResource('secrets/variables', { autoload: true });
     }
 
-    _catalogItems() {
+    disconnectedCallback() {
+        if (this._editorView) {
+            this._editorView.destroy();
+            this._editorView = null;
+        }
+        super.disconnectedCallback();
+    }
+
+    firstUpdated() {
+        void this._initCodeMirror();
+    }
+
+    updated(changedProperties) {
+        if (this._editorView && changedProperties.has('value')) {
+            const current = this._editorView.state.doc.toString();
+            if (this.value !== current) {
+                this._editorView.dispatch({
+                    changes: { from: 0, to: current.length, insert: this.value || '' },
+                });
+            }
+        }
+
+        if (this._editorView) {
+            const next = this._fingerprint();
+            if (next !== this._previewFingerprint) {
+                this._previewFingerprint = next;
+                this._variablesRefreshInProgress = true;
+                try {
+                    refreshVariableDecorations(this._editorView);
+                } finally {
+                    this._variablesRefreshInProgress = false;
+                }
+            }
+        }
+    }
+
+    _fingerprint() {
+        return [
+            JSON.stringify(this.previewValues || {}),
+            JSON.stringify(this.statePreview || {}),
+            JSON.stringify(this.variableCatalog || []),
+            JSON.stringify(this.statePaths || []),
+            JSON.stringify(this._companyCatalogEntries().map((e) => e.name)),
+        ].join('|');
+    }
+
+    /**
+     * @returns {Array<{ name: string, type: string, source: string, hasValue: boolean }>}
+     */
+    _companyCatalogEntries() {
         const companyItems = _asArray(this._variables.items).map((item) => {
             const payload = item.payload;
             const base = payload && typeof payload === 'object' ? payload.base : null;
             const expression = base && typeof base === 'object' && base.value_kind === 'expression';
-            const scopes = payload && typeof payload === 'object' ? payload.scopes : null;
-            const scoped = Array.isArray(scopes) && scopes.length > 0;
             return {
-                key: item.variable_key,
-                secret: Boolean(item.secret),
-                expression: Boolean(expression),
-                scoped,
+                name: item.variable_key,
+                type: expression ? 'expression' : 'string',
                 source: 'company',
+                hasValue: true,
             };
         });
         const systemItems = listSystemVariableKeys().map((key) => ({
-            key,
-            secret: false,
-            expression: false,
-            scoped: false,
+            name: key,
+            type: 'string',
             source: 'system',
+            hasValue: false,
         }));
         return [...companyItems, ...systemItems];
     }
 
-    _onInput(e) {
-        const target = e.target;
-        const v = target && 'value' in target ? _asString(target.value) : '';
-        this.value = v;
-        this.emit('change', { value: v });
-        const last = v.match(/@var:([A-Za-z0-9_]*)$/);
-        if (last) {
-            const prefix = last[1].toLowerCase();
-            const items = this._catalogItems()
-                .filter((item) => item.key.toLowerCase().startsWith(prefix))
-                .slice(0, 10);
-            this._suggestions = items;
-        } else {
-            this._suggestions = [];
+    /**
+     * @returns {Array<{ name: string, type?: string, source?: string, hasValue?: boolean }>}
+     */
+    _mergedCatalog() {
+        /** @type {Map<string, { name: string, type?: string, source?: string, hasValue?: boolean }>} */
+        const byName = new Map();
+        for (const entry of this._companyCatalogEntries()) {
+            byName.set(entry.name, entry);
         }
+        for (const entry of Array.isArray(this.variableCatalog) ? this.variableCatalog : []) {
+            if (!entry || typeof entry.name !== 'string') continue;
+            byName.set(entry.name, entry);
+        }
+        return [...byName.values()];
     }
 
-    _select(item) {
-        this.value = this.value.replace(/@var:[A-Za-z0-9_]*$/, `@var:${item.key}`);
-        this._suggestions = [];
-        this.emit('change', { value: this.value });
+    /**
+     * @returns {Record<string, unknown>}
+     */
+    _mergedValues() {
+        const values = this.previewValues && typeof this.previewValues === 'object' && !Array.isArray(this.previewValues)
+            ? { ...this.previewValues }
+            : {};
+        return values;
+    }
+
+    async _initCodeMirror() {
+        const cm = await import('/static/core/assets/codemirror/codemirror-bundle.js');
+        this._cmBundle = cm;
+        this._createEditor();
+    }
+
+    _createEditor() {
+        const host = this.shadowRoot?.querySelector('#cm-host');
+        if (!host || !this._cmBundle) {
+            return;
+        }
+        if (this._editorView) {
+            this._editorView.destroy();
+            this._editorView = null;
+        }
+
+        const cm = this._cmBundle;
+        const self = this;
+        const variableExtensions = createVariableExtensions(cm, {
+            syntax: 'at-ref',
+            getValues: () => self._mergedValues(),
+            getStatePreview: () => (
+                self.statePreview && typeof self.statePreview === 'object' && !Array.isArray(self.statePreview)
+                    ? self.statePreview
+                    : {}
+            ),
+            getCatalog: () => self._mergedCatalog(),
+            getStatePaths: () => (Array.isArray(self.statePaths) ? self.statePaths : []),
+            t: (key) => {
+                if (key === 'undefined') return self.t('markdown_editor.var_undefined');
+                if (key === 'runtime_value') return self.t('markdown_editor.runtime_value');
+                throw new Error(`platform-variable-input: unknown variable tooltip key ${key}`);
+            },
+        });
+
+        const singleLineFilter = cm.EditorState.transactionFilter.of((tr) => {
+            if (!tr.docChanged) {
+                return tr;
+            }
+            let hasNewline = false;
+            tr.changes.iterChanges((_fromA, _toA, _fromB, _toB, inserted) => {
+                if (inserted.toString().includes('\n')) {
+                    hasNewline = true;
+                }
+            });
+            if (!hasNewline && tr.newDoc.lines === 1) {
+                return tr;
+            }
+            return [{
+                changes: {
+                    from: 0,
+                    to: tr.startState.doc.length,
+                    insert: tr.newDoc.toString().replace(/\n/g, ' '),
+                },
+                selection: tr.newSelection,
+                filter: false,
+            }];
+        });
+
+        this._editorView = new cm.EditorView({
+            state: cm.EditorState.create({
+                doc: this.value || '',
+                extensions: [
+                    cm.history(),
+                    singleLineFilter,
+                    cm.keymap.of([
+                        ...cm.defaultKeymap,
+                        ...cm.historyKeymap,
+                        {
+                            key: 'Enter',
+                            run: () => true,
+                        },
+                    ]),
+                    ...variableExtensions,
+                    cm.EditorView.theme({
+                        '&': { backgroundColor: 'transparent' },
+                        '&.cm-focused': { outline: 'none' },
+                        '.cm-content': { fontFamily: 'inherit' },
+                    }),
+                    cm.EditorView.updateListener.of((update) => {
+                        if (update.docChanged && !self._variablesRefreshInProgress) {
+                            const next = update.state.doc.toString();
+                            self.value = next;
+                            self.emit('change', { value: next });
+                        }
+                    }),
+                ],
+            }),
+            parent: host,
+        });
+        this._previewFingerprint = this._fingerprint();
     }
 
     render() {
+        const hasLabel = typeof this.label === 'string' && this.label.length > 0;
+        const showPlaceholder = (typeof this.value !== 'string' || this.value.length === 0)
+            && typeof this.placeholder === 'string'
+            && this.placeholder.length > 0;
         return html`
-            <input
-                class="field-pill-input"
-                data-canon="search-as-you-type"
-                type="text"
-                .value=${this.value}
-                placeholder=${this.placeholder}
-                @input=${this._onInput}
-            />
-            ${this._suggestions.length > 0
-                ? html`
-                    <div class="suggestions">
-                        ${this._suggestions.map((item) => html`
-                            <div class="suggestion" @mousedown=${() => this._select(item)}>
-                                <span>@var:${item.key}</span>
-                                ${(() => {
-                                    const badge = _badgeLabel(item);
-                                    return badge ? html`<span class="badge">${badge}</span>` : '';
-                                })()}
-                            </div>
-                        `)}
+            <div class="field-pill" data-mode="edit">
+                ${hasLabel
+                    ? html`
+                        <div class="field-pill-head">
+                            <span class="field-pill-label">${this.label}</span>
+                        </div>
+                    `
+                    : nothing}
+                <div class="field-pill-control">
+                    <div class="field-pill-control-main cm-wrap">
+                        ${showPlaceholder
+                            ? html`<div class="cm-placeholder-overlay">${this.placeholder}</div>`
+                            : nothing}
+                        <div id="cm-host" data-canon="search-as-you-type"></div>
                     </div>
-                `
-                : ''}
+                </div>
+            </div>
         `;
     }
 }

@@ -21,7 +21,7 @@
  *     (drop на канву / порт / тело ноды; ресурс на ноде — flow resource + ссылка в node.resources;
  *      ресурс на пустой канве — flow resource + нода type `resource` с привязкой);
  *   - draw edges с output-порта на input-порт;
- *   - zoom: ctrl + wheel; pan: пробел/middle-mouse-drag/tool=pan;
+ *   - zoom: ctrl/meta + wheel (pinch на тачпаде — плавно по deltaY); pan: пробел/middle-mouse-drag/tool=pan;
  *   - select: click; multi-select: shift+drag по фону → bounding-rect;
  *   - hotkeys (вешаются на document): Del/Ctrl+A/Ctrl+D/F2/Enter/Esc/стрелки/Shift+S;
  *   - правый клик → диспатч `openContextMenu` через slice; <flows-canvas-context-menu>
@@ -55,7 +55,16 @@ import {
     getNodeCanvasHeight,
     computeFitViewBox,
     FLOWS_EDITOR_DEFAULT_VIEWBOX,
+    wheelZoomViewBoxFactor,
+    zoomViewBoxAroundPoint,
 } from '../../_helpers/flows-viewbox.js';
+import {
+    FLOW_TERMINAL_OUTER_R,
+    FLOW_TERMINAL_INNER_R,
+    terminalStartCenter,
+    terminalEndCenter,
+    listTerminalEndPorts,
+} from '../../_helpers/flows-terminal-markers.js';
 import {
     buildNodeRunViewModel,
     CANVAS_RUN_RESULT_GAP,
@@ -74,7 +83,22 @@ import {
 } from '../../_helpers/flows-tool-visual.js';
 import { getBlankCodeNodeConfig } from '../../_helpers/code-node-defaults.js';
 import { getBlankExternalApiNodeConfig } from '../../_helpers/flows-external-api-defaults.js';
-import { getBlankReflectionNodeConfig } from '../../_helpers/flows-reflection-defaults.js';
+import { getBlankHitlNodeConfig } from '../../_helpers/flows-hitl-defaults.js';
+import {
+    getBlankReflectionNodeConfig,
+    buildReflectionExitEdge,
+    listReflectionExits,
+    reflectionOutPortYFraction,
+} from '../../_helpers/flows-reflection-defaults.js';
+import {
+    defaultResourceConfigForType,
+    defaultResourceDisplayName,
+} from '../../_helpers/flows-resource-defaults.js';
+import {
+    canvasNodeTypeSubtitle,
+    isEvaluationRoleNode,
+    isPortlessCanvasNode,
+} from '../../_helpers/evaluation-flow-nodes.js';
 import {
     hasControlPath,
     buildDataWires,
@@ -843,6 +867,19 @@ export class FlowsFlowCanvas extends PlatformElement {
             .port.in:hover {
                 fill: var(--node-accent, var(--accent));
             }
+            .port-label {
+                fill: var(--text-tertiary);
+                font-size: 9px;
+                font-weight: var(--font-medium);
+                pointer-events: none;
+                user-select: none;
+            }
+            .port[data-port-kind="pass"] {
+                fill: color-mix(in oklab, var(--success) 72%, var(--node-accent, var(--accent)));
+            }
+            .port[data-port-kind="fail"] {
+                fill: color-mix(in oklab, var(--error) 72%, var(--node-accent, var(--accent)));
+            }
 
             /* Связи по данным (data-flow), отличаются от control-рёбер */
             .data-wires-layer {
@@ -957,28 +994,57 @@ export class FlowsFlowCanvas extends PlatformElement {
                 0%, 100% { stroke-opacity: 1; }
                 50% { stroke-opacity: 0.55; }
             }
-            .edge-end-marker {
-                fill: var(--text-tertiary);
-                opacity: 0.7;
-            }
-            .edge-end-text {
-                font-size: 12px;
-                font-weight: 700;
-                font-family: var(--font-mono);
-                fill: var(--bg-primary);
+            .terminal-marker {
                 pointer-events: none;
             }
-            .edge-start-marker {
-                fill: var(--accent);
-                opacity: 0.95;
+            .terminal-marker-ring {
+                fill: none;
+                stroke-width: 1.5;
             }
-            .edge-start-text {
-                font-size: 10px;
+            .terminal-marker--start .terminal-marker-ring {
+                stroke: color-mix(in oklab, var(--accent) 55%, transparent);
+            }
+            .terminal-marker--end .terminal-marker-ring {
+                stroke: color-mix(in oklab, var(--text-secondary) 55%, transparent);
+            }
+            .terminal-marker-halo {
+                pointer-events: none;
+            }
+            .terminal-marker--start .terminal-marker-halo {
+                fill: color-mix(in oklab, var(--accent) 28%, transparent);
+            }
+            .terminal-marker--end .terminal-marker-halo {
+                fill: color-mix(in oklab, var(--text-secondary) 22%, transparent);
+            }
+            .terminal-marker-disc {
+                stroke-width: 1.25;
+            }
+            .terminal-marker--start .terminal-marker-disc {
+                fill: color-mix(in oklab, var(--accent) 88%, var(--glass-solid-strong));
+                stroke: color-mix(in oklab, var(--accent) 40%, white);
+            }
+            .terminal-marker--end .terminal-marker-disc {
+                fill: var(--text-secondary);
+                stroke: color-mix(in oklab, var(--text-primary) 35%, var(--text-secondary));
+            }
+            .terminal-marker-icon {
+                fill: var(--bg-primary);
+            }
+            .terminal-marker--end .terminal-marker-icon {
+                fill: var(--bg-primary);
+            }
+            .terminal-marker-label {
+                font-size: 8px;
                 font-weight: 700;
                 font-family: var(--font-mono);
-                fill: var(--bg-primary);
+                letter-spacing: 0.06em;
                 pointer-events: none;
-                letter-spacing: 0;
+            }
+            .terminal-marker--start .terminal-marker-label {
+                fill: color-mix(in oklab, var(--accent) 72%, var(--text-secondary));
+            }
+            .terminal-marker--end .terminal-marker-label {
+                fill: var(--text-secondary);
             }
             .edge-temp {
                 fill: none;
@@ -1183,12 +1249,43 @@ export class FlowsFlowCanvas extends PlatformElement {
         return html`<flows-code-language-icon language=${language} size=${size}></flows-code-language-icon>`;
     }
 
-    _portCoords(node, side) {
+    _reflectionExitsForNode(node) {
+        if (!this._isReflectionNode(node)) {
+            return [];
+        }
+        const policy = isPlainObject(node.critic_policy) ? node.critic_policy : null;
+        return listReflectionExits(policy);
+    }
+
+    _portCoords(node, side, outPort = null) {
         const px = asNumber(node.pos_x);
         const x = side === 'in' ? px : px + NODE_W;
         const h = getNodeCanvasHeight(node);
-        const y = asNumber(node.pos_y) + h / 2;
+        const exits = side === 'out' ? this._reflectionExitsForNode(node) : null;
+        const fraction = side === 'out'
+            ? reflectionOutPortYFraction(outPort, exits)
+            : 0.5;
+        const y = asNumber(node.pos_y) + h * fraction;
         return { x, y };
+    }
+
+    _isReflectionNode(node) {
+        return isPlainObject(node) && node.type === 'reflection';
+    }
+
+    _resolveOutPortForEdge(fromNode, edge) {
+        if (!this._isReflectionNode(fromNode) || !isPlainObject(edge)) {
+            return null;
+        }
+        const port = edge.from_port;
+        if (typeof port !== 'string' || port.length === 0) {
+            return null;
+        }
+        const exits = this._reflectionExitsForNode(fromNode);
+        if (exits.some((item) => item.id === port)) {
+            return port;
+        }
+        return null;
     }
 
     _getSvgScreenScale() {
@@ -1453,13 +1550,13 @@ export class FlowsFlowCanvas extends PlatformElement {
     _onWheel(e) {
         if (!e.ctrlKey && !e.metaKey) return;
         e.preventDefault();
-        const factor = e.deltaY > 0 ? 1.1 : 0.9;
+        const factor = wheelZoomViewBoxFactor(e.deltaY, e.deltaMode);
+        if (factor === 1) return;
         const vb = this._viewBox();
-        const newW = vb.w * factor;
-        const newH = vb.h * factor;
-        const dx = (newW - vb.w) / 2;
-        const dy = (newH - vb.h) / 2;
-        this._editor.setViewBox({ viewBox: { x: vb.x - dx, y: vb.y - dy, w: newW, h: newH } });
+        const pivot = this._localPoint(e.clientX, e.clientY);
+        this._editor.setViewBox({
+            viewBox: zoomViewBoxAroundPoint(vb, factor, pivot.x, pivot.y),
+        });
     }
 
     /* ===== Pointer events ===== */
@@ -1495,15 +1592,27 @@ export class FlowsFlowCanvas extends PlatformElement {
         this.renderRoot.querySelector('svg.canvas-host').setPointerCapture(e.pointerId);
     }
 
-    _onPointerDownPort(e, nodeId, side) {
+    _onPointerDownPort(e, nodeId, side, outPort = null) {
         this._pointerDownAt = { x: e.clientX, y: e.clientY, button: e.button };
         this._pointerMoved = false;
         if (e.button !== 0 || side !== 'out') return;
         e.stopPropagation();
         const node = this._nodes()[nodeId];
-        if (!node || this._isResourceNode(node)) return;
-        const start = this._portCoords(node, 'out');
-        this._connection = { fromNode: nodeId, x1: start.x, y1: start.y, x2: start.x, y2: start.y };
+        if (!node || this._isPortlessNode(node)) return;
+        const exits = this._reflectionExitsForNode(node);
+        const resolvedPort = typeof outPort === 'string'
+            && exits.some((item) => item.id === outPort)
+            ? outPort
+            : null;
+        const start = this._portCoords(node, 'out', resolvedPort);
+        this._connection = {
+            fromNode: nodeId,
+            fromPort: resolvedPort,
+            x1: start.x,
+            y1: start.y,
+            x2: start.x,
+            y2: start.y,
+        };
         this.renderRoot.querySelector('svg.canvas-host').setPointerCapture(e.pointerId);
     }
 
@@ -1670,11 +1779,29 @@ export class FlowsFlowCanvas extends PlatformElement {
                 const fromNodeId = this._connection.fromNode;
                 const fromN = nodes[fromNodeId];
                 const toN = nodes[targetNodeId];
-                if (this._isResourceNode(fromN) || this._isResourceNode(toN)) {
-                    this.toast('flows:canvas.resource_node_no_edges', { type: 'warning' });
+                if (this._isPortlessNode(fromN) || this._isPortlessNode(toN)) {
+                    const evaluationEndpoint = this._isEvaluationNode(fromN)
+                        || this._isEvaluationNode(toN);
+                    this.toast(
+                        evaluationEndpoint
+                            ? 'flows:canvas.evaluation_node_no_edges'
+                            : 'flows:canvas.resource_node_no_edges',
+                        { type: 'warning' },
+                    );
                 } else {
                     const data = this._branchData();
-                    const edges = [...asArray(data.edges), { from_node: fromNodeId, to_node: targetNodeId }];
+                    const fromPort = this._connection.fromPort;
+                    let newEdge;
+                    if (
+                        this._isReflectionNode(fromN)
+                        && typeof fromPort === 'string'
+                        && fromPort.length > 0
+                    ) {
+                        newEdge = buildReflectionExitEdge(fromNodeId, targetNodeId, fromPort);
+                    } else {
+                        newEdge = { from_node: fromNodeId, to_node: targetNodeId };
+                    }
+                    const edges = [...asArray(data.edges), newEdge];
                     const next = { ...data, edges };
                     this._editor.updateBranchData({ data: next });
                     this._editor.pushHistory({ snapshot: next });
@@ -2058,7 +2185,9 @@ export class FlowsFlowCanvas extends PlatformElement {
             const newNode =
                 nodeType === 'external_api'
                     ? { ...base, ...getBlankExternalApiNodeConfig() }
-                    : { ...base, config: {} };
+                    : nodeType === 'hitl_node'
+                        ? { ...base, ...getBlankHitlNodeConfig() }
+                        : { ...base, config: {} };
             const nodes = { ...asObject(data.nodes), [id]: newNode };
             const next = { ...data, nodes };
             this._editor.updateBranchData({ data: next });
@@ -2069,7 +2198,16 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
         if (resourceType) {
             const rid = genId('r');
-            const flowResources = { ...asObject(data.resources), [rid]: { type: resourceType, name: resourceType, config: {} } };
+            const resourceName = defaultResourceDisplayName(resourceType);
+            const flowResources = {
+                ...asObject(data.resources),
+                [rid]: {
+                    type: resourceType,
+                    name: resourceName,
+                    permission: [],
+                    config: defaultResourceConfigForType(resourceType, rid),
+                },
+            };
             let nextNodes = { ...asObject(data.nodes) };
             let attachId = typeof htmlTargetNodeId === 'string' && htmlTargetNodeId.length > 0
                 ? htmlTargetNodeId
@@ -2089,7 +2227,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                     ...nextNodes,
                     [newWrapperNodeId]: {
                         type: 'resource',
-                        name: resourceType,
+                        name: resourceName,
                         pos_x: local.x - NODE_W / 2,
                         pos_y: local.y - NODE_H / 2,
                         resources: { [rid]: { resource_id: rid } },
@@ -2128,7 +2266,8 @@ export class FlowsFlowCanvas extends PlatformElement {
                 );
             },
             onChooseTemplates: () => {
-                this.openModal('flows.code_node_templates', {
+                this.openModal('flows.tool_picker', {
+                    pickMode: 'code_node',
                     onCommit: (detail) => {
                         if (!detail || typeof detail !== 'object' || !isPlainObject(detail.config)) {
                             throw new Error('flows-flow-canvas: code template commit must include config');
@@ -2394,9 +2533,14 @@ export class FlowsFlowCanvas extends PlatformElement {
         this.requestUpdate();
     }
 
-    /** Нода `resource` не соединяется рёбрами исполнения. */
-    _isResourceNode(node) {
-        return isPlainObject(node) && node.type === 'resource';
+    /** Tester/judge (`store.evaluation_role`) — harness-only, не execution-граф. */
+    _isEvaluationNode(node) {
+        return isEvaluationRoleNode(node);
+    }
+
+    /** Resource или evaluation — без портов, END и connect. */
+    _isPortlessNode(node) {
+        return isPortlessCanvasNode(node);
     }
 
     /* ===== Render ===== */
@@ -2902,9 +3046,10 @@ export class FlowsFlowCanvas extends PlatformElement {
         else if (isPlainObject(state.erroredNodes) && state.erroredNodes[id]) runtimeState = 'error';
         else if (asArray(state.completedNodeIds).includes(id)) runtimeState = 'completed';
         const isInherited = asArray(state.inheritedNodeIds).includes(id);
-        const isResource = this._isResourceNode(node);
+        const isPortless = this._isPortlessNode(node);
+        const typeSubtitle = canvasNodeTypeSubtitle(node);
         const problems = this._dataflowProblems(id);
-        const showFanInEffective = !isResource && inDegree >= 2;
+        const showFanInEffective = !isPortless && inDegree >= 2;
         const hasToolStrip = canvasTools.length > 0;
         const showAllWires = Boolean(state.showDataWires);
         const dataflowVisible = this._isDataflowVisibleForNode(id, { isSelected, isMulti, showAllWires });
@@ -2927,7 +3072,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                     </div>
                     <div class="node-meta">
                         <div class="node-name">${typeof node.name === 'string' && node.name.length > 0 ? node.name : id}</div>
-                        <div class="node-type">${asString(node.type)}</div>
+                        <div class="node-type">${typeSubtitle}</div>
                     </div>
                 </div>
                 ${hasToolStrip ? html`
@@ -3008,23 +3153,55 @@ export class FlowsFlowCanvas extends PlatformElement {
                 ${isInherited ? svg`<text class="badge-inherited" x="6" y=${h - 6} font-size="10">↑</text>` : ''}
                 ${showFanInEffective
                     ? this._renderFanInBadge(id, node)
-                    : (!isResource ? svg`
+                    : (!isPortless ? svg`
                         <circle
                             class="port in"
                             cx="0" cy=${h / 2} r=${PORT_R}
                             data-node-id=${id} data-port-side="in"
                         ></circle>
                     ` : '')}
-                ${!isResource ? svg`
-                <circle
-                    class="port"
-                    cx=${NODE_W} cy=${h / 2} r=${PORT_R}
-                    data-node-id=${id} data-port-side="out"
-                    @pointerdown=${(e) => this._onPointerDownPort(e, id, 'out')}
-                ></circle>
-                ` : ''}
+                ${!isPortless ? this._renderOutPorts(id, node, h) : ''}
                 ${this._renderNodeRunResult(id, h, runtimeState)}
             </g>
+        `;
+    }
+
+    _renderOutPorts(nodeId, node, h) {
+        if (this._isReflectionNode(node)) {
+            const ports = this._reflectionExitsForNode(node);
+            return svg`${ports.map((port, index) => {
+                const cy = h * reflectionOutPortYFraction(port.id, ports);
+                const kind = index === 0
+                    ? 'pass'
+                    : (index === ports.length - 1 ? 'fail' : 'mid');
+                return svg`
+                    <g class="reflection-out-port">
+                        <circle
+                            class="port"
+                            cx=${NODE_W} cy=${cy} r=${PORT_R}
+                            data-node-id=${nodeId}
+                            data-port-side="out"
+                            data-port-id=${port.id}
+                            data-port-kind=${kind}
+                            @pointerdown=${(e) => this._onPointerDownPort(e, nodeId, 'out', port.id)}
+                        ></circle>
+                        <text
+                            class="port-label"
+                            x=${NODE_W + PORT_R + 4}
+                            y=${cy}
+                            dominant-baseline="central"
+                        >${port.label}</text>
+                    </g>
+                `;
+            })}`;
+        }
+        return svg`
+            <circle
+                class="port"
+                cx=${NODE_W} cy=${h / 2} r=${PORT_R}
+                data-node-id=${nodeId} data-port-side="out"
+                @pointerdown=${(e) => this._onPointerDownPort(e, nodeId, 'out')}
+            ></circle>
         `;
     }
 
@@ -3039,7 +3216,8 @@ export class FlowsFlowCanvas extends PlatformElement {
         const fromNode = nodes[fromId];
         const toNode = nodes[toId];
         if (!fromNode || !toNode) return svg``;
-        const start = this._portCoords(fromNode, 'out');
+        const outPort = this._resolveOutPortForEdge(fromNode, edge);
+        const start = this._portCoords(fromNode, 'out', outPort);
         const end = this._portCoords(toNode, 'in');
         const condition = edge.condition === undefined ? null : edge.condition;
         const mid = midpoint(start.x, start.y, end.x, end.y);
@@ -3093,32 +3271,86 @@ export class FlowsFlowCanvas extends PlatformElement {
         this.openModal('flows.incoming_policy', { nodeId });
     }
 
-    _renderVirtualEnd(node) {
-        const start = this._portCoords(node, 'out');
-        const markerR = 18;
-        const gap = 24;
-        const cx = start.x + gap + markerR;
-        const cy = start.y;
+    _renderVirtualEnd(node, outPort = null) {
+        const start = this._portCoords(node, 'out', outPort);
+        const { cx, cy } = terminalEndCenter(start);
+        const stopHalf = 5;
         return svg`
-            <g class="edge-group">
-                <path class="edge" d=${pathFor(start.x, start.y, cx - markerR, cy)}></path>
-                <circle class="edge-end-marker" cx=${cx} cy=${cy} r=${markerR}></circle>
-                <text class="edge-end-text" x=${cx} y=${cy + 4} text-anchor="middle">END</text>
+            <g class="edge-group terminal-marker terminal-marker--end">
+                <path class="edge" d=${pathFor(start.x, start.y, cx - FLOW_TERMINAL_OUTER_R, cy)}></path>
+                <circle
+                    class="terminal-marker-halo"
+                    cx=${cx}
+                    cy=${cy}
+                    r=${FLOW_TERMINAL_OUTER_R + 2}
+                    filter="url(#flows-terminal-end-glow)"
+                ></circle>
+                <circle
+                    class="terminal-marker-ring"
+                    cx=${cx}
+                    cy=${cy}
+                    r=${FLOW_TERMINAL_OUTER_R}
+                ></circle>
+                <circle
+                    class="terminal-marker-disc"
+                    cx=${cx}
+                    cy=${cy}
+                    r=${FLOW_TERMINAL_INNER_R}
+                ></circle>
+                <rect
+                    class="terminal-marker-icon"
+                    x=${cx - stopHalf}
+                    y=${cy - stopHalf}
+                    width=${stopHalf * 2}
+                    height=${stopHalf * 2}
+                    rx="1.5"
+                    ry="1.5"
+                ></rect>
+                <text
+                    class="terminal-marker-label"
+                    x=${cx}
+                    y=${cy + FLOW_TERMINAL_OUTER_R + 11}
+                    text-anchor="middle"
+                >END</text>
             </g>
         `;
     }
 
     _renderVirtualStart(node) {
         const end = this._portCoords(node, 'in');
-        const markerR = 18;
-        const gap = 24;
-        const cx = end.x - gap - markerR;
-        const cy = end.y;
+        const { cx, cy } = terminalStartCenter(end);
         return svg`
-            <g class="edge-group">
-                <circle class="edge-start-marker" cx=${cx} cy=${cy} r=${markerR}></circle>
-                <text class="edge-start-text" x=${cx} y=${cy + 4} text-anchor="middle">START</text>
-                <path class="edge" d=${pathFor(cx + markerR, cy, end.x, end.y)}></path>
+            <g class="edge-group terminal-marker terminal-marker--start">
+                <circle
+                    class="terminal-marker-halo"
+                    cx=${cx}
+                    cy=${cy}
+                    r=${FLOW_TERMINAL_OUTER_R + 2}
+                    filter="url(#flows-terminal-start-glow)"
+                ></circle>
+                <circle
+                    class="terminal-marker-ring"
+                    cx=${cx}
+                    cy=${cy}
+                    r=${FLOW_TERMINAL_OUTER_R}
+                ></circle>
+                <circle
+                    class="terminal-marker-disc"
+                    cx=${cx}
+                    cy=${cy}
+                    r=${FLOW_TERMINAL_INNER_R}
+                ></circle>
+                <path
+                    class="terminal-marker-icon"
+                    d=${`M ${cx - 3.5} ${cy - 5.5} L ${cx - 3.5} ${cy + 5.5} L ${cx + 6.5} ${cy} Z`}
+                ></path>
+                <text
+                    class="terminal-marker-label"
+                    x=${cx}
+                    y=${cy + FLOW_TERMINAL_OUTER_R + 11}
+                    text-anchor="middle"
+                >START</text>
+                <path class="edge" d=${pathFor(cx + FLOW_TERMINAL_OUTER_R, cy, end.x, end.y)}></path>
             </g>
         `;
     }
@@ -3207,14 +3439,14 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (!menu) return '';
         const nodes = this._nodes();
         const tid = typeof menu.targetId === 'string' ? menu.targetId : '';
-        const resourceNode = menu.target === 'node' && tid.length > 0 && this._isResourceNode(nodes[tid]);
+        const portlessNode = menu.target === 'node' && tid.length > 0 && this._isPortlessNode(nodes[tid]);
         return html`
             <flows-canvas-context-menu
                 .x=${menu.x}
                 .y=${menu.y}
                 target=${menu.target}
                 target-id=${asString(menu.targetId)}
-                .resourceNode=${resourceNode}
+                .resourceNode=${portlessNode}
                 @action=${this._onContextMenuAction}
                 @close=${() => this._editor.closeContextMenu({})}
             ></flows-canvas-context-menu>
@@ -3232,14 +3464,14 @@ export class FlowsFlowCanvas extends PlatformElement {
         const panActive = Boolean(this._pan);
         const linkMode = Boolean(this._stickyLinkMode);
 
-        const fromIds = new Set();
-        for (const edge of edges) {
-            const { from_node, to_node } = getEdgeEndpoints(edge);
-            if (!from_node || !to_node) continue;
-            if (!nodes[from_node] || !nodes[to_node]) continue;
-            fromIds.add(from_node);
+        const terminalEnds = [];
+        for (const [nid, n] of Object.entries(nodes)) {
+            if (this._isPortlessNode(n)) continue;
+            const ports = listTerminalEndPorts(nid, n, edges, nodes);
+            for (const outPort of ports) {
+                terminalEnds.push({ node: n, outPort });
+            }
         }
-        const orphanNodes = Object.entries(nodes).filter(([nid, n]) => !fromIds.has(nid) && !this._isResourceNode(n));
         const entryId = typeof state.entryNodeId === 'string' && state.entryNodeId.length > 0
             ? state.entryNodeId
             : (typeof skillsData.entry === 'string' && skillsData.entry.length > 0 ? skillsData.entry : null);
@@ -3325,6 +3557,20 @@ export class FlowsFlowCanvas extends PlatformElement {
                             <feMergeNode in="SourceGraphic"></feMergeNode>
                         </feMerge>
                     </filter>
+                    <filter id="flows-terminal-start-glow" x="-80%" y="-80%" width="260%" height="260%">
+                        <feGaussianBlur in="SourceGraphic" stdDeviation="3.2" result="blur"></feGaussianBlur>
+                        <feMerge>
+                            <feMergeNode in="blur"></feMergeNode>
+                            <feMergeNode in="SourceGraphic"></feMergeNode>
+                        </feMerge>
+                    </filter>
+                    <filter id="flows-terminal-end-glow" x="-60%" y="-60%" width="220%" height="220%">
+                        <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"></feGaussianBlur>
+                        <feMerge>
+                            <feMergeNode in="blur"></feMergeNode>
+                            <feMergeNode in="SourceGraphic"></feMergeNode>
+                        </feMerge>
+                    </filter>
                 </defs>
                 <rect x="-1000000" y="-1000000" width="2000000" height="2000000" fill="url(#canvas-grid)"></rect>
 
@@ -3335,7 +3581,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 <g class="edges-layer">
                     ${edges.map((edge, i) => this._renderEdge(edge, i, nodes))}
                     ${entryNode ? this._renderVirtualStart(entryNode) : ''}
-                    ${orphanNodes.map(([id, n]) => this._renderVirtualEnd(n))}
+                    ${terminalEnds.map(({ node, outPort }) => this._renderVirtualEnd(node, outPort))}
                     ${this._connection
                         ? svg`<path class="edge-temp" d=${pathFor(this._connection.x1, this._connection.y1, this._connection.x2, this._connection.y2)}></path>`
                         : ''}

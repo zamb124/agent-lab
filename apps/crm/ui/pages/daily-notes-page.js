@@ -217,7 +217,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 border: none;
                 border-radius: var(--radius-full);
                 background: var(--crm-daily-notes-cta-bg);
-                color: var(--text-inverse);
+                color: var(--platform-btn-primary-text);
                 font-size: var(--text-lg);
                 font-weight: 500;
                 padding: 0 var(--space-6);
@@ -493,7 +493,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 justify-content: center;
                 background: var(--crm-summary-title-gradient);
             }
-            .summary-title-icon platform-icon { color: var(--text-inverse); }
+            .summary-title-icon platform-icon { color: var(--platform-btn-primary-text); }
             .summary-refresh-btn {
                 width: 32px;
                 height: 32px;
@@ -633,14 +633,14 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             .mobile-header-icon-btn.mobile-header-summary-btn {
                 border: none;
                 background: var(--crm-summary-title-gradient);
-                color: var(--text-inverse);
+                color: var(--platform-btn-primary-text);
                 box-shadow: 0 2px 8px rgba(153, 166, 249, 0.35);
             }
             .mobile-header-icon-btn.mobile-header-summary-btn:hover {
                 filter: brightness(1.06);
             }
             .mobile-header-icon-btn.mobile-header-summary-btn platform-icon {
-                color: var(--text-inverse);
+                color: var(--platform-btn-primary-text);
             }
             .mobile-toolbar-search-row {
                 display: flex;

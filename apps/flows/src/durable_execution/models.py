@@ -445,6 +445,17 @@ class WorkflowAppendResult(DurableStrictBaseModel):
     snapshot_id: str | None
 
 
+class TimeTravelEffect(DurableStrictBaseModel):
+    """Структурированный итог fork/rewind/retry/manual-patch для UX Outcome."""
+
+    activates_head: bool
+    source_execution_branch_id: str
+    source_sequence: int
+    source_events_after_base: int = Field(..., ge=0)
+    instance_status: WorkflowStatus
+    auto_resumes_run: bool = False
+
+
 class WorkflowBranchResult(DurableStrictBaseModel):
     execution_branch_id: str
     parent_execution_branch_id: str | None
@@ -455,6 +466,7 @@ class WorkflowBranchResult(DurableStrictBaseModel):
     sequence: int
     state_hash: str
     snapshot_id: str
+    effect: TimeTravelEffect
 
 
 class WorkflowBranchRecord(DurableStrictBaseModel):

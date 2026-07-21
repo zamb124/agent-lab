@@ -143,7 +143,6 @@ class ChannelType(str, Enum):
     """
 
     TELEGRAM = "telegram"   # Telegram Bot API
-    EMAIL = "email"         # Email (SMTP, Mailgun, SendGrid)
-    WHATSAPP = "whatsapp"   # WhatsApp Business API
-    SMS = "sms"             # SMS (Twilio, etc)
+    EMAIL = "email"         # Email (platform mail / SMTP)
+    SMS = "sms"             # SMS via HTTP superbase (External API canon)
     WEBHOOK = "webhook"     # HTTP webhook

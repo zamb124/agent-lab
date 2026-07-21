@@ -4,11 +4,15 @@ ChannelRegistry - реестр channel handlers.
 Регистрирует handlers для каждого типа канала.
 """
 
+from __future__ import annotations
 
 from apps.flows.src.models.enums import ChannelType
 from core.logging import get_logger
+from core.mail.service import MailService
 
 from .base import BaseChannelHandler
+from .email import EmailChannelHandler
+from .sms import SmsChannelHandler
 from .telegram import TelegramChannelHandler
 from .webhook import WebhookChannelHandler
 
@@ -22,7 +26,8 @@ class ChannelRegistry:
     При startup регистрируются все доступные каналы:
     - ChannelType.TELEGRAM → TelegramChannelHandler
     - ChannelType.WEBHOOK → WebhookChannelHandler
-    - и т.д.
+    - ChannelType.EMAIL → EmailChannelHandler (требует mail_service)
+    - ChannelType.SMS → SmsChannelHandler
     """
 
     def __init__(self) -> None:
@@ -44,21 +49,32 @@ class ChannelRegistry:
         self._handlers[channel_type] = handler_class
         logger.debug(f"Channel handler registered: {channel_type.value}")
 
-    def get(self, channel_type: ChannelType | str) -> BaseChannelHandler:
+    def get(
+        self,
+        channel_type: ChannelType | str,
+        *,
+        mail_service: MailService | None = None,
+    ) -> BaseChannelHandler:
         """
         Возвращает handler для канала.
 
         Аргументы:
             channel_type: Тип канала (enum или строка, например \"telegram\")
+            mail_service: обязателен для ChannelType.EMAIL
 
         Возвращает:
-            Экземпляр handler'а (singleton per channel type)
+            Экземпляр handler'а (singleton per channel type, кроме email — per mail_service)
 
         Исключения:
-            ValueError: Если канал не зарегистрирован
+            ValueError: Если канал не зарегистрирован или нет mail_service для email
         """
         if not isinstance(channel_type, ChannelType):
             channel_type = ChannelType(channel_type)
+
+        if channel_type is ChannelType.EMAIL:
+            if mail_service is None:
+                raise ValueError("Email channel requires mail_service")
+            return EmailChannelHandler(mail_service)
 
         if channel_type in self._instances:
             return self._instances[channel_type]
@@ -99,6 +115,8 @@ def create_default_channel_registry() -> ChannelRegistry:
 
     registry.register(ChannelType.TELEGRAM, TelegramChannelHandler)
     registry.register(ChannelType.WEBHOOK, WebhookChannelHandler)
+    registry.register(ChannelType.EMAIL, EmailChannelHandler)
+    registry.register(ChannelType.SMS, SmsChannelHandler)
 
     logger.info(f"Channel registry created with {len(registry)} handlers")
 

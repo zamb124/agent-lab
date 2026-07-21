@@ -4,17 +4,17 @@
  * Группы:
  *   1. zoom: zoom_in / zoom_out / zoom_100 / fit_view
  *   2. tools: select / pan
- *   3. actions: undo / redo / variables / переключатель smart-guides / help
+ *   3. history: undo / redo
+ *   4. actions: variables / smart-guides / data-wires / help (модалка shortcuts)
  *
  * Источник state: useOp('flows/editor').state.{activeTool,canUndo,canRedo,
- * smartGuidesEnabled,viewBox,skillsData,flowConfig}.
+ * smartGuidesEnabled,showDataWires,viewBox,skillsData,flowConfig}.
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
-import '@platform/lib/components/platform-help-hint.js';
 import { asObject, isPlainObject, getBranchNodes } from '../../_helpers/flows-resolvers.js';
 import { computeFitViewBox, FLOWS_EDITOR_DEFAULT_VIEWBOX } from '../../_helpers/flows-viewbox.js';
 
@@ -173,13 +173,6 @@ export class FlowsBottomToolbar extends PlatformElement {
                 onClick: () => this._toggleDataWires(),
                 active: wiresOn,
             })}
-            <platform-help-hint
-                .label=${this.t('canvas.toolbar.canvas_hint_label')}
-                .summary=${this.t('canvas.toolbar.canvas_hint_summary')}
-                .details=${this.t('canvas.toolbar.canvas_hint_details')}
-                .docHref=${'/documentation/scenarios/flows/add-llm-node/'}
-                .docLabel=${this.t('help_hints.open_scenario')}
-            ></platform-help-hint>
             ${this._renderIconButton({ icon: 'help', title: this.t('canvas.toolbar.help'), onClick: () => this._help() })}
         `;
     }

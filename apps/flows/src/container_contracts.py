@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Protocol, TypeAlias, TypedDict, cast
 
+from core.mail.service import MailService
 from core.types import JsonObject, JsonValue
 from core.worktracker.service import WorkItemService
 
@@ -64,8 +65,10 @@ if TYPE_CHECKING:
     from core.db.storage import Storage
     from core.files.file_repository import FileRepository
     from core.files.service import FilesService
+    from core.integrations.company_credentials import CompanyIntegrationCredentialService
     from core.integrations.oauth_service import OAuthService
     from core.mail.service import MailService
+    from core.namespace import NamespaceService
     from core.rag.llm_context_memory_store import RAGLLMContextMemoryStore
     from core.rag.repository import RAGRepository
     from core.state import ExecutionState
@@ -149,11 +152,17 @@ class ChannelActionHandlerProtocol(Protocol):
         params: Mapping[str, JsonValue],
         config: Mapping[str, JsonValue],
         variables: Mapping[str, JsonValue],
+        state: ExecutionState | Mapping[str, JsonValue] | None = None,
     ) -> JsonObject: ...
 
 
 class ChannelRegistryProtocol(Protocol):
-    def get(self, channel_type: ChannelType | str) -> ChannelActionHandlerProtocol: ...
+    def get(
+        self,
+        channel_type: ChannelType | str,
+        *,
+        mail_service: MailService | None = None,
+    ) -> ChannelActionHandlerProtocol: ...
 
 
 class FlowFactoryProtocol(Protocol):
@@ -298,6 +307,9 @@ class FlowRuntimeContainer(Protocol):
     def rag_repository(self) -> RAGRepository: ...
 
     @property
+    def namespace_service(self) -> NamespaceService: ...
+
+    @property
     def llm_context_memory_store(self) -> RAGLLMContextMemoryStore: ...
 
     @property
@@ -364,6 +376,9 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def oauth_service(self) -> OAuthService: ...
+
+    @property
+    def company_integration_credential_service(self) -> CompanyIntegrationCredentialService: ...
 
     @property
     def lara_facade(self) -> LaraFacade: ...

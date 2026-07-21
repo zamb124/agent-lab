@@ -7,6 +7,7 @@ from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource
 from apps.flows.src.models.mcp_catalog import MCPCatalogEntry, MCPCatalogVerifyStatus
 from apps.flows.src.services.mcp_catalog_ids import server_id_from_catalog_id
 from apps.flows.src.services.mcp_catalog_provisioner import catalog_entry_to_server_config
+from apps.flows.src.services.mcp_server_display_order import sort_mcp_catalog_entries_for_display
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from core.logging import get_logger
 
@@ -59,12 +60,13 @@ async def list_store_catalog_entries(
     offset: int,
 ) -> tuple[list[MCPCatalogStoreEntry], int]:
     all_entries = await container.mcp_catalog_repository.list(limit=20_000)
-    store_entries = [
-        entry
-        for entry in all_entries
-        if catalog_entry_is_search_visible(entry, search)
-    ]
-    store_entries.sort(key=lambda entry: entry.title.lower())
+    store_entries = sort_mcp_catalog_entries_for_display(
+        [
+            entry
+            for entry in all_entries
+            if catalog_entry_is_search_visible(entry, search)
+        ]
+    )
     total = len(store_entries)
     page = store_entries[offset : offset + limit]
 

@@ -3,20 +3,31 @@
  *
  * Контракт: ExternalAPIConfig (apps/flows/src/models/external_api.py).
  * Данные в запрос: через input_mapping (общий маппинг как у всех нод): ключи входа подставляются в {имя}
- * в URL и мержатся в JSON body после body_template.
+ * в URL и мержатся в JSON body после body_template (для методов кроме GET; GET body не шлёт).
  * Шаблоны — @state: / @var: в строках заголовков и body_template.
  * Для ноды как тула у LLM — parameters_schema задайте через общий редактор ноды (/workbench), когда нужно.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import './flows-base-node-editor.js';
 import '@platform/lib/components/platform-json-editor.js';
+import '../editors/flows-http-headers-editor.js';
 import { asObject } from '../../_helpers/flows-resolvers.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 const HTTP_METHODS = Object.freeze(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+
+/** @type {Readonly<Record<string, string>>} */
+const HTTP_METHOD_TONES = Object.freeze({
+    GET: 'success',
+    POST: 'accent-secondary',
+    PUT: 'warning',
+    PATCH: 'accent-tertiary',
+    DELETE: 'error',
+});
 
 export class FlowsExternalApiEditor extends PlatformElement {
     static properties = {
@@ -48,13 +59,24 @@ export class FlowsExternalApiEditor extends PlatformElement {
             }
             summary { cursor: pointer; font-size: var(--text-sm); font-weight: var(--font-semibold); }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+            .field-label {
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: var(--text-secondary);
+            }
             .field-hint {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 margin: 0 0 var(--space-2);
                 line-height: 1.35;
+            }
+            .method-toggle {
+                width: 100%;
+            }
+            .method-toggle platform-segmented-control {
+                width: 100%;
             }
         `,
     ];
@@ -101,8 +123,8 @@ export class FlowsExternalApiEditor extends PlatformElement {
             throw new Error('flows-external-api-editor: method detail.value');
         }
         const v = d.value;
-        if (typeof v !== 'string') {
-            throw new Error('flows-external-api-editor: method string required');
+        if (typeof v !== 'string' || !HTTP_METHODS.includes(v)) {
+            throw new Error(`flows-external-api-editor: unsupported HTTP method "${String(v)}"`);
         }
         this._emitPatch({ method: v });
     }
@@ -126,8 +148,16 @@ export class FlowsExternalApiEditor extends PlatformElement {
         this._emitPatch({ timeout: v });
     }
 
-    _onHeaders(parsed) {
-        this._emitPatch({ headers: parsed && typeof parsed === 'object' ? parsed : {} });
+    _onHeaders(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object' || !('value' in d)) {
+            throw new Error('flows-external-api-editor: headers change detail.value');
+        }
+        const headers = d.value;
+        if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+            throw new Error('flows-external-api-editor: headers must be an object');
+        }
+        this._emitPatch({ headers });
     }
 
     _onBodyTemplate(parsed) {
@@ -139,18 +169,22 @@ export class FlowsExternalApiEditor extends PlatformElement {
 
     render() {
         const cfg = asObject(this.nodeConfig);
-        const name = typeof cfg.name === 'string' ? cfg.name : '';
-        const description = typeof cfg.description === 'string' ? cfg.description : '';
         const url = typeof cfg.url === 'string' ? cfg.url : '';
         const method = HTTP_METHODS.includes(cfg.method) ? cfg.method : 'POST';
         const timeout = typeof cfg.timeout === 'number' ? cfg.timeout : 30.0;
-        const headersJson = cfg.headers && typeof cfg.headers === 'object'
-            ? JSON.stringify(cfg.headers, null, 2) : '{}';
+        const headers =
+            cfg.headers && typeof cfg.headers === 'object' && !Array.isArray(cfg.headers)
+                ? cfg.headers
+                : {};
         const bodyTemplateStr =
             typeof cfg.body_template === 'string' && cfg.body_template.length > 0
                 ? cfg.body_template
                 : '{}';
-        const methodValues = HTTP_METHODS.map((m) => ({ value: m, label: m }));
+        const methodItems = HTTP_METHODS.map((m) => ({
+            value: m,
+            label: m,
+            tone: HTTP_METHOD_TONES[m],
+        }));
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
@@ -165,22 +199,16 @@ export class FlowsExternalApiEditor extends PlatformElement {
                 ?embedded=${this.embedded}
             >
                 <div slot="settings" class="settings-wrap">
-                    <div class="grid">
-                        <platform-field
-                            mode="edit"
-                            type="string"
-                            .label=${this.t('external_api_editor.name')}
-                            .value=${name}
-                            @change=${(e) => this._onString('name', e)}
-                        ></platform-field>
-                        <platform-field
-                            mode="edit"
-                            type="enum"
-                            .label=${this.t('external_api_editor.method')}
+                    <div class="field method-toggle">
+                        <span class="field-label">${this.t('external_api_editor.method')}</span>
+                        <platform-segmented-control
+                            full-width
+                            density="dense"
                             .value=${method}
-                            .config=${{ values: methodValues }}
+                            .items=${methodItems}
+                            aria-label=${this.t('external_api_editor.method')}
                             @change=${this._onMethod}
-                        ></platform-field>
+                        ></platform-segmented-control>
                     </div>
                     <platform-field
                         mode="edit"
@@ -194,37 +222,36 @@ export class FlowsExternalApiEditor extends PlatformElement {
                     ></platform-field>
                     <platform-field
                         mode="edit"
-                        type="string"
-                        .label=${this.t('external_api_editor.description')}
-                        .value=${description}
-                        @change=${(e) => this._onString('description', e)}
-                    ></platform-field>
-                    <platform-field
-                        mode="edit"
                         type="number"
                         .label=${this.t('external_api_editor.timeout')}
                         .value=${timeout}
                         @change=${this._onTimeout}
                     ></platform-field>
-                    <details class="glass-subtle">
-                        <summary>${this.t('external_api_editor.body_template')}</summary>
-                        <p class="field-hint">${this.t('external_api_editor.body_template_hint')}</p>
-                        <platform-json-editor validate-json show-toolbar="false"
-                            .value=${bodyTemplateStr}
-                            @change=${(e) => {
-                                if (e.detail && 'parsed' in e.detail) {
-                                    this._onBodyTemplate(e.detail.parsed);
-                                }
-                            }}
-                        ></platform-json-editor>
-                    </details>
-                    <details class="glass-subtle">
+                    ${method === 'GET'
+                        ? nothing
+                        : html`
+                            <details class="glass-subtle">
+                                <summary>${this.t('external_api_editor.body_template')}</summary>
+                                <p class="field-hint">${this.t('external_api_editor.body_template_hint')}</p>
+                                <platform-json-editor
+                                    validate-json
+                                    show-toolbar="false"
+                                    .readonly=${false}
+                                    .value=${bodyTemplateStr}
+                                    @change=${(e) => {
+                                        if (e.detail && 'parsed' in e.detail) {
+                                            this._onBodyTemplate(e.detail.parsed);
+                                        }
+                                    }}
+                                ></platform-json-editor>
+                            </details>
+                        `}
+                    <details class="glass-subtle" open>
                         <summary>${this.t('external_api_editor.headers')}</summary>
-                        <p class="field-hint">${this.t('external_api_editor.headers_hint')}</p>
-                        <platform-json-editor validate-json show-toolbar="false"
-                            .value=${headersJson}
-                            @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._onHeaders(e.detail.parsed); }}
-                        ></platform-json-editor>
+                        <flows-http-headers-editor
+                            .value=${headers}
+                            @change=${this._onHeaders}
+                        ></flows-http-headers-editor>
                     </details>
                 </div>
             </flows-base-node-editor>
