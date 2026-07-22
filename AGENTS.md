@@ -102,22 +102,19 @@ Ollama embeddings: на macOS — **host Metal GPU** (`OLLAMA_MODE=metal`); dock
 
 **Запрещено:** `pkill` контейнерных MCP, `rm` docker volumes / `down -v` наугад, возвращать stdio spawn, параллельный `index_repository` мимо HTTP proxy.
 
-## Health-check
+## MCP — опционально
 
-`make zed-search-check` при старте.
-
-- exit 1 → скажи пользователю: запусти `make zed-search` (+ перезапуск IDE, если MCP всё ещё stdio).
-- WARN про индекс → `make zed-search-reindex`.
+Не запускай `make zed-search-check` «при старте». Тулы MCP есть в сессии — пользуйся; нет / падают — `grep`/`Glob`/`Read`, без требования поднять стек. `make zed-search*` — только по явной просьбе или при починке поиска.
 
 ## Команды
 
-- `make zed-search` — Compose up --build + wire + primary index
-- `make zed-search-check` / `zed-search-update` / `zed-search-reindex`
+- `make zed-search` — Compose up --build + wire + primary index (wire также пишет Zed `agent.tool_permissions`: default allow, fetch/search_web/edit — allow, delete/move — confirm, terminal — confirm на `sudo`/`git push`/`rm -rf`)
+- `make zed-search-check` / `zed-search-update` / `zed-search-reindex` (ручные)
 - `make zed-search-status` / `zed-search-logs` / `zed-search-down`
 
 ## Правило
 
-1. Структура → codebase-memory-mcp.
-2. Смысл → claude-context (короткие якоря в `query`, не multi-question prose).
+1. MCP доступен → структура через codebase-memory-mcp; иначе grep/Glob.
+2. MCP доступен → смысл через claude-context (короткие якоря в `query`, не multi-question prose); иначе grep.
 3. Литералы → grep.
-4. Оба MCP — только через Compose HTTP URL.
+4. Оба MCP — только через Compose HTTP URL (когда подключены).

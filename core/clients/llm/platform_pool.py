@@ -22,13 +22,25 @@ from core.clients.llm.provider_resolution import _resolve_headers_vars, _resolve
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.config.base import BaseSettings
-from core.config.llm_openai_compat import resolve_provider_api_keys
+from core.config.llm_openai_compat import (
+    collect_provider_api_keys,
+    llm_provider_block,
+    resolve_provider_api_keys,
+)
 from core.types import JsonObject
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
 _platform_free_pool_redis: RedisClient | None = None
+
+
+def _api_keys_for_free_pool_provider(settings: BaseSettings, provider: str) -> list[str]:
+    """Ключи для кандидата free-pool; пустой список = провайдер недоступен локально."""
+    cfg = llm_provider_block(settings.llm, provider)
+    if cfg is None:
+        return []
+    return collect_provider_api_keys(cfg)
 
 
 def _candidate_from_platform_free_record(
@@ -211,7 +223,7 @@ async def _expand_humanitec_llms_config(
     candidates: list[LLMCallConfig] = []
     if model == HUMANITEC_LLM_AUTO_MODEL:
         for record in records:
-            api_keys = resolve_provider_api_keys(settings.llm, record.provider)
+            api_keys = _api_keys_for_free_pool_provider(settings, record.provider)
             for api_key in api_keys:
                 candidates.append(
                     _with_authoring_overrides(
@@ -230,6 +242,14 @@ async def _expand_humanitec_llms_config(
                     _platform_paid_fallback_candidate(settings),
                     config,
                     state=state,
+                )
+            )
+        if not candidates:
+            raise RuntimeError(
+                (
+                    "humanitec_llm auto: нет кандидатов — задайте api_key хотя бы "
+                    "для одного провайдера из free-pool (обычно llm.openrouter) "
+                    "или включите paid_fallback."
                 )
             )
         return candidates
@@ -330,7 +350,7 @@ def _make_platform_default_candidate_resolver(
         candidates: list[LLMCallConfig] = []
         records = await _read_platform_free_records()
         for record in records:
-            api_keys = resolve_provider_api_keys(settings.llm, record.provider)
+            api_keys = _api_keys_for_free_pool_provider(settings, record.provider)
             for api_key in api_keys:
                 candidates.append(
                     _candidate_from_platform_free_record(
@@ -342,6 +362,14 @@ def _make_platform_default_candidate_resolver(
 
         if include_paid_fallback:
             candidates.append(_platform_paid_fallback_candidate(settings))
+        if not candidates:
+            raise RuntimeError(
+                (
+                    "platform free-pool: нет кандидатов — задайте api_key хотя бы "
+                    "для одного провайдера из free-pool (обычно llm.openrouter) "
+                    "или включите paid_fallback."
+                )
+            )
         return candidates
 
     return _resolve

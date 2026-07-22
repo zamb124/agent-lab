@@ -398,6 +398,77 @@ def strip_jsonc(s: str) -> str:
         i += 1
     return "".join(out)
 
+# agent.tool_permissions: readonly/fetch без промптов, опасное — confirm.
+# Canonical-ключи перезаписываются, прочие пользовательские tools сохраняются.
+CANONICAL_TOOL_PERMISSIONS = {
+    "default": "allow",
+    "tools": {
+        "fetch": {"default": "allow"},
+        "search_web": {"default": "allow"},
+        "skill": {"default": "allow"},
+        "edit_file": {"default": "allow"},
+        "write_file": {"default": "allow"},
+        "create_directory": {"default": "allow"},
+        "copy_path": {"default": "allow"},
+        "move_path": {"default": "confirm"},
+        "delete_path": {"default": "confirm"},
+        "terminal": {
+            "default": "allow",
+            "always_confirm": [
+                {"pattern": "sudo\\s"},
+                {"pattern": "git\\s+push"},
+                {"pattern": "\\brm\\s+-rf\\b"},
+            ],
+        },
+        "mcp:claude-context:search_code": {"default": "allow"},
+        "mcp:claude-context:get_indexing_status": {"default": "allow"},
+        "mcp:codebase-memory-mcp:search_graph": {"default": "allow"},
+        "mcp:codebase-memory-mcp:search_code": {"default": "allow"},
+        "mcp:codebase-memory-mcp:trace_path": {"default": "allow"},
+        "mcp:codebase-memory-mcp:query_graph": {"default": "allow"},
+        "mcp:codebase-memory-mcp:get_graph_schema": {"default": "allow"},
+        "mcp:codebase-memory-mcp:get_architecture": {"default": "allow"},
+        "mcp:codebase-memory-mcp:get_code_snippet": {"default": "allow"},
+        "mcp:codebase-memory-mcp:list_projects": {"default": "allow"},
+        "mcp:codebase-memory-mcp:index_status": {"default": "allow"},
+        "mcp:codebase-memory-mcp:detect_changes": {"default": "allow"},
+    },
+}
+
+def merge_tool_permissions(existing: dict) -> dict:
+    merged = dict(existing)
+    merged["default"] = CANONICAL_TOOL_PERMISSIONS["default"]
+    tools = dict(existing.get("tools", {}))
+    tools.update(CANONICAL_TOOL_PERMISSIONS["tools"])
+    merged["tools"] = tools
+    return merged
+
+def render_tool_permissions(merged: dict, indent: str) -> str:
+    body = json.dumps(merged, ensure_ascii=False, indent=2)
+    body = body.replace("\n", "\n" + indent)
+    return f'{indent}"tool_permissions": {body}'
+
+tp_span = find_object_span(new, "tool_permissions")
+if tp_span is not None:
+    a, c = tp_span
+    seg = new[a:c]
+    indent_match = re.match(r"[ \t]*", seg)
+    indent = indent_match.group(0) if indent_match else "    "
+    obj_text = seg[seg.find("{"):]
+    existing_tp = json.loads(re.sub(r",(\s*[}\]])", r"\1", strip_jsonc(obj_text)))
+    new = new[:a] + render_tool_permissions(merge_tool_permissions(existing_tp), indent) + new[c:]
+    print("  Zed: agent.tool_permissions обновлён (merge с canonical)")
+else:
+    agent_span = find_object_span(new, "agent")
+    if agent_span is None:
+        print("  agent не найден — пропуск tool_permissions", file=sys.stderr)
+    else:
+        a, _ = agent_span
+        brace = new.find("{", a)
+        rendered = render_tool_permissions(merge_tool_permissions({}), "    ")
+        new = new[:brace + 1] + "\n" + rendered + "," + new[brace + 1:]
+        print("  Zed: agent.tool_permissions добавлен (canonical)")
+
 cleaned = re.sub(r",(\s*[}\]])", r"\1", strip_jsonc(new))
 json.loads(cleaned)
 ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
