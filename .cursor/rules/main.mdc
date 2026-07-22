@@ -313,7 +313,7 @@ UI в `apps/<svc>/ui/` строго наследуется от core (`PlatformE
 
 UV: `uv add <pkg>`, `uv sync`, `uv run python <file>`, `uv run pytest`. Документацию библиотек — через Context7.
 
-Все сервисы локально: **`make app`** (granian `--reload --reload-paths apps --reload-paths core` для HTTP, без reload для воркеров; падение одного процесса не валит остальные). Зависшие порты: **`make app APP_KILL=1`**.
+Все сервисы локально: **`make app`** → **mprocs** (`mprocs.yaml`, `brew install mprocs`): один TUI, логи по выбранному процессу (`j`/`k`). Под капотом — `scripts/run.py <svc>` (granian `--reload` для HTTP кроме provider_litserve/browser; TaskIQ без reload). Зависшие порты: **`make app APP_KILL=1`**.
 
 Портал документации (Zensical): **`make doc`** (RU+EN, артефакт `documentation-dist/`, путь `/documentation/`). Локальный предпросмотр: **`make doc-serve`**.
 

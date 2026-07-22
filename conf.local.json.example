@@ -5,7 +5,8 @@
   "server": {
     "env": "development",
     "platform_public_base_url": "http://system.lvh.me:8002",
-    "document_server_dev_upstream_url": "http://localhost:8088"
+    "document_server_dev_upstream_url": "http://localhost:8088",
+    "provider_litserve_service_url": "http://127.0.0.1:8014"
   },
   "auth": {
     "jwt_secret_key": "YOUR_JWT_SECRET_KEY_CHANGE_IN_PRODUCTION",
@@ -149,12 +150,32 @@
     }
   },
   "rag": {
+    "embedding": {
+      "provider": "provider_litserve",
+      "api": {
+        "model": "qwen/qwen3-embedding-0.6b",
+        "dimension": 1024,
+        "mrl_output_dimension": 1024,
+        "base_url": "http://127.0.0.1:8014/v1"
+      }
+    },
+    "reranker": {
+      "provider": "provider_litserve",
+      "api": {
+        "base_url": "http://127.0.0.1:8014/v1"
+      }
+    },
     "providers": {
       "agentset": {
         "api_key": "YOUR_AGENTSET_API_KEY",
         "embedding_api_key": "YOUR_EMBEDDING_API_KEY",
         "base_url": "https://api.agentset.ai"
       }
+    }
+  },
+  "provider_litserve": {
+    "api": {
+      "base_url": "http://127.0.0.1:8014/v1"
     }
   },
   "push": {

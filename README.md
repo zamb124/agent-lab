@@ -43,7 +43,7 @@ make dev-up
 make dev-bootstrap-postgres
 
 # Все HTTP-сервисы и TaskIQ-воркеры (Granian с --reload)
-make app
+make app   # mprocs: раздельные логи по сервису (brew install mprocs)
 # или с предварительным освобождением портов:
 make app APP_KILL=1
 # исключить сервис из all:
@@ -142,7 +142,7 @@ agent-lab/
 | Команда | Назначение |
 |---|---|
 | `make dev-up` / `make dev-down` | Docker-инфраструктура для dev |
-| `make app` | Все сервисы и воркеры локально |
+| `make app` | Все сервисы через mprocs (раздельные логи) |
 | `make lint` | Полный lint gate (python + frontend) |
 | `make test` | CI-прогон unit/API |
 | `make test-ui` / `make ui-doc` | Playwright E2E + doc scenarios |

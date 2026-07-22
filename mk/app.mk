@@ -1,18 +1,15 @@
 .PHONY: app kill-ports
 
-# Все локальные сервисы (все ключи SERVICES в scripts/run.py, в т.ч. flows, frontend, crm, rag, sync, worktracker, office, browser, search,
-# provider_litserve, scheduler-api, voice :8015, воркеры TaskIQ и scheduler) — одной командой.
-# Granian: --reload для HTTP (кроме provider_litserve/browser — torch/Playwright на reload
-# копят память). APP_RELOAD=0 — без reload на всех сервисах. TaskIQ worker без reload.
-# Остановка: Ctrl+C. APP_KILL=1 — освободить порты перед стартом.
-# APP_KILL=1 — перед стартом завершить процессы на портах HTTP-сервисов (8001-8021 и др.), см. scripts/run.py kill-ports.
-# Исключение: make app ex flows_worker  (коротко, работает везде; ex | x, затем имя, можно повторять).
-#   Либо: make -- app --ex flows_worker  (системный make в macOS иначе принимает --ex за свой флаг).
-#   Либо: make app --exclude NAME  (если цель --exclude не конфликтует с make).
-# Список имён: ключи SERVICES в scripts/run.py.
+# Все локальные сервисы (ключи SERVICES в scripts/run.py) через mprocs —
+# один TUI, логи смотришь по выбранному процессу (j/k).
+# Требует: brew install mprocs. Конфиг: mprocs.yaml.
+# Granian: --reload для HTTP (кроме provider_litserve/browser). APP_RELOAD=0 — без reload.
+# Остановка: q в mprocs (или Ctrl+C). APP_KILL=1 — освободить порты перед стартом.
+# Исключение: make app ex flows_worker  (ex | x, затем имя; либо APP_EXCLUDE=…; либо make -- app --ex …).
 APP_MAK_EX_FLAGS := ex x --ex --exclude -e --kill
-APP_MAK_SVC := flows frontend crm rag sync worktracker office scheduler-api secrets browser search provider_litserve voice \
-	flows_worker rag_worker sync_worker crm_worker idle_worker scheduler
+APP_MAK_SVC := flows frontend crm rag sync worktracker office scheduler-api secrets browser search \
+	provider_litserve voice capability_gateway code_runner_python code_runner_node code_runner_go \
+	code_runner_csharp flows_worker rag_worker search_worker sync_worker crm_worker idle_worker scheduler
 ifneq (,$(findstring app,$(MAKECMDGOALS)))
 APP_MAK_EXTRAS := $(filter-out app,$(MAKECMDGOALS))
 APP_MAK_NOOP := $(filter $(APP_MAK_EX_FLAGS) $(APP_MAK_SVC),$(APP_MAK_EXTRAS))
@@ -27,8 +24,9 @@ endif
 
 # APP_EXCLUDE=… — тот же эффект (через запятую), можно совмещать с make app --ex …
 app: runtime-bootstrap
+	@command -v mprocs >/dev/null 2>&1 || { echo "mprocs не найден. Установи: brew install mprocs"; exit 1; }
 	@APP_EXCLUDE="$(APP_EXCLUDE)" uv run python scripts/run.py from-make $(MAKECMDGOALS) $(if $(filter 1,$(APP_KILL)),--from-make-kill,)
 
-# Только освободить порты 8001-8006 (без запуска сервисов).
+# Только освободить порты HTTP-сервисов (без запуска).
 kill-ports:
 	uv run python scripts/run.py kill-ports
