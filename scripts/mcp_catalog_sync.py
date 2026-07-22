@@ -127,11 +127,12 @@ async def main() -> None:
                 f"deprecated={crawl_stats.deprecated}",
             )
 
-    if args.crawl_only:
+    if args.crawl_only or args.seeds_only:
         return
 
     if settings.mcp_catalog.auto_provision == "disabled":
-        raise RuntimeError("mcp_catalog.auto_provision is disabled; set approved_only or all_verified")
+        print("auto_provision=disabled; skip company provision (companies install from Store)")
+        return
 
     await _provision_company(company_id=args.company_id)
 

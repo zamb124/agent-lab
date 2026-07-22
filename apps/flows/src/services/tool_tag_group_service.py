@@ -45,7 +45,7 @@ class ToolTagGroupService:
         self._repository = repository
         self._flow_repository = flow_repository
 
-    async def list_groups(self, *, limit: int = 500, offset: int = 0) -> list[ToolTagGroup]:
+    async def list_groups(self, *, limit: int = 200, offset: int = 0) -> list[ToolTagGroup]:
         groups = await self._repository.list(limit=limit, offset=offset)
         return sorted(groups, key=lambda item: item.tag)
 

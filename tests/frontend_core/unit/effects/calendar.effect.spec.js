@@ -49,6 +49,18 @@ describe('calendarEffect', () => {
         expect(dispatched.find((d) => d.type === CALENDAR_EVENTS.EVENT_DELETED).payload.event_id).toBe('e1');
     });
 
+    it('INTEGRATION_CONNECT_REQUESTED (caldav) → INTEGRATION_CONNECTED, forwards caldav_base_url', async () => {
+        fetchMock.respondJson('POST', '/svc/api/calendar/integrations/connect', { provider: 'caldav' });
+        const dispatched = [];
+        const payload = { provider: 'caldav', username: 'u@example.com', access_token: 'p', caldav_base_url: 'https://dav.example.com' };
+        await createCalendarEffect({ baseUrl: '/svc' })(ev(CALENDAR_EVENTS.INTEGRATION_CONNECT_REQUESTED, payload), buildCtx(() => ({}), dispatched));
+        expect(dispatched.find((d) => d.type === CALENDAR_EVENTS.INTEGRATION_CONNECTED)).toBeTruthy();
+        const connectCall = fetchMock.calls.find((c) => c.method === 'POST' && c.url === '/svc/api/calendar/integrations/connect');
+        const sentBody = JSON.parse(connectCall.init.body);
+        expect(sentBody.caldav_base_url).toBe('https://dav.example.com');
+        expect(sentBody.provider).toBe('caldav');
+    });
+
     it('INTEGRATIONS_LOAD_REQUESTED → INTEGRATIONS_LOADED', async () => {
         fetchMock.respondJson('GET', '/svc/api/calendar/integrations', { items: [{ provider: 'apple' }] });
         const dispatched = [];

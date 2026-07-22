@@ -23,6 +23,37 @@ from core.mail.models import (
     OutboundMailMessage,
 )
 from core.mail.transport.idle_session import MailIdleSession
+from core.models.calendar_models import CalendarEventUpsertPayload
+
+
+class MailCalendarBridge(Protocol):
+    """
+    Мост mail -> calendar через инверсию зависимости: core/mail не знает про
+    CalendarService, контейнер прокидывает реализацию.
+
+    - авто-подъём CalDAV календаря при подключении personal mailbox;
+    - upsert события из iMIP-приглашения во входящей почте.
+
+    Ошибки календаря не должны ломать bind/sync почты (best-effort у вызова).
+    """
+
+    async def ensure_caldav_integration_from_mailbox(
+        self,
+        *,
+        user_id: str,
+        company_id: str,
+        email_address: str,
+        password: str,
+        imap_host: str,
+    ) -> object | None: ...
+
+    async def upsert_imip_event(
+        self,
+        *,
+        payload: CalendarEventUpsertPayload,
+        user_id: str,
+        company_id: str,
+    ) -> object: ...
 
 
 class MailServerPort(Protocol):

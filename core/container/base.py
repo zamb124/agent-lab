@@ -518,6 +518,7 @@ class BaseContainer:
             attachment_file_index=self.mail_attachment_file_index,
             mail_sync_backfill_batch_size=mail_sync.backfill_batch_size,
             mail_sync_reconcile_every_n=mail_sync.reconcile_every_n_syncs,
+            calendar_bridge=self.calendar_service,
         )
 
     @lazy

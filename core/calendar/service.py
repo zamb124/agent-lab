@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 from typing import ClassVar
+from urllib.parse import urlsplit
 from uuid import uuid4
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
@@ -51,6 +52,55 @@ logger = get_logger(__name__)
 
 
 GOOGLE_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
+
+
+# Единый протокол CalDAV: разные провайдеры = разные base_url, один клиент.
+CALDAV_PROVIDERS: frozenset[CalendarProvider] = frozenset(
+    {CalendarProvider.YANDEX, CalendarProvider.MAILRU, CalendarProvider.CALDAV}
+)
+
+# Preset base_url для известных парольных провайдеров. CALDAV (custom) требует
+# явного caldav_base_url в payload/settings.
+CALDAV_PRESET_BASE_URLS: dict[CalendarProvider, str] = {
+    CalendarProvider.YANDEX: "https://caldav.yandex.ru",
+    CalendarProvider.MAILRU: "https://calendar.mail.ru",
+}
+
+_PROVIDER_TO_SOURCE: dict[CalendarProvider, CalendarEventSource] = {
+    CalendarProvider.GOOGLE: CalendarEventSource.GOOGLE,
+    CalendarProvider.YANDEX: CalendarEventSource.YANDEX,
+    CalendarProvider.MAILRU: CalendarEventSource.MAILRU,
+    CalendarProvider.CALDAV: CalendarEventSource.CALDAV,
+}
+
+
+# Автоподъём CalDAV календаря при подключении personal mailbox с известным хостом.
+_IMAP_HOST_TO_CALDAV_PROVIDER: dict[str, CalendarProvider] = {
+    "imap.yandex.com": CalendarProvider.YANDEX,
+    "imap.yandex.ru": CalendarProvider.YANDEX,
+    "imap.mail.ru": CalendarProvider.MAILRU,
+}
+
+
+def caldav_provider_for_imap_host(imap_host: str) -> CalendarProvider | None:
+    return _IMAP_HOST_TO_CALDAV_PROVIDER.get(imap_host.strip().lower())
+
+
+def calendar_source_for_provider(provider: CalendarProvider) -> CalendarEventSource:
+    source = _PROVIDER_TO_SOURCE.get(provider)
+    if source is None:
+        raise ValueError(f"No calendar event source mapping for provider {provider}")
+    return source
+
+
+def resolve_caldav_base_url(provider: CalendarProvider, explicit_base_url: str | None) -> str:
+    """base_url приоритет: явный (settings/payload) -> preset. Fail-closed для custom."""
+    if explicit_base_url and explicit_base_url.strip():
+        return explicit_base_url.strip().rstrip("/")
+    preset = CALDAV_PRESET_BASE_URLS.get(provider)
+    if preset is None:
+        raise ValueError(f"CalDAV provider {provider} requires explicit caldav_base_url")
+    return preset
 
 
 class GoogleCalendarDateTimePayload(FlexibleBaseModel):
@@ -98,7 +148,7 @@ class GoogleCalendarMutationResult(FlexibleBaseModel):
     etag: str | None = None
 
 
-class YandexCalendarEventPayload(StrictBaseModel):
+class CalDavEventPayload(StrictBaseModel):
     id: str
     href: str
     etag: str | None = None
@@ -112,7 +162,7 @@ class YandexCalendarEventPayload(StrictBaseModel):
     url: str | None = None
 
 
-class YandexCalendarMutationResult(StrictBaseModel):
+class CalDavMutationResult(StrictBaseModel):
     id: str
     href: str
     etag: str | None = None
@@ -161,7 +211,7 @@ def _parse_ical_datetime(value: str, all_day: bool) -> datetime:
     return parsed.replace(tzinfo=timezone.utc)
 
 
-def _parse_ical_event(raw_ics: str, *, href: str, etag: str | None) -> YandexCalendarEventPayload:
+def _parse_ical_event(raw_ics: str, *, href: str, etag: str | None) -> CalDavEventPayload:
     lines = _unfold_ical_lines(raw_ics)
     values: dict[str, str] = {}
     for line in lines:
@@ -182,11 +232,11 @@ def _parse_ical_event(raw_ics: str, *, href: str, etag: str | None) -> YandexCal
     all_day = "VALUE=DATE" in dtstart_key
     start_at = _parse_ical_datetime(dtstart_value, all_day=all_day)
     end_at = _parse_ical_datetime(dtend_value, all_day=all_day)
-    return YandexCalendarEventPayload(
+    return CalDavEventPayload(
         id=uid,
         href=href,
         etag=etag,
-        summary=values.get("SUMMARY", "Yandex event"),
+        summary=values.get("SUMMARY", "CalDAV event"),
         description=values.get("DESCRIPTION"),
         location=values.get("LOCATION"),
         status=values.get("STATUS", "CONFIRMED").lower(),
@@ -255,18 +305,110 @@ class GoogleCalendarClient:
             _ = response.raise_for_status()
 
 
-class YandexCalDavClient:
-    BASE_URL: ClassVar[str] = "https://caldav.yandex.ru"
+class CalDavClient:
+    """
+    Единый CalDAV-клиент для всех парольных провайдеров (Yandex/Mail.ru/custom).
+
+    Один протокол, разные base_url. Формат события на проводе — урезанный
+    iCalendar VEVENT (UID/SUMMARY/DTSTART/DTEND/DESCRIPTION/LOCATION/STATUS).
+    """
+
+    def __init__(self, base_url: str) -> None:
+        normalized = base_url.strip().rstrip("/")
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError(f"CalDAV base_url must be absolute http(s) URL: {base_url!r}")
+        self._base_url: str = normalized
+
+    def _origin(self) -> str:
+        parts = urlsplit(self._base_url)
+        return f"{parts.scheme}://{parts.netloc}"
+
+    def _absolutize(self, path_or_url: str) -> str:
+        if path_or_url.startswith(("http://", "https://")):
+            return path_or_url
+        if path_or_url.startswith("/"):
+            return f"{self._origin()}{path_or_url}"
+        raise ValueError(f"Cannot absolutize CalDAV reference: {path_or_url!r}")
 
     def _calendar_url(self, username: str, calendar_id: str) -> str:
-        return f"{self.BASE_URL}/calendars/{username}/{calendar_id}/"
+        if calendar_id.startswith(("http://", "https://", "/")):
+            absolute = self._absolutize(calendar_id)
+            return absolute if absolute.endswith("/") else f"{absolute}/"
+        return f"{self._base_url}/calendars/{username}/{calendar_id}/"
 
     def _event_url(self, username: str, calendar_id: str, external_event_id: str) -> str:
-        if external_event_id.startswith("http://") or external_event_id.startswith("https://"):
-            return external_event_id
-        if external_event_id.startswith("/"):
-            return f"{self.BASE_URL}{external_event_id}"
+        if external_event_id.startswith(("http://", "https://", "/")):
+            return self._absolutize(external_event_id)
         return f"{self._calendar_url(username=username, calendar_id=calendar_id)}{external_event_id}.ics"
+
+    async def discover_default_calendar_id(self, username: str, app_password: str) -> str:
+        """
+        RFC 4791 discovery: current-user-principal -> calendar-home-set ->
+        первая VEVENT-коллекция. Возвращает абсолютный path календаря
+        (используется как default_calendar_id). Fail-closed при отсутствии.
+        """
+        auth = (username, app_password)
+        ns = {"d": "DAV:", "c": "urn:ietf:params:xml:ns:caldav"}
+        principal_body = (
+            '<?xml version="1.0" encoding="utf-8" ?>'
+            '<d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>'
+        )
+        principal_root = await self._propfind(self._base_url, principal_body, depth="0", auth=auth)
+        principal_href = self._first_text(
+            principal_root, "d:response/d:propstat/d:prop/d:current-user-principal/d:href", ns
+        )
+        if not principal_href:
+            raise ValueError(f"CalDAV principal not found at {self._base_url}")
+        home_body = (
+            '<?xml version="1.0" encoding="utf-8" ?>'
+            '<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">'
+            "<d:prop><c:calendar-home-set/></d:prop></d:propfind>"
+        )
+        home_root = await self._propfind(self._absolutize(principal_href), home_body, depth="0", auth=auth)
+        home_href = self._first_text(
+            home_root, "d:response/d:propstat/d:prop/c:calendar-home-set/d:href", ns
+        )
+        if not home_href:
+            raise ValueError(f"CalDAV calendar-home-set not found for {username}")
+        list_body = (
+            '<?xml version="1.0" encoding="utf-8" ?>'
+            '<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">'
+            "<d:prop><d:resourcetype/><c:supported-calendar-component-set/></d:prop></d:propfind>"
+        )
+        home_root_list = await self._propfind(self._absolutize(home_href), list_body, depth="1", auth=auth)
+        for response_node in home_root_list.findall("d:response", ns):
+            resourcetype = response_node.find("d:propstat/d:prop/d:resourcetype", ns)
+            if resourcetype is None or resourcetype.find("c:calendar", ns) is None:
+                continue
+            comps = response_node.findall(
+                "d:propstat/d:prop/c:supported-calendar-component-set/c:comp", ns
+            )
+            supports_vevent = not comps or any(comp.get("name") == "VEVENT" for comp in comps)
+            if not supports_vevent:
+                continue
+            href_node = response_node.find("d:href", ns)
+            if href_node is not None and href_node.text and href_node.text.strip():
+                return href_node.text.strip()
+        raise ValueError(f"No VEVENT calendar collection found for {username}")
+
+    @staticmethod
+    def _first_text(root: ElementTree.Element, path: str, ns: dict[str, str]) -> str | None:
+        node = root.find(path, ns)
+        if node is None or node.text is None:
+            return None
+        text = node.text.strip()
+        return text if text else None
+
+    async def _propfind(
+        self, url: str, body: str, *, depth: str, auth: tuple[str, str]
+    ) -> ElementTree.Element:
+        headers = {"Depth": depth, "Content-Type": "application/xml"}
+        async with get_httpx_client(timeout=60.0) as client:
+            response = await client.request(
+                "PROPFIND", url, content=body.encode("utf-8"), headers=headers, auth=auth
+            )
+            _ = response.raise_for_status()
+        return ElementTree.fromstring(response.text)
 
     async def list_events(
         self,
@@ -275,7 +417,7 @@ class YandexCalDavClient:
         calendar_id: str,
         start_at: datetime,
         end_at: datetime,
-    ) -> list[YandexCalendarEventPayload]:
+    ) -> list[CalDavEventPayload]:
         url = self._calendar_url(username=username, calendar_id=calendar_id)
         report_body = f"""<?xml version="1.0" encoding="utf-8" ?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
@@ -303,7 +445,7 @@ class YandexCalDavClient:
             _ = response.raise_for_status()
         root = ElementTree.fromstring(response.text)
         ns = {"d": "DAV:", "c": "urn:ietf:params:xml:ns:caldav"}
-        events: list[YandexCalendarEventPayload] = []
+        events: list[CalDavEventPayload] = []
         for item in root.findall("d:response", ns):
             href_node = item.find("d:href", ns)
             calendar_data_node = item.find("d:propstat/d:prop/c:calendar-data", ns)
@@ -325,7 +467,7 @@ class YandexCalDavClient:
         calendar_id: str,
         external_event_id: str | None,
         event: CalendarEvent,
-    ) -> YandexCalendarMutationResult:
+    ) -> CalDavMutationResult:
         if external_event_id:
             event_url = self._event_url(
                 username=username,
@@ -334,7 +476,7 @@ class YandexCalDavClient:
             )
             uid_match = re.search(r"/([^/]+)\.ics$", event_url)
             if uid_match is None:
-                raise ValueError(f"Cannot extract Yandex event UID from URL: {event_url}")
+                raise ValueError(f"Cannot extract CalDAV event UID from URL: {event_url}")
             uid = uid_match.group(1)
         else:
             uid = uuid4().hex
@@ -368,7 +510,7 @@ class YandexCalDavClient:
             _ = response.raise_for_status()
         response_headers = dict(response.headers.items())
         etag = response_headers.get("ETag")
-        return YandexCalendarMutationResult(id=uid, href=event_url, etag=etag)
+        return CalDavMutationResult(id=uid, href=event_url, etag=etag)
 
     async def delete_event(
         self,
@@ -449,7 +591,10 @@ class CalendarService:
         self._company_repository: CompanyRepository = company_repository
         self._service_client: ServiceClient = service_client
         self._google_client: GoogleCalendarClient = GoogleCalendarClient()
-        self._yandex_client: YandexCalDavClient = YandexCalDavClient()
+
+    def _caldav_client_for(self, integration: CalendarIntegration) -> CalDavClient:
+        base_url = resolve_caldav_base_url(integration.provider, integration.settings.caldav_base_url)
+        return CalDavClient(base_url)
 
     async def _refresh_google_access_token(
         self,
@@ -919,16 +1064,36 @@ class CalendarService:
     ) -> CalendarIntegration:
         now = datetime.now(timezone.utc)
         provider = payload.provider
-        if provider not in {CalendarProvider.GOOGLE, CalendarProvider.YANDEX}:
+        if provider != CalendarProvider.GOOGLE and provider not in CALDAV_PROVIDERS:
             raise ValueError(f"Unsupported calendar provider for integration: {provider}")
-        if provider == CalendarProvider.YANDEX and not payload.username:
-            raise ValueError("Yandex integration username is required")
         existing = await self._credential_repository.get_by_user_provider_service(
             company_id=company_id,
             user_id=user_id,
             provider=IntegrationProvider(provider),
             service="calendar",
         )
+        existing_settings = (
+            calendar_integration_from_credential(existing).settings if existing else None
+        )
+        caldav_base_url: str | None = None
+        default_calendar_id = payload.default_calendar_id
+        if provider in CALDAV_PROVIDERS:
+            if not payload.username:
+                raise ValueError(f"{provider} integration username is required")
+            caldav_base_url = resolve_caldav_base_url(
+                provider,
+                payload.caldav_base_url
+                or (existing_settings.caldav_base_url if existing_settings else None),
+            )
+            if not default_calendar_id or not default_calendar_id.strip():
+                if existing_settings and existing_settings.default_calendar_id:
+                    default_calendar_id = existing_settings.default_calendar_id
+                else:
+                    client = CalDavClient(caldav_base_url)
+                    default_calendar_id = await client.discover_default_calendar_id(
+                        username=payload.username,
+                        app_password=payload.access_token,
+                    )
         integration = CalendarIntegration(
             integration_id=existing.credential_id if existing else uuid4().hex,
             company_id=company_id,
@@ -943,7 +1108,8 @@ class CalendarService:
                 token_type=payload.token_type,
             ),
             settings=CalendarIntegrationSettings(
-                default_calendar_id=payload.default_calendar_id,
+                default_calendar_id=default_calendar_id,
+                caldav_base_url=caldav_base_url,
                 sync_enabled=payload.sync_enabled,
                 sync_inbound_enabled=payload.sync_inbound_enabled,
                 sync_outbound_enabled=payload.sync_outbound_enabled,
@@ -955,6 +1121,59 @@ class CalendarService:
         credential = _calendar_integration_to_credential(integration)
         await self._credential_repository.upsert(credential)
         return integration
+
+    async def ensure_caldav_integration_from_mailbox(
+        self,
+        *,
+        user_id: str,
+        company_id: str,
+        email_address: str,
+        password: str,
+        imap_host: str,
+    ) -> CalendarIntegration | None:
+        """
+        Идемпотентно поднимает CalDAV calendar integration из personal mailbox,
+        если IMAP host относится к известному провайдеру (Yandex/Mail.ru).
+        Возвращает None, если провайдер не поддерживает auto-link.
+        """
+        provider = caldav_provider_for_imap_host(imap_host)
+        if provider is None:
+            return None
+        payload = CalendarIntegrationConnectPayload(
+            provider=provider,
+            username=email_address,
+            access_token=password,
+        )
+        return await self.connect_integration(
+            user_id=user_id,
+            company_id=company_id,
+            payload=payload,
+        )
+
+    async def upsert_imip_event(
+        self,
+        *,
+        payload: CalendarEventUpsertPayload,
+        user_id: str,
+        company_id: str,
+    ) -> CalendarEvent:
+        """
+        Идемпотентный upsert события из iMIP-приглашения: дедуп по source_id
+        (`imip:{uid}`), чтобы повторный mail sync не плодил дубли.
+        """
+        if not payload.source_id or not payload.source_id.strip():
+            raise ValueError("iMIP calendar payload requires source_id")
+        existing = await self._event_repository.get_by_source(
+            company_id=company_id,
+            source=payload.source,
+            source_id=payload.source_id,
+        )
+        return await self.upsert_event(
+            event_id=existing.event_id if existing else None,
+            payload=payload,
+            user_id=user_id,
+            company_id=company_id,
+        )
 
     async def disconnect_integration(self, user_id: str, company_id: str, provider: CalendarProvider) -> None:
         deleted = await self._credential_repository.delete_by_user_provider_service(
@@ -1029,11 +1248,14 @@ class CalendarService:
                 google_integration = await self._refresh_google_access_token(integration=google_integration)
                 imported, exported = await _run_google_sync(google_integration)
             return {"imported": imported, "exported": exported}
-        if provider == CalendarProvider.YANDEX:
+        if provider in CALDAV_PROVIDERS:
             if not integration.credentials.username:
-                raise ValueError("Yandex integration username is required")
+                raise ValueError(f"{provider} integration username is required")
+            client = self._caldav_client_for(integration)
             if integration.settings.sync_inbound_enabled:
-                imported = await self._sync_yandex_inbound(
+                imported = await self._sync_caldav_inbound(
+                    provider=provider,
+                    client=client,
                     company_id=company_id,
                     user_id=user_id,
                     credentials=integration.credentials,
@@ -1042,7 +1264,9 @@ class CalendarService:
                     end_at=end_at,
                 )
             if integration.settings.sync_outbound_enabled:
-                exported = await self._sync_yandex_outbound(
+                exported = await self._sync_caldav_outbound(
+                    provider=provider,
+                    client=client,
                     user_id=user_id,
                     company_id=company_id,
                     credentials=integration.credentials,
@@ -1139,8 +1363,10 @@ class CalendarService:
             imported += 1
         return imported
 
-    async def _sync_yandex_inbound(
+    async def _sync_caldav_inbound(
         self,
+        provider: CalendarProvider,
+        client: CalDavClient,
         company_id: str,
         user_id: str,
         credentials: CalendarIntegrationCredentials,
@@ -1149,8 +1375,9 @@ class CalendarService:
         end_at: datetime,
     ) -> int:
         if not credentials.username:
-            raise ValueError("Yandex integration username is required")
-        items = await self._yandex_client.list_events(
+            raise ValueError(f"{provider} integration username is required")
+        source = calendar_source_for_provider(provider)
+        items = await client.list_events(
             username=credentials.username,
             app_password=credentials.access_token,
             calendar_id=calendar_id,
@@ -1170,7 +1397,7 @@ class CalendarService:
             for candidate in existing:
                 for ref in candidate.external_refs:
                     if (
-                        ref.provider == CalendarProvider.YANDEX
+                        ref.provider == provider
                         and ref.calendar_id == calendar_id
                         and ref.external_event_id == item.href
                     ):
@@ -1181,16 +1408,21 @@ class CalendarService:
             start_value = _ensure_utc(item.start_at)
             end_value = _ensure_utc(item.end_at)
             if start_value >= end_value:
-                raise ValueError("Yandex event start must be before end")
+                logger.warning(
+                    "calendar.caldav_event_skipped_bad_range",
+                    provider=provider.value,
+                    href=item.href,
+                )
+                continue
             status = CalendarEventStatus(item.status)
             event = CalendarEvent(
                 event_id=matched.event_id if matched else uuid4().hex,
-                source=CalendarEventSource.YANDEX,
+                source=source,
                 source_id=item.id,
                 company_id=company_id,
                 namespace=None,
                 kind="event",
-                title=item.summary if item.summary else "Yandex event",
+                title=item.summary if item.summary else f"{provider.value} event",
                 description=item.description,
                 location=item.location,
                 status=status,
@@ -1205,7 +1437,7 @@ class CalendarService:
                 deep_link=item.url,
                 external_refs=[
                     CalendarExternalRef(
-                        provider=CalendarProvider.YANDEX,
+                        provider=provider,
                         calendar_id=calendar_id,
                         external_event_id=item.href,
                         etag=item.etag,
@@ -1292,8 +1524,10 @@ class CalendarService:
             exported += 1
         return exported
 
-    async def _sync_yandex_outbound(
+    async def _sync_caldav_outbound(
         self,
+        provider: CalendarProvider,
+        client: CalDavClient,
         user_id: str,
         company_id: str,
         credentials: CalendarIntegrationCredentials,
@@ -1302,7 +1536,7 @@ class CalendarService:
         end_at: datetime,
     ) -> int:
         if not credentials.username:
-            raise ValueError("Yandex integration username is required")
+            raise ValueError(f"{provider} integration username is required")
         events = await self._event_repository.list_in_range(
             company_id=company_id,
             start_at=start_at,
@@ -1320,20 +1554,20 @@ class CalendarService:
                 continue
             ext_id = None
             for ref in event.external_refs:
-                if ref.provider == CalendarProvider.YANDEX and ref.calendar_id == calendar_id:
+                if ref.provider == provider and ref.calendar_id == calendar_id:
                     ext_id = ref.external_event_id
                     break
-            saved = await self._yandex_client.upsert_event(
+            saved = await client.upsert_event(
                 username=credentials.username,
                 app_password=credentials.access_token,
                 calendar_id=calendar_id,
                 external_event_id=ext_id,
                 event=event,
             )
-            refs = [ref for ref in event.external_refs if not (ref.provider == CalendarProvider.YANDEX and ref.calendar_id == calendar_id)]
+            refs = [ref for ref in event.external_refs if not (ref.provider == provider and ref.calendar_id == calendar_id)]
             refs.append(
                 CalendarExternalRef(
-                    provider=CalendarProvider.YANDEX,
+                    provider=provider,
                     calendar_id=calendar_id,
                     external_event_id=saved.href,
                     etag=saved.etag,
@@ -1364,10 +1598,11 @@ class CalendarService:
                     calendar_id=ref.calendar_id,
                     external_event_id=ref.external_event_id,
                 )
-            elif ref.provider == CalendarProvider.YANDEX:
+            elif ref.provider in CALDAV_PROVIDERS:
                 if not integration.credentials.username:
-                    raise ValueError("Yandex integration username is required")
-                await self._yandex_client.delete_event(
+                    raise ValueError(f"{ref.provider} integration username is required")
+                client = self._caldav_client_for(integration)
+                await client.delete_event(
                     username=integration.credentials.username,
                     app_password=integration.credentials.access_token,
                     calendar_id=ref.calendar_id,

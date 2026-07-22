@@ -515,4 +515,84 @@ describe('flows mcp servers modal', () => {
 
         expect(card.getAttribute('aria-selected')).to.equal('true');
     });
+
+    it('shows installed cards without both platform defaults', async () => {
+        fetchStub = createMcpModalFetchStub([
+            {
+                method: 'GET',
+                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
+                body: {
+                    items: [
+                        installedServerStub('browser', { source: 'platform' }),
+                        installedServerStub('mcp_store_demo', {
+                            source: 'catalog',
+                            catalog_id: 'store_demo',
+                        }),
+                    ],
+                    total: 2,
+                    limit: 50,
+                    offset: 0,
+                },
+            },
+        ]);
+
+        const modal = await fixture(html`
+            <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
+        `);
+        await modal.updateComplete;
+        await waitUntil(() => modal._installedItems.length === 2, 'installed load');
+
+        expect(modal._listTab).to.equal('installed');
+        expect(modalRoot(modal).querySelectorAll('.mcp-card-shell')).to.have.length(2);
+    });
+
+    it('catalog then installed roundtrip reloads and shows cards', async () => {
+        let installedCalls = 0;
+        fetchStub = createMcpModalFetchStub([
+            {
+                method: 'GET',
+                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
+                body: () => {
+                    installedCalls += 1;
+                    return {
+                        items: [
+                            installedServerStub('browser', { source: 'platform' }),
+                            installedServerStub('search', { source: 'platform' }),
+                        ],
+                        total: 2,
+                        limit: 50,
+                        offset: 0,
+                    };
+                },
+            },
+            {
+                method: 'GET',
+                match: (href) => href.includes('/flows/api/v1/mcp/catalog'),
+                body: {
+                    items: [catalogItemStub('store_demo')],
+                    total: 1,
+                    limit: 50,
+                    offset: 0,
+                },
+            },
+        ]);
+
+        const modal = await fixture(html`
+            <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
+        `);
+        await modal.updateComplete;
+        await waitUntil(() => modal._installedItems.length === 2, 'initial installed');
+        const callsAfterOpen = installedCalls;
+
+        await clickListTab(modal, 'catalog');
+        await waitUntil(() => modal._catalogItems.length === 1, 'catalog load');
+        expect(modal._listTab).to.equal('catalog');
+
+        await clickListTab(modal, 'installed');
+        await waitUntil(() => modal._listTab === 'installed', 'back to installed');
+        await waitUntil(() => installedCalls > callsAfterOpen, 'installed reload');
+        await waitUntil(() => modal._installedItems.length === 2, 'installed after roundtrip');
+
+        expect(modalRoot(modal).querySelectorAll('.mcp-card-shell')).to.have.length(2);
+    });
 });

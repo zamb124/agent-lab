@@ -33,6 +33,17 @@ class TestDemoAuth:
         finally:
             set_settings(old)
 
+    async def test_auth_providers_public_without_session(self, frontend_client):
+        response = await frontend_client.get("/frontend/api/auth/providers")
+        assert response.status_code == 200
+        payload = response.json()
+        assert isinstance(payload.get("providers"), list)
+        assert len(payload["providers"]) > 0
+        for item in payload["providers"]:
+            assert isinstance(item.get("name"), str) and item["name"]
+            assert isinstance(item.get("display_name"), str)
+            assert isinstance(item.get("auth_url"), str)
+
     async def test_login_demo_when_disabled_returns_401(self, frontend_client):
         old = get_settings()
         demo_off = old.auth.model_copy(

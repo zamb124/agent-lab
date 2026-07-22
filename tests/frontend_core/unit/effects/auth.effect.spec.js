@@ -99,11 +99,15 @@ describe('authEffect: AUTH_COMPANY_SWITCH_REQUESTED', () => {
 
 describe('authEffect: PROVIDERS_LOAD_REQUESTED', () => {
     it('успех → PROVIDERS_LOADED с items', async () => {
-        fetchMock.respondJson('GET', '/svc/api/auth/providers', { providers: [{ id: 'google' }] });
+        fetchMock.respondJson('GET', '/svc/api/auth/providers', {
+            providers: [{ name: 'google', display_name: 'Google', auth_url: '/api/v1/auth/login/google' }],
+        });
         const dispatched = [];
         await createAuthEffect({ baseUrl: '/svc' })(ev(CoreAuthEvents.PROVIDERS_LOAD_REQUESTED), buildCtx(() => ({}), dispatched));
         const loaded = dispatched.find((d) => d.type === CoreAuthEvents.PROVIDERS_LOADED);
-        expect(loaded.payload.items).toEqual([{ id: 'google' }]);
+        expect(loaded.payload.items).toEqual([
+            { name: 'google', display_name: 'Google', auth_url: '/api/v1/auth/login/google' },
+        ]);
     });
 
     it('пустой список → PROVIDERS_LOAD_FAILED', async () => {
@@ -112,6 +116,15 @@ describe('authEffect: PROVIDERS_LOAD_REQUESTED', () => {
         await createAuthEffect({ baseUrl: '/svc' })(ev(CoreAuthEvents.PROVIDERS_LOAD_REQUESTED), buildCtx(() => ({}), dispatched));
         const failed = dispatched.find((d) => d.type === CoreAuthEvents.PROVIDERS_LOAD_FAILED);
         expect(failed).toBeTruthy();
+    });
+
+    it('provider без name → PROVIDERS_LOAD_FAILED', async () => {
+        fetchMock.respondJson('GET', '/svc/api/auth/providers', { providers: [{ id: 'google' }] });
+        const dispatched = [];
+        await createAuthEffect({ baseUrl: '/svc' })(ev(CoreAuthEvents.PROVIDERS_LOAD_REQUESTED), buildCtx(() => ({}), dispatched));
+        const failed = dispatched.find((d) => d.type === CoreAuthEvents.PROVIDERS_LOAD_FAILED);
+        expect(failed).toBeTruthy();
+        expect(failed.payload.message).toMatch(/name/);
     });
 });
 

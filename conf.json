@@ -1354,7 +1354,7 @@
     }
   },
   "mcp_catalog": {
-    "auto_provision": "approved_only"
+    "auto_provision": "disabled"
   },
   "agent": {
     "releases": {

@@ -13,6 +13,7 @@ from apps.flows.config import get_settings
 from apps.flows.src.models import EmailTriggerConfig, TriggerType
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.mail.exceptions import MailConnectionNotFoundError
 from core.mail.models import MailConnectionStatus
 from core.mail.service import MailService
 from core.types import JsonObject, parse_json_object
@@ -146,22 +147,6 @@ async def verify_email_config(
     except Exception as exc:
         return False, {}, "email_config_invalid", str(exc)
 
-    connection = await mail_service.get_connection(company_id)
-    if connection is None:
-        return (
-            False,
-            {},
-            "mail_connection_missing",
-            "Почта компании не подключена. Откройте настройки почты и настройте сервер.",
-        )
-    if connection.status != MailConnectionStatus.ACTIVE:
-        return (
-            False,
-            {"status": connection.status.value},
-            "mail_connection_inactive",
-            f"Почтовый сервер компании в статусе {connection.status.value}.",
-        )
-
     bindings = await mail_service.list_my_bindings(company_id)
     matched = next(
         (
@@ -177,6 +162,23 @@ async def verify_email_config(
             {"mailbox_binding_id": email_config.mailbox_binding_id},
             "mailbox_binding_not_found",
             "Ящик не найден среди ваших mailbox bindings. Выберите ящик или настройте почту.",
+        )
+
+    try:
+        connection = await mail_service.require_connection_for_binding(matched)
+    except MailConnectionNotFoundError as exc:
+        return (
+            False,
+            {"mailbox_binding_id": matched.mailbox_binding_id},
+            "mail_connection_missing",
+            str(exc),
+        )
+    if connection.status != MailConnectionStatus.ACTIVE:
+        return (
+            False,
+            {"status": connection.status.value},
+            "mail_connection_inactive",
+            f"Почтовый сервер в статусе {connection.status.value}.",
         )
 
     return True, {

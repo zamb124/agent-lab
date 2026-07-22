@@ -17,8 +17,6 @@ MCPCatalogStoreEntry = tuple[MCPCatalogEntry, bool, bool]
 
 
 def catalog_entry_is_store_installable(entry: MCPCatalogEntry) -> bool:
-    if entry.platform_approved:
-        return False
     if entry.is_deprecated:
         return False
     return entry.verify_status in (
@@ -47,9 +45,7 @@ def catalog_store_entry_matches_search(entry: MCPCatalogEntry, search: str) -> b
 def catalog_entry_is_search_visible(entry: MCPCatalogEntry, search: str) -> bool:
     if not catalog_store_entry_matches_search(entry, search):
         return False
-    if catalog_entry_is_store_installable(entry):
-        return True
-    return bool(search.strip()) and entry.platform_approved and not entry.is_deprecated
+    return catalog_entry_is_store_installable(entry)
 
 
 async def list_store_catalog_entries(
@@ -80,7 +76,7 @@ async def list_store_catalog_entries(
         (
             entry,
             entry.catalog_id in installed_catalog_ids,
-            entry.platform_approved and not catalog_entry_is_store_installable(entry),
+            entry.platform_approved,
         )
         for entry in page
     ], total
@@ -134,10 +130,6 @@ async def uninstall_catalog_entry_from_company(
         raise ValueError(f"MCP server {server_id!r} is not catalog-managed")
     if server.catalog_id != catalog_id:
         raise ValueError(f"MCP server {server_id!r} catalog_id mismatch")
-    if server.catalog_auto_provisioned:
-        raise ValueError(
-            f"Catalog entry {catalog_id!r} is auto-provisioned; use server delete is not allowed"
-        )
 
     for tool_id in server.cached_tools:
         _ = await container.tool_repository.delete(tool_id)

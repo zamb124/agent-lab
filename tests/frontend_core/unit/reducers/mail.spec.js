@@ -491,4 +491,25 @@ describe('mailReducer', () => {
         expect(next.messages.map((item) => item.uid)).toEqual(['8']);
         expect(next.selectedUid).toBeNull();
     });
+
+    it('FOLDERS_REORDER_REQUESTED updates folders order optimistically', () => {
+        const seeded = {
+            ...initialMailState,
+            folders: Object.freeze([
+                { name: 'INBOX', role: 'inbox' },
+                { name: 'Sent', role: 'sent' },
+            ]),
+        };
+        const next = mailReducer(
+            seeded,
+            ev(MAIL_EVENTS.FOLDERS_REORDER_REQUESTED, {
+                mailbox_binding_id: 'b1',
+                folders: [
+                    { name: 'Sent', role: 'sent' },
+                    { name: 'INBOX', role: 'inbox' },
+                ],
+            }),
+        );
+        expect(next.folders.map((folder) => folder.name)).toEqual(['Sent', 'INBOX']);
+    });
 });

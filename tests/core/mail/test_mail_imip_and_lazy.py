@@ -51,6 +51,20 @@ def test_imip_build_and_parse_roundtrip() -> None:
     assert payload.metadata["imip_uid"] == "uid-fixed-1"
     assert payload.attendees[0].email == "att@linnex.io"
     assert payload.mailbox_binding_id == "mailbind_imip_test"
+    # Дедуп-ключ iMIP: source_id = imip:{uid} (используется upsert_imip_event).
+    assert payload.source_id == "imip:uid-fixed-1"
+    # use_enum_values=True: payload.source в рантайме — строка, а не enum.
+    # upsert_imip_event полагается на это (source в get_by_source без .value;
+    # ранее .value ронял mail_sync_binding через AttributeError).
+    assert payload.source == "platform"
+    assert isinstance(payload.source, str)
+    assert not hasattr(payload.source, "value")
+    # use_enum_values=True: payload.source в рантайме — строка, а не enum.
+    # upsert_imip_event полагается на это (source передаётся в get_by_source
+    # без .value; ранее .value ронял mail_sync_binding через AttributeError).
+    assert payload.source == "platform"
+    assert isinstance(payload.source, str)
+    assert not hasattr(payload.source, "value")
 
 
 @pytest.mark.asyncio

@@ -171,6 +171,17 @@ export function groupMailThreads(messages) {
             (count, item) => count + (typeof item.attachment_count === 'number' ? item.attachment_count : 0),
             0,
         );
+        let ragIndexStatus = 'skipped';
+        for (const item of ordered) {
+            const status = typeof item.rag_index_status === 'string' ? item.rag_index_status : 'skipped';
+            if (status === 'failed') {
+                ragIndexStatus = 'failed';
+                break;
+            }
+            if (status === 'pending' && ragIndexStatus !== 'failed') {
+                ragIndexStatus = 'pending';
+            }
+        }
         const rawSubject = typeof latest.subject === 'string' ? latest.subject : '';
         const subject = normalizeMailSubject(rawSubject)
             ? rawSubject.replace(SUBJECT_PREFIX_RE, '').trim() || rawSubject
@@ -182,6 +193,7 @@ export function groupMailThreads(messages) {
             unreadCount,
             participants,
             attachmentCount,
+            ragIndexStatus,
             subject,
         });
     }

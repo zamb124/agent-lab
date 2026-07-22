@@ -39,6 +39,10 @@ import {
     mailReplyPreviewText,
     normalizeMailSubject,
 } from '../utils/mail-threads.js';
+import { reorderByInsertIndex } from '../utils/reorder-by-insert-index.js';
+import { decodeImapModifiedUtf7 } from '../utils/imap-utf7.js';
+
+const MAIL_FOLDER_INDEX_MIME = 'application/x-platform-mail-folder-index';
 
 function paletteKeyFromPickerValue(value) {
     if (typeof value !== 'string' || !value.trim()) {
@@ -145,6 +149,12 @@ export class PlatformMailModal extends PlatformModal {
         _expandedThreadIds: { state: true },
         _createKind: { state: true },
         _memberDraftUserId: { state: true },
+        _personalPreset: { state: true },
+        _personalDraft: { state: true },
+        _dragFolderIndex: { state: true },
+        _folderInsertIndex: { state: true },
+        _editingMailboxBindingId: { state: true },
+        _editDraft: { state: true },
     };
 
     static styles = [
@@ -290,6 +300,17 @@ export class PlatformMailModal extends PlatformModal {
                 min-height: 0;
                 overflow: auto;
             }
+            .folder-insert-gap {
+                height: 4px;
+                margin: 0 var(--space-2);
+                border-radius: 2px;
+                background: transparent;
+                transition: background 0.12s ease, height 0.12s ease;
+            }
+            .folder-insert-gap.active {
+                height: 8px;
+                background: color-mix(in srgb, var(--accent) 55%, transparent);
+            }
             .folder-btn {
                 display: grid;
                 grid-template-columns: 20px minmax(0, 1fr) auto;
@@ -301,10 +322,13 @@ export class PlatformMailModal extends PlatformModal {
                 border-radius: var(--radius-md);
                 background: transparent;
                 color: var(--text-secondary);
-                cursor: pointer;
+                cursor: grab;
                 text-align: left;
                 font: inherit;
-                transition: background 0.15s ease, color 0.15s ease;
+                transition: background 0.15s ease, color 0.15s ease, opacity 0.12s ease;
+            }
+            .folder-btn.dragging {
+                opacity: 0.45;
             }
             .folder-btn:hover {
                 background: color-mix(in srgb, var(--accent) 10%, transparent);
@@ -592,6 +616,34 @@ export class PlatformMailModal extends PlatformModal {
                 flex-shrink: 0;
                 color: var(--text-tertiary);
             }
+            .msg-rag-status {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 20px;
+                height: 20px;
+                padding: 0;
+                border: none;
+                border-radius: 4px;
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: default;
+            }
+            .msg-rag-status.is-failed {
+                color: var(--warning, #c47a00);
+                cursor: pointer;
+            }
+            .msg-rag-status.is-failed:hover {
+                color: var(--text-primary);
+                background: var(--surface-muted, rgba(0, 0, 0, 0.04));
+            }
+            .msg-rag-status.is-pending {
+                animation: mail-rag-pulse 1.2s ease-in-out infinite;
+            }
+            @keyframes mail-rag-pulse {
+                0%, 100% { opacity: 0.35; }
+                50% { opacity: 1; }
+            }
             .msg-attach-count {
                 font-size: 0.6875rem;
                 font-weight: 600;
@@ -739,6 +791,7 @@ export class PlatformMailModal extends PlatformModal {
                 display: flex;
                 gap: var(--space-2);
                 align-items: flex-end;
+                min-width: 0;
                 max-width: min(720px, 100%);
             }
             .chat-bubble-row.mine {
@@ -751,6 +804,7 @@ export class PlatformMailModal extends PlatformModal {
             .chat-bubble {
                 min-width: 0;
                 max-width: 100%;
+                overflow: hidden;
                 padding: 10px 14px;
                 border-radius: 16px;
                 border: 1px solid var(--border-subtle);
@@ -934,6 +988,19 @@ export class PlatformMailModal extends PlatformModal {
                 line-height: 1.6;
                 font-size: 0.9375rem;
                 max-width: 72ch;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+            }
+            .thread-body-text a {
+                overflow-wrap: anywhere;
+            }
+            .thread-body-text pre {
+                max-width: 100%;
+                overflow-x: auto;
+            }
+            .thread-body-text img {
+                max-width: 100%;
+                height: auto;
             }
             .thread-body-text p {
                 margin: 0 0 var(--space-3);
@@ -1364,6 +1431,61 @@ export class PlatformMailModal extends PlatformModal {
                 justify-content: flex-start;
                 align-items: center;
             }
+            .settings-row.editing {
+                border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
+                box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+            }
+            .binding-edit-panel {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: var(--space-3);
+                padding-top: var(--space-3);
+                border-top: 1px solid var(--border-subtle);
+                animation: binding-edit-in 180ms ease-out;
+            }
+            .binding-edit-panel > .settings-hint,
+            .binding-edit-panel > .binding-edit-email,
+            .binding-edit-panel > .binding-edit-actions {
+                grid-column: 1 / -1;
+            }
+            .binding-edit-email {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            .binding-edit-email-label {
+                font-size: 0.75rem;
+                color: var(--text-tertiary);
+                letter-spacing: 0.02em;
+                text-transform: uppercase;
+            }
+            .binding-edit-email-value {
+                font-weight: 650;
+                font-size: 0.95rem;
+                word-break: break-all;
+            }
+            .binding-edit-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                justify-content: flex-end;
+                padding-top: var(--space-1);
+            }
+            @keyframes binding-edit-in {
+                from {
+                    opacity: 0;
+                    transform: translateY(-6px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            @media (max-width: 640px) {
+                .binding-edit-panel {
+                    grid-template-columns: 1fr;
+                }
+            }
             .settings-create-card {
                 display: flex;
                 flex-direction: column;
@@ -1481,6 +1603,20 @@ export class PlatformMailModal extends PlatformModal {
         this._expandedThreadIds = [];
         this._createKind = 'user';
         this._memberDraftUserId = '';
+        this._personalPreset = 'gmail';
+        this._personalDraft = {
+            email_address: '',
+            password: '',
+            imap_host: 'imap.gmail.com',
+            imap_port: 993,
+            smtp_host: 'smtp.gmail.com',
+            smtp_port: 465,
+            use_ssl: true,
+        };
+        this._dragFolderIndex = -1;
+        this._folderInsertIndex = -1;
+        this._editingMailboxBindingId = null;
+        this._editDraft = null;
         this._searchDebounceTimer = null;
         this._draftSaveTimer = null;
         this._onMailKeydown = (event) => this._handleMailKeydown(event);
@@ -1497,7 +1633,10 @@ export class PlatformMailModal extends PlatformModal {
         this.useEvent(MAIL_EVENTS.MESSAGE_SEND_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.CONNECTION_SAVE_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.BINDING_CREATE_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.PERSONAL_CONNECT_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.PERSONAL_HEALTHCHECK_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.BINDING_PATCH_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.BINDING_HEALTHCHECK_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.BINDING_DELETE_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.DEFAULT_SET_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.MESSAGE_TRASH_FAILED, (e) => this._toastErr(e));
@@ -1505,9 +1644,38 @@ export class PlatformMailModal extends PlatformModal {
         this.useEvent(MAIL_EVENTS.MESSAGE_DELETE_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.MESSAGE_STAR_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.SYNC_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.FOLDERS_LOAD_FAILED, (e) => this._toastErr(e));
+        this.useEvent(MAIL_EVENTS.FOLDERS_REORDER_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.DRAFT_SAVE_FAILED, (e) => this._toastErr(e));
         this.useEvent(MAIL_EVENTS.BINDING_CREATED, () => {
             this.toast('toast_binding_created', { type: 'success' });
+            this._resetPersonalDraft();
+        });
+        this.useEvent(MAIL_EVENTS.PERSONAL_HEALTHCHECK_COMPLETED, (e) => {
+            const health = e.payload && e.payload.health;
+            if (health && health.imap_ok === true && health.smtp_ok === true) {
+                this.toast('toast_personal_health_ok', { type: 'success' });
+                return;
+            }
+            this.toast('toast_personal_health_failed', { type: 'warning' });
+        });
+        this.useEvent(MAIL_EVENTS.BINDING_HEALTHCHECK_COMPLETED, (e) => {
+            const health = e.payload && e.payload.health;
+            if (health && health.imap_ok === true && health.smtp_ok === true) {
+                this.toast('toast_binding_health_ok', { type: 'success' });
+                return;
+            }
+            this.toast('toast_binding_health_failed', { type: 'warning' });
+        });
+        this.useEvent(MAIL_EVENTS.BINDING_PATCHED, (e) => {
+            const binding = e.payload && e.payload.binding;
+            if (
+                binding
+                && this._editingMailboxBindingId === binding.mailbox_binding_id
+            ) {
+                this._closeBindingEdit();
+                this.toast('toast_binding_updated', { type: 'success' });
+            }
         });
         this.useEvent(MAIL_EVENTS.COMPANY_BINDINGS_LOADED, () => {
             const mail = this._mailSelect.value;
@@ -1820,13 +1988,102 @@ export class PlatformMailModal extends PlatformModal {
     _folderLabel(folder) {
         const meta = FOLDER_ROLE_META[folder.role];
         if (meta) return this.t(meta.key);
-        return folder.name;
+        const rawName = typeof folder.name === 'string' ? folder.name : '';
+        if (!rawName) {
+            return '';
+        }
+        try {
+            return decodeImapModifiedUtf7(rawName);
+        } catch (_err) {
+            return rawName;
+        }
     }
 
     _folderIcon(folder) {
         const meta = FOLDER_ROLE_META[folder.role];
         if (meta) return meta.icon;
         return 'mail';
+    }
+
+    _reorderSelectableFolders(fromIndex, insertIndex) {
+        const mail = this._mailSelect.value;
+        if (!mail.activeMailboxBindingId) {
+            throw new Error('platform-mail-modal: activeMailboxBindingId required for folder reorder');
+        }
+        const allFolders = Array.isArray(mail.folders) ? [...mail.folders] : [];
+        const selectable = allFolders.filter((folder) => folder.selectable !== false);
+        const reorderedSelectable = reorderByInsertIndex(selectable, fromIndex, insertIndex);
+        let selectableCursor = 0;
+        const nextFolders = allFolders.map((folder) => {
+            if (folder.selectable === false) {
+                return folder;
+            }
+            const next = reorderedSelectable[selectableCursor];
+            selectableCursor += 1;
+            return next;
+        });
+        this.dispatch(MAIL_EVENTS.FOLDERS_REORDER_REQUESTED, {
+            mailbox_binding_id: mail.activeMailboxBindingId,
+            folders: nextFolders,
+        });
+    }
+
+    _onFolderDragStart(event, index) {
+        event.stopPropagation();
+        event.dataTransfer.setData(MAIL_FOLDER_INDEX_MIME, String(index));
+        event.dataTransfer.effectAllowed = 'move';
+        this._dragFolderIndex = index;
+    }
+
+    _onFolderDragEnd() {
+        this._dragFolderIndex = -1;
+        this._folderInsertIndex = -1;
+    }
+
+    _onFolderInsertDragOver(event, insertIndex) {
+        if (!event.dataTransfer.types.includes(MAIL_FOLDER_INDEX_MIME)) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = 'move';
+        if (this._folderInsertIndex !== insertIndex) {
+            this._folderInsertIndex = insertIndex;
+        }
+    }
+
+    _onFolderInsertDrop(event, insertIndex) {
+        event.preventDefault();
+        event.stopPropagation();
+        this._folderInsertIndex = -1;
+        this._dragFolderIndex = -1;
+        const rawIndex = event.dataTransfer.getData(MAIL_FOLDER_INDEX_MIME);
+        if (typeof rawIndex !== 'string' || rawIndex.length === 0) {
+            return;
+        }
+        const sourceIndex = Number(rawIndex);
+        if (Number.isNaN(sourceIndex)) {
+            throw new Error('platform-mail-modal: invalid folder drag index');
+        }
+        this._reorderSelectableFolders(sourceIndex, insertIndex);
+    }
+
+    _onFolderRowDragOver(event, rowIndex) {
+        if (!event.dataTransfer.types.includes(MAIL_FOLDER_INDEX_MIME)) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = 'move';
+        const target = event.currentTarget;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+        const rect = target.getBoundingClientRect();
+        const insertIndex = event.clientY < rect.top + rect.height / 2 ? rowIndex : rowIndex + 1;
+        if (this._folderInsertIndex !== insertIndex) {
+            this._folderInsertIndex = insertIndex;
+        }
     }
 
     _ensureStandardFolders() {
@@ -2127,12 +2384,46 @@ export class PlatformMailModal extends PlatformModal {
         const mail = this._mailSelect.value;
         const uid = mail.selectedUid;
         if (typeof uid !== 'string' || uid.length === 0) return null;
-        if (!mail.activeMailboxBindingId || !mail.folder) return null;
+        if (!mail.activeMailboxBindingId) return null;
+        const folder = this._folderForUid(mail, uid);
+        if (typeof folder !== 'string' || !folder) return null;
         return {
             mailbox_binding_id: mail.activeMailboxBindingId,
-            folder: mail.folder,
+            folder,
             uid,
         };
+    }
+
+    /**
+     * UID уникален только внутри папки. Для треда (INBOX+Sent) берём folder письма.
+     * @param {{ folder?: string | null, selectedMessage?: { uid?: string, folder?: string } | null, selectedThreadMessages?: Array<{ uid?: string, folder?: string }> }} mail
+     * @param {string} uid
+     * @returns {string | null}
+     */
+    _folderForUid(mail, uid) {
+        if (!mail || typeof uid !== 'string' || uid.length === 0) {
+            return null;
+        }
+        const selected = mail.selectedMessage;
+        if (
+            selected
+            && selected.uid === uid
+            && typeof selected.folder === 'string'
+            && selected.folder.length > 0
+        ) {
+            return selected.folder;
+        }
+        const threadItems = Array.isArray(mail.selectedThreadMessages)
+            ? mail.selectedThreadMessages
+            : [];
+        const inThread = threadItems.find((item) => item && item.uid === uid);
+        if (inThread && typeof inThread.folder === 'string' && inThread.folder.length > 0) {
+            return inThread.folder;
+        }
+        if (typeof mail.folder === 'string' && mail.folder.length > 0) {
+            return mail.folder;
+        }
+        return null;
     }
 
     _trashSelected() {
@@ -2154,6 +2445,75 @@ export class PlatformMailModal extends PlatformModal {
         if (!payload) return;
         this.dispatch(MAIL_EVENTS.MESSAGE_DELETE_REQUESTED, payload);
         this._mobilePane = 'list';
+    }
+
+    /**
+     * @param {{ ragIndexStatus?: string, latest?: { uid?: string, folder?: string, rag_index_status?: string }, messages?: Array<{ uid?: string, folder?: string, rag_index_status?: string }> }} thread
+     */
+    _renderRagIndexIndicator(thread) {
+        const status = typeof thread.ragIndexStatus === 'string'
+            ? thread.ragIndexStatus
+            : (thread.latest && typeof thread.latest.rag_index_status === 'string'
+                ? thread.latest.rag_index_status
+                : 'skipped');
+        if (status === 'pending') {
+            return html`
+                <span
+                    class="msg-rag-status is-pending"
+                    title=${this.t('rag_index_pending')}
+                    aria-label=${this.t('rag_index_pending')}
+                >
+                    <platform-icon name="zap" size="14"></platform-icon>
+                </span>
+            `;
+        }
+        if (status !== 'failed') {
+            return nothing;
+        }
+        const target = Array.isArray(thread.messages)
+            ? (thread.messages.find((msg) => msg && msg.rag_index_status === 'failed') || thread.latest)
+            : thread.latest;
+        const uid = target && typeof target.uid === 'string' ? target.uid : null;
+        const folder = target && typeof target.folder === 'string' ? target.folder : null;
+        return html`
+            <button
+                type="button"
+                class="msg-rag-status is-failed"
+                title=${this.t('rag_index_failed_retry')}
+                aria-label=${this.t('rag_index_failed_retry')}
+                @click=${(event) => {
+                    event.stopPropagation();
+                    this._requestRagIndex(uid, folder);
+                }}
+            >
+                <platform-icon name="zap" size="14"></platform-icon>
+            </button>
+        `;
+    }
+
+    /**
+     * @param {string | null | undefined} uid
+     * @param {string | null | undefined} folder
+     */
+    _requestRagIndex(uid, folder) {
+        const mail = this._mailSelect.value;
+        if (!mail || typeof mail.activeMailboxBindingId !== 'string' || !mail.activeMailboxBindingId) {
+            return;
+        }
+        if (typeof uid !== 'string' || uid.length === 0) {
+            return;
+        }
+        const resolvedFolder = typeof folder === 'string' && folder.length > 0
+            ? folder
+            : this._folderForUid(mail, uid);
+        if (typeof resolvedFolder !== 'string' || !resolvedFolder) {
+            return;
+        }
+        this.dispatch(MAIL_EVENTS.MESSAGE_RAG_INDEX_REQUESTED, {
+            mailbox_binding_id: mail.activeMailboxBindingId,
+            folder: resolvedFolder,
+            uid,
+        });
     }
 
     _toggleStarSelected() {
@@ -2360,25 +2720,29 @@ export class PlatformMailModal extends PlatformModal {
 
     _refreshMessages() {
         const mail = this._mailSelect.value;
-        if (!mail.activeMailboxBindingId || !mail.folder) return;
+        if (!mail.activeMailboxBindingId) return;
         this.dispatch(MAIL_EVENTS.SYNC_REQUESTED, {
             mailbox_binding_id: mail.activeMailboxBindingId,
         });
-        this.dispatch(MAIL_EVENTS.MESSAGES_LOAD_REQUESTED, {
-            mailbox_binding_id: mail.activeMailboxBindingId,
-            folder: mail.folder,
-        });
+        if (typeof mail.folder === 'string' && mail.folder.length > 0) {
+            this.dispatch(MAIL_EVENTS.MESSAGES_LOAD_REQUESTED, {
+                mailbox_binding_id: mail.activeMailboxBindingId,
+                folder: mail.folder,
+            });
+        }
     }
 
     _markSelectedUnseen() {
         const mail = this._mailSelect.value;
         const uid = mail.selectedUid;
         if (typeof uid !== 'string' || uid.length === 0) return;
-        if (!mail.activeMailboxBindingId || !mail.folder) return;
+        if (!mail.activeMailboxBindingId) return;
+        const folder = this._folderForUid(mail, uid);
+        if (typeof folder !== 'string' || !folder) return;
         this.dispatch(MAIL_EVENTS.MESSAGE_MARK_UNSEEN_REQUESTED, {
             uid,
             mailbox_binding_id: mail.activeMailboxBindingId,
-            folder: mail.folder,
+            folder,
         });
     }
 
@@ -2423,12 +2787,337 @@ export class PlatformMailModal extends PlatformModal {
         }
     }
 
+    _resetPersonalDraft() {
+        this._personalPreset = 'gmail';
+        this._personalDraft = {
+            email_address: '',
+            password: '',
+            imap_host: 'imap.gmail.com',
+            imap_port: 993,
+            smtp_host: 'smtp.gmail.com',
+            smtp_port: 465,
+            use_ssl: true,
+        };
+    }
+
+    _applyPersonalPreset(preset) {
+        this._personalPreset = preset;
+        if (preset === 'gmail') {
+            this._personalDraft = {
+                ...this._personalDraft,
+                imap_host: 'imap.gmail.com',
+                imap_port: 993,
+                smtp_host: 'smtp.gmail.com',
+                smtp_port: 465,
+                use_ssl: true,
+            };
+            return;
+        }
+        if (preset === 'yandex') {
+            this._personalDraft = {
+                ...this._personalDraft,
+                imap_host: 'imap.yandex.com',
+                imap_port: 993,
+                smtp_host: 'smtp.yandex.com',
+                smtp_port: 465,
+                use_ssl: true,
+            };
+            return;
+        }
+        if (preset === 'mailru') {
+            this._personalDraft = {
+                ...this._personalDraft,
+                imap_host: 'imap.mail.ru',
+                imap_port: 993,
+                smtp_host: 'smtp.mail.ru',
+                smtp_port: 465,
+                use_ssl: true,
+            };
+            return;
+        }
+        this._personalDraft = { ...this._personalDraft };
+    }
+
+    _personalConnectPayload() {
+        return {
+            email_address: this._personalDraft.email_address.trim(),
+            password: this._personalDraft.password,
+            imap_host: this._personalDraft.imap_host.trim(),
+            imap_port: Number(this._personalDraft.imap_port),
+            smtp_host: this._personalDraft.smtp_host.trim(),
+            smtp_port: Number(this._personalDraft.smtp_port),
+            use_ssl: Boolean(this._personalDraft.use_ssl),
+        };
+    }
+
+    _submitPersonalConnect() {
+        const payload = this._personalConnectPayload();
+        if (!payload.email_address || !payload.password || !payload.imap_host || !payload.smtp_host) {
+            this.toast('personal_connect_required', { type: 'warning' });
+            return;
+        }
+        this.dispatch(MAIL_EVENTS.PERSONAL_CONNECT_REQUESTED, payload);
+    }
+
+    _healthcheckPersonal() {
+        const payload = this._personalConnectPayload();
+        if (!payload.email_address || !payload.password || !payload.imap_host || !payload.smtp_host) {
+            this.toast('personal_connect_required', { type: 'warning' });
+            return;
+        }
+        this.dispatch(MAIL_EVENTS.PERSONAL_HEALTHCHECK_REQUESTED, payload);
+    }
+
+    _renderPersonalConnectForm() {
+        const custom = this._personalPreset === 'custom';
+        return html`
+            <div class="settings-create-card">
+                <div class="settings-section-title">${this.t('personal_connect_title')}</div>
+                <div class="settings-hint">${this.t('personal_connect_hint')}</div>
+                <platform-field
+                    type="enum"
+                    .label=${this.t('personal_preset')}
+                    .value=${this._personalPreset}
+                    .config=${{ values: [
+                        { value: 'gmail', label: this.t('personal_preset_gmail') },
+                        { value: 'yandex', label: this.t('personal_preset_yandex') },
+                        { value: 'mailru', label: this.t('personal_preset_mailru') },
+                        { value: 'custom', label: this.t('personal_preset_custom') },
+                    ] }}
+                    mode="edit"
+                    @change=${(e) => this._applyPersonalPreset(e.detail.value)}
+                ></platform-field>
+                <platform-field
+                    type="string"
+                    .label=${this.t('personal_email')}
+                    .value=${this._personalDraft.email_address}
+                    mode="edit"
+                    @change=${(e) => {
+                        this._personalDraft = { ...this._personalDraft, email_address: e.detail.value };
+                    }}
+                ></platform-field>
+                <platform-field
+                    type="string"
+                    input-type="password"
+                    .label=${this.t('personal_password')}
+                    .value=${this._personalDraft.password}
+                    mode="edit"
+                    @change=${(e) => {
+                        this._personalDraft = { ...this._personalDraft, password: e.detail.value };
+                    }}
+                ></platform-field>
+                ${custom ? html`
+                    <platform-field
+                        type="string"
+                        .label=${this.t('connection_imap')}
+                        .value=${this._personalDraft.imap_host}
+                        mode="edit"
+                        @change=${(e) => {
+                            this._personalDraft = { ...this._personalDraft, imap_host: e.detail.value };
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="integer"
+                        .label=${this.t('connection_imap_port')}
+                        .value=${this._personalDraft.imap_port}
+                        mode="edit"
+                        @change=${(e) => {
+                            this._personalDraft = { ...this._personalDraft, imap_port: e.detail.value };
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        .label=${this.t('connection_smtp')}
+                        .value=${this._personalDraft.smtp_host}
+                        mode="edit"
+                        @change=${(e) => {
+                            this._personalDraft = { ...this._personalDraft, smtp_host: e.detail.value };
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="integer"
+                        .label=${this.t('connection_smtp_port')}
+                        .value=${this._personalDraft.smtp_port}
+                        mode="edit"
+                        @change=${(e) => {
+                            this._personalDraft = { ...this._personalDraft, smtp_port: e.detail.value };
+                        }}
+                    ></platform-field>
+                ` : nothing}
+                <div class="header-actions">
+                    <platform-button variant="secondary" @click=${() => this._healthcheckPersonal()}>
+                        ${this.t('personal_healthcheck')}
+                    </platform-button>
+                    <platform-button variant="accent" @click=${() => this._submitPersonalConnect()}>
+                        ${this.t('personal_connect')}
+                    </platform-button>
+                </div>
+            </div>
+        `;
+    }
+
     _patchBindingColor(mailboxBindingId, pickerValue) {
         const calendarColor = paletteKeyFromPickerValue(pickerValue);
         this.dispatch(MAIL_EVENTS.BINDING_PATCH_REQUESTED, {
             mailbox_binding_id: mailboxBindingId,
             calendar_color: calendarColor,
         });
+    }
+
+    _openBindingEdit(binding) {
+        if (!binding || binding.connection_scope !== 'personal') {
+            throw new Error('platform-mail-modal: only personal bindings can be edited');
+        }
+        if (typeof binding.imap_host !== 'string' || !binding.imap_host.trim()) {
+            throw new Error('platform-mail-modal: binding.imap_host required');
+        }
+        if (typeof binding.smtp_host !== 'string' || !binding.smtp_host.trim()) {
+            throw new Error('platform-mail-modal: binding.smtp_host required');
+        }
+        this._editingMailboxBindingId = binding.mailbox_binding_id;
+        this._editDraft = {
+            imap_host: binding.imap_host,
+            imap_port: typeof binding.imap_port === 'number' ? binding.imap_port : 993,
+            smtp_host: binding.smtp_host,
+            smtp_port: typeof binding.smtp_port === 'number' ? binding.smtp_port : 465,
+            use_ssl: binding.use_ssl !== false,
+            password: '',
+        };
+    }
+
+    _closeBindingEdit() {
+        this._editingMailboxBindingId = null;
+        this._editDraft = null;
+    }
+
+    _updateEditDraft(patch) {
+        if (!this._editDraft) {
+            throw new Error('platform-mail-modal: edit draft is closed');
+        }
+        this._editDraft = { ...this._editDraft, ...patch };
+    }
+
+    _bindingEditHealthcheckPayload(binding) {
+        if (!this._editDraft) {
+            throw new Error('platform-mail-modal: edit draft is closed');
+        }
+        const draft = this._editDraft;
+        const body = {
+            mailbox_binding_id: binding.mailbox_binding_id,
+            imap_host: draft.imap_host.trim(),
+            imap_port: Number(draft.imap_port),
+            smtp_host: draft.smtp_host.trim(),
+            smtp_port: Number(draft.smtp_port),
+            use_ssl: Boolean(draft.use_ssl),
+        };
+        if (typeof draft.password === 'string' && draft.password.trim()) {
+            body.password = draft.password;
+        }
+        return body;
+    }
+
+    _healthcheckBindingEdit(binding) {
+        const payload = this._bindingEditHealthcheckPayload(binding);
+        if (!payload.imap_host || !payload.smtp_host) {
+            this.toast('binding_edit_hosts_required', { type: 'warning' });
+            return;
+        }
+        this.dispatch(MAIL_EVENTS.BINDING_HEALTHCHECK_REQUESTED, payload);
+    }
+
+    _saveBindingEdit(binding) {
+        if (!this._editDraft) {
+            throw new Error('platform-mail-modal: edit draft is closed');
+        }
+        const draft = this._editDraft;
+        const imapHost = draft.imap_host.trim();
+        const smtpHost = draft.smtp_host.trim();
+        if (!imapHost || !smtpHost) {
+            this.toast('binding_edit_hosts_required', { type: 'warning' });
+            return;
+        }
+        const body = {
+            mailbox_binding_id: binding.mailbox_binding_id,
+            imap_host: imapHost,
+            imap_port: Number(draft.imap_port),
+            smtp_host: smtpHost,
+            smtp_port: Number(draft.smtp_port),
+            use_ssl: Boolean(draft.use_ssl),
+        };
+        if (typeof draft.password === 'string' && draft.password.trim()) {
+            body.password = draft.password;
+        }
+        this.dispatch(MAIL_EVENTS.BINDING_PATCH_REQUESTED, body);
+    }
+
+    _renderBindingEditPanel(binding) {
+        const draft = this._editDraft;
+        if (!draft) {
+            return nothing;
+        }
+        return html`
+            <div class="binding-edit-panel">
+                <div class="settings-hint">${this.t('binding_edit_hint')}</div>
+                <div class="binding-edit-email">
+                    <span class="binding-edit-email-label">${this.t('personal_email')}</span>
+                    <span class="binding-edit-email-value">${binding.email_address}</span>
+                </div>
+                <platform-field
+                    type="string"
+                    .label=${this.t('connection_imap')}
+                    .value=${draft.imap_host}
+                    mode="edit"
+                    @change=${(e) => this._updateEditDraft({ imap_host: e.detail.value })}
+                ></platform-field>
+                <platform-field
+                    type="integer"
+                    .label=${this.t('connection_imap_port')}
+                    .value=${draft.imap_port}
+                    mode="edit"
+                    @change=${(e) => this._updateEditDraft({ imap_port: e.detail.value })}
+                ></platform-field>
+                <platform-field
+                    type="string"
+                    .label=${this.t('connection_smtp')}
+                    .value=${draft.smtp_host}
+                    mode="edit"
+                    @change=${(e) => this._updateEditDraft({ smtp_host: e.detail.value })}
+                ></platform-field>
+                <platform-field
+                    type="integer"
+                    .label=${this.t('connection_smtp_port')}
+                    .value=${draft.smtp_port}
+                    mode="edit"
+                    @change=${(e) => this._updateEditDraft({ smtp_port: e.detail.value })}
+                ></platform-field>
+                <platform-field
+                    type="boolean"
+                    .label=${this.t('connection_use_ssl')}
+                    .value=${draft.use_ssl}
+                    mode="edit"
+                    @change=${(e) => this._updateEditDraft({ use_ssl: e.detail.value === true })}
+                ></platform-field>
+                <platform-field
+                    type="string"
+                    input-type="password"
+                    .label=${this.t('binding_edit_password')}
+                    .value=${draft.password}
+                    mode="edit"
+                    @change=${(e) => this._updateEditDraft({ password: e.detail.value })}
+                ></platform-field>
+                <div class="binding-edit-actions">
+                    <platform-button variant="ghost" @click=${() => this._closeBindingEdit()}>
+                        ${this.t('binding_edit_cancel')}
+                    </platform-button>
+                    <platform-button variant="secondary" @click=${() => this._healthcheckBindingEdit(binding)}>
+                        ${this.t('personal_healthcheck')}
+                    </platform-button>
+                    <platform-button variant="accent" @click=${() => this._saveBindingEdit(binding)}>
+                        ${this.t('binding_edit_save')}
+                    </platform-button>
+                </div>
+            </div>
+        `;
     }
 
     _closeSettings() {
@@ -2750,24 +3439,48 @@ export class PlatformMailModal extends PlatformModal {
                 <div class="nav-folders">
                     ${selectableFolders.length === 0
                         ? html`<div class="empty empty-nav">${this.t('empty_folders')}</div>`
-                        : selectableFolders.map((folder) => {
-                            const unseen = typeof folder.unseen_count === 'number' ? folder.unseen_count : 0;
-                            return html`
-                            <button
-                                class="folder-btn ${mail.folder === folder.name ? 'active' : ''}"
-                                type="button"
-                                @click=${() => this._selectFolder(folder.name)}
-                            >
-                                <span class="folder-icon">
-                                    <platform-icon name=${this._folderIcon(folder)} size="16"></platform-icon>
-                                </span>
-                                <span class="folder-label">${this._folderLabel(folder)}</span>
-                                ${unseen > 0
-                                    ? html`<span class="folder-unseen">${unseen}</span>`
-                                    : nothing}
-                            </button>
-                        `;
-                        })}
+                        : html`
+                            <div
+                                class="folder-insert-gap ${this._folderInsertIndex === 0 ? 'active' : ''}"
+                                @dragover=${(event) => this._onFolderInsertDragOver(event, 0)}
+                                @drop=${(event) => this._onFolderInsertDrop(event, 0)}
+                            ></div>
+                            ${selectableFolders.map((folder, index) => {
+                                const unseen = typeof folder.unseen_count === 'number' ? folder.unseen_count : 0;
+                                return html`
+                                    <button
+                                        class="folder-btn ${mail.folder === folder.name ? 'active' : ''} ${this._dragFolderIndex === index ? 'dragging' : ''}"
+                                        type="button"
+                                        draggable="true"
+                                        title=${this.t('folder_reorder_hint')}
+                                        aria-label=${`${this._folderLabel(folder)}. ${this.t('folder_reorder_hint')}`}
+                                        @click=${() => this._selectFolder(folder.name)}
+                                        @dragstart=${(event) => this._onFolderDragStart(event, index)}
+                                        @dragend=${() => this._onFolderDragEnd()}
+                                        @dragover=${(event) => this._onFolderRowDragOver(event, index)}
+                                        @drop=${(event) => this._onFolderInsertDrop(
+                                            event,
+                                            this._folderInsertIndex >= 0
+                                                ? this._folderInsertIndex
+                                                : index,
+                                        )}
+                                    >
+                                        <span class="folder-icon">
+                                            <platform-icon name=${this._folderIcon(folder)} size="16"></platform-icon>
+                                        </span>
+                                        <span class="folder-label">${this._folderLabel(folder)}</span>
+                                        ${unseen > 0
+                                            ? html`<span class="folder-unseen">${unseen}</span>`
+                                            : nothing}
+                                    </button>
+                                    <div
+                                        class="folder-insert-gap ${this._folderInsertIndex === index + 1 ? 'active' : ''}"
+                                        @dragover=${(event) => this._onFolderInsertDragOver(event, index + 1)}
+                                        @drop=${(event) => this._onFolderInsertDrop(event, index + 1)}
+                                    ></div>
+                                `;
+                            })}
+                        `}
                     ${missingRoles.length > 0 ? html`
                         <platform-button variant="ghost" @click=${() => this._ensureStandardFolders()}>
                             ${this.t('ensure_folders')}
@@ -2990,6 +3703,7 @@ export class PlatformMailModal extends PlatformModal {
                                                         : nothing}
                                                 </span>
                                             ` : nothing}
+                                            ${this._renderRagIndexIndicator(thread)}
                                         </div>
                                         <div class="msg-subject">${subjectLabel}</div>
                                         ${snippet.length > 0
@@ -3417,11 +4131,17 @@ export class PlatformMailModal extends PlatformModal {
 
     _renderMyBindingRow(binding) {
         const isRole = binding.kind === 'role';
+        const isPersonal = binding.connection_scope === 'personal';
+        const isEditing = isPersonal
+            && this._editingMailboxBindingId === binding.mailbox_binding_id;
         return html`
-            <div class="settings-row">
+            <div class="settings-row ${isEditing ? 'editing' : ''}">
                 <div class="settings-row-main">
                     <div class="settings-row-meta">
                         <div class="binding-email">${binding.email_address}</div>
+                        ${isPersonal
+                            ? html`<span class="att-badge">${this.t('binding_scope_personal')}</span>`
+                            : nothing}
                         ${isRole
                             ? html`<span class="att-badge">${this.t('binding_kind_role')}</span>`
                             : nothing}
@@ -3435,17 +4155,30 @@ export class PlatformMailModal extends PlatformModal {
                             @change=${(e) => this._patchBindingColor(binding.mailbox_binding_id, e.detail.value)}
                         ></platform-palette-color-picker>
                     </div>
-                    ${!isRole && !binding.is_default ? html`
-                        <div class="binding-actions">
+                    <div class="binding-actions">
+                        ${!isRole && !binding.is_default ? html`
                             <platform-button
                                 variant="ghost"
                                 @click=${() => this.dispatch(MAIL_EVENTS.DEFAULT_SET_REQUESTED, {
                                     mailbox_binding_id: binding.mailbox_binding_id,
                                 })}
                             >${this.t('set_default')}</platform-button>
-                        </div>
-                    ` : nothing}
+                        ` : nothing}
+                        ${isPersonal && !isEditing ? html`
+                            <platform-button
+                                variant="secondary"
+                                @click=${() => this._openBindingEdit(binding)}
+                            >${this.t('binding_edit')}</platform-button>
+                        ` : nothing}
+                        ${isPersonal ? html`
+                            <platform-button
+                                variant="ghost"
+                                @click=${() => this._confirmUnbind(binding)}
+                            >${this.t('unbind')}</platform-button>
+                        ` : nothing}
+                    </div>
                 </div>
+                ${isEditing ? this._renderBindingEditPanel(binding) : nothing}
             </div>
         `;
     }
@@ -3603,6 +4336,7 @@ export class PlatformMailModal extends PlatformModal {
                             ${mail.bindings.length === 0
                                 ? html`<div class="empty">${this.t('my_bindings_empty')}</div>`
                                 : mail.bindings.map((binding) => this._renderMyBindingRow(binding))}
+                            ${this._renderPersonalConnectForm()}
                         </section>
                         ${isAdmin ? html`
                             <section class="settings-section">

@@ -10,11 +10,31 @@ class MailError(Exception):
 
 
 class MailConnectionNotFoundError(MailError):
-    company_id: Final[str]
+    company_id: Final[str | None]
+    company_mail_connection_id: Final[str | None]
 
-    def __init__(self, company_id: str) -> None:
-        super().__init__(f"CompanyMailConnection not found for company_id={company_id}")
-        self.company_id = company_id
+    def __init__(
+        self,
+        company_id: str | None = None,
+        *,
+        company_mail_connection_id: str | None = None,
+    ) -> None:
+        if company_mail_connection_id is not None and company_mail_connection_id.strip():
+            detail = (
+                "MailConnection not found for "
+                f"company_mail_connection_id={company_mail_connection_id}"
+            )
+            self.company_mail_connection_id = company_mail_connection_id
+            self.company_id = company_id
+        elif company_id is not None and company_id.strip():
+            detail = f"CompanyMailConnection not found for company_id={company_id}"
+            self.company_id = company_id
+            self.company_mail_connection_id = None
+        else:
+            raise ValueError(
+                "MailConnectionNotFoundError requires company_id or company_mail_connection_id"
+            )
+        super().__init__(detail)
 
 
 class MailBindingNotFoundError(MailError):

@@ -457,6 +457,18 @@ async def crawl_mcp_registry(*, container: FlowRuntimeContainer) -> MCPCatalogCr
     verify_budget = catalog_cfg.max_verify_per_crawl
     cursor: str | None = None
 
+    seed_upserted, seed_verified, seed_verify_failed, verify_budget = await _upsert_allowlist_seed_entries(
+        container=container,
+        allowlist=allowlist,
+        crawled_at=crawled_at,
+        seen_catalog_ids=seen_catalog_ids,
+        verify_budget=verify_budget,
+        verify_timeout_seconds=catalog_cfg.verify_timeout_seconds,
+    )
+    upserted += seed_upserted
+    verified += seed_verified
+    verify_failed += seed_verify_failed
+
     while True:
         page = await _fetch_registry_page(
             base_url=catalog_cfg.registry_base_url,
@@ -475,6 +487,8 @@ async def crawl_mcp_registry(*, container: FlowRuntimeContainer) -> MCPCatalogCr
                 crawled_at=crawled_at,
             )
             if entry is None:
+                continue
+            if entry.catalog_id in seen_catalog_ids:
                 continue
             fetched += 1
             seen_catalog_ids.add(entry.catalog_id)
@@ -522,18 +536,6 @@ async def crawl_mcp_registry(*, container: FlowRuntimeContainer) -> MCPCatalogCr
         if next_cursor is None:
             break
         cursor = next_cursor
-
-    seed_upserted, seed_verified, seed_verify_failed, verify_budget = await _upsert_allowlist_seed_entries(
-        container=container,
-        allowlist=allowlist,
-        crawled_at=crawled_at,
-        seen_catalog_ids=seen_catalog_ids,
-        verify_budget=verify_budget,
-        verify_timeout_seconds=catalog_cfg.verify_timeout_seconds,
-    )
-    upserted += seed_upserted
-    verified += seed_verified
-    verify_failed += seed_verify_failed
 
     deprecated = 0
     existing_entries = await container.mcp_catalog_repository.list(limit=20_000)

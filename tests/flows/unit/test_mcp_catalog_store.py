@@ -38,7 +38,7 @@ def _entry(
 @pytest.mark.parametrize(
     ("platform_approved", "is_deprecated", "verify_status", "expected"),
     [
-        (True, False, MCPCatalogVerifyStatus.VERIFIED, False),
+        (True, False, MCPCatalogVerifyStatus.VERIFIED, True),
         (False, True, MCPCatalogVerifyStatus.VERIFIED, False),
         (False, False, MCPCatalogVerifyStatus.VERIFIED, True),
         (False, False, MCPCatalogVerifyStatus.AUTH_REQUIRED, True),
@@ -92,9 +92,10 @@ def test_catalog_store_entry_matches_search(
     ("platform_approved", "is_deprecated", "search", "expected"),
     [
         (False, False, "", True),
-        (True, False, "", False),
+        (True, False, "", True),
         (True, False, "context7", True),
         (True, True, "context7", False),
+        (True, True, "", False),
     ],
 )
 def test_catalog_entry_is_search_visible(

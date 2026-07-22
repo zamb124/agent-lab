@@ -13,16 +13,16 @@ alwaysApply: false
 - **Единая фабрика**: MCP-тулы создаются через `ToolFactory` как обычные ноды/тулы.
 - **State-aware**: MCP-тулы читают/пишут `ExecutionState`.
 
-## Двухуровневая модель (auto + Store)
+## Единый MCP Store + platform defaults
 
-| Уровень | Как появляется | `catalog_auto_provisioned` | Uninstall из UI |
-|---|---|---|---|
-| **Tier 1 — platform + curated auto** | `ensure_default_mcp_servers` (Browser, Search) + provisioner при `auto_provision=approved_only` | `true` для catalog auto | Запрещён для auto tier |
-| **Tier 2 — MCP Store (opt-in)** | Пользователь: `POST .../mcp/catalog/{catalog_id}/install` | `false` | `DELETE .../install` |
+| Уровень | Как появляется | Uninstall |
+|---|---|---|
+| **Platform defaults** | `ensure_default_mcp_servers` (Browser, Search), `source=platform` | Не через Store; platform-only |
+| **MCP Store (opt-in)** | Глобальный `mcp_catalog` (Official Registry crawl + yaml allowlist seeds) → `POST .../mcp/catalog/{catalog_id}/install` | `DELETE .../install` для любого catalog install |
 
-**Default policy:** `settings.mcp_catalog.auto_provision` = **`approved_only`** (не `all_verified`). Curated allowlist: `apps/flows/mcp_catalog_allowlist.yaml`.
+**Default policy:** `settings.mcp_catalog.auto_provision` = **`disabled`** — компании ставят MCP из каталога сами. Legacy: `approved_only` / `all_verified` (auto-tier с `catalog_auto_provisioned=true`). Curated badge: `platform_approved` в [`apps/flows/mcp_catalog_allowlist.yaml`](apps/flows/mcp_catalog_allowlist.yaml) — видны в Store наравне с registry, install/uninstall разрешены.
 
-Provisioner **деактивирует** только записи с `catalog_auto_provisioned=true`, если entry исчез или не provisionable. Opt-in Store install **не** снимается provisioner-ом.
+Provisioner при `auto_provision != disabled` **деактивирует** только записи с `catalog_auto_provisioned=true`, если entry исчез или не provisionable. Opt-in Store install (`catalog_auto_provisioned=false`) provisioner не снимает.
 
 ### MCP Store API
 
@@ -33,13 +33,14 @@ POST /flows/api/v1/mcp/catalog/{catalog_id}/install
 DELETE /flows/api/v1/mcp/catalog/{catalog_id}/install
 ```
 
-- `tier=store` — verified registry entries для UI «Каталог»; неизвестный `tier` → **400** fail-closed.
+- `tier=store` — verified/auth_required entries (включая curated yaml) для UI «Каталог»; неизвестный `tier` → **400** fail-closed.
 - Install **идемпотентен**: повторный POST → тот же `server_id`, без дублей.
 - После install — `sync_mcp_server_tools` (или явный sync).
+- Uninstall — любой `source=catalog` install компании (в т.ч. curated / бывший auto-tier).
 
 ### Internal company init
 
-`POST /flows/api/v1/internal/company/init` (signed headers через `build_internal_context_headers`) → TaskIQ `init_company_resources` (очередь `flows_worker`) → `ensure_default_mcp_servers_for_company` + `provision_mcp_catalog_for_company` + `sync_auto_mcp_servers_for_company`. Ошибки MCP при init **не проглатываются** — raise для retry.
+`POST /flows/api/v1/internal/company/init` (signed headers через `build_internal_context_headers`) → TaskIQ `init_company_resources` (очередь `flows_worker`) → `upsert_allowlist_seed_entries_only` + `ensure_default_mcp_servers_for_company` + `provision_mcp_catalog_for_company` + `sync_auto_mcp_servers_for_company`. Ошибки MCP при init **не проглатываются** — raise для retry.
 
 Триггеры (только через `idle_worker`, не из HTTP lifespan flows):
 
@@ -86,8 +87,9 @@ active_servers = await mcp_repo.list_active()
 
 ### Источники и jobs
 
-- **Crawl:** `apps/idle_worker/tasks/mcp_catalog_tasks.py::mcp_catalog_crawl_task` — paginate registry, filter `streamable-http`/`sse` + `https://`, verify через `MCPClient.initialize()` + `list_tools()`, upsert `MCPCatalogRepository`.
-- **Provision:** `mcp_catalog_provision_companies_task` — все компании → `provision_mcp_catalog_for_company`.
+- **Crawl:** `apps/idle_worker/tasks/mcp_catalog_tasks.py::mcp_catalog_crawl_task` — сначала verify/upsert yaml allowlist seeds (`upstream_url`), затем paginate Official Registry (`streamable-http`/`sse` + `https://`), verify через `MCPClient.initialize()` + `list_tools()`, upsert `MCPCatalogRepository`. Curated seeds с `upstream_url` не перезаписываются registry.
+- **Company init seed:** `upsert_allowlist_seed_entries_only` в `init_company_resources` — каталог не пуст без полного crawl.
+- **Provision:** `mcp_catalog_provision_companies_task` — все компании → `provision_mcp_catalog_for_company` (noop при `auto_provision=disabled`).
 - **Resync:** `mcp_catalog_resync_tools_task` — `sync_mcp_server_tools` для `source=catalog` без `override_locked`.
 - Scheduler: `apps/scheduler/main.py` — `mcp_catalog_crawl_task` по `crawl_cron` (default `0 0 * * *`, раз в сутки) + `crawl_run_on_start=true`. `mcp_catalog.resync_tools_cron` (тот же дефолт).
 
@@ -115,7 +117,7 @@ from apps.flows.src.models.mcp_catalog import MCPCatalogEntry
 - **Deprecate:** entry исчез / не provisionable → `is_active=false` только для `catalog_auto_provisioned=true` (если не locked).
 - **Skip:** `override_locked=true`, `source=platform|manual`, opt-in Store без auto flag.
 
-Policy: `settings.mcp_catalog.auto_provision` — `approved_only` (default) | `all_verified` | `disabled`.
+Policy: `settings.mcp_catalog.auto_provision` — `disabled` (default) | `approved_only` | `all_verified`.
 
 ### Override lock + Reset
 
@@ -275,7 +277,7 @@ Git-бандл: `apps/flows/mcp_branding/` (`manifest.yaml`, `icons/`, `SOURCES.
 - **Вызов `tool.coroutine` напрямую** — минует декоратор. Только `tool.ainvoke(...)`.
 - **Забыть про `company_id`** — серверы не глобальные, `mcp_repo.get()` берёт `company_id` из контекста автоматически.
 - **`__name__` после `@tool`** — `@tool` фиксирует имя при создании; `func.__name__` ставить **до** декоратора.
-- **Путать auto и opt-in** — uninstall Store только для `catalog_auto_provisioned=false`; provisioner не трогает opt-in.
+- **Путать platform и Store** — Browser/Search (`source=platform`) не uninstall через Store; catalog installs (включая curated yaml) — install/uninstall из каталога.
 
 ## Файлы
 

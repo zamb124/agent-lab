@@ -45,15 +45,14 @@ export class JoinPage extends PlatformPage {
             .provider-button {
                 display: flex; align-items: center; justify-content: center; gap: var(--space-3);
                 padding: var(--space-3) var(--space-4);
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: var(--glass-bg-subtle);
+                border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
                 font-size: var(--text-base); color: var(--text-primary);
                 cursor: pointer; transition: var(--motion-transition-interactive);
             }
-            .provider-button:hover { background: rgba(255, 255, 255, 0.1); transform: translateY(-1px); }
+            .provider-button:hover { background: var(--glass-bg-medium); transform: translateY(-1px); }
             .provider-button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-            .provider-icon { width: 24px; height: 24px; }
             .checking { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); }
             .invite-preview {
                 text-align: left;
@@ -228,12 +227,12 @@ export class JoinPage extends PlatformPage {
                         </button>
                         <button type="button" class="provider-button" ?disabled=${this._oauthLoading}
                             @click=${() => this._startProvider('github')}>
-                            <img src="/static/frontend/assets/icons/providers/github.svg" class="provider-icon" alt="GitHub">
+                            <platform-icon name="github" size="24"></platform-icon>
                             <span>${this.t('join_page.login_github')}</span>
                         </button>
                         <button type="button" class="provider-button" ?disabled=${this._oauthLoading}
                             @click=${() => this._startProvider('apple')}>
-                            <img src="/static/frontend/assets/icons/providers/apple.svg" class="provider-icon" alt="Apple">
+                            <platform-icon name="apple" size="24"></platform-icon>
                             <span>${this.t('join_page.login_apple')}</span>
                         </button>
                     </div>

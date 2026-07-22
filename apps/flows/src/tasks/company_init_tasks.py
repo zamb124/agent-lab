@@ -13,6 +13,7 @@ from apps.flows.src.services.hitl_demo_queue import (
     ensure_example_hitl_queue,
     hitl_demo_operator_user_ids,
 )
+from apps.flows.src.services.mcp_catalog_crawler import upsert_allowlist_seed_entries_only
 from apps.flows.src.services.mcp_catalog_provisioner import provision_mcp_catalog_for_company
 from apps.flows.src.services.mcp_sync import (
     ensure_default_mcp_servers_for_company,
@@ -99,6 +100,14 @@ async def init_company_resources(
 
         try:
             runtime_container = as_flow_runtime_container(container)
+            seed_stats = await upsert_allowlist_seed_entries_only(container=runtime_container)
+            logger.info(
+                "MCP allowlist seed для %s: upserted=%s verified=%s verify_failed=%s",
+                company_id,
+                seed_stats.upserted,
+                seed_stats.verified,
+                seed_stats.verify_failed,
+            )
             _ = await ensure_default_mcp_servers_for_company(container=runtime_container)
             catalog_stats = await provision_mcp_catalog_for_company(container=runtime_container)
             synced = await sync_auto_mcp_servers_for_company(container=runtime_container)

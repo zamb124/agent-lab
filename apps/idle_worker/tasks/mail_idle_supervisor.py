@@ -21,8 +21,8 @@ async def _idle_one_binding(
     timeout_seconds: float,
 ) -> bool:
     container = get_container()
-    connection = await container.company_mail_connection_repository.get_by_company(
-        binding.company_id
+    connection = await container.company_mail_connection_repository.get(
+        binding.company_mail_connection_id
     )
     if connection is None:
         return False

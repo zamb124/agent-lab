@@ -29,11 +29,26 @@ def test_sync_ws_is_public_middleware_auth_in_handler() -> None:
     assert rule.auth_required is False
 
 
-def test_prefixed_auth_providers_matches() -> None:
+def test_prefixed_auth_providers_is_public_anonymous() -> None:
+    """Login-модалка на landing грузит провайдеров без сессии."""
     matcher = RouteMatcher()
-    rule = matcher.match("/frontend/api/auth/providers")
+    for path in (
+        "/frontend/api/auth/providers",
+        "/api/auth/providers",
+        "/sync/api/auth/providers",
+    ):
+        rule = matcher.match(path)
+        assert rule is not None, path
+        assert rule.auth_required is False, path
+        assert rule.context_type == "anonymous", path
+
+
+def test_prefixed_auth_demo_status_is_public_anonymous() -> None:
+    matcher = RouteMatcher()
+    rule = matcher.match("/frontend/api/auth/demo/status")
     assert rule is not None
-    assert rule.auth_required is True
+    assert rule.auth_required is False
+    assert rule.context_type == "anonymous"
 
 
 def test_frontend_health_is_public_anonymous() -> None:

@@ -84,9 +84,29 @@ describe('authReducer: events', () => {
     });
 
     it('PROVIDERS_LOADED заполняет providers.list', () => {
-        const next = authReducer(initialAuthState, ev(CoreAuthEvents.PROVIDERS_LOADED, { items: [{ id: 'google' }] }));
-        expect(next.providers.list).toEqual([{ id: 'google' }]);
+        const next = authReducer(initialAuthState, ev(CoreAuthEvents.PROVIDERS_LOADED, { items: [{ name: 'google' }] }));
+        expect(next.providers.list).toEqual([{ name: 'google' }]);
         expect(next.providers.loading).toBe(false);
+    });
+
+    it('AUTH_LOGGED_OUT сохраняет providers и demo', () => {
+        const withPublic = {
+            ...initialAuthState,
+            providers: { list: [{ name: 'google' }], loading: false, error: null },
+            demo: { enabled: true, email: 'demo@demo.ru', loaded: true },
+            status: 'authenticated',
+            user: { user_id: 'u' },
+        };
+        const next = authReducer(withPublic, ev(CoreEvents.AUTH_LOGGED_OUT));
+        expect(next.status).toBe('unauthenticated');
+        expect(next.user).toBeNull();
+        expect(next.providers.list).toEqual([{ name: 'google' }]);
+        expect(next.demo).toEqual({ enabled: true, email: 'demo@demo.ru', loaded: true });
+    });
+
+    it('DEMO_STATUS_LOADED ставит loaded=true', () => {
+        const next = authReducer(initialAuthState, ev(CoreAuthEvents.DEMO_STATUS_LOADED, { enabled: true, email: 'demo@demo.ru' }));
+        expect(next.demo).toEqual({ enabled: true, email: 'demo@demo.ru', loaded: true });
     });
 
     it('SERVICE_ATTRS_LOADED мержит атрибуты сервиса', () => {

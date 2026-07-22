@@ -119,6 +119,7 @@ async def test_list_folders_includes_unseen_counts(
     )
     assert stale.folders == []
     assert stale.stale is True
+    assert stale.needs_sync is True
 
     _ = await mail_service.sync_user_inbox(binding, max_new_messages=20)
     folders = await mail_service.list_folders(

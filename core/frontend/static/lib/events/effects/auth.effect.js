@@ -138,7 +138,20 @@ export function createAuthEffect({ baseUrl }) {
                     if (!Array.isArray(r.providers) || r.providers.length === 0) {
                         throw new Error('empty providers list');
                     }
-                    ctx.dispatch(CoreAuthEvents.PROVIDERS_LOADED, { items: r.providers }, { causation_id: event.id, source: 'http' });
+                    const items = r.providers.map((raw) => {
+                        if (!raw || typeof raw !== 'object') {
+                            throw new Error('provider item must be an object');
+                        }
+                        if (typeof raw.name !== 'string' || raw.name.length === 0) {
+                            throw new Error('provider item.name must be a non-empty string');
+                        }
+                        return {
+                            name: raw.name,
+                            display_name: typeof raw.display_name === 'string' ? raw.display_name : raw.name,
+                            auth_url: typeof raw.auth_url === 'string' ? raw.auth_url : '',
+                        };
+                    });
+                    ctx.dispatch(CoreAuthEvents.PROVIDERS_LOADED, { items }, { causation_id: event.id, source: 'http' });
                 } catch (err) {
                     ctx.dispatch(CoreAuthEvents.PROVIDERS_LOAD_FAILED, { message: String(err && err.message ? err.message : err) }, { causation_id: event.id, source: 'http' });
                 }

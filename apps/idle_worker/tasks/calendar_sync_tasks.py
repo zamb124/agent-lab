@@ -20,8 +20,9 @@ from core.calendar.service import (
     CalendarReauthRequiredError,
     CalendarService,
     calendar_integration_from_credential,
+    calendar_source_for_provider,
 )
-from core.integrations.models import IntegrationProvider
+from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.logging import get_logger
 from core.models import CalendarEventSource, CalendarIntegration, CalendarProvider
 from core.websocket.publisher import Notification, NotificationType, notify_user
@@ -137,12 +138,7 @@ async def _sync_single_integration(
     async with semaphore:
         calendar_service = container.calendar_service
         provider = CalendarProvider(integration.provider)
-        if provider == CalendarProvider.GOOGLE:
-            source = CalendarEventSource.GOOGLE
-        elif provider == CalendarProvider.YANDEX:
-            source = CalendarEventSource.YANDEX
-        else:
-            raise ValueError(f"Unsupported calendar provider for background sync: {provider}")
+        source = calendar_source_for_provider(provider)
 
         before_ids = await _load_existing_event_ids(
             calendar_service=calendar_service,
@@ -211,17 +207,21 @@ async def calendar_sync_tick(
     end_at = _add_months(start_tick, config.lookahead_months)
 
     credential_repository = container.integration_credential_repository
-    google_creds = await credential_repository.list_by_provider_service(
-        provider=IntegrationProvider.GOOGLE,
-        service="calendar",
-        limit=config.max_integrations_per_tick,
+    calendar_providers = (
+        IntegrationProvider.GOOGLE,
+        IntegrationProvider.YANDEX,
+        IntegrationProvider.MAILRU,
+        IntegrationProvider.CALDAV,
     )
-    yandex_creds = await credential_repository.list_by_provider_service(
-        provider=IntegrationProvider.YANDEX,
-        service="calendar",
-        limit=config.max_integrations_per_tick,
-    )
-    all_creds = google_creds + yandex_creds
+    all_creds: list[IntegrationCredential] = []
+    for calendar_provider in calendar_providers:
+        all_creds.extend(
+            await credential_repository.list_by_provider_service(
+                provider=calendar_provider,
+                service="calendar",
+                limit=config.max_integrations_per_tick,
+            )
+        )
     integrations = [
         integration
         for c in all_creds

@@ -68,6 +68,7 @@ class ToolResponse(StrictBaseModel):
 
 _TOOLS_MAX_LIMIT = 2000
 _TOOLS_ALL_HTTP_MAX_LIMIT = 20
+_TAG_GROUPS_HTTP_MAX_LIMIT = 200
 
 
 class PickerCategory(str, Enum):
@@ -329,73 +330,12 @@ async def list_all_tools_and_flows(
     ] = None,
 ) -> OffsetPage[ToolResponse]:
     """Список tools и flows для picker с общим лимитом."""
-    if picker_category is not None:
-        return await _list_picker_tools_and_flows(
-            container,
-            picker_category=picker_category,
-            limit=limit,
-            offset=offset,
-            q=q,
-        )
-
-    tools_list, flows_list, tools_count, flows_count = await asyncio.gather(
-        container.tool_repository.list(limit=_TOOLS_MAX_LIMIT, offset=0),
-        container.flow_repository.list(limit=_TOOLS_MAX_LIMIT),
-        container.tool_repository.count_all(),
-        container.flow_repository.count_all(),
-    )
-    items: list[ToolResponse] = []
-    seen_tool_ids: set[str] = set()
-    for t in tools_list:
-        toolkit_ids = await _toolkit_ids_for_tool(container, t.tool_id)
-        items.append(_tool_response_from_reference(t, agent_toolkit_ids=toolkit_ids))
-        seen_tool_ids.add(t.tool_id)
-
-    registry = container.tool_registry
-    registry.register_builtin_tools()
-    registry_only_count = 0
-    for tool_id, tool in sorted(registry.list_all().items(), key=lambda item: item[0]):
-        if tool_id in seen_tool_ids:
-            continue
-        if not tool.listed_in_platform_tool_docs:
-            continue
-        items.append(_tool_response_from_registry_tool(tool))
-        seen_tool_ids.add(tool_id)
-        registry_only_count += 1
-
-    for flow_row in flows_list:
-        flow_toolkit_ids = await _toolkit_ids_for_flow(container, flow_row.flow_id)
-        flow_item = _flow_response(flow_row)
-        items.append(flow_item.model_copy(update={"agent_toolkit_ids": flow_toolkit_ids}))
-
-    needle = q.strip().lower() if isinstance(q, str) and q.strip() else None
-    if needle is not None:
-        filtered: list[ToolResponse] = []
-        for item in items:
-            hay = " ".join(
-                part
-                for part in (
-                    item.tool_id,
-                    item.title or "",
-                    item.description or "",
-                )
-            ).lower()
-            if needle in hay:
-                filtered.append(item)
-        page = filtered[offset : offset + limit]
-        return OffsetPage[ToolResponse](
-            items=page,
-            total=len(filtered),
-            limit=limit,
-            offset=offset,
-        )
-
-    page = items[offset : offset + limit]
-    return OffsetPage[ToolResponse](
-        items=page,
-        total=tools_count + flows_count + registry_only_count,
+    return await _list_picker_tools_and_flows(
+        container,
+        picker_category=picker_category if picker_category is not None else PickerCategory.ALL,
         limit=limit,
         offset=offset,
+        q=q,
     )
 
 
@@ -412,7 +352,7 @@ class ToolTagGroupResponse(StrictBaseModel):
 @router.get("/tag-groups", response_model=OffsetPage[ToolTagGroupResponse])
 async def list_tool_tag_groups(
     container: ContainerDep,
-    limit: Annotated[int, Query(ge=1, le=_TOOLS_ALL_HTTP_MAX_LIMIT)] = _TOOLS_ALL_HTTP_MAX_LIMIT,
+    limit: Annotated[int, Query(ge=1, le=_TAG_GROUPS_HTTP_MAX_LIMIT)] = _TAG_GROUPS_HTTP_MAX_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[ToolTagGroupResponse]:
     """Список платформенных описаний групп tools по тегам."""

@@ -23,7 +23,7 @@ from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.mail.attachment_index import MailAttachmentFileIndex
 from core.mail.calendar_colors import default_calendar_color, require_mail_calendar_color
-from core.mail.enqueue import enqueue_mail_sync_binding
+from core.mail.enqueue import enqueue_mail_rag_index, enqueue_mail_sync_binding
 from core.mail.exceptions import (
     MailBindingNotFoundError,
     MailConfigError,
@@ -36,6 +36,7 @@ from core.mail.exceptions import (
     MailUidNotFoundError,
 )
 from core.mail.factory import build_mail_server_port
+from core.mail.imip import calendar_upsert_payload_from_imip, extract_imip_ics
 from core.mail.models import (
     CompanyMailConnection,
     CompanyMailConnectionPublic,
@@ -46,6 +47,7 @@ from core.mail.models import (
     MailAttachmentPublic,
     MailboxBinding,
     MailboxBindingCreatePayload,
+    MailboxBindingHealthcheckPayload,
     MailboxBindingKind,
     MailboxBindingMember,
     MailboxBindingMemberPayload,
@@ -54,6 +56,7 @@ from core.mail.models import (
     MailboxEnsureSpec,
     MailboxSecret,
     MailboxSyncCursor,
+    MailConnectionScope,
     MailConnectionStatus,
     MailDraftSavePayload,
     MailDraftSaveResult,
@@ -61,6 +64,7 @@ from core.mail.models import (
     MailFolder,
     MailFolderListResult,
     MailFolderRole,
+    MailFoldersReorderPayload,
     MailImapSystemFlag,
     MailMessageFlagPayload,
     MailMessageFlagResult,
@@ -69,10 +73,13 @@ from core.mail.models import (
     MailMessageListResult,
     MailMessageMovePayload,
     MailMessageMoveResult,
+    MailMessageRagIndexPayload,
+    MailMessageRagIndexResult,
     MailMessageSearchPayload,
     MailMessageStarPayload,
     MailMessageStarResult,
     MailProvider,
+    MailRagIndexStatus,
     MailReconcileResult,
     MailSendPayload,
     MailSendResult,
@@ -87,12 +94,14 @@ from core.mail.models import (
     MailThreadResult,
     MailUidSearchCriteria,
     OutboundMailMessage,
+    PersonalMailboxConnectPayload,
+    PersonalMailboxHealthcheckPayload,
     StoredMailAttachmentRef,
     StoredMailboxFolder,
     StoredMailMessage,
 )
 from core.mail.mutations import build_rfc822_bytes
-from core.mail.ports import MailServerPort
+from core.mail.ports import MailCalendarBridge, MailServerPort
 from core.mail.repositories import (
     INBOX_FOLDER,
     CompanyMailConnectionRepository,
@@ -123,6 +132,21 @@ class _BackfillResult:
     completed: bool
 
 
+_FOLDER_ROLE_SORT_ORDER: Final[dict[MailFolderRole, int]] = {
+    MailFolderRole.INBOX: 0,
+    MailFolderRole.SENT: 1,
+    MailFolderRole.DRAFTS: 2,
+    MailFolderRole.TRASH: 3,
+    MailFolderRole.ARCHIVE: 4,
+    MailFolderRole.JUNK: 5,
+    MailFolderRole.OTHER: 6,
+}
+
+
+def _default_folder_sort_key(folder: MailFolder) -> tuple[int, str]:
+    return (_FOLDER_ROLE_SORT_ORDER.get(folder.role, 6), folder.name.lower())
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -150,6 +174,8 @@ def to_public_connection(connection: CompanyMailConnection) -> CompanyMailConnec
     return CompanyMailConnectionPublic(
         company_mail_connection_id=connection.company_mail_connection_id,
         company_id=connection.company_id,
+        scope=connection.scope,
+        owner_user_id=connection.owner_user_id,
         mail_domain=connection.mail_domain,
         provider=connection.provider,
         imap_host=connection.imap_host,
@@ -165,11 +191,17 @@ def to_public_connection(connection: CompanyMailConnection) -> CompanyMailConnec
     )
 
 
-def to_public_binding(binding: MailboxBinding) -> MailboxBindingPublic:
+def to_public_binding(
+    binding: MailboxBinding,
+    *,
+    connection: CompanyMailConnection | None = None,
+) -> MailboxBindingPublic:
+    scope = connection.scope if connection is not None else MailConnectionScope.COMPANY
     return MailboxBindingPublic(
         mailbox_binding_id=binding.mailbox_binding_id,
         company_id=binding.company_id,
         company_mail_connection_id=binding.company_mail_connection_id,
+        connection_scope=scope,
         user_id=binding.user_id,
         kind=binding.kind,
         email_address=binding.email_address,
@@ -178,6 +210,11 @@ def to_public_binding(binding: MailboxBinding) -> MailboxBindingPublic:
         is_default=binding.is_default,
         calendar_color=binding.calendar_color,
         has_password=bool(binding.password_encrypted and binding.password_encrypted.strip()),
+        imap_host=connection.imap_host if connection is not None else None,
+        imap_port=connection.imap_port if connection is not None else None,
+        smtp_host=connection.smtp_host if connection is not None else None,
+        smtp_port=connection.smtp_port if connection is not None else None,
+        use_ssl=connection.use_ssl if connection is not None else None,
         created_at=binding.created_at,
         updated_at=binding.updated_at,
     )
@@ -243,6 +280,7 @@ def to_message_list_item(message: InboundMailMessage) -> MailMessageListItem:
         date=message.date,
         in_reply_to=message.in_reply_to,
         references=message.references,
+        rag_index_status=MailRagIndexStatus.SKIPPED,
     )
 
 
@@ -262,6 +300,7 @@ def stored_to_list_item(stored: StoredMailMessage) -> MailMessageListItem:
         date=stored.date_at,
         in_reply_to=stored.in_reply_to,
         references=stored.references,
+        rag_index_status=stored.rag_index_status,
     )
 
 
@@ -336,6 +375,7 @@ class MailService:
         attachment_file_index: MailAttachmentFileIndex | None = None,
         mail_sync_backfill_batch_size: int = 50,
         mail_sync_reconcile_every_n: int = 1,
+        calendar_bridge: MailCalendarBridge | None = None,
     ) -> None:
         self._connection_repository: Final[CompanyMailConnectionRepository] = connection_repository
         self._binding_repository: Final[MailboxBindingRepository] = binding_repository
@@ -353,6 +393,7 @@ class MailService:
         self._attachment_file_index: Final[MailAttachmentFileIndex | None] = attachment_file_index
         self._backfill_batch_size: Final[int] = mail_sync_backfill_batch_size
         self._reconcile_every_n: Final[int] = mail_sync_reconcile_every_n
+        self._calendar_bridge: Final[MailCalendarBridge | None] = calendar_bridge
         self._sync_pass_counters: dict[str, int] = {}
 
     def _active_company_id(self) -> str:
@@ -384,6 +425,31 @@ class MailService:
 
     def port_for_connection(self, connection: CompanyMailConnection) -> MailServerPort:
         return self._port_for(connection)
+
+    async def _connection_for_binding(
+        self, binding: MailboxBinding
+    ) -> CompanyMailConnection | None:
+        return await self._connection_repository.get(binding.company_mail_connection_id)
+
+    async def _require_connection_for_binding(
+        self, binding: MailboxBinding
+    ) -> CompanyMailConnection:
+        connection = await self._connection_for_binding(binding)
+        if connection is None:
+            raise MailConnectionNotFoundError(
+                company_mail_connection_id=binding.company_mail_connection_id,
+            )
+        return connection
+
+    async def require_connection_for_binding(
+        self, binding: MailboxBinding
+    ) -> CompanyMailConnection:
+        """Connection for binding FK (company or personal). Not get_by_company."""
+        return await self._require_connection_for_binding(binding)
+
+    async def public_binding(self, binding: MailboxBinding) -> MailboxBindingPublic:
+        connection = await self._connection_for_binding(binding)
+        return to_public_binding(binding, connection=connection)
 
     async def get_connection(self, company_id: str | None = None) -> CompanyMailConnection | None:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
@@ -435,6 +501,8 @@ class MailService:
         connection = CompanyMailConnection(
             company_mail_connection_id=connection_id,
             company_id=resolved_company_id,
+            scope=MailConnectionScope.COMPANY,
+            owner_user_id=None,
             mail_domain=payload.mail_domain.strip().lower(),
             provider=payload.provider,
             imap_host=payload.imap_host.strip(),
@@ -581,13 +649,23 @@ class MailService:
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
 
+        connection = await self._require_connection_for_binding(binding)
+        is_personal = connection.scope == MailConnectionScope.PERSONAL
+
+        has_host_fields = (
+            payload.imap_host is not None
+            or payload.imap_port is not None
+            or payload.smtp_host is not None
+            or payload.smtp_port is not None
+            or payload.use_ssl is not None
+        )
         has_admin_fields = (
             payload.user_id is not None
             or payload.sync_enabled is not None
             or payload.password is not None
         )
         has_color = payload.calendar_color is not None
-        if not has_admin_fields and not has_color:
+        if not has_admin_fields and not has_color and not has_host_fields:
             raise ValueError("MailboxBindingPatchPayload is empty")
 
         is_admin = self._is_company_admin(resolved_company_id)
@@ -597,14 +675,28 @@ class MailService:
             and binding.user_id is not None
             and binding.user_id == acting_user_id
         )
-        if has_admin_fields and not is_admin:
+        if payload.user_id is not None and not is_admin:
             raise MailPermissionError(
-                f"admin required to patch mailbox_binding_id={mailbox_binding_id}"
+                f"admin required to reassign mailbox_binding_id={mailbox_binding_id}"
             )
-        if has_color and not (is_admin or is_owner):
+        if has_host_fields and not is_personal:
             raise MailPermissionError(
-                f"no access to patch calendar_color for mailbox_binding_id={mailbox_binding_id}"
+                "imap/smtp hosts can only be patched on personal mailboxes"
             )
+        if is_personal:
+            if not (is_admin or is_owner):
+                raise MailPermissionError(
+                    f"no access to patch mailbox_binding_id={mailbox_binding_id}"
+                )
+        else:
+            if (payload.sync_enabled is not None or payload.password is not None) and not is_admin:
+                raise MailPermissionError(
+                    f"admin required to patch mailbox_binding_id={mailbox_binding_id}"
+                )
+            if has_color and not (is_admin or is_owner):
+                raise MailPermissionError(
+                    f"no access to patch calendar_color for mailbox_binding_id={mailbox_binding_id}"
+                )
 
         user_id = binding.user_id
         if payload.user_id is not None:
@@ -627,6 +719,41 @@ class MailService:
         calendar_color = binding.calendar_color
         if payload.calendar_color is not None:
             calendar_color = require_mail_calendar_color(payload.calendar_color)
+
+        if has_host_fields:
+            updated_connection = connection.model_copy(
+                update={
+                    "imap_host": (
+                        payload.imap_host.strip()
+                        if payload.imap_host is not None
+                        else connection.imap_host
+                    ),
+                    "imap_port": (
+                        payload.imap_port
+                        if payload.imap_port is not None
+                        else connection.imap_port
+                    ),
+                    "smtp_host": (
+                        payload.smtp_host.strip()
+                        if payload.smtp_host is not None
+                        else connection.smtp_host
+                    ),
+                    "smtp_port": (
+                        payload.smtp_port
+                        if payload.smtp_port is not None
+                        else connection.smtp_port
+                    ),
+                    "use_ssl": (
+                        payload.use_ssl if payload.use_ssl is not None else connection.use_ssl
+                    ),
+                    "updated_at": _utcnow(),
+                }
+            )
+            if not updated_connection.imap_host.strip():
+                raise ValueError("imap_host must not be empty")
+            if not updated_connection.smtp_host.strip():
+                raise ValueError("smtp_host must not be empty")
+            _ = await self._connection_repository.upsert(updated_connection)
 
         updated = binding.model_copy(
             update={
@@ -653,6 +780,330 @@ class MailService:
                     acting_as_admin=True,
                 )
         return stored
+
+    async def connect_personal_mailbox(
+        self,
+        payload: PersonalMailboxConnectPayload,
+        *,
+        company_id: str | None = None,
+    ) -> MailboxBinding:
+        resolved_company_id = company_id if company_id is not None else self._active_company_id()
+        acting_user_id = self._active_user_id()
+        email_address = payload.email_address.strip().lower()
+        if "@" not in email_address:
+            raise ValueError(f"Invalid email_address={payload.email_address!r}")
+        local_part, mail_domain = email_address.split("@", 1)
+        if not local_part.strip() or not mail_domain.strip():
+            raise ValueError(f"Invalid email_address={payload.email_address!r}")
+        if not payload.password.strip():
+            raise ValueError("password must not be empty")
+        imap_host = payload.imap_host.strip()
+        smtp_host = payload.smtp_host.strip()
+        if not imap_host or not smtp_host:
+            raise ValueError("imap_host and smtp_host are required")
+
+        health = await self.healthcheck_personal_credentials(payload)
+        if not health.imap_ok or not health.smtp_ok:
+            detail = health.detail if health.detail is not None else "imap/smtp login failed"
+            raise MailConfigError(f"personal mailbox healthcheck failed: {detail}")
+
+        existing = await self._binding_repository.get_by_email(
+            resolved_company_id, email_address
+        )
+        now = _utcnow()
+        if existing is not None:
+            existing_connection = await self._require_connection_for_binding(existing)
+            if existing_connection.scope != MailConnectionScope.PERSONAL:
+                raise MailPermissionError(
+                    f"email_address={email_address} is already bound as company mailbox"
+                )
+            if existing.user_id != acting_user_id:
+                raise MailPermissionError(
+                    f"email_address={email_address} belongs to another user"
+                )
+            connection = existing_connection.model_copy(
+                update={
+                    "mail_domain": mail_domain,
+                    "imap_host": imap_host,
+                    "imap_port": payload.imap_port,
+                    "smtp_host": smtp_host,
+                    "smtp_port": payload.smtp_port,
+                    "use_ssl": payload.use_ssl,
+                    "status": MailConnectionStatus.ACTIVE,
+                    "updated_at": now,
+                }
+            )
+            _ = await self._connection_repository.upsert(connection)
+            calendar_color = (
+                require_mail_calendar_color(payload.calendar_color)
+                if payload.calendar_color is not None
+                else existing.calendar_color
+            )
+            updated = existing.model_copy(
+                update={
+                    "password_encrypted": encrypt_secret(payload.password),
+                    "sync_enabled": payload.sync_enabled,
+                    "calendar_color": calendar_color,
+                    "updated_at": now,
+                }
+            )
+            stored = await self._binding_repository.upsert(updated)
+            _ = await self.refresh_folders_from_imap(
+                stored.mailbox_binding_id,
+                company_id=resolved_company_id,
+            )
+            await enqueue_mail_sync_binding(
+                company_id=resolved_company_id,
+                mailbox_binding_id=stored.mailbox_binding_id,
+            )
+            await self._autolink_personal_calendar(
+                binding=stored,
+                company_id=resolved_company_id,
+                imap_host=imap_host,
+                password=payload.password,
+            )
+            return stored
+
+        connection_id = f"mailconn_{uuid.uuid4().hex}"
+        connection = CompanyMailConnection(
+            company_mail_connection_id=connection_id,
+            company_id=resolved_company_id,
+            scope=MailConnectionScope.PERSONAL,
+            owner_user_id=acting_user_id,
+            mail_domain=mail_domain,
+            provider=MailProvider.GENERIC_IMAP_SMTP,
+            imap_host=imap_host,
+            imap_port=payload.imap_port,
+            smtp_host=smtp_host,
+            smtp_port=payload.smtp_port,
+            use_ssl=payload.use_ssl,
+            supports_provision=False,
+            status=MailConnectionStatus.ACTIVE,
+            ispmanager=None,
+            created_at=now,
+            updated_at=now,
+        )
+        _ = await self._connection_repository.upsert(connection)
+
+        existing_for_user = await self._binding_repository.list_by_user(
+            resolved_company_id, acting_user_id
+        )
+        is_default = len(existing_for_user) == 0
+        calendar_color = (
+            require_mail_calendar_color(payload.calendar_color)
+            if payload.calendar_color is not None
+            else default_calendar_color(email_address)
+        )
+        binding = MailboxBinding(
+            mailbox_binding_id=f"mailbind_{uuid.uuid4().hex}",
+            company_id=resolved_company_id,
+            company_mail_connection_id=connection_id,
+            user_id=acting_user_id,
+            kind=MailboxBindingKind.USER,
+            email_address=email_address,
+            local_part=local_part,
+            sync_enabled=payload.sync_enabled,
+            is_default=is_default,
+            calendar_color=calendar_color,
+            password_encrypted=encrypt_secret(payload.password),
+            created_at=now,
+            updated_at=now,
+        )
+        if is_default:
+            await self._binding_repository.clear_defaults_for_user(
+                resolved_company_id,
+                acting_user_id,
+                except_binding_id=binding.mailbox_binding_id,
+            )
+        stored = await self._binding_repository.upsert(binding)
+        _ = await self.refresh_folders_from_imap(
+            stored.mailbox_binding_id,
+            company_id=resolved_company_id,
+        )
+        await enqueue_mail_sync_binding(
+            company_id=resolved_company_id,
+            mailbox_binding_id=stored.mailbox_binding_id,
+        )
+        await self._autolink_personal_calendar(
+            binding=stored,
+            company_id=resolved_company_id,
+            imap_host=imap_host,
+            password=payload.password,
+        )
+        return stored
+
+    async def _autolink_personal_calendar(
+        self,
+        *,
+        binding: MailboxBinding,
+        company_id: str,
+        imap_host: str,
+        password: str,
+    ) -> None:
+        """
+        Best-effort: поднять CalDAV календарь для known-провайдера. Сбой календаря
+        (HTTP/discovery) логируется и не откатывает bind почты.
+        """
+        if self._calendar_bridge is None or binding.user_id is None:
+            return
+        try:
+            _ = await self._calendar_bridge.ensure_caldav_integration_from_mailbox(
+                user_id=binding.user_id,
+                company_id=company_id,
+                email_address=binding.email_address,
+                password=password,
+                imap_host=imap_host,
+            )
+        except Exception as exc:
+            logger.warning(
+                "mail.personal_calendar_autolink_failed",
+                mailbox_binding_id=binding.mailbox_binding_id,
+                imap_host=imap_host,
+                error=str(exc),
+            )
+
+    async def _ingest_imip_invites(
+        self,
+        binding: MailboxBinding,
+        messages: list[InboundMailMessage],
+    ) -> None:
+        """
+        iMIP: входящий text/calendar -> upsert события календаря (дедуп по
+        source_id). Best-effort: bad ICS / сбой календаря логируется, не ломает
+        сохранение письма. Только для user-binding (есть owner).
+        """
+        if self._calendar_bridge is None or binding.user_id is None:
+            return
+        for message in messages:
+            ics_text = extract_imip_ics(message)
+            if ics_text is None:
+                continue
+            try:
+                payload = calendar_upsert_payload_from_imip(
+                    ics_text,
+                    attendee_email=binding.email_address,
+                    mailbox_binding_id=binding.mailbox_binding_id,
+                )
+                _ = await self._calendar_bridge.upsert_imip_event(
+                    payload=payload,
+                    user_id=binding.user_id,
+                    company_id=binding.company_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "mail.imip_ingest_failed",
+                    mailbox_binding_id=binding.mailbox_binding_id,
+                    message_uid=message.uid,
+                    error=str(exc),
+                )
+
+    async def healthcheck_personal_credentials(
+        self,
+        payload: PersonalMailboxHealthcheckPayload | PersonalMailboxConnectPayload,
+    ) -> MailServerHealth:
+        email_address = payload.email_address.strip().lower()
+        if "@" not in email_address:
+            raise ValueError(f"Invalid email_address={payload.email_address!r}")
+        if not payload.password.strip():
+            raise ValueError("password must not be empty")
+        imap_host = payload.imap_host.strip()
+        smtp_host = payload.smtp_host.strip()
+        if not imap_host or not smtp_host:
+            raise ValueError("imap_host and smtp_host are required")
+        _, mail_domain = email_address.split("@", 1)
+        now = _utcnow()
+        ephemeral = CompanyMailConnection(
+            company_mail_connection_id=f"mailconn_health_{uuid.uuid4().hex}",
+            company_id=self._active_company_id(),
+            scope=MailConnectionScope.PERSONAL,
+            owner_user_id=self._active_user_id(),
+            mail_domain=mail_domain,
+            provider=MailProvider.GENERIC_IMAP_SMTP,
+            imap_host=imap_host,
+            imap_port=payload.imap_port,
+            smtp_host=smtp_host,
+            smtp_port=payload.smtp_port,
+            use_ssl=payload.use_ssl,
+            supports_provision=False,
+            status=MailConnectionStatus.ACTIVE,
+            ispmanager=None,
+            created_at=now,
+            updated_at=now,
+        )
+        port = self._port_for(ephemeral)
+        secret = MailboxSecret(email_address=email_address, password=payload.password)
+        return await port.healthcheck_with_credentials(secret)
+
+    async def healthcheck_binding(
+        self,
+        mailbox_binding_id: str,
+        payload: MailboxBindingHealthcheckPayload,
+        *,
+        company_id: str | None = None,
+    ) -> MailServerHealth:
+        resolved_company_id = company_id if company_id is not None else self._active_company_id()
+        binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
+        if binding is None:
+            raise MailBindingNotFoundError(mailbox_binding_id)
+        connection = await self._require_connection_for_binding(binding)
+        if connection.scope != MailConnectionScope.PERSONAL:
+            raise MailPermissionError(
+                "binding healthcheck is only for personal mailboxes"
+            )
+        is_admin = self._is_company_admin(resolved_company_id)
+        acting_user_id = self._active_user_id()
+        is_owner = (
+            binding.kind == MailboxBindingKind.USER
+            and binding.user_id is not None
+            and binding.user_id == acting_user_id
+        )
+        if not (is_admin or is_owner):
+            raise MailPermissionError(
+                f"no access to healthcheck mailbox_binding_id={mailbox_binding_id}"
+            )
+
+        imap_host = (
+            payload.imap_host.strip()
+            if payload.imap_host is not None
+            else connection.imap_host
+        )
+        smtp_host = (
+            payload.smtp_host.strip()
+            if payload.smtp_host is not None
+            else connection.smtp_host
+        )
+        if not imap_host or not smtp_host:
+            raise ValueError("imap_host and smtp_host are required")
+        probe_connection = connection.model_copy(
+            update={
+                "imap_host": imap_host,
+                "imap_port": (
+                    payload.imap_port
+                    if payload.imap_port is not None
+                    else connection.imap_port
+                ),
+                "smtp_host": smtp_host,
+                "smtp_port": (
+                    payload.smtp_port
+                    if payload.smtp_port is not None
+                    else connection.smtp_port
+                ),
+                "use_ssl": (
+                    payload.use_ssl if payload.use_ssl is not None else connection.use_ssl
+                ),
+            }
+        )
+        if payload.password is not None:
+            if not payload.password.strip():
+                raise ValueError("password must not be empty")
+            secret = MailboxSecret(
+                email_address=binding.email_address,
+                password=payload.password,
+            )
+        else:
+            secret = self._binding_secret(binding)
+        port = self._port_for(probe_connection)
+        return await port.healthcheck_with_credentials(secret)
 
     async def bind_mailbox(
         self,
@@ -854,9 +1305,33 @@ class MailService:
         binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
+        connection = await self._connection_for_binding(binding)
+        is_personal = (
+            connection is not None and connection.scope == MailConnectionScope.PERSONAL
+        )
+        is_admin = self._is_company_admin(resolved_company_id)
+        acting_user_id = self._active_user_id()
+        is_owner = (
+            binding.kind == MailboxBindingKind.USER
+            and binding.user_id is not None
+            and binding.user_id == acting_user_id
+        )
+        if is_personal:
+            if not (is_admin or is_owner):
+                raise MailPermissionError(
+                    f"no access to unbind mailbox_binding_id={mailbox_binding_id}"
+                )
+        elif not is_admin:
+            raise MailPermissionError(
+                f"admin required to unbind mailbox_binding_id={mailbox_binding_id}"
+            )
         deleted = await self._binding_repository.delete(mailbox_binding_id, resolved_company_id)
         if not deleted:
             raise MailBindingNotFoundError(mailbox_binding_id)
+        if is_personal and connection is not None:
+            _ = await self._connection_repository.delete(
+                connection.company_mail_connection_id
+            )
         if (
             binding.kind == MailboxBindingKind.USER
             and binding.user_id is not None
@@ -905,7 +1380,12 @@ class MailService:
         if has_more and rows:
             last = rows[-1]
             next_cursor = encode_mail_list_cursor(date_at=last.date_at, uid=last.uid)
-        needs_sync = len(rows) == 0 and payload.cursor is None
+        needs_sync = False
+        if payload.cursor is None and len(rows) == 0:
+            folder_cursor = await self._sync_cursor_repository.get(
+                payload.mailbox_binding_id, folder=payload.folder
+            )
+            needs_sync = folder_cursor is None or folder_cursor.last_synced_at is None
         return MailMessageListResult(
             items=[stored_to_list_item(item) for item in rows],
             next_cursor=next_cursor,
@@ -971,6 +1451,7 @@ class MailService:
                 selectable=item.selectable,
                 unseen_count=item.unseen_count,
                 message_count=item.message_count,
+                sort_index=item.sort_index,
             )
             for item in stored
         ]
@@ -992,6 +1473,21 @@ class MailService:
         if self._folder_repository is None:
             return
         now = _utcnow()
+        existing = await self._folder_repository.list_for_binding(binding.mailbox_binding_id)
+        existing_index = {item.folder_name: item.sort_index for item in existing}
+        is_bootstrap = len(existing) == 0
+        if is_bootstrap:
+            ordered_folders = sorted(folders_result.folders, key=_default_folder_sort_key)
+            assigned: dict[str, int] = {
+                folder.name: index for index, folder in enumerate(ordered_folders)
+            }
+        else:
+            assigned = dict(existing_index)
+            next_index = (max(existing_index.values()) + 1) if existing_index else 0
+            for folder in folders_result.folders:
+                if folder.name not in assigned:
+                    assigned[folder.name] = next_index
+                    next_index += 1
         stored = [
             StoredMailboxFolder(
                 mailbox_binding_id=binding.mailbox_binding_id,
@@ -1005,6 +1501,7 @@ class MailService:
                 unseen_count=folder.unseen_count,
                 namespace_prefix=folders_result.namespace_prefix,
                 capabilities=list(folders_result.capabilities),
+                sort_index=assigned[folder.name],
                 updated_at=now,
             )
             for folder in folders_result.folders
@@ -1014,6 +1511,33 @@ class MailService:
             company_id=binding.company_id,
             folders=stored,
         )
+
+    async def reorder_folders(
+        self,
+        payload: MailFoldersReorderPayload,
+        *,
+        company_id: str | None = None,
+    ) -> MailFolderListResult:
+        resolved_company_id = company_id if company_id is not None else self._active_company_id()
+        binding = await self._binding_repository.get(
+            payload.mailbox_binding_id, resolved_company_id
+        )
+        if binding is None:
+            raise MailBindingNotFoundError(payload.mailbox_binding_id)
+        await self._require_binding_access(binding, company_id=resolved_company_id)
+        if self._folder_repository is None:
+            raise MailConfigError("folder repository required")
+        names = [name.strip() for name in payload.folder_names]
+        if any(not name for name in names):
+            raise ValueError("folder_names must not contain empty entries")
+        if len(names) != len(set(names)):
+            raise ValueError("folder_names must not contain duplicates")
+        folder_name_to_index = {name: index for index, name in enumerate(names)}
+        stored = await self._folder_repository.set_sort_indices(
+            payload.mailbox_binding_id,
+            folder_name_to_index=folder_name_to_index,
+        )
+        return self._folder_list_from_stored(stored, stale=False)
 
     async def list_folders(
         self,
@@ -1030,7 +1554,7 @@ class MailService:
             return MailFolderListResult(folders=[], stale=True)
         stored = await self._folder_repository.list_for_binding(mailbox_binding_id)
         if not stored:
-            return MailFolderListResult(folders=[], stale=True)
+            return MailFolderListResult(folders=[], stale=True, needs_sync=True)
         return self._folder_list_from_stored(stored, stale=False)
 
     async def refresh_folders_from_imap(
@@ -1045,9 +1569,7 @@ class MailService:
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        connection = await self._connection_repository.get_by_company(resolved_company_id)
-        if connection is None:
-            raise MailConnectionNotFoundError(resolved_company_id)
+        connection = await self._require_connection_for_binding(binding)
         port = self._port_for(connection)
         folders_result = await port.list_imap_folders(self._binding_secret(binding))
         await self._persist_folder_cache(binding, folders_result)
@@ -1064,9 +1586,7 @@ class MailService:
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        connection = await self._connection_repository.get_by_company(resolved_company_id)
-        if connection is None:
-            raise MailConnectionNotFoundError(resolved_company_id)
+        connection = await self._require_connection_for_binding(binding)
         port = self._port_for(connection)
         folders_result = await port.ensure_standard_imap_folders(self._binding_secret(binding))
         await self._persist_folder_cache(binding, folders_result)
@@ -1273,9 +1793,7 @@ class MailService:
         if binding is None:
             raise MailBindingNotFoundError(payload.mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        connection = await self._connection_repository.get_by_company(resolved_company_id)
-        if connection is None:
-            raise MailConnectionNotFoundError(resolved_company_id)
+        connection = await self._require_connection_for_binding(binding)
         port = self._port_for(connection)
         try:
             await port.mark_message_seen(
@@ -1309,9 +1827,7 @@ class MailService:
         if binding is None:
             raise MailBindingNotFoundError(payload.mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        connection = await self._connection_repository.get_by_company(resolved_company_id)
-        if connection is None:
-            raise MailConnectionNotFoundError(resolved_company_id)
+        connection = await self._require_connection_for_binding(binding)
         port = self._port_for(connection)
         try:
             await port.mark_message_unseen(
@@ -1415,9 +1931,7 @@ class MailService:
         if binding is None:
             raise MailBindingNotFoundError(payload.mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        connection = await self._connection_repository.get_by_company(resolved_company_id)
-        if connection is None:
-            raise MailConnectionNotFoundError(resolved_company_id)
+        connection = await self._require_connection_for_binding(binding)
         port = self._port_for(connection)
         secret = self._binding_secret(binding)
         move_result = await port.uid_move(
@@ -1543,9 +2057,7 @@ class MailService:
                 folder=payload.folder,
                 uids=[int(payload.uid)],
             )
-        connection = await self._connection_repository.get_by_company(resolved_company_id)
-        if connection is None:
-            raise MailConnectionNotFoundError(resolved_company_id)
+        connection = await self._require_connection_for_binding(binding)
         port = self._port_for(connection)
         await port.uid_expunge(
             self._binding_secret(binding),
@@ -1589,9 +2101,7 @@ class MailService:
         if binding is None:
             raise MailBindingNotFoundError(payload.mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        connection = await self._connection_repository.get_by_company(resolved_company_id)
-        if connection is None:
-            raise MailConnectionNotFoundError(resolved_company_id)
+        connection = await self._require_connection_for_binding(binding)
         port = self._port_for(connection)
         add_flags = [MailImapSystemFlag.FLAGGED.value] if payload.flagged else []
         remove_flags = [] if payload.flagged else [MailImapSystemFlag.FLAGGED.value]
@@ -1643,9 +2153,7 @@ class MailService:
             references=payload.references,
         )
         raw = build_rfc822_bytes(outbound, from_address=binding.email_address)
-        connection = await self._connection_repository.get_by_company(resolved_company_id)
-        if connection is None:
-            raise MailConnectionNotFoundError(resolved_company_id)
+        connection = await self._require_connection_for_binding(binding)
         port = self._port_for(connection)
         append_result = await port.append_message(
             self._binding_secret(binding),
@@ -1825,6 +2333,24 @@ class MailService:
             file_id=file_id,
         )
 
+    async def allocate_outbound_message_id(
+        self,
+        mailbox_binding_id: str,
+        *,
+        company_id: str | None = None,
+    ) -> str:
+        """Message-Id domain from binding connection (company or personal)."""
+        resolved_company_id = company_id if company_id is not None else self._active_company_id()
+        binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
+        if binding is None:
+            raise MailBindingNotFoundError(mailbox_binding_id)
+        await self._require_binding_access(binding, company_id=resolved_company_id)
+        connection = await self._require_connection_for_binding(binding)
+        domain = connection.mail_domain.strip()
+        if not domain:
+            raise MailConfigError("mail_domain is required for outbound Message-ID")
+        return f"<{uuid.uuid4().hex}@{domain}>"
+
     async def prepare_send_local(
         self,
         payload: MailSendPayload,
@@ -1846,7 +2372,10 @@ class MailService:
                 )
         message_id = payload.message_id
         if message_id is None or not message_id.strip():
-            raise ValueError("message_id is required for prepare_send_local")
+            message_id = await self.allocate_outbound_message_id(
+                payload.mailbox_binding_id,
+                company_id=resolved_company_id,
+            )
         if self._message_repository is None:
             raise MailConfigError("message repository required")
         sent_folder = await self.resolve_folder_name_for_role(
@@ -1911,6 +2440,7 @@ class MailService:
             references=payload.references,
             rag_document_id=None,
             rag_namespace=None,
+            rag_index_status=MailRagIndexStatus.SKIPPED,
             synced_at=now,
             created_at=now,
             updated_at=now,
@@ -2053,9 +2583,7 @@ class MailService:
         binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
-        connection = await self._connection_repository.get_by_company(resolved_company_id)
-        if connection is None:
-            raise MailConnectionNotFoundError(resolved_company_id)
+        connection = await self._require_connection_for_binding(binding)
         port = self._port_for(connection)
         return await port.send_message(self._binding_secret(binding), message)
 
@@ -2070,9 +2598,7 @@ class MailService:
         binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
-        connection = await self._connection_repository.get_by_company(resolved_company_id)
-        if connection is None:
-            raise MailConnectionNotFoundError(resolved_company_id)
+        connection = await self._require_connection_for_binding(binding)
         port = self._port_for(connection)
         return await port.fetch_messages(self._binding_secret(binding), query)
 
@@ -2169,7 +2695,7 @@ class MailService:
         if resolved_backfill < 1:
             raise ValueError("backfill_batch_size must be >= 1")
 
-        connection = await self._connection_repository.get_by_company(binding.company_id)
+        connection = await self._connection_for_binding(binding)
         if connection is None:
             return MailSyncBindingResult(
                 mailbox_binding_id=binding.mailbox_binding_id,
@@ -2549,6 +3075,8 @@ class MailService:
                 messages=messages,
             )
 
+        await self._ingest_imip_invites(binding, to_store)
+
         rag_namespace: str | None = None
         if self._namespace_service is not None:
             company = await self._company_repository.get(binding.company_id)
@@ -2625,34 +3153,14 @@ class MailService:
                     "Attachments: " + ", ".join(attachment_names)
                 )
             rag_text = "\n\n".join(rag_text_parts)
-            file_id_list = [ref.file_id for ref in attachment_refs if ref.file_id is not None]
-            if (
+            should_index = (
                 self._rag_client is not None
                 and rag_namespace is not None
-                and rag_text.strip()
-            ):
-                rag_metadata: RAGMetadata = {
-                    "company_id": binding.company_id,
-                    "document_id": mail_message_id,
-                    "mailbox_binding_id": binding.mailbox_binding_id,
-                    "mail_uid": message.uid,
-                    "folder": folder,
-                    "thread_id": thread_id_for_message(message),
-                    "ttl_seconds": 0,
-                    "uploaded_by_user_id": (
-                        binding.user_id if binding.user_id is not None else ""
-                    ),
-                    "has_attachments": len(message.attachments) > 0,
-                    "attachment_names": list(attachment_names),
-                    "file_ids": file_id_list,
-                }
-                ingest = await self._rag_client.ingest_text(
-                    namespace_id=rag_namespace,
-                    text=rag_text,
-                    document_name=mail_message_id,
-                    metadata=rag_metadata,
-                )
-                rag_document_id = ingest.document_id
+                and bool(rag_text.strip())
+            )
+            rag_index_status = (
+                MailRagIndexStatus.PENDING if should_index else MailRagIndexStatus.SKIPPED
+            )
             stored = StoredMailMessage(
                 mail_message_id=mail_message_id,
                 company_id=binding.company_id,
@@ -2680,11 +3188,218 @@ class MailService:
                 references=message.references,
                 rag_document_id=rag_document_id,
                 rag_namespace=rag_namespace,
+                rag_index_status=rag_index_status,
                 synced_at=now,
                 created_at=now,
                 updated_at=now,
             )
             _ = await self._message_repository.upsert(stored)
+            if should_index:
+                await enqueue_mail_rag_index(
+                    company_id=binding.company_id,
+                    mailbox_binding_id=binding.mailbox_binding_id,
+                    folder=folder,
+                    uid=str(message.uid),
+                )
+
+    async def _resolve_mail_rag_namespace(self, binding: MailboxBinding) -> str | None:
+        if self._namespace_service is None:
+            return None
+        company = await self._company_repository.get(binding.company_id)
+        if company is None:
+            raise ValueError(f"company not found for mail rag: {binding.company_id}")
+        if binding.kind == MailboxBindingKind.USER:
+            if binding.user_id is None or not binding.user_id.strip():
+                raise ValueError("binding.user_id required for user mail RAG")
+            user = await self._user_repository.get(binding.user_id)
+            if user is None:
+                raise ValueError(f"user not found for mail rag: {binding.user_id}")
+            await ensure_personal_namespace_for_user(
+                self._namespace_service,
+                user,
+                company=company,
+            )
+            return personal_namespace_name(user.user_id)
+        technical_name = f"mail-{binding.mailbox_binding_id}"
+        _ = await self._namespace_service.get_or_create(
+            technical_name,
+            kind=NamespaceKind.TECHNICAL,
+            description=f"Role mailbox {binding.email_address}",
+        )
+        return technical_name
+
+    def _build_mail_rag_text(self, stored: StoredMailMessage) -> str:
+        parts: list[str] = []
+        if stored.subject.strip():
+            parts.append(f"Subject: {stored.subject.strip()}")
+        if stored.from_address.strip():
+            parts.append(f"From: {stored.from_address.strip()}")
+        if stored.body_text is not None and stored.body_text.strip():
+            parts.append(stored.body_text.strip())
+        attachment_names = [
+            ref.filename for ref in stored.attachments if ref.filename.strip()
+        ]
+        if attachment_names:
+            parts.append("Attachments: " + ", ".join(attachment_names))
+        return "\n\n".join(parts)
+
+    async def index_mail_message(
+        self,
+        *,
+        mailbox_binding_id: str,
+        folder: str,
+        uid: str,
+        company_id: str | None = None,
+    ) -> StoredMailMessage:
+        """
+        Фоновая RAG-индексация одного письма. Persist уже выполнен;
+        при ошибке ingest ставит failed и пробрасывает исключение.
+        """
+        if self._message_repository is None:
+            raise MailConfigError("message repository required")
+        if self._rag_client is None:
+            raise MailConfigError("rag client required for mail indexing")
+        resolved_company_id = company_id if company_id is not None else self._active_company_id()
+        binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
+        if binding is None:
+            raise MailBindingNotFoundError(mailbox_binding_id)
+        stored = await self._message_repository.get_by_uid(
+            mailbox_binding_id,
+            folder=folder,
+            uid=int(uid),
+        )
+        if stored is None:
+            raise MailMessageNotFoundError(mailbox_binding_id, uid)
+        rag_text = self._build_mail_rag_text(stored)
+        if not rag_text.strip():
+            updated = stored.model_copy(
+                update={
+                    "rag_index_status": MailRagIndexStatus.SKIPPED,
+                    "updated_at": _utcnow(),
+                }
+            )
+            return await self._message_repository.upsert(updated)
+        rag_namespace = await self._resolve_mail_rag_namespace(binding)
+        if rag_namespace is None:
+            raise MailConfigError("namespace service required for mail indexing")
+        file_id_list = [ref.file_id for ref in stored.attachments if ref.file_id is not None]
+        attachment_names = [
+            ref.filename for ref in stored.attachments if ref.filename.strip()
+        ]
+        rag_metadata: RAGMetadata = {
+            "company_id": binding.company_id,
+            "document_id": stored.mail_message_id,
+            "mailbox_binding_id": binding.mailbox_binding_id,
+            "mail_uid": str(stored.uid),
+            "folder": folder,
+            "thread_id": stored.thread_id,
+            "ttl_seconds": 0,
+            "uploaded_by_user_id": (
+                binding.user_id if binding.user_id is not None else ""
+            ),
+            "has_attachments": stored.has_attachments,
+            "attachment_names": list(attachment_names),
+            "file_ids": file_id_list,
+        }
+        try:
+            ingest = await self._rag_client.ingest_text(
+                namespace_id=rag_namespace,
+                text=rag_text,
+                document_name=stored.mail_message_id,
+                metadata=rag_metadata,
+            )
+        except Exception as exc:
+            failed = stored.model_copy(
+                update={
+                    "rag_namespace": rag_namespace,
+                    "rag_index_status": MailRagIndexStatus.FAILED,
+                    "updated_at": _utcnow(),
+                }
+            )
+            _ = await self._message_repository.upsert(failed)
+            logger.warning(
+                "mail.rag_index_failed",
+                mailbox_binding_id=mailbox_binding_id,
+                message_uid=uid,
+                error=str(exc),
+            )
+            raise
+        ready = stored.model_copy(
+            update={
+                "rag_document_id": ingest.document_id,
+                "rag_namespace": rag_namespace,
+                "rag_index_status": MailRagIndexStatus.READY,
+                "updated_at": _utcnow(),
+            }
+        )
+        return await self._message_repository.upsert(ready)
+
+    async def request_rag_index(
+        self,
+        payload: MailMessageRagIndexPayload,
+        *,
+        company_id: str | None = None,
+    ) -> MailMessageRagIndexResult:
+        resolved_company_id = company_id if company_id is not None else self._active_company_id()
+        binding = await self._binding_repository.get(
+            payload.mailbox_binding_id, resolved_company_id
+        )
+        if binding is None:
+            raise MailBindingNotFoundError(payload.mailbox_binding_id)
+        await self._require_binding_access(binding, company_id=resolved_company_id)
+        if self._message_repository is None:
+            raise MailConfigError("message repository required")
+        stored = await self._message_repository.get_by_uid(
+            payload.mailbox_binding_id,
+            folder=payload.folder,
+            uid=int(payload.uid),
+        )
+        if stored is None:
+            raise MailMessageNotFoundError(payload.mailbox_binding_id, payload.uid)
+        if stored.rag_index_status == MailRagIndexStatus.READY and stored.rag_document_id:
+            return MailMessageRagIndexResult(
+                accepted=True,
+                mailbox_binding_id=payload.mailbox_binding_id,
+                folder=payload.folder,
+                uid=payload.uid,
+                rag_index_status=MailRagIndexStatus.READY,
+            )
+        rag_text = self._build_mail_rag_text(stored)
+        if not rag_text.strip() or self._rag_client is None:
+            skipped = stored.model_copy(
+                update={
+                    "rag_index_status": MailRagIndexStatus.SKIPPED,
+                    "updated_at": _utcnow(),
+                }
+            )
+            _ = await self._message_repository.upsert(skipped)
+            return MailMessageRagIndexResult(
+                accepted=True,
+                mailbox_binding_id=payload.mailbox_binding_id,
+                folder=payload.folder,
+                uid=payload.uid,
+                rag_index_status=MailRagIndexStatus.SKIPPED,
+            )
+        pending = stored.model_copy(
+            update={
+                "rag_index_status": MailRagIndexStatus.PENDING,
+                "updated_at": _utcnow(),
+            }
+        )
+        _ = await self._message_repository.upsert(pending)
+        await enqueue_mail_rag_index(
+            company_id=resolved_company_id,
+            mailbox_binding_id=payload.mailbox_binding_id,
+            folder=payload.folder,
+            uid=payload.uid,
+        )
+        return MailMessageRagIndexResult(
+            accepted=True,
+            mailbox_binding_id=payload.mailbox_binding_id,
+            folder=payload.folder,
+            uid=payload.uid,
+            rag_index_status=MailRagIndexStatus.PENDING,
+        )
 
     async def ensure_system_mail_connection(self) -> CompanyMailConnection | None:
         system_cfg = self._mail_config.system
@@ -2731,6 +3446,8 @@ class MailService:
         connection = CompanyMailConnection(
             company_mail_connection_id=connection_id,
             company_id=SYSTEM_COMPANY_ID,
+            scope=MailConnectionScope.COMPANY,
+            owner_user_id=None,
             mail_domain=system_cfg.mail_domain.strip().lower(),
             provider=provider,
             imap_host=system_cfg.imap_host.strip(),

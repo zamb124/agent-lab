@@ -33,6 +33,7 @@ from apps.flows.src.triggers.handlers.base import (
 )
 from core.context import Context, User, clear_context, get_context, set_context
 from core.logging import get_logger
+from core.mail.exceptions import MailConnectionNotFoundError
 from core.mail.models import InboundMailMessage, MailboxBinding, MailConnectionStatus
 from core.types import JsonObject
 
@@ -84,20 +85,21 @@ class EmailTriggerHandler(BaseTriggerHandler):
             flow_id=flow_id,
             trigger_id=trigger.trigger_id,
         )
-        connection = await self.container.mail_service.get_connection(company_id)
-        if connection is None:
+        try:
+            connection = await self.container.mail_service.require_connection_for_binding(binding)
+        except MailConnectionNotFoundError as exc:
             raise TriggerRegistrationError(
                 trigger_type="email",
                 flow_id=flow_id,
                 trigger_id=trigger.trigger_id,
-                message="company mail connection is not configured",
-            )
+                message=str(exc),
+            ) from exc
         if connection.status != MailConnectionStatus.ACTIVE:
             raise TriggerRegistrationError(
                 trigger_type="email",
                 flow_id=flow_id,
                 trigger_id=trigger.trigger_id,
-                message=f"company mail connection status is {connection.status.value}",
+                message=f"mail connection status is {connection.status.value}",
             )
 
         member = email_trigger_index_member(

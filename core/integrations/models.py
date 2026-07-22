@@ -16,6 +16,8 @@ from core.types import JsonObject
 class IntegrationProvider(StrEnum):
     GOOGLE = "google"
     YANDEX = "yandex"
+    MAILRU = "mailru"
+    CALDAV = "caldav"
     AMOCRM = "amocrm"
 
 

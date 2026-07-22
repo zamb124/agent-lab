@@ -20,6 +20,7 @@ from core.mail.models import (
     MailboxEnsureSpec,
     MailboxInfo,
     MailboxSecret,
+    MailConnectionScope,
     MailConnectionStatus,
     MailProvider,
 )
@@ -33,6 +34,8 @@ from core.mail.repositories import (
     MailMessageRepository,
 )
 from core.mail.service import MailService
+
+pytest_plugins = ["tests.core.mail.live.personal_conftest"]
 
 _LIVE_PLACEHOLDERS = frozenset({"", "null", "changeme", "YOUR_PASSWORD", "placeholder"})
 
@@ -79,6 +82,8 @@ def mail_live_port(mail_live_settings: MailConfig) -> MailServerPort:
     connection = CompanyMailConnection(
         company_mail_connection_id="live-test-connection",
         company_id="system",
+        scope=MailConnectionScope.COMPANY,
+        owner_user_id=None,
         mail_domain=system.mail_domain,
         provider=MailProvider.ISPMANAGER,
         imap_host=system.imap_host,

@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createMailEffect } from '@platform/lib/events/effects/mail.effect.js';
+import { createMailEffect, resetMailAutoSyncCooldownForTests } from '@platform/lib/events/effects/mail.effect.js';
 import { MAIL_EVENTS } from '@platform/lib/events/reducers/mail.js';
 import { installFetchMock } from '../../helpers/mock-fetch.js';
 import { buildCtx } from '../../helpers/bus-fixtures.js';
 
 let fetchMock;
-beforeEach(() => { fetchMock = installFetchMock(); });
+beforeEach(() => {
+    fetchMock = installFetchMock();
+    resetMailAutoSyncCooldownForTests();
+});
 afterEach(() => fetchMock.uninstall());
 
 const ev = (type, payload) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
@@ -107,6 +110,43 @@ describe('mailEffect', () => {
             buildCtx(() => ({ mail: {} }), dispatched),
         );
         expect(dispatched.find((d) => d.type === MAIL_EVENTS.BINDING_PATCHED).payload.binding.user_id).toBe('u2');
+    });
+
+    it('BINDING_PATCH_REQUESTED with hosts → PATCHED', async () => {
+        fetchMock.respondJson('PATCH', '/svc/api/mail/bindings/b1', {
+            mailbox_binding_id: 'b1',
+            imap_host: 'imap2.mail.ru',
+        });
+        const dispatched = [];
+        await createMailEffect({ baseUrl: '/svc' })(
+            ev(MAIL_EVENTS.BINDING_PATCH_REQUESTED, {
+                mailbox_binding_id: 'b1',
+                imap_host: 'imap2.mail.ru',
+                smtp_host: 'smtp2.mail.ru',
+            }),
+            buildCtx(() => ({ mail: {} }), dispatched),
+        );
+        expect(dispatched.find((d) => d.type === MAIL_EVENTS.BINDING_PATCHED).payload.binding.imap_host).toBe(
+            'imap2.mail.ru',
+        );
+    });
+
+    it('BINDING_HEALTHCHECK_REQUESTED → COMPLETED', async () => {
+        fetchMock.respondJson('POST', '/svc/api/mail/bindings/b1/healthcheck', {
+            imap_ok: true,
+            smtp_ok: true,
+        });
+        const dispatched = [];
+        await createMailEffect({ baseUrl: '/svc' })(
+            ev(MAIL_EVENTS.BINDING_HEALTHCHECK_REQUESTED, {
+                mailbox_binding_id: 'b1',
+                imap_host: 'imap.mail.ru',
+            }),
+            buildCtx(() => ({ mail: {} }), dispatched),
+        );
+        const completed = dispatched.find((d) => d.type === MAIL_EVENTS.BINDING_HEALTHCHECK_COMPLETED);
+        expect(completed.payload.health.imap_ok).toBe(true);
+        expect(completed.payload.mailbox_binding_id).toBe('b1');
     });
 
     it('BINDING_DELETE_REQUESTED → DELETED', async () => {
@@ -297,7 +337,7 @@ describe('mailEffect', () => {
         });
     });
 
-    it('SYNC_REQUESTED → SYNC_ACCEPTED', async () => {
+    it('SYNC_REQUESTED → SYNC_ACCEPTED + folders reload', async () => {
         fetchMock.respondJson('POST', '/svc/api/mail/sync', {
             accepted: true,
             mailbox_binding_id: 'b1',
@@ -308,6 +348,10 @@ describe('mailEffect', () => {
             buildCtx(() => ({ mail: { activeMailboxBindingId: 'b1' } }), dispatched),
         );
         expect(dispatched.find((d) => d.type === MAIL_EVENTS.SYNC_ACCEPTED).payload.accepted).toBe(true);
+        expect(dispatched.find((d) => d.type === MAIL_EVENTS.FOLDERS_LOAD_REQUESTED).payload).toEqual({
+            mailbox_binding_id: 'b1',
+            skip_auto_sync: true,
+        });
     });
 
     it('MESSAGES_SEARCH_REQUESTED → MESSAGES_LOADED', async () => {
@@ -397,6 +441,28 @@ describe('mailEffect', () => {
         expect(starDispatched.find((d) => d.type === MAIL_EVENTS.MESSAGE_STAR_COMPLETED).payload.flagged).toBe(true);
     });
 
+    it('MESSAGE_RAG_INDEX_REQUESTED → ACCEPTED', async () => {
+        fetchMock.respondJson('POST', '/svc/api/mail/messages/rag-index', {
+            accepted: true,
+            mailbox_binding_id: 'b1',
+            folder: 'INBOX',
+            uid: '9',
+            rag_index_status: 'pending',
+        });
+        const dispatched = [];
+        await createMailEffect({ baseUrl: '/svc' })(
+            ev(MAIL_EVENTS.MESSAGE_RAG_INDEX_REQUESTED, {
+                mailbox_binding_id: 'b1',
+                folder: 'INBOX',
+                uid: '9',
+            }),
+            buildCtx(() => ({ mail: {} }), dispatched),
+        );
+        const accepted = dispatched.find((d) => d.type === MAIL_EVENTS.MESSAGE_RAG_INDEX_ACCEPTED);
+        expect(accepted).toBeTruthy();
+        expect(accepted.payload.rag_index_status).toBe('pending');
+    });
+
     it('BINDING_MEMBERS_LOAD_REQUESTED → LOADED', async () => {
         fetchMock.respondJson('GET', '/svc/api/mail/bindings/role1/members', {
             items: [{ user_id: 'u1', role: 'member' }],
@@ -429,7 +495,30 @@ describe('mailEffect', () => {
         ).rejects.toThrow(/mailbox_binding_id/);
     });
 
-    it('FOLDERS_LOAD_REQUESTED → LOADED + sync + messages', async () => {
+    it('FOLDERS_LOAD_REQUESTED empty + needs_sync → SYNC', async () => {
+        fetchMock.respondJson(
+            'GET',
+            '/svc/api/mail/folders?mailbox_binding_id=b1',
+            {
+                folders: [],
+                missing_standard_roles: [],
+                needs_sync: true,
+            },
+        );
+        const dispatched = [];
+        await createMailEffect({ baseUrl: '/svc' })(
+            ev(MAIL_EVENTS.FOLDERS_LOAD_REQUESTED, { mailbox_binding_id: 'b1' }),
+            buildCtx(
+                () => ({ mail: { activeMailboxBindingId: 'b1', folder: null } }),
+                dispatched,
+            ),
+        );
+        expect(dispatched.find((d) => d.type === MAIL_EVENTS.FOLDERS_LOADED).payload.needs_sync).toBe(true);
+        expect(dispatched.some((d) => d.type === MAIL_EVENTS.SYNC_REQUESTED)).toBe(true);
+        expect(dispatched.some((d) => d.type === MAIL_EVENTS.MESSAGES_LOAD_REQUESTED)).toBe(false);
+    });
+
+    it('FOLDERS_LOAD_REQUESTED → LOADED + messages (folders present, no auto-sync)', async () => {
         fetchMock.respondJson(
             'GET',
             '/svc/api/mail/folders?mailbox_binding_id=b1',
@@ -438,7 +527,7 @@ describe('mailEffect', () => {
                 missing_standard_roles: ['archive'],
                 namespace_prefix: 'INBOX.',
                 capabilities: ['MOVE'],
-                needs_sync: true,
+                needs_sync: false,
             },
         );
         const dispatched = [];
@@ -452,7 +541,7 @@ describe('mailEffect', () => {
         const loaded = dispatched.find((d) => d.type === MAIL_EVENTS.FOLDERS_LOADED);
         expect(loaded.payload.folders).toHaveLength(1);
         expect(loaded.payload.missing_standard_roles).toEqual(['archive']);
-        expect(dispatched.some((d) => d.type === MAIL_EVENTS.SYNC_REQUESTED)).toBe(true);
+        expect(dispatched.some((d) => d.type === MAIL_EVENTS.SYNC_REQUESTED)).toBe(false);
         expect(dispatched.find((d) => d.type === MAIL_EVENTS.MESSAGES_LOAD_REQUESTED).payload).toEqual({
             mailbox_binding_id: 'b1',
             folder: 'INBOX',
@@ -497,6 +586,47 @@ describe('mailEffect', () => {
         expect(dispatched.find((d) => d.type === MAIL_EVENTS.FOLDERS_ENSURE_FAILED).payload.message).toMatch(
             /ensure failed/,
         );
+    });
+
+    it('FOLDERS_REORDER_REQUESTED → PUT order + FOLDERS_LOADED', async () => {
+        fetchMock.respondJson('PUT', '/svc/api/mail/folders/order', {
+            folders: [
+                { name: 'Sent', role: 'sent', sort_index: 0 },
+                { name: 'INBOX', role: 'inbox', sort_index: 1 },
+            ],
+            missing_standard_roles: [],
+        });
+        const dispatched = [];
+        await createMailEffect({ baseUrl: '/svc' })(
+            ev(MAIL_EVENTS.FOLDERS_REORDER_REQUESTED, {
+                mailbox_binding_id: 'b1',
+                folders: [
+                    { name: 'Sent', role: 'sent' },
+                    { name: 'INBOX', role: 'inbox' },
+                ],
+            }),
+            buildCtx(() => ({ mail: {} }), dispatched),
+        );
+        const loaded = dispatched.find((d) => d.type === MAIL_EVENTS.FOLDERS_LOADED);
+        expect(loaded.payload.folders.map((folder) => folder.name)).toEqual(['Sent', 'INBOX']);
+        expect(fetchMock.calls.some((call) => call.method === 'PUT' && call.url.includes('/folders/order'))).toBe(true);
+    });
+
+    it('FOLDERS_REORDER_REQUESTED error → FAILED + reload', async () => {
+        fetchMock.respondError('PUT', '/svc/api/mail/folders/order', new Error('reorder failed'));
+        const dispatched = [];
+        await createMailEffect({ baseUrl: '/svc' })(
+            ev(MAIL_EVENTS.FOLDERS_REORDER_REQUESTED, {
+                mailbox_binding_id: 'b1',
+                folders: [{ name: 'INBOX' }],
+            }),
+            buildCtx(() => ({ mail: {} }), dispatched),
+        );
+        expect(dispatched.find((d) => d.type === MAIL_EVENTS.FOLDERS_REORDER_FAILED)).toBeTruthy();
+        expect(dispatched.find((d) => d.type === MAIL_EVENTS.FOLDERS_LOAD_REQUESTED).payload).toEqual({
+            mailbox_binding_id: 'b1',
+            skip_auto_sync: true,
+        });
     });
 
     it('FOLDER_SELECT → MESSAGES_LOAD_REQUESTED', async () => {
@@ -941,6 +1071,43 @@ describe('mailEffect', () => {
                 dispatched,
             ),
         );
-        expect(dispatched.find((d) => d.type === MAIL_EVENTS.THREAD_LOAD_REQUESTED).payload.uid).toBe('1');
+        expect(dispatched.find((d) => d.type === MAIL_EVENTS.THREAD_LOAD_REQUESTED).payload).toEqual({
+            mailbox_binding_id: 'b1',
+            folder: 'INBOX',
+            uid: '1',
+        });
+    });
+
+    it('MESSAGE_UPSERTED keeps selectedUid folder across thread siblings', async () => {
+        const dispatched = [];
+        await createMailEffect({ baseUrl: '/svc' })(
+            ev(MAIL_EVENTS.MESSAGE_UPSERTED, {
+                mailbox_binding_id: 'b1',
+                folder: 'Sent',
+                uid: '605',
+                thread_id: 't1',
+            }),
+            buildCtx(
+                () => ({
+                    mail: {
+                        activeMailboxBindingId: 'b1',
+                        folder: 'INBOX',
+                        selectedUid: '538',
+                        selectedThreadId: 't1',
+                        selectedMessage: { uid: '538', folder: 'INBOX' },
+                        selectedThreadMessages: [
+                            { uid: '538', folder: 'INBOX' },
+                            { uid: '605', folder: 'Sent' },
+                        ],
+                    },
+                }),
+                dispatched,
+            ),
+        );
+        expect(dispatched.find((d) => d.type === MAIL_EVENTS.THREAD_LOAD_REQUESTED).payload).toEqual({
+            mailbox_binding_id: 'b1',
+            folder: 'INBOX',
+            uid: '538',
+        });
     });
 });

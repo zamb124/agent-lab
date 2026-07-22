@@ -166,6 +166,10 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/api/auth/demo/status", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/auth/demo/status", auth_required=False, context_type="anonymous"),
     RouteRule("/*/api/auth/demo/status", auth_required=False, context_type="anonymous"),
+    # Список OAuth-провайдеров для login-модалки (гость на landing)
+    RouteRule("/api/auth/providers", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/auth/providers", auth_required=False, context_type="anonymous"),
+    RouteRule("/*/api/auth/providers", auth_required=False, context_type="anonymous"),
 
     # Публичные API
     RouteRule("/api/leads", auth_required=False, context_type="anonymous"),

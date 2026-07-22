@@ -96,7 +96,7 @@ ENV: `MAIL__SYSTEM__ISPMANAGER__*` + `MAIL__LIVE_TEST__ENABLED=true` + hosts (с
 uv run pytest -q tests/core/mail/live -m network --tb=short -n0
 ```
 
-**VPN:** исходящий SMTP `:465` часто режется VPN — отключи VPN или гоняй с VPS. Проверка: `nc -vz sm36.hosting.reg.ru 465`.
+**VPN:** исходящий SMTP `:465` часто режется VPN — отключи VPN или гоняй с VPS. Проверка: `nc -vz sm36.hosting.reg.ru 465` / `nc -vz smtp.mail.ru 465`.
 
 ### Матрица live
 
@@ -106,12 +106,54 @@ uv run pytest -q tests/core/mail/live -m network --tb=short -n0
 | `live/test_mail_service_live.py` | system ensure, PUT forbidden, bind+send+fetch |
 | `live/test_mail_scenarios_live.py` | attachments, unicode, reply headers, lazy bind, iMIP→calendar |
 | `live/test_mail_complete_client_live.py` | provision+sync; send A→B; star/trash; drafts; search; sync-now; role ACL; local wipe+resync |
+| `live/test_mail_personal_live.py` | Mail.ru personal A↔B: health, connect, folders, send/recv, reply, attach, unicode, sync, seen/star/trash/archive, drafts, MailService send, search, sync-now, unbind, company+personal |
+
+### Personal live (Mail.ru A↔B)
+
+Фиксированные personal-ящики (не ISP `plt-*` provision/delete). Cleanup — по subject marker `plt-pers-{unique_id}` (IMAP expunge), ящики **не** удаляются.
+
+Креды только в `conf.local.json`:
+
+```json
+{
+  "mail": {
+    "local_dev": {
+      "enabled": true,
+      "mutate_remote_passwords": false,
+      "mailbox_passwords": {
+        "zambas124@mail.ru": "APP_PASSWORD",
+        "zambas125@mail.ru": "APP_PASSWORD"
+      }
+    },
+    "live_test": {
+      "enabled": true,
+      "personal": {
+        "enabled": true,
+        "imap_host": "imap.mail.ru",
+        "imap_port": 993,
+        "smtp_host": "smtp.mail.ru",
+        "smtp_port": 465,
+        "use_ssl": true,
+        "account_a": "zambas124@mail.ru",
+        "account_b": "zambas125@mail.ru"
+      }
+    }
+  }
+}
+```
+
+```bash
+uv run pytest -q tests/core/mail/live/test_mail_personal_live.py -m network --tb=short -n0
+```
+
+Gate: skip если `personal.enabled=false` или нет пароля в `mailbox_passwords`.
 
 ### Квота
 
-- Только `plt-{unique_id}*@…`
+- Только `plt-{unique_id}*@…` для ISP suite
 - System role boxes: ensure only, never delete
 - `mail_quota_sweeper` + per-test finally удаляют созданные адреса
+- Personal suite: marker cleanup, no mailbox delete
 
 ### Shared hosting quirks
 

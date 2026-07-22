@@ -23,10 +23,21 @@ export const initialAuthState = Object.freeze({
     error: null,
     lastValidatedAt: null,
     providers: { list: [], loading: false, error: null },
-    demo: { enabled: false, email: null },
+    demo: { enabled: false, email: null, loaded: false },
     serviceAttrs: {},
     sessionEndCause: null,
 });
+
+/** Публичный OAuth/demo-конфиг не зависит от сессии — сохраняем при logout/anonymous. */
+function _sessionReset(state, { status, sessionEndCause }) {
+    return {
+        ...initialAuthState,
+        status,
+        sessionEndCause,
+        providers: state.providers,
+        demo: state.demo,
+    };
+}
 
 export function authReducer(state = initialAuthState, event) {
     switch (event.type) {
@@ -60,17 +71,13 @@ export function authReducer(state = initialAuthState, event) {
             };
 
         case CoreEvents.AUTH_UNAUTHORIZED:
-            return { ...initialAuthState, status: 'unauthenticated', sessionEndCause: 'lost_session' };
+            return _sessionReset(state, { status: 'unauthenticated', sessionEndCause: 'lost_session' });
 
         case CoreEvents.AUTH_ASSUMED_ANONYMOUS:
-            return {
-                ...initialAuthState,
-                status: 'unauthenticated',
-                sessionEndCause: null,
-            };
+            return _sessionReset(state, { status: 'unauthenticated', sessionEndCause: null });
 
         case CoreEvents.AUTH_LOGGED_OUT:
-            return { ...initialAuthState, status: 'unauthenticated', sessionEndCause: 'logout' };
+            return _sessionReset(state, { status: 'unauthenticated', sessionEndCause: 'logout' });
 
         case CoreEvents.AUTH_COMPANY_SWITCHED: {
             const companyId = event.payload && event.payload.company_id ? event.payload.company_id : null;
@@ -91,7 +98,14 @@ export function authReducer(state = initialAuthState, event) {
 
         case CoreAuthEvents.DEMO_STATUS_LOADED: {
             const p = event.payload || {};
-            return { ...state, demo: { enabled: !!p.enabled, email: p.email || null } };
+            return {
+                ...state,
+                demo: {
+                    enabled: !!p.enabled,
+                    email: typeof p.email === 'string' ? p.email : null,
+                    loaded: true,
+                },
+            };
         }
 
         case CoreAuthEvents.SERVICE_ATTRS_LOADED:

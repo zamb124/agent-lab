@@ -774,10 +774,10 @@ async def test_mcp_catalog_auto_provision_disabled_is_noop(
 
 
 def test_mcp_catalog_config_model_default_auto_provision() -> None:
-    """Pydantic-default policy: prod использует approved_only."""
+    """Pydantic-default policy: opt-in Store only (disabled auto-provision)."""
     from core.config.models import MCPCatalogConfig
 
-    assert MCPCatalogConfig().auto_provision == "approved_only"
+    assert MCPCatalogConfig().auto_provision == "disabled"
 
 
 @pytest.mark.asyncio
@@ -930,7 +930,7 @@ async def test_mcp_servers_list_search_and_pagination(
 
 
 @pytest.mark.asyncio
-async def test_mcp_catalog_search_includes_platform_curated_entries(
+async def test_mcp_catalog_lists_platform_curated_without_search(
     client,
     local_mcp_http_url: str,
     unique_id: str,
@@ -948,34 +948,32 @@ async def test_mcp_catalog_search_includes_platform_curated_entries(
 
     empty_search_response = await client.get(
         "/flows/api/v1/mcp/catalog",
-        params={"tier": "store", "search": "", "limit": 20, "offset": 0},
+        params={"tier": "store", "search": "", "limit": 50, "offset": 0},
     )
     assert empty_search_response.status_code == 200, empty_search_response.text
     empty_catalog_ids = [item["catalog_id"] for item in empty_search_response.json()["items"]]
-    assert catalog_id not in empty_catalog_ids
+    assert catalog_id in empty_catalog_ids
 
-    search_response = await client.get(
-        "/flows/api/v1/mcp/catalog",
-        params={"tier": "store", "search": f"context7 {unique_id}", "limit": 20, "offset": 0},
+    curated_item = next(
+        item
+        for item in empty_search_response.json()["items"]
+        if item["catalog_id"] == catalog_id
     )
-    assert search_response.status_code == 200, search_response.text
-    body = search_response.json()
-    assert body["total"] == 1
-    assert body["items"][0]["catalog_id"] == catalog_id
-    assert body["items"][0]["platform_curated"] is True
-    assert body["items"][0]["installed"] is False
+    assert curated_item["platform_curated"] is True
+    assert curated_item["installed"] is False
 
     _ = await container.mcp_catalog_repository.delete(catalog_id)
 
 
 @pytest.mark.asyncio
-async def test_auto_provisioned_catalog_entry_rejects_store_uninstall(
+async def test_auto_provisioned_catalog_entry_allows_store_uninstall(
     client,
     local_mcp_http_url: str,
     unique_id: str,
 ) -> None:
-    """Auto tier catalog сервер нельзя удалить через MCP Store uninstall API."""
+    """Даже legacy auto-tier catalog сервер снимается через MCP Store uninstall."""
     catalog_id = f"auto_tier_{unique_id}"
+    server_id = server_id_from_catalog_id(catalog_id)
     container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
@@ -987,15 +985,15 @@ async def test_auto_provisioned_catalog_entry_rejects_store_uninstall(
     with mcp_catalog_settings(auto_provision="approved_only"):
         _ = await provision_mcp_catalog_for_company(container=container)
 
-    uninstall_response = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
-    assert uninstall_response.status_code == 400
+    stored = await container.mcp_server_repository.get(server_id)
+    assert stored is not None
+    assert stored.catalog_auto_provisioned is True
 
-    await cleanup_catalog_and_server(
-        container=container,
-        client=client,
-        catalog_id=catalog_id,
-        server_id=server_id_from_catalog_id(catalog_id),
-    )
+    uninstall_response = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
+    assert uninstall_response.status_code == 200, uninstall_response.text
+    assert await container.mcp_server_repository.get(server_id) is None
+
+    _ = await container.mcp_catalog_repository.delete(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -1117,12 +1115,13 @@ async def test_mcp_catalog_search_matches_registry_name_and_description(
 
 
 @pytest.mark.asyncio
-async def test_mcp_catalog_install_rejects_platform_curated(
+async def test_mcp_catalog_install_and_uninstall_platform_curated(
     client,
     local_mcp_http_url: str,
     unique_id: str,
 ) -> None:
     catalog_id = f"curated_install_{unique_id}"
+    server_id = server_id_from_catalog_id(catalog_id)
     container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
@@ -1132,9 +1131,28 @@ async def test_mcp_catalog_install_rejects_platform_curated(
     )
     _ = await persist_catalog_entry(container=container, entry=entry)
 
+    list_response = await client.get(
+        "/flows/api/v1/mcp/catalog",
+        params={"tier": "store", "limit": 50, "offset": 0},
+    )
+    assert list_response.status_code == 200, list_response.text
+    curated_items = [
+        item
+        for item in list_response.json()["items"]
+        if item["catalog_id"] == catalog_id
+    ]
+    assert len(curated_items) == 1
+    assert curated_items[0]["platform_curated"] is True
+    assert curated_items[0]["installed"] is False
+
     install_response = await client.post(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
-    assert install_response.status_code == 400, install_response.text
-    assert "not available in MCP Store" in install_response.json()["detail"]
+    assert install_response.status_code == 200, install_response.text
+    assert install_response.json()["server_id"] == server_id
+    assert install_response.json()["catalog_auto_provisioned"] is False
+
+    uninstall_response = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
+    assert uninstall_response.status_code == 200, uninstall_response.text
+    assert await container.mcp_server_repository.get(server_id) is None
 
     _ = await container.mcp_catalog_repository.delete(catalog_id)
 

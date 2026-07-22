@@ -11,7 +11,7 @@ import '../components/worktracker-work-item-card.js';
 import '../components/worktracker-icon-action.js';
 import '../components/worktracker-board-picker.js';
 import '../components/worktracker-page-header.js';
-import { reorderByInsertIndex } from '../utils/board-column-reorder.js';
+import { reorderByInsertIndex } from '@platform/lib/utils/reorder-by-insert-index.js';
 
 const WORK_ITEM_MIME = 'application/x-worktracker-work-item-id';
 const BOARD_COLUMN_MIME = 'application/x-worktracker-board-column-id';

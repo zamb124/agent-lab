@@ -71,6 +71,23 @@ class CalendarEventSqlRepository:
                 return None
             return _event_from_record(row)
 
+    async def get_by_source(
+        self, company_id: str, source: str, source_id: str
+    ) -> CalendarEvent | None:
+        session_factory = await get_session_factory(self._db_url)
+        async with session_factory() as session:
+            result = await session.execute(
+                select(CalendarEventRecord).where(
+                    CalendarEventRecord.company_id == company_id,
+                    CalendarEventRecord.source == source,
+                    CalendarEventRecord.source_id == source_id,
+                )
+            )
+            row = result.scalars().first()
+            if row is None:
+                return None
+            return _event_from_record(row)
+
     async def upsert(self, event: CalendarEvent) -> None:
         session_factory = await get_session_factory(self._db_url)
         values = {

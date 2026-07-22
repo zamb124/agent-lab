@@ -1,11 +1,15 @@
 /**
  * Одна страница GET /flows/api/v1/tools/all — page size ≤ TOOLS_ALL_PAGE_LIMIT.
+ * Tag-groups: отдельный OffsetPage-лимит (лёгкие записи описаний).
  */
 
 import { isPlainObject } from './flows-resolvers.js';
 
 /** Максимум `limit` на один HTTP-запрос tools/all (API + клиент). */
 export const TOOLS_ALL_PAGE_LIMIT = 20;
+
+/** Максимум `limit` для GET /flows/api/v1/tools/tag-groups. */
+export const TAG_GROUPS_PAGE_LIMIT = 200;
 
 /**
  * @typedef {{ items: Record<string, unknown>[], total: number, limit: number, offset: number, hasMore: boolean }} ToolsAllPage

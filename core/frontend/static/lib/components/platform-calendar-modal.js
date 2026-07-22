@@ -2183,6 +2183,7 @@ export class PlatformCalendarModal extends PlatformModal {
             username: '',
             app_password: '',
             default_calendar_id: '',
+            caldav_base_url: '',
             sync_enabled: true,
             sync_inbound_enabled: true,
             sync_outbound_enabled: true,
@@ -2912,6 +2913,37 @@ export class PlatformCalendarModal extends PlatformModal {
         return String(source || '').toLowerCase();
     }
 
+    _isCalDavProvider(provider) {
+        return provider === 'yandex' || provider === 'mailru' || provider === 'caldav';
+    }
+
+    _integrationModalIconName() {
+        const provider = this._integrationModalProvider;
+        if (provider === 'google' || provider === 'yandex') {
+            return provider;
+        }
+        if (provider === 'mailru') {
+            return 'mail';
+        }
+        return 'calendar';
+    }
+
+    _providerDisplayLabel(provider) {
+        if (provider === 'google') {
+            return 'Google';
+        }
+        if (provider === 'yandex') {
+            return 'Yandex';
+        }
+        if (provider === 'mailru') {
+            return 'Mail.ru';
+        }
+        if (provider === 'caldav') {
+            return this._calT('integration_caldav');
+        }
+        return provider ? provider.toUpperCase() : '';
+    }
+
     _kindKey(kind) {
         return String(kind || '').toLowerCase();
     }
@@ -2935,6 +2967,12 @@ export class PlatformCalendarModal extends PlatformModal {
         }
         if (key === 'yandex') {
             return 'Yandex';
+        }
+        if (key === 'mailru') {
+            return 'Mail.ru';
+        }
+        if (key === 'caldav') {
+            return this._calT('integration_caldav');
         }
         return key ? key.toUpperCase() : this._calT('unknown');
     }
@@ -3379,6 +3417,7 @@ export class PlatformCalendarModal extends PlatformModal {
             scope: null,
             token_type: null,
             default_calendar_id: this._integrationForm.default_calendar_id.trim() || null,
+            caldav_base_url: this._integrationForm.caldav_base_url.trim() || null,
             sync_enabled: Boolean(this._integrationForm.sync_enabled),
             sync_inbound_enabled: Boolean(this._integrationForm.sync_inbound_enabled),
             sync_outbound_enabled: Boolean(this._integrationForm.sync_outbound_enabled),
@@ -3390,6 +3429,10 @@ export class PlatformCalendarModal extends PlatformModal {
         }
         if (!payload.access_token) {
             this.toast('err_app_password_required', { type: 'error' });
+            return;
+        }
+        if (this._activeProvider === 'caldav' && !payload.caldav_base_url) {
+            this.toast('err_caldav_base_url_required', { type: 'error' });
             return;
         }
         this._saving = true;
@@ -3421,13 +3464,14 @@ export class PlatformCalendarModal extends PlatformModal {
         this._activeProvider = provider;
         const integrations = this._integrationsSelect.value;
         const activeIntegration = integrations.find((item) => item.provider === provider) || null;
-        if (provider !== 'yandex' || !activeIntegration) {
+        if (!this._isCalDavProvider(provider) || !activeIntegration) {
             return;
         }
         const settings = activeIntegration.settings || {};
         this._integrationForm = {
             ...this._integrationForm,
             default_calendar_id: settings.default_calendar_id || '',
+            caldav_base_url: settings.caldav_base_url || '',
             sync_enabled: settings.sync_enabled !== false,
             sync_inbound_enabled: settings.sync_inbound_enabled !== false,
             sync_outbound_enabled: settings.sync_outbound_enabled !== false,
@@ -3918,13 +3962,13 @@ export class PlatformCalendarModal extends PlatformModal {
             return html``;
         }
         const c = (key, params) => this._calT(key, params);
-        const providerLabel = this._integrationModalProvider === 'google' ? 'Google' : 'Yandex';
+        const providerLabel = this._providerDisplayLabel(this._integrationModalProvider);
         return html`
             <div class="integration-modal-overlay" @click=${() => this._closeIntegrationModal()}>
                 <div class="integration-modal" @click=${(e) => e.stopPropagation()}>
                     <div class="integration-modal-header">
                         <div class="integration-modal-title">
-                            <platform-icon name=${this._integrationModalProvider} size="20" colored></platform-icon>
+                            <platform-icon name=${this._integrationModalIconName()} size="20" colored></platform-icon>
                             ${c('integration_provider_title', { provider: providerLabel })}
                         </div>
                         <button class="btn-icon" type="button" @click=${() => this._closeIntegrationModal()}>
@@ -3944,7 +3988,7 @@ export class PlatformCalendarModal extends PlatformModal {
         if (this._activeProvider === 'google') {
             return this._renderGoogleIntegration(c, activeIntegration);
         }
-        return this._renderYandexIntegration(c, activeIntegration);
+        return this._renderCalDavIntegration(c, activeIntegration, this._activeProvider);
     }
 
     _renderGoogleIntegration(c, activeIntegration) {
@@ -3977,15 +4021,34 @@ export class PlatformCalendarModal extends PlatformModal {
         `;
     }
 
-    _renderYandexIntegration(c, activeIntegration) {
+    _renderCalDavIntegration(c, activeIntegration, provider) {
+        const isCustom = provider === 'caldav';
+        const usernamePlaceholder = provider === 'mailru'
+            ? 'login@mail.ru'
+            : (provider === 'yandex' ? 'login@yandex.ru' : c('caldav_username_placeholder'));
+        const calendarIdPlaceholder = isCustom
+            ? c('caldav_calendar_id_placeholder')
+            : c('yandex_calendar_id_placeholder');
         return html`
+            <div class="hint">${c('caldav_hint')}</div>
+            ${isCustom ? html`
+                <div class="row">
+                    <label class="form-label">${c('caldav_base_url_label')}</label>
+                    <input
+                        class="form-input"
+                        .value=${this._integrationForm.caldav_base_url}
+                        @input=${(e) => this._integrationForm = { ...this._integrationForm, caldav_base_url: e.target.value }}
+                        placeholder="https://caldav.example.com"
+                    />
+                </div>
+            ` : ''}
             <div class="row">
                 <label class="form-label">${c('yandex_username_label')}</label>
                 <input
                     class="form-input"
                     .value=${this._integrationForm.username}
                     @input=${(e) => this._integrationForm = { ...this._integrationForm, username: e.target.value }}
-                    placeholder="login@yandex.ru"
+                    placeholder=${usernamePlaceholder}
                 />
             </div>
             <div class="row">
@@ -4003,7 +4066,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     class="form-input"
                     .value=${this._integrationForm.default_calendar_id}
                     @input=${(e) => this._integrationForm = { ...this._integrationForm, default_calendar_id: e.target.value }}
-                    placeholder=${c('yandex_calendar_id_placeholder')}
+                    placeholder=${calendarIdPlaceholder}
                 />
             </div>
             <div class="event-compose-switch event-compose-switch--spaced">
@@ -4020,11 +4083,11 @@ export class PlatformCalendarModal extends PlatformModal {
                 <button class="btn btn-primary" type="button" @click=${this._saveIntegration} ?disabled=${this._saving}>
                     ${c('save_connection')}
                 </button>
-                <button class="btn btn-secondary" type="button" @click=${() => this._runSync('yandex')} ?disabled=${this._syncing || !activeIntegration}>
+                <button class="btn btn-secondary" type="button" @click=${() => this._runSync(provider)} ?disabled=${this._syncing || !activeIntegration}>
                     ${this._syncing ? c('syncing') : c('sync')}
                 </button>
                 ${activeIntegration ? html`
-                    <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration('yandex')}>
+                    <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration(provider)}>
                         ${c('disconnect')}
                     </button>
                 ` : ''}
@@ -4122,6 +4185,14 @@ export class PlatformCalendarModal extends PlatformModal {
                         <button class="dropdown-item" type="button" @click=${() => this._openIntegrationModal('yandex')}>
                             <platform-icon name="yandex" size="16" colored></platform-icon>
                             <span>${v('integration_yandex')}</span>
+                        </button>
+                        <button class="dropdown-item" type="button" @click=${() => this._openIntegrationModal('mailru')}>
+                            <platform-icon name="mail" size="16"></platform-icon>
+                            <span>${v('integration_mailru')}</span>
+                        </button>
+                        <button class="dropdown-item" type="button" @click=${() => this._openIntegrationModal('caldav')}>
+                            <platform-icon name="calendar" size="16"></platform-icon>
+                            <span>${v('integration_caldav')}</span>
                         </button>
                     </div>
                 ` : ''}

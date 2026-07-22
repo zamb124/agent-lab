@@ -9,6 +9,25 @@ function errorMessage(err) {
     return String(err && err.message ? err.message : err);
 }
 
+// Троттлинг авто-синка: needs_sync от folders/list мог бы дёргать SYNC в тугом
+// цикле (list -> sync -> folders -> list ...). Авто-синк на ящик — не чаще
+// AUTO_SYNC_COOLDOWN_MS. Ручной SYNC_REQUESTED (кнопка) не троттлится.
+const AUTO_SYNC_COOLDOWN_MS = 15000;
+const lastAutoSyncAt = new Map();
+
+function shouldAutoSync(mailboxBindingId) {
+    const now = Date.now();
+    const prev = lastAutoSyncAt.get(mailboxBindingId) || 0;
+    if (now - prev < AUTO_SYNC_COOLDOWN_MS) return false;
+    lastAutoSyncAt.set(mailboxBindingId, now);
+    return true;
+}
+
+/** @internal vitest */
+export function resetMailAutoSyncCooldownForTests() {
+    lastAutoSyncAt.clear();
+}
+
 export function createMailEffect({ baseUrl }) {
     const base = baseUrl || '';
     return async function mailEffect(event, ctx) {
@@ -158,6 +177,52 @@ export function createMailEffect({ baseUrl }) {
                 }
                 return;
             }
+            case MAIL_EVENTS.PERSONAL_CONNECT_REQUESTED: {
+                try {
+                    const binding = await httpRequest({
+                        method: 'POST',
+                        url: `${base}/api/mail/bindings/personal`,
+                        body: event.payload,
+                    });
+                    ctx.dispatch(
+                        MAIL_EVENTS.BINDING_CREATED,
+                        { binding },
+                        { causation_id: event.id, source: 'http' },
+                    );
+                    ctx.dispatch(MAIL_EVENTS.BINDINGS_LOAD_REQUESTED, null, {
+                        causation_id: event.id,
+                        source: 'local',
+                    });
+                } catch (err) {
+                    ctx.dispatch(
+                        MAIL_EVENTS.PERSONAL_CONNECT_FAILED,
+                        { message: errorMessage(err) },
+                        { causation_id: event.id, source: 'http' },
+                    );
+                }
+                return;
+            }
+            case MAIL_EVENTS.PERSONAL_HEALTHCHECK_REQUESTED: {
+                try {
+                    const health = await httpRequest({
+                        method: 'POST',
+                        url: `${base}/api/mail/bindings/personal/healthcheck`,
+                        body: event.payload,
+                    });
+                    ctx.dispatch(
+                        MAIL_EVENTS.PERSONAL_HEALTHCHECK_COMPLETED,
+                        { health },
+                        { causation_id: event.id, source: 'http' },
+                    );
+                } catch (err) {
+                    ctx.dispatch(
+                        MAIL_EVENTS.PERSONAL_HEALTHCHECK_FAILED,
+                        { message: errorMessage(err) },
+                        { causation_id: event.id, source: 'http' },
+                    );
+                }
+                return;
+            }
             case MAIL_EVENTS.BINDING_PATCH_REQUESTED: {
                 const id = event.payload && event.payload.mailbox_binding_id;
                 if (!id) throw new Error('mail.effect: mailbox_binding_id required');
@@ -180,6 +245,30 @@ export function createMailEffect({ baseUrl }) {
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_PATCH_FAILED,
+                        { message: errorMessage(err) },
+                        { causation_id: event.id, source: 'http' },
+                    );
+                }
+                return;
+            }
+            case MAIL_EVENTS.BINDING_HEALTHCHECK_REQUESTED: {
+                const id = event.payload && event.payload.mailbox_binding_id;
+                if (!id) throw new Error('mail.effect: mailbox_binding_id required');
+                const { mailbox_binding_id: _id, ...body } = event.payload;
+                try {
+                    const health = await httpRequest({
+                        method: 'POST',
+                        url: `${base}/api/mail/bindings/${encodeURIComponent(id)}/healthcheck`,
+                        body: body || {},
+                    });
+                    ctx.dispatch(
+                        MAIL_EVENTS.BINDING_HEALTHCHECK_COMPLETED,
+                        { health, mailbox_binding_id: id },
+                        { causation_id: event.id, source: 'http' },
+                    );
+                } catch (err) {
+                    ctx.dispatch(
+                        MAIL_EVENTS.BINDING_HEALTHCHECK_FAILED,
                         { message: errorMessage(err) },
                         { causation_id: event.id, source: 'http' },
                     );
@@ -268,6 +357,7 @@ export function createMailEffect({ baseUrl }) {
             case MAIL_EVENTS.FOLDERS_LOAD_REQUESTED: {
                 const mailboxBindingId = event.payload && event.payload.mailbox_binding_id;
                 if (!mailboxBindingId) throw new Error('mail.effect: mailbox_binding_id required');
+                const skipAutoSync = event.payload && event.payload.skip_auto_sync === true;
                 try {
                     const data = await httpRequest({
                         method: 'GET',
@@ -285,10 +375,17 @@ export function createMailEffect({ baseUrl }) {
                                 : [],
                             namespace_prefix: data.namespace_prefix,
                             capabilities: Array.isArray(data.capabilities) ? data.capabilities : [],
+                            needs_sync: data.needs_sync === true,
+                            stale: data.stale === true,
                         },
                         { causation_id: event.id, source: 'http' },
                     );
-                    if (data && data.needs_sync === true) {
+                    if (
+                        !skipAutoSync
+                        && data.needs_sync === true
+                        && data.folders.length === 0
+                        && shouldAutoSync(mailboxBindingId)
+                    ) {
                         ctx.dispatch(
                             MAIL_EVENTS.SYNC_REQUESTED,
                             { mailbox_binding_id: mailboxBindingId },
@@ -330,6 +427,14 @@ export function createMailEffect({ baseUrl }) {
                         data || { accepted: true, mailbox_binding_id: mailboxBindingId },
                         { causation_id: event.id, source: 'http' },
                     );
+                    ctx.dispatch(
+                        MAIL_EVENTS.FOLDERS_LOAD_REQUESTED,
+                        {
+                            mailbox_binding_id: mailboxBindingId,
+                            skip_auto_sync: true,
+                        },
+                        { causation_id: event.id, source: 'local' },
+                    );
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.SYNC_FAILED,
@@ -360,6 +465,8 @@ export function createMailEffect({ baseUrl }) {
                                 : [],
                             namespace_prefix: data.namespace_prefix,
                             capabilities: Array.isArray(data.capabilities) ? data.capabilities : [],
+                            needs_sync: data.needs_sync === true,
+                            stale: data.stale === true,
                         },
                         { causation_id: event.id, source: 'http' },
                     );
@@ -380,6 +487,60 @@ export function createMailEffect({ baseUrl }) {
                         MAIL_EVENTS.FOLDERS_ENSURE_FAILED,
                         { message: errorMessage(err) },
                         { causation_id: event.id, source: 'http' },
+                    );
+                }
+                return;
+            }
+            case MAIL_EVENTS.FOLDERS_REORDER_REQUESTED: {
+                const mailboxBindingId = event.payload && event.payload.mailbox_binding_id;
+                const folders = event.payload && event.payload.folders;
+                if (!mailboxBindingId) throw new Error('mail.effect: mailbox_binding_id required');
+                if (!Array.isArray(folders)) throw new Error('mail.effect: folders must be an array');
+                const folderNames = folders.map((folder) => {
+                    if (!folder || typeof folder.name !== 'string' || !folder.name) {
+                        throw new Error('mail.effect: folder.name required');
+                    }
+                    return folder.name;
+                });
+                try {
+                    const data = await httpRequest({
+                        method: 'PUT',
+                        url: `${base}/api/mail/folders/order`,
+                        body: {
+                            mailbox_binding_id: mailboxBindingId,
+                            folder_names: folderNames,
+                        },
+                    });
+                    if (!data || !Array.isArray(data.folders)) {
+                        throw new Error('mail.folders.order: folders must be array');
+                    }
+                    ctx.dispatch(
+                        MAIL_EVENTS.FOLDERS_LOADED,
+                        {
+                            folders: data.folders,
+                            missing_standard_roles: Array.isArray(data.missing_standard_roles)
+                                ? data.missing_standard_roles
+                                : [],
+                            namespace_prefix: data.namespace_prefix,
+                            capabilities: Array.isArray(data.capabilities) ? data.capabilities : [],
+                            needs_sync: data.needs_sync === true,
+                            stale: data.stale === true,
+                        },
+                        { causation_id: event.id, source: 'http' },
+                    );
+                } catch (err) {
+                    ctx.dispatch(
+                        MAIL_EVENTS.FOLDERS_REORDER_FAILED,
+                        { message: errorMessage(err) },
+                        { causation_id: event.id, source: 'http' },
+                    );
+                    ctx.dispatch(
+                        MAIL_EVENTS.FOLDERS_LOAD_REQUESTED,
+                        {
+                            mailbox_binding_id: mailboxBindingId,
+                            skip_auto_sync: true,
+                        },
+                        { causation_id: event.id, source: 'local' },
                     );
                 }
                 return;
@@ -429,7 +590,7 @@ export function createMailEffect({ baseUrl }) {
                         },
                         { causation_id: event.id, source: 'http' },
                     );
-                    if (data.needs_sync === true) {
+                    if (data.needs_sync === true && shouldAutoSync(mailboxBindingId)) {
                         ctx.dispatch(
                             MAIL_EVENTS.SYNC_REQUESTED,
                             { mailbox_binding_id: mailboxBindingId },
@@ -786,6 +947,28 @@ export function createMailEffect({ baseUrl }) {
                 }
                 return;
             }
+            case MAIL_EVENTS.MESSAGE_RAG_INDEX_REQUESTED: {
+                const payload = event.payload || {};
+                try {
+                    const result = await httpRequest({
+                        method: 'POST',
+                        url: `${base}/api/mail/messages/rag-index`,
+                        body: payload,
+                    });
+                    ctx.dispatch(
+                        MAIL_EVENTS.MESSAGE_RAG_INDEX_ACCEPTED,
+                        result,
+                        { causation_id: event.id, source: 'http' },
+                    );
+                } catch (err) {
+                    ctx.dispatch(
+                        MAIL_EVENTS.MESSAGE_RAG_INDEX_FAILED,
+                        { message: errorMessage(err) },
+                        { causation_id: event.id, source: 'http' },
+                    );
+                }
+                return;
+            }
             case MAIL_EVENTS.DRAFT_SAVE_REQUESTED: {
                 try {
                     const result = await httpRequest({
@@ -953,10 +1136,10 @@ export function createMailEffect({ baseUrl }) {
                     ? payload.thread_id
                     : '';
                 if (
-                    selectedUid
-                    && upsertUid
-                    && upsertFolder
-                    && (
+                    !selectedUid
+                    || !upsertUid
+                    || !upsertFolder
+                    || !(
                         selectedUid === upsertUid
                         || (
                             typeof mail.selectedThreadId === 'string'
@@ -965,16 +1148,43 @@ export function createMailEffect({ baseUrl }) {
                         )
                     )
                 ) {
-                    ctx.dispatch(
-                        MAIL_EVENTS.THREAD_LOAD_REQUESTED,
-                        {
-                            mailbox_binding_id: mail.activeMailboxBindingId,
-                            folder: upsertFolder,
-                            uid: selectedUid,
-                        },
-                        { causation_id: event.id, source: 'ws' },
-                    );
+                    return;
                 }
+                // UID уникален только в папке. Upsert другого письма треда
+                // (INBOX↔Sent) не должен подменять folder якоря selectedUid.
+                let anchorFolder = null;
+                if (selectedUid === upsertUid) {
+                    anchorFolder = upsertFolder;
+                } else if (
+                    mail.selectedMessage
+                    && mail.selectedMessage.uid === selectedUid
+                    && typeof mail.selectedMessage.folder === 'string'
+                    && mail.selectedMessage.folder.length > 0
+                ) {
+                    anchorFolder = mail.selectedMessage.folder;
+                } else if (Array.isArray(mail.selectedThreadMessages)) {
+                    const anchor = mail.selectedThreadMessages.find(
+                        (item) => item && item.uid === selectedUid,
+                    );
+                    if (anchor && typeof anchor.folder === 'string' && anchor.folder.length > 0) {
+                        anchorFolder = anchor.folder;
+                    }
+                }
+                if (!anchorFolder && typeof mail.folder === 'string' && mail.folder.length > 0) {
+                    anchorFolder = mail.folder;
+                }
+                if (!anchorFolder) {
+                    return;
+                }
+                ctx.dispatch(
+                    MAIL_EVENTS.THREAD_LOAD_REQUESTED,
+                    {
+                        mailbox_binding_id: mail.activeMailboxBindingId,
+                        folder: anchorFolder,
+                        uid: selectedUid,
+                    },
+                    { causation_id: event.id, source: 'ws' },
+                );
                 return;
             }
             default:

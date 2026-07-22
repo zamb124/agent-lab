@@ -16,6 +16,8 @@ class CalendarProvider(StrEnum):
     PLATFORM = "platform"
     GOOGLE = "google"
     YANDEX = "yandex"
+    MAILRU = "mailru"
+    CALDAV = "caldav"
 
 
 class CalendarEventSource(StrEnum):
@@ -25,6 +27,8 @@ class CalendarEventSource(StrEnum):
     FLOWS = "flows"
     GOOGLE = "google"
     YANDEX = "yandex"
+    MAILRU = "mailru"
+    CALDAV = "caldav"
 
 
 class CalendarEventStatus(StrEnum):
@@ -110,6 +114,7 @@ class CalendarIntegrationCredentials(StrictBaseModel):
 
 class CalendarIntegrationSettings(StrictBaseModel):
     default_calendar_id: str | None = None
+    caldav_base_url: str | None = None
     sync_enabled: bool = True
     sync_inbound_enabled: bool = True
     sync_outbound_enabled: bool = True
@@ -141,6 +146,7 @@ class CalendarIntegrationConnectPayload(StrictBaseModel):
     scope: str | None = None
     token_type: str | None = None
     default_calendar_id: str | None = None
+    caldav_base_url: str | None = None
     sync_enabled: bool = True
     sync_inbound_enabled: bool = True
     sync_outbound_enabled: bool = True

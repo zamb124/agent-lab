@@ -309,6 +309,77 @@ async def test_calendar_yandex_connect_requires_username(
 
 
 @pytest.mark.asyncio
+async def test_calendar_mailru_connect_uses_preset_base_url(
+    unique_id: str,
+    frontend_client,
+    auth_headers_system,
+) -> None:
+    response = await frontend_client.post(
+        "/frontend/api/calendar/integrations/connect",
+        json={
+            "provider": "mailru",
+            "username": f"user-{unique_id}@mail.ru",
+            "access_token": "app-password",
+            "default_calendar_id": "default",
+            "sync_enabled": True,
+            "sync_inbound_enabled": True,
+            "sync_outbound_enabled": True,
+            "notifications_enabled": True,
+        },
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["provider"] == "mailru"
+    assert data["settings"]["caldav_base_url"] == "https://calendar.mail.ru"
+    assert data["settings"]["default_calendar_id"] == "default"
+
+
+@pytest.mark.asyncio
+async def test_calendar_custom_caldav_requires_base_url(
+    unique_id: str,
+    frontend_client,
+    auth_headers_system,
+) -> None:
+    response = await frontend_client.post(
+        "/frontend/api/calendar/integrations/connect",
+        json={
+            "provider": "caldav",
+            "username": f"user-{unique_id}@example.com",
+            "access_token": "app-password",
+            "default_calendar_id": "default",
+            "sync_enabled": True,
+        },
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_calendar_custom_caldav_connect_with_base_url(
+    unique_id: str,
+    frontend_client,
+    auth_headers_system,
+) -> None:
+    response = await frontend_client.post(
+        "/frontend/api/calendar/integrations/connect",
+        json={
+            "provider": "caldav",
+            "username": f"user-{unique_id}@example.com",
+            "access_token": "app-password",
+            "caldav_base_url": "https://dav.example.com/",
+            "default_calendar_id": "default",
+            "sync_enabled": True,
+        },
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["provider"] == "caldav"
+    assert data["settings"]["caldav_base_url"] == "https://dav.example.com"
+
+
+@pytest.mark.asyncio
 async def test_calendar_integration_notifications_flag_roundtrip(
     unique_id: str,
     frontend_client,

@@ -36,7 +36,7 @@ from core.mail.repositories import INBOX_FOLDER, MailMessageRepository
 from core.mail.service import MailService
 from core.models.context_models import Context
 from core.models.identity_models import Company, User, UserStatus
-from tests.core.mail.live.test_ispmanager_live import _poll_fetch_message
+from tests.core.mail.live.poll import poll_fetch_message as _poll_fetch_message
 
 pytestmark = [pytest.mark.network, pytest.mark.timeout(240)]
 

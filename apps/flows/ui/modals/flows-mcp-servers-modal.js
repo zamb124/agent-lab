@@ -56,8 +56,6 @@ const HEADER_PRESET_OPTIONS = Object.freeze([
     Object.freeze({ id: 'apikey', titleKey: 'mcp_servers_modal.preset_api_key', icon: 'key' }),
     Object.freeze({ id: 'basic', titleKey: 'mcp_servers_modal.preset_basic', icon: 'lock' }),
 ]);
-const PLATFORM_MCP_SLUGS = Object.freeze(['browser', 'search']);
-
 export class FlowsMcpServersModal extends PlatformModal {
     static modalKind = 'flows.mcp_servers';
     static i18nNamespace = 'flows';
@@ -71,7 +69,8 @@ export class FlowsMcpServersModal extends PlatformModal {
         _saving: { state: true },
         _testFeedback: { state: true },
         _testingServerId: { state: true },
-        _search: { state: true },
+        _installedSearch: { state: true },
+        _catalogSearch: { state: true },
         _installedItems: { state: true },
         _installedTotal: { state: true },
         _installedLoading: { state: true },
@@ -123,13 +122,16 @@ export class FlowsMcpServersModal extends PlatformModal {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
+                height: min(70vh, 640px);
                 max-height: min(70vh, 640px);
                 overflow-y: auto;
                 padding: var(--space-1);
+                box-sizing: border-box;
             }
             .mcp-cards.is-fullscreen {
                 display: grid;
                 grid-template-columns: repeat(3, minmax(0, 1fr));
+                height: auto;
                 max-height: none;
                 flex: 1;
                 min-height: 0;
@@ -144,6 +146,17 @@ export class FlowsMcpServersModal extends PlatformModal {
                 .mcp-cards.is-fullscreen {
                     grid-template-columns: minmax(0, 1fr);
                 }
+            }
+            .mcp-cards > .mcp-empty,
+            .mcp-cards > .mcp-error-panel {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-3);
+                min-height: 0;
+                box-sizing: border-box;
             }
             .mcp-card {
                 gap: var(--space-2);
@@ -532,7 +545,19 @@ export class FlowsMcpServersModal extends PlatformModal {
         this._installedSearchTimer = null;
         this._brandingSearchTimer = null;
         this._brandingSlugTimer = null;
-        this._search = '';
+        this._installedSearch = '';
+        this._catalogSearch = '';
+    }
+
+    _clearListSearchTimers() {
+        if (this._catalogSearchTimer !== null) {
+            clearTimeout(this._catalogSearchTimer);
+            this._catalogSearchTimer = null;
+        }
+        if (this._installedSearchTimer !== null) {
+            clearTimeout(this._installedSearchTimer);
+            this._installedSearchTimer = null;
+        }
     }
 
     updated(changedProperties) {
@@ -548,7 +573,8 @@ export class FlowsMcpServersModal extends PlatformModal {
             this._brandingError = null;
             this._brandingSaving = false;
             this._brandingUploadFiles = [];
-            this._search = '';
+            this._installedSearch = '';
+            this._catalogSearch = '';
             this._catalogItems = [];
             this._catalogLoading = false;
             this._catalogError = null;
@@ -563,14 +589,7 @@ export class FlowsMcpServersModal extends PlatformModal {
             this._brandingSearch = '';
             this._brandingSlugSuggestions = [];
             this._brandingEditingSlug = '';
-            if (this._catalogSearchTimer !== null) {
-                clearTimeout(this._catalogSearchTimer);
-                this._catalogSearchTimer = null;
-            }
-            if (this._installedSearchTimer !== null) {
-                clearTimeout(this._installedSearchTimer);
-                this._installedSearchTimer = null;
-            }
+            this._clearListSearchTimers();
             if (this._brandingSearchTimer !== null) {
                 clearTimeout(this._brandingSearchTimer);
                 this._brandingSearchTimer = null;
@@ -587,14 +606,7 @@ export class FlowsMcpServersModal extends PlatformModal {
     }
 
     disconnectedCallback() {
-        if (this._catalogSearchTimer !== null) {
-            clearTimeout(this._catalogSearchTimer);
-            this._catalogSearchTimer = null;
-        }
-        if (this._installedSearchTimer !== null) {
-            clearTimeout(this._installedSearchTimer);
-            this._installedSearchTimer = null;
-        }
+        this._clearListSearchTimers();
         if (this._brandingSearchTimer !== null) {
             clearTimeout(this._brandingSearchTimer);
             this._brandingSearchTimer = null;
@@ -625,8 +637,8 @@ export class FlowsMcpServersModal extends PlatformModal {
         if (this._view !== 'list') {
             return;
         }
-        this._search = v;
         if (this._listTab === 'catalog') {
+            this._catalogSearch = v;
             if (this._catalogSearchTimer !== null) {
                 clearTimeout(this._catalogSearchTimer);
             }
@@ -636,6 +648,7 @@ export class FlowsMcpServersModal extends PlatformModal {
             }, 250);
             return;
         }
+        this._installedSearch = v;
         if (this._installedSearchTimer !== null) {
             clearTimeout(this._installedSearchTimer);
         }
@@ -656,17 +669,8 @@ export class FlowsMcpServersModal extends PlatformModal {
         `;
     }
 
-    _hasPlatformDefaults(items) {
-        const ids = new Set(
-            items
-                .map((item) => (typeof item.server_id === 'string' ? item.server_id : ''))
-                .filter((id) => id.length > 0),
-        );
-        return PLATFORM_MCP_SLUGS.every((slug) => ids.has(slug));
-    }
-
     _isOptInCatalogServer(server) {
-        return server.source === 'catalog' && server.catalog_auto_provisioned !== true;
+        return server.source === 'catalog';
     }
 
     async _retryServersLoad() {
@@ -679,7 +683,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         const offset = reset ? 0 : this._installedItems.length;
         try {
             const payload = await this._serversListOp.run({
-                search: this._search,
+                search: this._installedSearch,
                 limit: INSTALLED_PAGE_SIZE,
                 offset,
             });
@@ -709,7 +713,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         const offset = reset ? 0 : this._catalogItems.length;
         try {
             const payload = await this._catalogLoadOp.run({
-                search: this._search,
+                search: this._catalogSearch,
                 limit: CATALOG_PAGE_SIZE,
                 offset,
             });
@@ -737,13 +741,13 @@ export class FlowsMcpServersModal extends PlatformModal {
         if (tab !== 'installed' && tab !== 'catalog') {
             throw new Error(`flows-mcp-servers-modal: invalid list tab ${tab}`);
         }
+        this._clearListSearchTimers();
         this._listTab = tab;
-        if (tab === 'catalog' && this._catalogItems.length === 0 && this._catalogError === null) {
+        if (tab === 'catalog') {
             await this._loadCatalog({ reset: true });
+            return;
         }
-        if (tab === 'installed' && this._installedItems.length === 0 && this._installedError === null) {
-            await this._loadInstalled({ reset: true });
-        }
+        await this._loadInstalled({ reset: true });
     }
 
     async _installCatalogEntry(entry) {
@@ -788,7 +792,12 @@ export class FlowsMcpServersModal extends PlatformModal {
     }
 
     _renderHeaderSearch() {
-        const value = this._view === 'branding' ? this._brandingSearch : this._search;
+        let value = this._installedSearch;
+        if (this._view === 'branding') {
+            value = this._brandingSearch;
+        } else if (this._listTab === 'catalog') {
+            value = this._catalogSearch;
+        }
         const placeholderKey = this._view === 'branding'
             ? 'mcp_servers_modal.branding_search_placeholder'
             : 'mcp_servers_modal.search_placeholder';
@@ -1275,12 +1284,9 @@ export class FlowsMcpServersModal extends PlatformModal {
             return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
         }
         if (allItems.length === 0) {
-            return this._search.trim().length > 0
+            return this._installedSearch.trim().length > 0
                 ? html`<div class="mcp-empty">${this.t('mcp_servers_modal.empty_search')}</div>`
-                : this._renderInstalledEmptyState('mcp_servers_modal.empty_init_pending');
-        }
-        if (!this._hasPlatformDefaults(allItems) && this._search.trim().length === 0) {
-            return this._renderInstalledEmptyState('mcp_servers_modal.empty_init_pending');
+                : this._renderInstalledEmptyState('mcp_servers_modal.empty_none_installed');
         }
         return html`
             ${allItems.map((s) => html`
@@ -1393,7 +1399,7 @@ export class FlowsMcpServersModal extends PlatformModal {
             return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
         }
         if (this._catalogItems.length === 0) {
-            const msg = this._search.trim().length > 0
+            const msg = this._catalogSearch.trim().length > 0
                 ? this.t('mcp_servers_modal.catalog_empty_search')
                 : this.t('mcp_servers_modal.catalog_empty');
             return html`<div class="mcp-empty">${msg}</div>`;

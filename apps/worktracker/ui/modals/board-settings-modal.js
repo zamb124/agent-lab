@@ -9,7 +9,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/worktracker-icon-action.js';
-import { reorderByInsertIndex } from '../utils/board-column-reorder.js';
+import { reorderByInsertIndex } from '@platform/lib/utils/reorder-by-insert-index.js';
 
 const BOARDS_NAME = 'worktracker/boards';
 const BOARD_COLUMN_INDEX_MIME = 'application/x-worktracker-board-column-index';

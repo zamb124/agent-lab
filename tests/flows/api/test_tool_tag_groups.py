@@ -13,7 +13,7 @@ from apps.flows.src.services.tool_tag_group_service import ToolTagGroupService
 @pytest.mark.asyncio
 async def test_list_tool_tag_groups_empty(client, container, unique_id):
     tag = f"empty_{unique_id}"
-    response = await client.get("/flows/api/v1/tools/tag-groups?limit=500&offset=0")
+    response = await client.get("/flows/api/v1/tools/tag-groups?limit=200&offset=0")
     assert response.status_code == 200
     body = response.json()
     assert isinstance(body["items"], list)
@@ -31,7 +31,7 @@ async def test_list_tool_tag_groups_returns_stored(client, container, unique_id)
         updated_at=datetime.now(timezone.utc),
     )
     await container.tool_tag_group_repository.set(record)
-    response = await client.get("/flows/api/v1/tools/tag-groups?limit=500&offset=0")
+    response = await client.get("/flows/api/v1/tools/tag-groups?limit=200&offset=0")
     assert response.status_code == 200
     body = response.json()
     match = next((item for item in body["items"] if item["tag"] == tag), None)

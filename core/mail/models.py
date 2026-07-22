@@ -21,6 +21,11 @@ class MailConnectionStatus(StrEnum):
     DISABLED = "disabled"
 
 
+class MailConnectionScope(StrEnum):
+    COMPANY = "company"
+    PERSONAL = "personal"
+
+
 class MailboxBindingKind(StrEnum):
     USER = "user"
     ROLE = "role"
@@ -40,6 +45,15 @@ class MailFolderRole(StrEnum):
     OTHER = "other"
 
 
+class MailRagIndexStatus(StrEnum):
+    """Статус фоновой RAG-индексации письма (не блокирует local-first persist)."""
+
+    READY = "ready"
+    PENDING = "pending"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
 class MailFolder(StrictBaseModel):
     name: str
     delimiter: str | None = None
@@ -48,6 +62,7 @@ class MailFolder(StrictBaseModel):
     selectable: bool = True
     unseen_count: int = Field(default=0, ge=0)
     message_count: int = Field(default=0, ge=0)
+    sort_index: int = Field(default=0)
 
 
 class MailFolderListResult(StrictBaseModel):
@@ -63,6 +78,10 @@ class MailFolderListResult(StrictBaseModel):
 class MailFoldersEnsurePayload(StrictBaseModel):
     mailbox_binding_id: str
 
+
+class MailFoldersReorderPayload(StrictBaseModel):
+    mailbox_binding_id: str
+    folder_names: list[str] = Field(min_length=1)
 
 class StoredMailAttachmentRef(StrictBaseModel):
     """Ссылка на вложение в локальном store (file_id после materialize)."""
@@ -84,6 +103,8 @@ class IspmanagerProvisionConfig(StrictBaseModel):
 class CompanyMailConnection(StrictBaseModel):
     company_mail_connection_id: str
     company_id: str
+    scope: MailConnectionScope = MailConnectionScope.COMPANY
+    owner_user_id: str | None = None
     mail_domain: str
     provider: MailProvider
     imap_host: str
@@ -140,17 +161,56 @@ class MailboxBindingCreatePayload(StrictBaseModel):
     calendar_color: str | None = None
 
 
+class PersonalMailboxConnectPayload(StrictBaseModel):
+    email_address: str = Field(min_length=3)
+    password: str = Field(min_length=1)
+    imap_host: str = Field(min_length=1)
+    imap_port: int = Field(ge=1, le=65535, default=993)
+    smtp_host: str = Field(min_length=1)
+    smtp_port: int = Field(ge=1, le=65535, default=465)
+    use_ssl: bool = True
+    sync_enabled: bool = True
+    calendar_color: str | None = None
+
+
+class PersonalMailboxHealthcheckPayload(StrictBaseModel):
+    email_address: str = Field(min_length=3)
+    password: str = Field(min_length=1)
+    imap_host: str = Field(min_length=1)
+    imap_port: int = Field(ge=1, le=65535, default=993)
+    smtp_host: str = Field(min_length=1)
+    smtp_port: int = Field(ge=1, le=65535, default=465)
+    use_ssl: bool = True
+
+
+class MailboxBindingHealthcheckPayload(StrictBaseModel):
+    """Проверка login существующего binding; password/hosts опциональны (иначе stored)."""
+
+    password: str | None = None
+    imap_host: str | None = None
+    imap_port: int | None = Field(default=None, ge=1, le=65535)
+    smtp_host: str | None = None
+    smtp_port: int | None = Field(default=None, ge=1, le=65535)
+    use_ssl: bool | None = None
+
+
 class MailboxBindingPatchPayload(StrictBaseModel):
     user_id: str | None = None
     sync_enabled: bool | None = None
     password: str | None = None
     calendar_color: str | None = None
+    imap_host: str | None = None
+    imap_port: int | None = Field(default=None, ge=1, le=65535)
+    smtp_host: str | None = None
+    smtp_port: int | None = Field(default=None, ge=1, le=65535)
+    use_ssl: bool | None = None
 
 
 class MailboxBindingPublic(StrictBaseModel):
     mailbox_binding_id: str
     company_id: str
     company_mail_connection_id: str
+    connection_scope: MailConnectionScope
     user_id: str | None = None
     kind: MailboxBindingKind
     email_address: str
@@ -159,6 +219,11 @@ class MailboxBindingPublic(StrictBaseModel):
     is_default: bool
     calendar_color: str
     has_password: bool
+    imap_host: str | None = None
+    imap_port: int | None = None
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    use_ssl: bool | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -183,6 +248,21 @@ class MailMessageListItem(StrictBaseModel):
     date: datetime | None = None
     in_reply_to: str | None = None
     references: str | None = None
+    rag_index_status: MailRagIndexStatus = MailRagIndexStatus.SKIPPED
+
+
+class MailMessageRagIndexPayload(StrictBaseModel):
+    mailbox_binding_id: str
+    folder: str = "INBOX"
+    uid: str
+
+
+class MailMessageRagIndexResult(StrictBaseModel):
+    accepted: bool
+    mailbox_binding_id: str
+    folder: str
+    uid: str
+    rag_index_status: MailRagIndexStatus
 
 
 class MailMessageListResult(StrictBaseModel):
@@ -331,6 +411,8 @@ class MailThreadResult(StrictBaseModel):
 class CompanyMailConnectionPublic(StrictBaseModel):
     company_mail_connection_id: str
     company_id: str
+    scope: MailConnectionScope
+    owner_user_id: str | None = None
     mail_domain: str
     provider: MailProvider
     imap_host: str
@@ -546,6 +628,7 @@ class StoredMailMessage(StrictBaseModel):
     references: str | None = None
     rag_document_id: str | None = None
     rag_namespace: str | None = None
+    rag_index_status: MailRagIndexStatus = MailRagIndexStatus.SKIPPED
     synced_at: datetime
     created_at: datetime
     updated_at: datetime
@@ -590,4 +673,5 @@ class StoredMailboxFolder(StrictBaseModel):
     unseen_count: int = Field(default=0, ge=0)
     namespace_prefix: str = ""
     capabilities: list[str] = Field(default_factory=list)
+    sort_index: int = 0
     updated_at: datetime

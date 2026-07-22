@@ -130,6 +130,7 @@ import apps.idle_worker.tasks.file_retention_tasks as _file_retention_tasks  # n
 import apps.idle_worker.tasks.calendar_sync_tasks as _calendar_sync_tasks  # noqa: E402
 import apps.idle_worker.tasks.mail_sync_tasks as _mail_sync_tasks  # noqa: E402
 import apps.idle_worker.tasks.mail_mutation_tasks as _mail_mutation_tasks  # noqa: E402
+import apps.idle_worker.tasks.mail_rag_tasks as _mail_rag_tasks  # noqa: E402
 import apps.idle_worker.tasks.mail_idle_supervisor as _mail_idle_supervisor  # noqa: E402
 import apps.idle_worker.tasks.namespace_personal_backfill_tasks as _namespace_personal_backfill_tasks  # noqa: E402
 import apps.idle_worker.tasks.company_init_tasks as _company_init_tasks  # noqa: E402
@@ -148,6 +149,7 @@ _TASK_REGISTRATION_MODULES = (
     _calendar_sync_tasks,
     _mail_sync_tasks,
     _mail_mutation_tasks,
+    _mail_rag_tasks,
     _mail_idle_supervisor,
     _namespace_personal_backfill_tasks,
     _company_init_tasks,

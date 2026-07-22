@@ -592,12 +592,14 @@ class CompanyPronunciationRule(Base):
 
 
 class CompanyMailConnectionRecord(Base):
-    """Подключение компании к почтовому серверу."""
+    """Подключение к почтовому серверу (company или personal)."""
 
     __tablename__: str = "company_mail_connections"
 
     company_mail_connection_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    scope: Mapped[str] = mapped_column(String(32), nullable=False, default="company")
+    owner_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     mail_domain: Mapped[str] = mapped_column(String(255), nullable=False)
     provider: Mapped[str] = mapped_column(String(64), nullable=False)
     imap_host: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -621,7 +623,6 @@ class CompanyMailConnectionRecord(Base):
     )
 
     __table_args__: _TableArgs = (
-        UniqueConstraint("company_id", name="uq_company_mail_connections_company_id"),
         CheckConstraint(
             "provider IN ('ispmanager','generic_imap_smtp')",
             name="company_mail_connections_provider_check",
@@ -629,6 +630,20 @@ class CompanyMailConnectionRecord(Base):
         CheckConstraint(
             "status IN ('active','degraded','disabled')",
             name="company_mail_connections_status_check",
+        ),
+        CheckConstraint(
+            "scope IN ('company','personal')",
+            name="company_mail_connections_scope_check",
+        ),
+        CheckConstraint(
+            "(scope = 'company' AND owner_user_id IS NULL) OR (scope = 'personal' AND owner_user_id IS NOT NULL)",
+            name="company_mail_connections_scope_owner_check",
+        ),
+        Index(
+            "uq_company_mail_connections_company_scope",
+            "company_id",
+            unique=True,
+            postgresql_where=text("scope = 'company'"),
         ),
         Index("ix_company_mail_connections_mail_domain", "mail_domain"),
     )
@@ -752,6 +767,7 @@ class MailboxFolderRecord(Base):
     capabilities: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
+    sort_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -794,6 +810,9 @@ class MailMessageRecord(Base):
     references_header: Mapped[str | None] = mapped_column(Text, nullable=True)
     rag_document_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rag_namespace: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rag_index_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'skipped'")
+    )
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

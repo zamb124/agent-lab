@@ -1,8 +1,9 @@
-# Curated MCP catalog allowlist for auto_provision=approved_only.
-# catalog_id — slug сервера в MCPServerRepository (source=catalog).
+# Curated MCP catalog allowlist (badge platform_approved в Store).
+# catalog_id — slug сервера в MCPServerRepository (source=catalog) после install.
 #
 # Запись без upstream_url — только overlay для official registry (platform_approved, auth).
 # Запись с upstream_url — curated seed вне registry (Context7, DeepWiki и т.д.).
+# Default auto_provision=disabled: компании ставят curated из Store сами.
 
 - catalog_id: deepwiki
   registry_name: com.deepwiki/mcp

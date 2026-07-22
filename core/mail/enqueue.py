@@ -12,6 +12,7 @@ from core.mail.task_names import (
     MAIL_MARK_SEEN_TASK_NAME,
     MAIL_MARK_UNSEEN_TASK_NAME,
     MAIL_MOVE_TASK_NAME,
+    MAIL_RAG_INDEX_TASK_NAME,
     MAIL_SEND_TASK_NAME,
     MAIL_STAR_TASK_NAME,
     MAIL_SYNC_BINDING_TASK_NAME,
@@ -156,4 +157,22 @@ async def enqueue_mail_star(*, company_id: str, payload: JsonObject) -> None:
         company_id=company_id,
         payload=payload,
         background_kind="mail_mutation",
+    )
+
+
+async def enqueue_mail_rag_index(
+    *,
+    company_id: str,
+    mailbox_binding_id: str,
+    folder: str,
+    uid: str,
+) -> None:
+    _ = await kiq_task_name_with_context(
+        MAIL_RAG_INDEX_TASK_NAME,
+        _idle_broker(),
+        company_id=company_id,
+        mailbox_binding_id=mailbox_binding_id,
+        folder=folder,
+        uid=uid,
+        background_kind="mail_rag_index",
     )

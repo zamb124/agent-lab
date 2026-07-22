@@ -1614,12 +1614,29 @@ class MailSystemConfig(BaseModel):
     )
 
 
+class MailLivePersonalConfig(BaseModel):
+    """Opt-in live тесты против фиксированных personal IMAP/SMTP ящиков (не ISP provision).
+
+    Пароли — только в mail.local_dev.mailbox_passwords[email].
+    """
+
+    enabled: bool = False
+    imap_host: str = "imap.mail.ru"
+    imap_port: int = 993
+    smtp_host: str = "smtp.mail.ru"
+    smtp_port: int = 465
+    use_ssl: bool = True
+    account_a: str = ""
+    account_b: str = ""
+
+
 class MailLiveTestConfig(BaseModel):
     """Opt-in live тесты против реального mail-сервера."""
 
     enabled: bool = False
     mailbox_prefix: str = "plt-"
     allow_delete: bool = True
+    personal: MailLivePersonalConfig = Field(default_factory=MailLivePersonalConfig)
 
 
 class MailLocalDevConfig(BaseModel):
@@ -2037,7 +2054,12 @@ class MCPCatalogConfig(BaseModel):
 
     enabled: bool = Field(default=True)
     auto_provision: Literal["all_verified", "approved_only", "disabled"] = Field(
-        default="approved_only",
+        default="disabled",
+        description=(
+            "Auto-provision catalog entries into company Installed. "
+            "disabled = opt-in Store only (platform Browser/Search via ensure_default). "
+            "approved_only / all_verified = legacy auto-tier."
+        ),
     )
     registry_base_url: str = Field(default="https://registry.modelcontextprotocol.io")
     crawl_cron: str = Field(default="0 0 * * *")

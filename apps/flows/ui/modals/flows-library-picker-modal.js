@@ -23,7 +23,7 @@ import { renderMcpServerIcon } from '../_helpers/mcp-server-icon.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from '../_helpers/flows-mcp-tool-registry.js';
 import { buildToolTagGroups } from '../_helpers/flows-tool-tag-groups.js';
-import { fetchToolsAllPage, TOOLS_ALL_PAGE_LIMIT } from '../_helpers/flows-tools-all-pages.js';
+import { fetchToolsAllPage, TAG_GROUPS_PAGE_LIMIT, TOOLS_ALL_PAGE_LIMIT } from '../_helpers/flows-tools-all-pages.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { hueFromString } from '@platform/lib/utils/hash-string.js';
@@ -994,7 +994,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         let offset = 0;
         while (true) {
             const result = await this._toolTagGroups.run({
-                limit: TOOLS_ALL_PAGE_LIMIT,
+                limit: TAG_GROUPS_PAGE_LIMIT,
                 offset,
             });
             if (result === null || !isPlainObject(result) || !Array.isArray(result.items)) {
@@ -1009,7 +1009,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                     description_en: typeof item.description_en === 'string' ? item.description_en : '',
                 };
             }
-            if (result.items.length < TOOLS_ALL_PAGE_LIMIT) {
+            if (result.items.length < TAG_GROUPS_PAGE_LIMIT) {
                 break;
             }
             offset += result.items.length;

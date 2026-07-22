@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -39,6 +38,7 @@ from core.mail.models import (
     CompanyMailConnectionUpsertPayload,
     InboundMailMessagePublic,
     MailboxBindingCreatePayload,
+    MailboxBindingHealthcheckPayload,
     MailboxBindingMember,
     MailboxBindingMemberPayload,
     MailboxBindingPatchPayload,
@@ -48,12 +48,15 @@ from core.mail.models import (
     MailFolderListResult,
     MailFolderRole,
     MailFoldersEnsurePayload,
+    MailFoldersReorderPayload,
     MailMessageFlagPayload,
     MailMessageFlagResult,
     MailMessageListPayload,
     MailMessageListResult,
     MailMessageMovePayload,
     MailMessageMoveResult,
+    MailMessageRagIndexPayload,
+    MailMessageRagIndexResult,
     MailMessageSearchPayload,
     MailMessageStarPayload,
     MailMessageStarResult,
@@ -65,8 +68,10 @@ from core.mail.models import (
     MailSyncNowResult,
     MailThreadPayload,
     MailThreadResult,
+    PersonalMailboxConnectPayload,
+    PersonalMailboxHealthcheckPayload,
 )
-from core.mail.service import MailService, to_public_binding, to_public_connection
+from core.mail.service import MailService, to_public_connection
 from core.pagination import ListResponse
 
 router = APIRouter(tags=["mail"])
@@ -138,9 +143,10 @@ async def list_mail_bindings(mail_service: MailServiceDep) -> ListResponse[Mailb
     try:
         mail_service.require_company_admin()
         bindings = await mail_service.list_bindings()
+        items = [await mail_service.public_binding(item) for item in bindings]
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return ListResponse(items=[to_public_binding(item) for item in bindings])
+    return ListResponse(items=items)
 
 
 @router.get("/bindings/me", response_model=ListResponse[MailboxBindingPublic])
@@ -149,9 +155,10 @@ async def list_my_mail_bindings(
 ) -> ListResponse[MailboxBindingPublic]:
     try:
         bindings = await mail_service.list_my_bindings()
+        items = [await mail_service.public_binding(item) for item in bindings]
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return ListResponse(items=[to_public_binding(item) for item in bindings])
+    return ListResponse(items=items)
 
 
 @router.post("/bindings", response_model=MailboxBindingPublic)
@@ -164,7 +171,45 @@ async def create_mail_binding(
         binding = await mail_service.bind_mailbox(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return to_public_binding(binding)
+    return await mail_service.public_binding(binding)
+
+
+@router.post("/bindings/personal", response_model=MailboxBindingPublic)
+async def connect_personal_mail_binding(
+    payload: PersonalMailboxConnectPayload,
+    mail_service: MailServiceDep,
+) -> MailboxBindingPublic:
+    try:
+        binding = await mail_service.connect_personal_mailbox(payload)
+    except Exception as exc:
+        _raise_http_for_mail_error(exc)
+    return await mail_service.public_binding(binding)
+
+
+@router.post("/bindings/personal/healthcheck", response_model=MailServerHealth)
+async def healthcheck_personal_mail_binding(
+    payload: PersonalMailboxHealthcheckPayload,
+    mail_service: MailServiceDep,
+) -> MailServerHealth:
+    try:
+        return await mail_service.healthcheck_personal_credentials(payload)
+    except Exception as exc:
+        _raise_http_for_mail_error(exc)
+
+
+@router.post(
+    "/bindings/{mailbox_binding_id}/healthcheck",
+    response_model=MailServerHealth,
+)
+async def healthcheck_mail_binding(
+    mailbox_binding_id: str,
+    payload: MailboxBindingHealthcheckPayload,
+    mail_service: MailServiceDep,
+) -> MailServerHealth:
+    try:
+        return await mail_service.healthcheck_binding(mailbox_binding_id, payload)
+    except Exception as exc:
+        _raise_http_for_mail_error(exc)
 
 
 @router.patch("/bindings/{mailbox_binding_id}", response_model=MailboxBindingPublic)
@@ -177,7 +222,7 @@ async def patch_mail_binding(
         binding = await mail_service.patch_binding(mailbox_binding_id, payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return to_public_binding(binding)
+    return await mail_service.public_binding(binding)
 
 
 @router.put("/bindings/{mailbox_binding_id}/default", response_model=MailboxBindingPublic)
@@ -189,7 +234,7 @@ async def set_default_mail_binding(
         binding = await mail_service.set_default_binding(mailbox_binding_id)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return to_public_binding(binding)
+    return await mail_service.public_binding(binding)
 
 
 @router.delete("/bindings/{mailbox_binding_id}", status_code=204)
@@ -198,7 +243,6 @@ async def delete_mail_binding(
     mail_service: MailServiceDep,
 ) -> None:
     try:
-        mail_service.require_company_admin()
         await mail_service.unbind_mailbox(mailbox_binding_id)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
@@ -222,6 +266,17 @@ async def ensure_mail_folders(
 ) -> MailFolderListResult:
     try:
         return await mail_service.ensure_standard_folders(payload.mailbox_binding_id)
+    except Exception as exc:
+        _raise_http_for_mail_error(exc)
+
+
+@router.put("/folders/order", response_model=MailFolderListResult)
+async def reorder_mail_folders(
+    payload: MailFoldersReorderPayload,
+    mail_service: MailServiceDep,
+) -> MailFolderListResult:
+    try:
+        return await mail_service.reorder_folders(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -357,16 +412,13 @@ async def send_mail_message(
 ) -> MailSendResult:
     try:
         company_id = _require_company_context()
-        message_id = payload.message_id
-        if message_id is None or not message_id.strip():
-            connection = await mail_service.get_connection(company_id)
-            if connection is None:
-                raise MailConnectionNotFoundError(company_id)
-            domain = connection.mail_domain.strip()
-            if not domain:
-                raise MailConfigError("mail_domain is required for outbound Message-ID")
-            message_id = f"<{uuid.uuid4().hex}@{domain}>"
-        send_payload = payload.model_copy(update={"message_id": message_id})
+        send_payload = payload
+        if payload.message_id is None or not payload.message_id.strip():
+            message_id = await mail_service.allocate_outbound_message_id(
+                payload.mailbox_binding_id,
+                company_id=company_id,
+            )
+            send_payload = payload.model_copy(update={"message_id": message_id})
         result = await mail_service.prepare_send_local(send_payload, company_id=company_id)
         await enqueue_mail_send(
             company_id=company_id,
@@ -483,6 +535,17 @@ async def star_mail_message(
             payload=payload.model_dump(mode="json"),
         )
         return result
+    except Exception as exc:
+        _raise_http_for_mail_error(exc)
+
+
+@router.post("/messages/rag-index", response_model=MailMessageRagIndexResult)
+async def rag_index_mail_message(
+    payload: MailMessageRagIndexPayload,
+    mail_service: MailServiceDep,
+) -> MailMessageRagIndexResult:
+    try:
+        return await mail_service.request_rag_index(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 

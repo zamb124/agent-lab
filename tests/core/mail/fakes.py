@@ -90,6 +90,7 @@ class RecordingMailServerPort:
         self.uid_expunge_calls: list[tuple[str, str | None]] = []
         self.append_message_calls: list[tuple[str, str]] = []
         self.idle_wake: MailIdleWake | None = None
+        self.healthcheck_with_credentials_calls: list[MailboxSecret] = []
 
     async def healthcheck(self) -> MailServerHealth:
         return MailServerHealth(
@@ -101,7 +102,7 @@ class RecordingMailServerPort:
         )
 
     async def healthcheck_with_credentials(self, secret: MailboxSecret) -> MailServerHealth:
-        _ = secret
+        self.healthcheck_with_credentials_calls.append(secret)
         return await self.healthcheck()
 
     async def list_mailboxes(self, mail_domain: str) -> list[MailboxInfo]:

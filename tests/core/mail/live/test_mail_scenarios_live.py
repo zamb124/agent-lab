@@ -24,7 +24,7 @@ from core.mail.models import (
 )
 from core.mail.ports import MailServerPort
 from core.mail.service import MailService
-from tests.core.mail.live.test_ispmanager_live import _poll_fetch_message
+from tests.core.mail.live.poll import poll_fetch_message as _poll_fetch_message
 
 pytestmark = [pytest.mark.network, pytest.mark.timeout(180)]
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import secrets
 from datetime import datetime, timezone
 
@@ -11,44 +10,15 @@ import pytest
 from core.config.models import MailConfig
 from core.mail.exceptions import MailDeleteDeniedError
 from core.mail.models import (
-    InboundMailMessage,
     MailboxEnsureSpec,
     MailboxInfo,
     MailboxSecret,
-    MailFetchQuery,
     OutboundMailMessage,
 )
 from core.mail.ports import MailServerPort
+from tests.core.mail.live.poll import poll_fetch_message as _poll_fetch_message
 
 pytestmark = [pytest.mark.network, pytest.mark.timeout(120)]
-
-
-async def _poll_fetch_message(
-    port: MailServerPort,
-    secret: MailboxSecret,
-    *,
-    message_id: str,
-    subject: str,
-    deadline_sec: float = 90.0,
-) -> InboundMailMessage | None:
-    """Shared hosting может переписать Message-Id — матчим subject (+ id если сохранился)."""
-    deadline = asyncio.get_running_loop().time() + deadline_sec
-    while asyncio.get_running_loop().time() < deadline:
-        messages = await port.fetch_messages(
-            secret,
-            MailFetchQuery(subject_contains=subject, limit=50),
-        )
-        for item in messages:
-            if item.subject == subject:
-                return item
-            if item.message_id == message_id:
-                return item
-        all_recent = await port.fetch_messages(secret, MailFetchQuery(limit=50))
-        for item in all_recent:
-            if item.subject == subject or item.message_id == message_id:
-                return item
-        await asyncio.sleep(2.0)
-    return None
 
 
 @pytest.mark.asyncio

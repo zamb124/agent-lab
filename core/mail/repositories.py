@@ -26,9 +26,11 @@ from core.mail.models import (
     MailboxBindingMember,
     MailboxBindingMemberRole,
     MailboxSyncCursor,
+    MailConnectionScope,
     MailConnectionStatus,
     MailFolderRole,
     MailProvider,
+    MailRagIndexStatus,
     MailSyncErrorKind,
     MailSyncLagStats,
     StoredMailAttachmentRef,
@@ -51,6 +53,8 @@ def _connection_from_record(record: CompanyMailConnectionRecord) -> CompanyMailC
     return CompanyMailConnection(
         company_mail_connection_id=record.company_mail_connection_id,
         company_id=record.company_id,
+        scope=MailConnectionScope(record.scope),
+        owner_user_id=record.owner_user_id,
         mail_domain=record.mail_domain,
         provider=MailProvider(record.provider),
         imap_host=record.imap_host,
@@ -110,12 +114,30 @@ class CompanyMailConnectionRepository:
     def __init__(self, db_url: str) -> None:
         self._db_url: Final[str] = db_url
 
-    async def get_by_company(self, company_id: str) -> CompanyMailConnection | None:
+    async def get(self, company_mail_connection_id: str) -> CompanyMailConnection | None:
+        if not company_mail_connection_id.strip():
+            raise ValueError("company_mail_connection_id is required")
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
                 select(CompanyMailConnectionRecord).where(
-                    CompanyMailConnectionRecord.company_id == company_id
+                    CompanyMailConnectionRecord.company_mail_connection_id
+                    == company_mail_connection_id
+                )
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                return None
+            return _connection_from_record(row)
+
+    async def get_by_company(self, company_id: str) -> CompanyMailConnection | None:
+        """Company-scoped connection only (admin mail server)."""
+        session_factory = await get_session_factory(self._db_url)
+        async with session_factory() as session:
+            result = await session.execute(
+                select(CompanyMailConnectionRecord).where(
+                    CompanyMailConnectionRecord.company_id == company_id,
+                    CompanyMailConnectionRecord.scope == str(MailConnectionScope.COMPANY),
                 )
             )
             row = result.scalar_one_or_none()
@@ -137,6 +159,8 @@ class CompanyMailConnectionRepository:
         values = {
             "company_mail_connection_id": connection.company_mail_connection_id,
             "company_id": connection.company_id,
+            "scope": str(connection.scope),
+            "owner_user_id": connection.owner_user_id,
             "mail_domain": connection.mail_domain,
             "provider": str(connection.provider),
             "imap_host": connection.imap_host,
@@ -154,9 +178,11 @@ class CompanyMailConnectionRepository:
         }
         stmt = insert(CompanyMailConnectionRecord).values(**values)
         stmt = stmt.on_conflict_do_update(
-            index_elements=["company_id"],
+            index_elements=["company_mail_connection_id"],
             set_={
-                "company_mail_connection_id": stmt.excluded.company_mail_connection_id,
+                "company_id": stmt.excluded.company_id,
+                "scope": stmt.excluded.scope,
+                "owner_user_id": stmt.excluded.owner_user_id,
                 "mail_domain": stmt.excluded.mail_domain,
                 "provider": stmt.excluded.provider,
                 "imap_host": stmt.excluded.imap_host,
@@ -177,12 +203,27 @@ class CompanyMailConnectionRepository:
         async with session_factory() as session:
             _ = await session.execute(stmt)
             await session.commit()
-        stored = await self.get_by_company(connection.company_id)
+        stored = await self.get(connection.company_mail_connection_id)
         if stored is None:
             raise RuntimeError(
-                f"CompanyMailConnection upsert failed for company_id={connection.company_id}"
+                "CompanyMailConnection upsert failed for "
+                + f"company_mail_connection_id={connection.company_mail_connection_id}"
             )
         return stored
+
+    async def delete(self, company_mail_connection_id: str) -> bool:
+        if not company_mail_connection_id.strip():
+            raise ValueError("company_mail_connection_id is required")
+        session_factory = await get_session_factory(self._db_url)
+        async with session_factory() as session:
+            result = await session.execute(
+                delete(CompanyMailConnectionRecord).where(
+                    CompanyMailConnectionRecord.company_mail_connection_id
+                    == company_mail_connection_id
+                )
+            )
+            await session.commit()
+            return get_rowcount(result) > 0
 
 
 @final
@@ -637,6 +678,7 @@ def _stored_from_record(record: MailMessageRecord) -> StoredMailMessage:
         references=record.references_header,
         rag_document_id=record.rag_document_id,
         rag_namespace=record.rag_namespace,
+        rag_index_status=MailRagIndexStatus(record.rag_index_status),
         synced_at=record.synced_at,
         created_at=record.created_at,
         updated_at=record.updated_at,
@@ -682,6 +724,7 @@ class MailMessageRepository:
             "references_header": message.references,
             "rag_document_id": message.rag_document_id,
             "rag_namespace": message.rag_namespace,
+            "rag_index_status": str(message.rag_index_status),
             "synced_at": message.synced_at,
             "created_at": message.created_at,
             "updated_at": message.updated_at,
@@ -710,6 +753,7 @@ class MailMessageRepository:
                 "references_header": stmt.excluded.references_header,
                 "rag_document_id": stmt.excluded.rag_document_id,
                 "rag_namespace": stmt.excluded.rag_namespace,
+                "rag_index_status": stmt.excluded.rag_index_status,
                 "synced_at": stmt.excluded.synced_at,
                 "updated_at": stmt.excluded.updated_at,
             },
@@ -1111,6 +1155,7 @@ def _folder_from_record(record: MailboxFolderRecord) -> StoredMailboxFolder:
         unseen_count=int(record.unseen_count),
         namespace_prefix=record.namespace_prefix,
         capabilities=list(record.capabilities),
+        sort_index=int(record.sort_index),
         updated_at=record.updated_at,
     )
 
@@ -1130,7 +1175,10 @@ class MailboxFolderRepository:
             result = await session.execute(
                 select(MailboxFolderRecord)
                 .where(MailboxFolderRecord.mailbox_binding_id == mailbox_binding_id)
-                .order_by(MailboxFolderRecord.folder_name.asc())
+                .order_by(
+                    MailboxFolderRecord.sort_index.asc(),
+                    MailboxFolderRecord.folder_name.asc(),
+                )
             )
             records = list(result.scalars().all())
         return [_folder_from_record(record) for record in records]
@@ -1168,8 +1216,42 @@ class MailboxFolderRepository:
                         unseen_count=folder.unseen_count,
                         namespace_prefix=folder.namespace_prefix,
                         capabilities=list(folder.capabilities),
+                        sort_index=int(folder.sort_index),
                         updated_at=now,
                     )
                 )
+            await session.commit()
+        return await self.list_for_binding(mailbox_binding_id)
+
+    async def set_sort_indices(
+        self,
+        mailbox_binding_id: str,
+        *,
+        folder_name_to_index: dict[str, int],
+    ) -> list[StoredMailboxFolder]:
+        if not mailbox_binding_id.strip():
+            raise ValueError("mailbox_binding_id is required")
+        if not folder_name_to_index:
+            raise ValueError("folder_name_to_index is required")
+        now = datetime.now(timezone.utc)
+        session_factory = await get_session_factory(self._db_url)
+        async with session_factory() as session:
+            result = await session.execute(
+                select(MailboxFolderRecord).where(
+                    MailboxFolderRecord.mailbox_binding_id == mailbox_binding_id
+                )
+            )
+            records = list(result.scalars().all())
+            known = {record.folder_name for record in records}
+            payload_names = set(folder_name_to_index.keys())
+            if known != payload_names:
+                missing = sorted(known - payload_names)
+                extra = sorted(payload_names - known)
+                raise ValueError(
+                    f"folder_names must match cached folders exactly; missing={missing!r} extra={extra!r}"
+                )
+            for record in records:
+                record.sort_index = folder_name_to_index[record.folder_name]
+                record.updated_at = now
             await session.commit()
         return await self.list_for_binding(mailbox_binding_id)

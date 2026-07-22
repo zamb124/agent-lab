@@ -243,6 +243,9 @@ export class PlatformApp extends PlatformElement {
             this.dispatch(CoreEvents.AUTH_ASSUMED_ANONYMOUS, null);
             this.dispatch(CoreAuthEvents.USER_SILENT_PROBE_REQUESTED, null);
         }
+        // Публичный OAuth/demo-конфиг — до открытия auth-modal, без скачка высоты.
+        this.dispatch(CoreAuthEvents.PROVIDERS_LOAD_REQUESTED, null);
+        this.dispatch(CoreAuthEvents.DEMO_STATUS_REQUESTED, null);
         completeBootstrap();
     }
 

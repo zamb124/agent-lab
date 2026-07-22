@@ -26,9 +26,17 @@ export const MAIL_EVENTS = Object.freeze({
     BINDING_CREATE_REQUESTED: 'mail/binding/create_requested',
     BINDING_CREATED: 'mail/binding/created',
     BINDING_CREATE_FAILED: 'mail/binding/create_failed',
+    PERSONAL_CONNECT_REQUESTED: 'mail/binding/personal_connect_requested',
+    PERSONAL_CONNECT_FAILED: 'mail/binding/personal_connect_failed',
+    PERSONAL_HEALTHCHECK_REQUESTED: 'mail/binding/personal_healthcheck_requested',
+    PERSONAL_HEALTHCHECK_COMPLETED: 'mail/binding/personal_healthcheck_completed',
+    PERSONAL_HEALTHCHECK_FAILED: 'mail/binding/personal_healthcheck_failed',
     BINDING_PATCH_REQUESTED: 'mail/binding/patch_requested',
     BINDING_PATCHED: 'mail/binding/patched',
     BINDING_PATCH_FAILED: 'mail/binding/patch_failed',
+    BINDING_HEALTHCHECK_REQUESTED: 'mail/binding/healthcheck_requested',
+    BINDING_HEALTHCHECK_COMPLETED: 'mail/binding/healthcheck_completed',
+    BINDING_HEALTHCHECK_FAILED: 'mail/binding/healthcheck_failed',
     BINDING_DELETE_REQUESTED: 'mail/binding/delete_requested',
     BINDING_DELETED: 'mail/binding/deleted',
     BINDING_DELETE_FAILED: 'mail/binding/delete_failed',
@@ -42,6 +50,8 @@ export const MAIL_EVENTS = Object.freeze({
     FOLDERS_LOAD_FAILED: 'mail/folders/load_failed',
     FOLDERS_ENSURE_REQUESTED: 'mail/folders/ensure_requested',
     FOLDERS_ENSURE_FAILED: 'mail/folders/ensure_failed',
+    FOLDERS_REORDER_REQUESTED: 'mail/folders/reorder_requested',
+    FOLDERS_REORDER_FAILED: 'mail/folders/reorder_failed',
     SYNC_REQUESTED: 'mail/sync/requested',
     SYNC_ACCEPTED: 'mail/sync/accepted',
     SYNC_FAILED: 'mail/sync/failed',
@@ -84,6 +94,9 @@ export const MAIL_EVENTS = Object.freeze({
     MESSAGE_STAR_REQUESTED: 'mail/message/star_requested',
     MESSAGE_STAR_COMPLETED: 'mail/message/star_completed',
     MESSAGE_STAR_FAILED: 'mail/message/star_failed',
+    MESSAGE_RAG_INDEX_REQUESTED: 'mail/message/rag_index_requested',
+    MESSAGE_RAG_INDEX_ACCEPTED: 'mail/message/rag_index_accepted',
+    MESSAGE_RAG_INDEX_FAILED: 'mail/message/rag_index_failed',
     MESSAGES_SEARCH_REQUESTED: 'mail/messages/search_requested',
     MESSAGES_LOAD_MORE_REQUESTED: 'mail/messages/load_more_requested',
     MESSAGES_APPEND_LOADED: 'mail/messages/append_loaded',
@@ -244,12 +257,16 @@ export function mailReducer(state = initialMailState, event) {
         case MAIL_EVENTS.BINDINGS_LOAD_FAILED:
         case MAIL_EVENTS.FOLDERS_LOAD_FAILED:
         case MAIL_EVENTS.FOLDERS_ENSURE_FAILED:
+        case MAIL_EVENTS.FOLDERS_REORDER_FAILED:
         case MAIL_EVENTS.MESSAGES_LOAD_FAILED:
         case MAIL_EVENTS.CONNECTION_LOAD_FAILED:
         case MAIL_EVENTS.COMPANY_BINDINGS_LOAD_FAILED:
         case MAIL_EVENTS.CONNECTION_SAVE_FAILED:
         case MAIL_EVENTS.BINDING_CREATE_FAILED:
+        case MAIL_EVENTS.PERSONAL_CONNECT_FAILED:
+        case MAIL_EVENTS.PERSONAL_HEALTHCHECK_FAILED:
         case MAIL_EVENTS.BINDING_PATCH_FAILED:
+        case MAIL_EVENTS.BINDING_HEALTHCHECK_FAILED:
         case MAIL_EVENTS.BINDING_DELETE_FAILED:
         case MAIL_EVENTS.DEFAULT_SET_FAILED:
         case MAIL_EVENTS.MESSAGE_SEND_FAILED:
@@ -259,6 +276,7 @@ export function mailReducer(state = initialMailState, event) {
         case MAIL_EVENTS.MESSAGE_ARCHIVE_FAILED:
         case MAIL_EVENTS.MESSAGE_DELETE_FAILED:
         case MAIL_EVENTS.MESSAGE_STAR_FAILED:
+        case MAIL_EVENTS.MESSAGE_RAG_INDEX_FAILED:
         case MAIL_EVENTS.DRAFT_SAVE_FAILED:
         case MAIL_EVENTS.BINDING_MEMBERS_LOAD_FAILED:
         case MAIL_EVENTS.BINDING_MEMBER_ADD_FAILED:
@@ -361,11 +379,25 @@ export function mailReducer(state = initialMailState, event) {
                 folders: Object.freeze(folders),
                 missingStandardRoles: Object.freeze(missing),
                 folder,
+                needsSync: payload.needs_sync === true,
                 selectedUid: keepList ? state.selectedUid : state.pendingOpenUid,
                 selectedThreadId: keepList ? state.selectedThreadId : null,
                 selectedThreadMessages: keepList ? state.selectedThreadMessages : Object.freeze([]),
                 selectedMessage: keepList ? state.selectedMessage : null,
                 messages: keepList ? state.messages : Object.freeze([]),
+            };
+        }
+        case MAIL_EVENTS.FOLDERS_REORDER_REQUESTED: {
+            const payload = event.payload;
+            if (!payload || !Array.isArray(payload.folders)) {
+                throw new Error(`${event.type}: payload.folders must be an array`);
+            }
+            if (typeof payload.mailbox_binding_id !== 'string' || !payload.mailbox_binding_id) {
+                throw new Error(`${event.type}: mailbox_binding_id required`);
+            }
+            return {
+                ...state,
+                folders: Object.freeze(payload.folders),
             };
         }
         case MAIL_EVENTS.FOLDER_SELECT: {
@@ -764,6 +796,19 @@ export function mailReducer(state = initialMailState, event) {
                 selectedMessage: state.selectedMessage && state.selectedMessage.uid === uid
                     ? Object.freeze({ ...state.selectedMessage, flagged })
                     : state.selectedMessage,
+            };
+        }
+        case MAIL_EVENTS.MESSAGE_RAG_INDEX_ACCEPTED: {
+            const uid = event.payload && event.payload.uid;
+            const status = event.payload && event.payload.rag_index_status;
+            if (typeof uid !== 'string' || typeof status !== 'string') return state;
+            return {
+                ...state,
+                messages: Object.freeze(state.messages.map((item) => (
+                    item.uid === uid
+                        ? Object.freeze({ ...item, rag_index_status: status })
+                        : item
+                ))),
             };
         }
         case MAIL_EVENTS.DRAFT_SAVED: {
