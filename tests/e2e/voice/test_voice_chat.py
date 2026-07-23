@@ -47,13 +47,23 @@ def _websocket_session(client: TestClient, url: str):
             cm.__exit__(None, None, None)
 
 
+def _mock_voice_tier_company_id(unique_id: str) -> str:
+    """company_id без строки в ``company_voice_providers`` — STT/TTS из deployment mock.
+
+    У ``system`` в тестовой БД часто есть override (litserve), он сильнее
+    ``VOICE__*__PROVIDER=mock`` из ``voice_app`` и валит session resolve.
+    """
+    return f"voice_e2e_tier_{unique_id}"
+
+
 @pytest.mark.e2e
 def test_voice_chat_e2e_speak_roundtrip(voice_app, unique_id: str) -> None:
     """speak от клиента → PCM из mock TTS + tts_state переключается."""
+    company_id = _mock_voice_tier_company_id(unique_id)
     with TestClient(voice_app) as client:
         url = (
             f"/voice/api/ws/session/e2e-{unique_id}"
-            "?company_id=system"
+            f"?company_id={company_id}"
         )
         with _websocket_session(client, url) as ws:
             media_cfg = None
@@ -126,9 +136,10 @@ def test_voice_chat_e2e_binary_pcm_upload_smoke(
     живой (последующий ``speak`` всё ещё работает).
     """
     with TestClient(voice_app) as client:
+        company_id = _mock_voice_tier_company_id(unique_id)
         url = (
             f"/voice/api/ws/session/pcm-{unique_id}"
-            "?company_id=system"
+            f"?company_id={company_id}"
         )
         with _websocket_session(client, url) as ws:
             for _ in range(10):

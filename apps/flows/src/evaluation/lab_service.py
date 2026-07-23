@@ -1099,36 +1099,15 @@ class EvaluationLabService:
 
         latest_run = await self._require_run_model(run.run_id)
         canceled = latest_run.state == EvaluationRunState.CANCELED
+        # Terminal run event пишется внутри _finish_run вместе со сменой state,
+        # до gate: иначе GET run уже видит ERROR/FAILED/PASSED, а run_failed/
+        # run_finished ещё нет (гонка с _wait_for_run / UI poll).
         run = await self._finish_run(latest_run, completed_case_runs, force_canceled=canceled)
         if run.state == EvaluationRunState.CANCELED:
             return EvaluationRunWithCases(run=run, case_runs=completed_case_runs)
         gate_result = await self._evaluate_gate(run)
         if gate_result is not None:
             run = await self._require_run_model(run.run_id)
-        event_type = (
-            EvaluationEventType.RUN_FAILED
-            if run.state == EvaluationRunState.ERROR
-            else EvaluationEventType.RUN_FINISHED
-        )
-        _ = await self._append_event(
-            run.run_id,
-            None,
-            event_type,
-            {
-                "state": str(run.state),
-                "gate_state": str(run.gate_state) if run.gate_state is not None else None,
-                "passed_case_runs": run.passed_case_runs,
-                "failed_case_runs": run.failed_case_runs,
-                "error_case_runs": run.error_case_runs,
-                "canceled_case_runs": run.canceled_case_runs,
-                "average_score": run.average_score,
-                "average_duration_ms": run.average_duration_ms,
-                "input_tokens": run.input_tokens,
-                "output_tokens": run.output_tokens,
-                "total_tokens": run.total_tokens,
-                "billing_quantity": run.billing_quantity,
-            },
-        )
         return EvaluationRunWithCases(run=run, case_runs=completed_case_runs, gate_result=gate_result)
 
     async def get_run(self, run_id: str) -> EvaluationRunWithCases:
@@ -2163,7 +2142,7 @@ class EvaluationLabService:
         else:
             state = EvaluationRunState.PASSED
         now = _utc_now()
-        return await self._repository.update_run(
+        finished_run = await self._repository.update_run(
             run.model_copy(
                 update={
                     "state": state,
@@ -2182,6 +2161,37 @@ class EvaluationLabService:
                 }
             )
         )
+        # CANCELED: terminal event уже пишет cancel_run (RUN_CANCELED).
+        if state != EvaluationRunState.CANCELED:
+            event_type = (
+                EvaluationEventType.RUN_FAILED
+                if state == EvaluationRunState.ERROR
+                else EvaluationEventType.RUN_FINISHED
+            )
+            _ = await self._append_event(
+                finished_run.run_id,
+                None,
+                event_type,
+                {
+                    "state": str(finished_run.state),
+                    "gate_state": (
+                        str(finished_run.gate_state)
+                        if finished_run.gate_state is not None
+                        else None
+                    ),
+                    "passed_case_runs": finished_run.passed_case_runs,
+                    "failed_case_runs": finished_run.failed_case_runs,
+                    "error_case_runs": finished_run.error_case_runs,
+                    "canceled_case_runs": finished_run.canceled_case_runs,
+                    "average_score": finished_run.average_score,
+                    "average_duration_ms": finished_run.average_duration_ms,
+                    "input_tokens": finished_run.input_tokens,
+                    "output_tokens": finished_run.output_tokens,
+                    "total_tokens": finished_run.total_tokens,
+                    "billing_quantity": finished_run.billing_quantity,
+                },
+            )
+        return finished_run
 
     async def _evaluate_gate(self, run: EvaluationRun) -> EvaluationGateResult | None:
         if run.gate_policy_id is None:

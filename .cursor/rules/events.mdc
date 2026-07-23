@@ -58,6 +58,12 @@ await publish_domain_event("crm/entity/created", payload, company_id=company_id,
 наследуются из контекста, если не заданы явно. Redis недоступен —
 публикация падает (Zero-Guess).
 
+Redis-клиент шины — `events_redis_client()` (`core/events/redis_client.py`):
+один на **текущий running event loop**. Starlette `TestClient` поднимает
+свой loop на каждый `with`-блок; клиент с закрытого loop даёт
+`Event loop is closed` на XADD/HSET. При смене loop синглтон пересоздаётся;
+в testing shutdown `create_service_app` вызывает `close_publisher_client()`.
+
 ### Потребители (`core/events/consumer.py`)
 
 | Режим | Примитив | Кто | Семантика |

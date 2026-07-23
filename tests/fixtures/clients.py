@@ -135,7 +135,11 @@ def patch_service_clients_asgi(
         except ImportError:
             return None
         finally:
-            set_settings(preserved)
+            # Voice reload намеренно кладёт mock STT/TTS в глобальный settings.
+            # Restore затёрло бы их: app.state.settings остаётся mock, а get_settings()
+            # в session handler снова видит litserve → provider_resolve_failed.
+            if service != "voice":
+                set_settings(preserved)
         return _apps_cache.get(service)
 
     original_request = ServiceClient.request

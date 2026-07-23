@@ -266,6 +266,13 @@ async def _create_passing_case(client: AsyncClient, suite_id: str, name: str) ->
     return EvaluationCase.model_validate(response.json())
 
 
+_TERMINAL_RUN_EVENT_TYPES = {
+    EvaluationEventType.RUN_FINISHED,
+    EvaluationEventType.RUN_FAILED,
+    EvaluationEventType.RUN_CANCELED,
+}
+
+
 async def _wait_for_run(
     client: AsyncClient,
     run_id: str,
@@ -286,7 +293,15 @@ async def _wait_for_run(
         payload = EvaluationRunWithCases.model_validate(response.json())
         last_payload = payload
         if payload.run.state in terminal_states:
-            return payload
+            # State становится terminal до commit terminal-event в ledger —
+            # ждём событие, иначе assert по events ловит гонку.
+            events_response = await client.get(
+                f"/flows/api/v1/evaluation/runs/{run_id}/events"
+            )
+            assert events_response.status_code == 200, events_response.text
+            events = ListResponse[EvaluationRunEvent].model_validate(events_response.json())
+            if any(item.event_type in _TERMINAL_RUN_EVENT_TYPES for item in events.items):
+                return payload
         await asyncio.sleep(0.2)
     raise AssertionError(f"Evaluation run did not finish: {last_payload}")
 

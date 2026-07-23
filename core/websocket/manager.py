@@ -47,10 +47,20 @@ class NotificationManager:
     def __init__(self) -> None:
         self._connections: dict[str, set[WebSocket]] = {}
         self._socket_meta: dict[WebSocket, tuple[str, str | None]] = {}
-        self._connection_lock: asyncio.Lock = asyncio.Lock()
+        self._connection_lock: asyncio.Lock | None = None
+        self._connection_lock_loop: asyncio.AbstractEventLoop | None = None
         self._tail_task: asyncio.Task[None] | None = None
         self._connect_hooks: list[ConnectionHook] = []
         self._disconnect_hooks: list[ConnectionHook] = []
+
+    def _get_connection_lock(self) -> asyncio.Lock:
+        """Lock на текущий running loop (TestClient каждый раз поднимает свой)."""
+        loop = asyncio.get_running_loop()
+        if self._connection_lock is not None and self._connection_lock_loop is loop:
+            return self._connection_lock
+        self._connection_lock = asyncio.Lock()
+        self._connection_lock_loop = loop
+        return self._connection_lock
 
     def register_connect_hook(self, hook: ConnectionHook) -> None:
         """Hook вида ``async def hook(user_id: str, company_id: str | None, was_first_connection: bool) -> None``."""
@@ -66,7 +76,7 @@ class NotificationManager:
         user_id: str,
         company_id: str | None = None,
     ) -> None:
-        async with self._connection_lock:
+        async with self._get_connection_lock():
             existing = self._connections.get(user_id)
             was_first_connection = not existing
             self._connections.setdefault(user_id, set()).add(websocket)
@@ -86,7 +96,7 @@ class NotificationManager:
     async def disconnect(self, websocket: WebSocket, user_id: str) -> None:
         was_last_connection = False
         company_id: str | None = None
-        async with self._connection_lock:
+        async with self._get_connection_lock():
             meta = self._socket_meta.pop(websocket, None)
             if meta is not None:
                 _, company_id = meta
@@ -121,7 +131,7 @@ class NotificationManager:
                 logger.warning("WS send failed (%s): %s", label, exc)
                 dead.add(ws)
         if dead:
-            async with self._connection_lock:
+            async with self._get_connection_lock():
                 for ws in dead:
                     meta = self._socket_meta.pop(ws, None)
                     if meta:
@@ -191,9 +201,25 @@ class NotificationManager:
 
     async def start_redis_listener(self, redis_url: str) -> None:
         """Запустить tail-чтение шины `platform:events` для UI-доставки."""
-        if self._tail_task is not None:
-            logger.warning("Platform events tail listener already running")
-            return
+        existing = self._tail_task
+        if existing is not None:
+            task_loop = existing.get_loop()
+            if (
+                not existing.done()
+                and not task_loop.is_closed()
+                and task_loop.is_running()
+            ):
+                logger.warning("Platform events tail listener already running")
+                return
+            # Задача с закрытого/чужого loop (pytest ASGI / reload) — перезапуск.
+            self._tail_task = None
+            if not existing.done() and not task_loop.is_closed():
+                _ = existing.cancel()
+            # Сокеты/lock с прошлого TestClient loop больше невалидны.
+            self._connections.clear()
+            self._socket_meta.clear()
+            self._connection_lock = None
+            self._connection_lock_loop = None
         reader = PlatformEventTailReader(redis_url, self.deliver_platform_event)
         self._tail_task = asyncio.create_task(reader.run())
         logger.info("Platform events tail listener started")

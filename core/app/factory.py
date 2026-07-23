@@ -52,6 +52,7 @@ from core.config.loader import get_project_root, load_merged_config
 from core.config.testing import is_testing
 from core.container.base import BaseContainer
 from core.events import store_registered_platform_events
+from core.events.publisher import close_publisher_client
 from core.files.api import build_files_router
 from core.files.processors import initialize_default_processors
 from core.frontend.documentation_mount import mount_documentation_static
@@ -296,8 +297,14 @@ def create_service_app(
 
         # В одном процессе pytest поднимается несколько приложений (flows, office, rag, sync);
         # stop_redis_listener останавливает общий tail-listener и ломает доставку в чужих тестах.
-        if include_platform_lifecycle and not is_testing():
-            await notification_manager.stop_redis_listener()
+        # Redis-клиент шины (publish/catalog) привязан к event loop TestClient —
+        # на shutdown в тестах закрываем его, иначе следующий TestClient ловит
+        # «Event loop is closed» на store_registered_platform_events / publish.
+        if include_platform_lifecycle:
+            if not is_testing():
+                await notification_manager.stop_redis_listener()
+            else:
+                await close_publisher_client()
 
     # Создание приложения
     app = FastAPI(
