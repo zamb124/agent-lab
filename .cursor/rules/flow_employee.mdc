@@ -1,0 +1,103 @@
+---
+description: "Flow как сотрудник: identity, inbox, Sync DM/@mention, WorkItem, UI enable, матрица готовности и долг"
+globs: "{core/identity/flow_employee.py,apps/flows/src/services/execution_identity.py,apps/flows/src/services/flow_employee_provisioning.py,apps/flows/src/services/employee_inbox_service.py,apps/flows/src/services/platform_event_consumer.py,apps/flows/src/models/flow_config.py,apps/flows/tools/sync_tools.py,apps/flows/ui/modals/flows-employee-settings-modal.js,apps/flows/ui/components/editor/flows-editor-header.js,apps/flows/ui/components/flow-card.js,apps/sync/realtime/handlers.py,core/worktracker/service.py,apps/frontend/ui/pages/team/**,tests/**/test*flow_employee*,tests/**/test*employee*}"
+alwaysApply: false
+---
+# Flow как сотрудник
+
+Ось идентичности агента одна — `user_id`. Flow с `FlowConfig.employee.enabled` — обычный `User` `flow_employee_{flow_id}` (`attributes.kind=flow_employee`), не отдельная сущность Agent. `AgentActor` / `AgentAssignment` / `platform-agent:*` запрещены.
+
+## Identity и provisioning
+
+- Хелперы: `core/identity/flow_employee.py` (`ensure_flow_employee`, `deactivate_flow_employee`, `curator_user_ids` ≥1).
+- Конфиг: `FlowEmployeeConfig` (`enabled`, `roles`, `curator_user_ids`, `display_name`, `avatar_url`) на `FlowConfig.employee`.
+- Sync на create/update/delete: `apps/flows/src/services/flow_employee_provisioning.py` → двустороннее членство `user.companies` + `company.members` (team API, Sync `company_members`, @mention).
+- Execution: `apps/flows/src/services/execution_identity.resolve_execution_context` минтит SESSION JWT сотрудника; `ExecutionState.initiator_user_id` — кто запустил (уведомления / `ask_user` / prompt `user_*`); identity/memory/tools — от актора-сотрудника.
+- Act-as куратора: `POST /{svc}/api/team/employees/{user_id}/act-as` (+ stop); `impersonated_by` в JWT metadata.
+
+## UI включения (flows editor)
+
+- Модалка `flows.employee_settings` — [`apps/flows/ui/modals/flows-employee-settings-modal.js`](apps/flows/ui/modals/flows-employee-settings-modal.js): switch, display_name, avatar_url, кураторы из `state.team.members` (без `is_flow_employee`); save → `flows/flow_update` PUT; роли v1 фиксированы `["member"]`.
+- Хидер: chip «Сотрудник» / «AI-сотрудник» в [`flows-editor-header.js`](apps/flows/ui/components/editor/flows-editor-header.js) (desktop всегда; mobile — overflow `menu_employee`).
+- Сайдбар: badge на аватаре [`flow-card.js`](apps/flows/ui/components/flow-card.js); `list_flows` отдаёт `employee=f.employee`.
+
+## Единый inbox (платформа → flow)
+
+`EmployeeInboxService` (`apps/flows/src/services/employee_inbox_service.py`) — вызывается in-process consumer group `flows` шины `platform:events` (`PlatformEventConsumerService`, фоновая задача в `flows_worker`). HTTP-endpoint'а нет.
+
+| Событие шины | Кто публикует | `context_id` |
+|---|---|---|
+| `sync/message/created` (DM или @mention employee из payload `channel_type`/`mentioned_user_ids`/`recipient_user_ids`) | Sync `send_message_with_side_effects` | `sync:{channel_id}` |
+| `worktracker/work_item/assigned` (assignee — employee) | `WorkItemService` (create/reassign) | `work_item:{work_item_id}` |
+
+Дальше: `resolve_execution_context` → `enqueue(TASK_PROCESS_FLOW)` от имени employee, `initiator_user_id` = отправитель/назначивший. Для `work_item_assigned` — write-back в задачу: `WorkItemLink(flow_session)` + системный `WorkItemComment` («Агент взял задачу» / текст ошибки запуска).
+
+Поверхности **не** знают flows-домен — публикуют обычные доменные события шины.
+
+## Sync: роль «коллега в чате»
+
+| Capability | Статус | Поведение |
+|---|---|---|
+| Участник DM / group / topic | **DONE** | Обычный `user_id` в `sync_channel_members`; human-only фильтра нет |
+| Пробуждение flow | **DONE (узкий контракт)** | Только `ChannelType.DIRECT` **или** `@mention` employee-member; правило применяет flows-consumer шины по payload `sync/message/created` |
+| Group без @mention | **не будит** | By design: member ≠ always-on бот |
+| Ответ в канал | **DONE через tool** | Нет auto-post ответа LLM; builtins `sync_*` messaging/channels/threads + `team_*` под JWT сотрудника |
+| Auth browser Sync UI | **N/A** | Employee не логинится в Sync; JWT из job context |
+
+Диспатч: событие `sync/message/created` шины `platform:events` → consumer group `flows` → `EmployeeInboxService` (никаких прямых HTTP Sync→flows и TaskIQ-задач Sync→flows).
+
+Без tool на `llm_node` inbox запустит flow, сообщение в Sync не появится.
+
+## WorkItem
+
+Назначение = `UsersAssignment(user_ids=[flow_employee_{flow_id}])`. В `_after_assignment_change`: людям — `notify_user` (skip employee ids); на шину публикуется `worktracker/work_item/assigned` — flows-consumer будит employee через inbox и делает write-back (link + системный комментарий). Tools `work_item_create/complete/list` пишут тот же `UsersAssignment`.
+
+## Матрица готовности (as is)
+
+| Поверхность | Статус | Есть | Нет |
+|---|---|---|---|
+| Identity + provisioning | **DONE** | ensure/deactivate, curators | — |
+| Execution identity | **DONE** | JWT сотрудника, initiator отдельно | — |
+| Employee inbox | **DONE** | шина `platform:events` → consumer `flows` → sync + work_item | mail/CRM/прочие sources |
+| Team badge + act-as | **PARTIAL** | team API/UI, act-as | — |
+| Enable employee в flows editor | **DONE** | modal + header chip + sidebar badge | — |
+| WorkItem → run | **DONE** | событие assigned → inbox + write-back (link + комментарий) | — |
+| WorkItem tools (employee parity) | **DONE** | list_mine/get/update/assign/move/claim/complete/cancel/comments + queues/boards + team-directory | HITL operator dialog (N/A) |
+| Sync DM | **DONE** | inbox + sync messaging/channels tools | Sync AI badge в picker |
+| Sync group | **DONE by design** | member + @mention (+ `mentioned_user_ids` на send) | auto-reply без @ |
+| A2A / platform-chat | **DONE** | `resolve_execution_context` в channel entry | — |
+| Scheduler + curator escalation | **DONE** | runtime + escalation tests | полный E2E schedule-as-employee |
+| Handoff → child employee | **PARTIAL** | последующие replies через `create_task` резолвят identity | kickoff child: `context_data=self.context.to_dict()` parent (`BaseChannel._handle_handoff`), без employee JWT child |
+| HITL operator | **N/A** | HITL = люди/очереди | employee не оператор HITL |
+| CRM (NetWorkle) | **READY** (employee tool parity) | `networkle` → entities/notes/graph/ops + `work-items`; ServiceClient→CRM REST | CRM→inbox, AmoCRM/grants/type-admin, graph 3d chrome |
+| Documents (Office) | **READY** (chat/file parity) | `documents-*` / `document-workspace` / `diagrams-viz` / `knowledge-rag` | OnlyOffice DS UI, anonymous viewer — OOS |
+| Mail / Calendar / Voice | **MISSING** | — | mailbox, inbound→inbox, meeting semantics |
+
+### Планки продукта
+
+- **Планка A** («агент-сотрудник»): identity + inbox (Sync DM/@ + WorkItem) + JWT + team/act-as + tools + UI enable ≈ **95%+**. Осталось: handoff kickoff identity, Sync badge. Documents + Networkle employee tools уже в планке A.
+- **Планка B** («цифровой коллега везде»): + Mail/Calendar/Voice, always-on group bot, presence; CRM inbox subscription на `crm/entity/*` — отдельные эпики. Mail подключается подпиской consumer'а на `mail/message/upserted`.
+
+## Долг (не закрыт в коде)
+
+1. **Handoff kickoff:** перед `kickoff_child_flow` для employee-child нужен `resolve_execution_context` child; сейчас parent context.
+2. **Sync UX:** `is_flow_employee` в Sync `CompanyMemberRead` (badge в picker).
+
+## Ключевые файлы
+
+| Зона | Путь |
+|---|---|
+| Identity | `core/identity/flow_employee.py` |
+| Provisioning | `apps/flows/src/services/flow_employee_provisioning.py` |
+| Execution JWT | `apps/flows/src/services/execution_identity.py` |
+| Inbox | `apps/flows/src/services/employee_inbox_service.py` |
+| Consumer шины | `apps/flows/src/services/platform_event_consumer.py` |
+| UI modal | `apps/flows/ui/modals/flows-employee-settings-modal.js` |
+| UI header chip | `apps/flows/ui/components/editor/flows-editor-header.js` |
+| UI sidebar badge | `apps/flows/ui/components/flow-card.js` |
+| Sync событие (обогащение payload) | `apps/sync/realtime/events.py`, `handlers.py` |
+| Sync tools | `apps/flows/tools/sync_tools.py`, `sync_channel_tools.py`, `sync_thread_tools.py` |
+| WorkItem событие assigned | `core/worktracker/events.py`, `service.py` |
+| Config model | `apps/flows/src/models/flow_config.py` (`FlowEmployeeConfig`) |
+
+См. также: `flows.mdc`, `sync.mdc`, `worktracker.mdc`, `handoff.mdc`, `main.mdc` (glossary Flow employee).

@@ -13,7 +13,6 @@ from apps.flows.src.observability.flow_timing import (
     record_flow_task_enqueued,
 )
 from core.clients.llm import setup_mock_responses
-from core.integrations.mcp import MCP_PROTOCOL_VERSION
 from core.logging.attributes import (
     LOG_FLOW_FIRST_CHUNK_MS,
     LOG_FLOW_ID,

@@ -15,6 +15,7 @@ from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.messages import MessageRead, MessageStatus, ReactionEntry
 from apps.sync.models.threads import ThreadRead
 from core.calls.models import SignalType
+from core.events import register_platform_event
 from core.types import JsonArray, JsonObject, parse_json_object
 
 EventType = Literal[
@@ -46,12 +47,12 @@ EventType = Literal[
 
 
 class RealtimeEvent(BaseModel):
-    """Доменное событие Sync для рассылки через `platform:ui_events`.
+    """Доменное событие Sync для рассылки через шину `platform:events`.
 
     `channel_id` в payload остаётся (где нужно) — для фильтрации на клиенте.
     `company_id` / `recipient_user_ids` — адресация для `publish_realtime_events`,
-    в проводной фрейм не уходят (определяют выбор `publish_ui_event_to_user`
-    vs `publish_ui_event_to_company`).
+    в проводной фрейм не уходят (определяют выбор `publish_event_to_users`
+    vs `publish_event_to_company`).
     """
 
     type: EventType
@@ -67,6 +68,24 @@ class RealtimeEvent(BaseModel):
 class MessageStatusChangedPayload(BaseModel):
     message_id: str
     status: MessageStatus
+
+
+class MessageCreatedEventPayload(MessageRead):
+    """Payload `sync/message/created`: сообщение + контекст канала.
+
+    `channel_type` и `recipient_user_ids` нужны durable-потребителям шины
+    (триггеры flows, routing flow-сотрудников: DM или @mention).
+    """
+
+    channel_type: str
+    recipient_user_ids: list[str]
+
+
+class MessageDeletedEventPayload(BaseModel):
+    """Payload `sync/message/deleted`."""
+
+    message_id: str
+    channel_id: str
 
 
 def event_channel_created(
@@ -164,11 +183,19 @@ def event_message_created(
     *,
     company_id: str,
     recipient_user_ids: list[str],
+    channel_type: str,
 ) -> RealtimeEvent:
+    enriched = MessageCreatedEventPayload.model_validate(
+        {
+            **message.model_dump(),
+            "channel_type": channel_type,
+            "recipient_user_ids": recipient_user_ids,
+        }
+    )
     return RealtimeEvent(
         type="sync/message/created",
         channel_id=message.channel_id,
-        payload=parse_json_object(message.model_dump_json(), "MessageRead"),
+        payload=parse_json_object(enriched.model_dump_json(), "MessageCreatedEventPayload"),
         company_id=company_id,
         recipient_user_ids=recipient_user_ids,
     )
@@ -440,6 +467,170 @@ def event_call_recording_failed(
         company_id=company_id,
         recipient_user_ids=recipient_user_ids,
     )
+
+
+class SyncChannelMemberAddedPayload(BaseModel):
+    channel_id: str
+    added_user_id: str
+
+
+class SyncChannelReadUpdatedPayload(BaseModel):
+    channel_id: str
+    reader_user_id: str
+    read_at: str
+
+
+class SyncChannelTypingPayload(BaseModel):
+    channel_id: str
+    thread_id: str | None = None
+    typing: bool
+    user: JsonObject
+
+
+class SyncMessageReactionChangedPayload(BaseModel):
+    message_id: str
+    channel_id: str
+    reactions: list[ReactionEntry] = Field(default_factory=list)
+
+
+class SyncPresenceChangedPayload(BaseModel):
+    company_id: str
+    user_id: str
+    online: bool
+    last_seen_at: str | None = None
+
+
+class SyncCallSignaledPayload(BaseModel):
+    call_id: str
+    signal_type: SignalType
+    data: JsonObject = Field(default_factory=dict)
+
+
+class SyncCallUserPayload(BaseModel):
+    call_id: str
+    user_id: str
+
+
+register_platform_event(
+    "sync/message/created",
+    MessageCreatedEventPayload,
+    description="Новое сообщение в канале Sync (payload: сообщение + channel_type + получатели).",
+)
+register_platform_event(
+    "sync/message/updated",
+    MessageRead,
+    description="Сообщение Sync изменено (edit/transcription/react side effects).",
+)
+register_platform_event(
+    "sync/message/deleted",
+    MessageDeletedEventPayload,
+    description="Сообщение Sync удалено.",
+)
+register_platform_event(
+    "sync/message/status_changed",
+    MessageStatusChangedPayload,
+    description="Статус доставки/прочтения сообщения Sync изменён.",
+)
+register_platform_event(
+    "sync/message/reaction_changed",
+    SyncMessageReactionChangedPayload,
+    description="Реакции на сообщение Sync изменены.",
+)
+register_platform_event(
+    "sync/channel/created",
+    ChannelRead,
+    description="Создан канал Sync (direct/group/topic/calendar_meeting).",
+)
+register_platform_event(
+    "sync/channel/member_added",
+    SyncChannelMemberAddedPayload,
+    description="В канал Sync добавлен участник.",
+)
+register_platform_event(
+    "sync/channel/read_updated",
+    SyncChannelReadUpdatedPayload,
+    description="Обновлена метка прочтения канала Sync.",
+)
+register_platform_event(
+    "sync/channel/typing",
+    SyncChannelTypingPayload,
+    description="Индикатор набора текста в канале Sync.",
+)
+register_platform_event(
+    "sync/channel/pins_changed",
+    ChannelRead,
+    description="Изменён список закреплённых сообщений канала Sync.",
+)
+register_platform_event(
+    "sync/thread/created",
+    ThreadRead,
+    description="Создан тред в канале Sync.",
+)
+register_platform_event(
+    "sync/git_resource/upserted",
+    GitResourceRefRead,
+    description="Git-ресурс Sync создан или обновлён.",
+)
+register_platform_event(
+    "sync/call/incoming",
+    CallRead,
+    description="Входящий звонок Sync.",
+)
+register_platform_event(
+    "sync/call/signaled",
+    SyncCallSignaledPayload,
+    description="Сигнал WebRTC/LiveKit в звонке Sync.",
+)
+register_platform_event(
+    "sync/call/accepted",
+    SyncCallUserPayload,
+    description="Звонок Sync принят.",
+)
+register_platform_event(
+    "sync/call/declined",
+    SyncCallUserPayload,
+    description="Звонок Sync отклонён.",
+)
+register_platform_event(
+    "sync/call/ended",
+    CallRead,
+    description="Звонок Sync завершён (все участники вышли).",
+)
+register_platform_event(
+    "sync/call/participant_joined",
+    SyncCallUserPayload,
+    description="Участник присоединился к звонку Sync.",
+)
+register_platform_event(
+    "sync/call/participant_left",
+    SyncCallUserPayload,
+    description="Участник покинул звонок Sync.",
+)
+register_platform_event(
+    "sync/call/admin_changed",
+    CallRead,
+    description="Изменён список админов звонка Sync.",
+)
+register_platform_event(
+    "sync/call/recording_started",
+    CallRecordingRead,
+    description="Начата запись звонка Sync.",
+)
+register_platform_event(
+    "sync/call/recording_stopped",
+    CallRecordingRead,
+    description="Запись звонка Sync остановлена.",
+)
+register_platform_event(
+    "sync/call/recording_failed",
+    CallRecordingRead,
+    description="Ошибка записи звонка Sync.",
+)
+register_platform_event(
+    "sync/presence/changed",
+    SyncPresenceChangedPayload,
+    description="Изменился online/offline статус пользователя Sync.",
+)
 
 
 def event_user_presence(

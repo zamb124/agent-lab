@@ -2,18 +2,19 @@
 TriggerConfig - конфигурация триггера для запуска агента.
 
 Триггер = точка входа + маппинг данных в state.
-Типы: telegram, cron, webhook, email, redis.
+Типы: telegram, cron, webhook, email, platform_event.
 
 Триггеры хранятся в FlowConfig.triggers (не отдельная таблица).
 """
 
 import re
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
+from core.events import assert_platform_event_type
 from core.models import StrictBaseModel
-from core.types import JsonObject
+from core.types import JsonObject, JsonValue
 
 from .channel_config import OutputAction
 from .enums import TriggerStatus, TriggerType
@@ -271,14 +272,38 @@ class EmailTriggerConfig(StrictBaseModel):
         return stripped
 
 
-class RedisTriggerConfig(StrictBaseModel):
-    """Конфигурация Redis Pub/Sub триггера."""
+class EventFilter(StrictBaseModel):
+    """Условие на payload события платформы (dot-path, без JSONPath-движка)."""
 
-    channel: str = Field(..., description="Redis channel для подписки")
-    pattern: bool = Field(
-        default=False,
-        description="Использовать pattern subscribe"
+    path: str = Field(..., description="Dot-path по payload события (например entity_type)")
+    op: Literal["eq", "ne", "contains"] = Field(default="eq", description="Оператор сравнения")
+    value: JsonValue = Field(..., description="Ожидаемое значение")
+
+    @field_validator("path")
+    @classmethod
+    def _validate_path(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("EventFilter.path is required")
+        return stripped
+
+
+class PlatformEventTriggerConfig(StrictBaseModel):
+    """Конфигурация триггера на событие платформы (шина `platform:events`)."""
+
+    event_type: str = Field(
+        ...,
+        description="Тип события платформы (scope/entity/verb) из каталога core/events",
     )
+    filters: list[EventFilter] = Field(
+        default_factory=list,
+        description="Все условия должны выполниться (AND) для запуска flow",
+    )
+
+    @field_validator("event_type")
+    @classmethod
+    def _validate_event_type(cls, value: str) -> str:
+        return assert_platform_event_type(value.strip())
 
 
 __all__ = [
@@ -290,5 +315,6 @@ __all__ = [
     "CronTriggerConfig",
     "WebhookTriggerConfig",
     "EmailTriggerConfig",
-    "RedisTriggerConfig",
+    "EventFilter",
+    "PlatformEventTriggerConfig",
 ]

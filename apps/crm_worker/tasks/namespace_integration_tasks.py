@@ -10,11 +10,11 @@ from datetime import datetime, timezone
 
 import core.tracing.attributes as trace_attributes
 from apps.crm.container import get_crm_container
-from apps.crm_worker.broker import broker
-from apps.crm_worker.task_names import CRM_RUN_NAMESPACE_INTEGRATION_JOB_TASK_NAME
 from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
 from apps.crm_worker.tasks.knowledge_import_tasks import notify_task_user
+from apps.crm_worker.tasks.task_names import CRM_RUN_NAMESPACE_INTEGRATION_JOB
 from core.logging import get_logger
+from core.tasks import platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
 
@@ -47,7 +47,7 @@ def _notification_cancelled_title(label: str, *, job: str) -> str:
 
 
 # Без broker retry: длинный пайплайн и WS; повтор без явной идемпотентности по этапам даёт дубли UI.
-@broker.task(task_name=CRM_RUN_NAMESPACE_INTEGRATION_JOB_TASK_NAME, queue_name="crm")
+@platform_task(CRM_RUN_NAMESPACE_INTEGRATION_JOB)
 async def run_namespace_integration_job(
     task_id: str,
     company_id: str,

@@ -14,12 +14,12 @@ import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-cron-field.js';
 import '@platform/lib/components/platform-timezone-picker.js';
 import '@platform/lib/components/fields/platform-field.js';
+import { CRM_TASK_UPDATED } from '../events/types.js';
 
 const PROVIDER_AMOCRM = 'amocrm';
 
 const INTEGRATION_TASK_TERMINAL = new Set(['completed', 'failed', 'cancelled', 'rolled_back']);
-const INTEGRATION_TASK_POLL_MS = 1500;
-const INTEGRATION_TASK_POLL_MAX = 400;
+const INTEGRATION_TASK_WAIT_MS = 600_000;
 
 function amoSubdomainFromCrmSettings(cs) {
     if (!cs || typeof cs.integrations !== 'object' || cs.integrations === null) {
@@ -359,36 +359,57 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
         }
     }
 
-    async _pollCrmTaskOutcome(taskId) {
-        for (let i = 0; i < INTEGRATION_TASK_POLL_MAX; i += 1) {
-            const row = await this._taskGetOp.run({ task_id: taskId });
-            if (row === null) {
-                return { ok: false, status: 'missing', error_message: '' };
+    async _waitCrmTaskOutcome(taskId) {
+        const seeded = await this._taskGetOp.run({ task_id: taskId });
+        if (seeded !== null) {
+            if (typeof seeded.status !== 'string') {
+                throw new Error('crm task wait: status missing');
             }
-            if (typeof row.status !== 'string') {
-                throw new Error('task poll: status missing');
-            }
-            if (INTEGRATION_TASK_TERMINAL.has(row.status)) {
-                if (row.status === 'completed') {
+            if (INTEGRATION_TASK_TERMINAL.has(seeded.status)) {
+                if (seeded.status === 'completed') {
                     return { ok: true, status: 'completed', error_message: '' };
                 }
-                const msg = typeof row.error_message === 'string' ? row.error_message : '';
-                return { ok: false, status: row.status, error_message: msg };
+                const msg = typeof seeded.error_message === 'string' ? seeded.error_message : '';
+                return { ok: false, status: seeded.status, error_message: msg };
             }
-            await new Promise((resolve) => {
-                setTimeout(resolve, INTEGRATION_TASK_POLL_MS);
-            });
         }
-        return { ok: false, status: 'timeout', error_message: '' };
+        return new Promise((resolve) => {
+            let settled = false;
+            const finish = (outcome) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                window.clearTimeout(timerId);
+                unsub();
+                resolve(outcome);
+            };
+            const onUpdated = (event) => {
+                const payload = event && event.payload;
+                const task = payload && payload.task;
+                if (!task || typeof task !== 'object' || task.task_id !== taskId) {
+                    return;
+                }
+                if (typeof task.status !== 'string' || !INTEGRATION_TASK_TERMINAL.has(task.status)) {
+                    return;
+                }
+                if (task.status === 'completed') {
+                    finish({ ok: true, status: 'completed', error_message: '' });
+                    return;
+                }
+                const msg = typeof task.error_message === 'string' ? task.error_message : '';
+                finish({ ok: false, status: task.status, error_message: msg });
+            };
+            const unsub = this.useEvent(CRM_TASK_UPDATED, onUpdated);
+            const timerId = window.setTimeout(() => {
+                finish({ ok: false, status: 'timeout', error_message: '' });
+            }, INTEGRATION_TASK_WAIT_MS);
+        });
     }
 
     _toastTaskFailure(failedKey, outcome) {
         if (outcome.status === 'timeout') {
             this.toast('integrations_page.amocrm_task_poll_timeout', { type: 'warning' });
-            return;
-        }
-        if (outcome.status === 'missing') {
-            this.toast(failedKey, { type: 'error', vars: { message: '' } });
             return;
         }
         this.toast(failedKey, { type: 'error', vars: { message: outcome.error_message } });
@@ -464,7 +485,7 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
             }
             this.toast('integrations_page.amocrm_unified_sync_started', { type: 'success' });
             this._listOp.run({ namespace_name: this.itemId });
-            const entitiesOutcome = await this._pollCrmTaskOutcome(entitiesStarted.task_id);
+            const entitiesOutcome = await this._waitCrmTaskOutcome(entitiesStarted.task_id);
             if (!entitiesOutcome.ok) {
                 this._toastTaskFailure('integrations_page.amocrm_sync_task_failed', entitiesOutcome);
                 return;
@@ -478,7 +499,7 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
                 throw new Error('amocrm fields: task_id missing in response');
             }
             this._listOp.run({ namespace_name: this.itemId });
-            const fieldsOutcome = await this._pollCrmTaskOutcome(fieldsStarted.task_id);
+            const fieldsOutcome = await this._waitCrmTaskOutcome(fieldsStarted.task_id);
             if (!fieldsOutcome.ok) {
                 this._toastTaskFailure('integrations_page.amocrm_fields_task_failed', fieldsOutcome);
                 return;

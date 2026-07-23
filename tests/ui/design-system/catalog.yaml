@@ -425,3 +425,18 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
+- component: platform-work-item-board
+  doc_slug: platform-work-item-board
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
+- component: platform-work-item-detail
+  doc_slug: platform-work-item-detail
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
+- component: platform-work-item-row
+  doc_slug: platform-work-item-row
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3

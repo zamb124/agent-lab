@@ -27,7 +27,6 @@ import '../components/office-catalog-semantic-search-results.js';
 
 const VIEW_MODE_STORAGE_KEY = 'documents_explorer_view_mode';
 const SEARCH_DEBOUNCE_MS = 300;
-const RAG_INDEX_POLL_MS = 5000;
 const RAG_INDEX_STATUS_VALUES = new Set(['ready', 'pending', 'failed', 'absent']);
 
 export class OfficeDocumentsExplorerPage extends PlatformPage {
@@ -60,10 +59,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._permanentDelete = this.useOp('office/document_permanent_delete');
         this._shareCreate = this.useOp('office/document_share_create');
         this._catalogRagSearch = this.useOp('office/catalog_rag_search');
-        this._ragStatuses = this.useOp('office/documents_rag_statuses');
         this._lastLoadKey = '';
         this._lastSemanticSearchKey = '';
-        this._ragIndexPollTimer = null;
         this._localeSel = this.select((s) => s.i18n.locale);
     }
 
@@ -77,11 +74,6 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             this._documents.setExplorerView({ explorerView: 'recent' });
         }
         this.useEvent(CoreEvents.UI_DOCUMENTS_RELOAD_REQUESTED, () => this._onNamespaceReload());
-    }
-
-    disconnectedCallback() {
-        this._stopRagIndexPoll();
-        super.disconnectedCallback();
     }
 
     _restoreViewMode() {
@@ -110,7 +102,6 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._maybeReloadDocs();
         this._maybeRunSemanticSearch();
         this._ensureActiveCatalog();
-        this._syncRagIndexPoll();
     }
 
     _ragIndexStatusLabel(status) {
@@ -118,48 +109,6 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             return '';
         }
         return this.t(`rag_index.${status}`);
-    }
-
-    _stopRagIndexPoll() {
-        if (this._ragIndexPollTimer != null) {
-            clearInterval(this._ragIndexPollTimer);
-            this._ragIndexPollTimer = null;
-        }
-    }
-
-    _pendingRagFileIds() {
-        return this._visibleDocuments()
-            .filter((doc) => doc && doc.rag_index_status === 'pending')
-            .map((doc) => doc.file_id)
-            .filter((fileId) => typeof fileId === 'string' && fileId.length > 0);
-    }
-
-    _pollRagIndexStatuses() {
-        if (this._ragStatuses.busy) {
-            return;
-        }
-        const fileIds = this._pendingRagFileIds();
-        if (fileIds.length === 0) {
-            this._stopRagIndexPoll();
-            return;
-        }
-        this._ragStatuses.run({ fileIds });
-    }
-
-    _syncRagIndexPoll() {
-        const fileIds = this._pendingRagFileIds();
-        if (fileIds.length === 0) {
-            this._stopRagIndexPoll();
-            return;
-        }
-        if (this._ragIndexPollTimer != null) {
-            return;
-        }
-        // Сразу точечный patch статусов, затем интервал — без reload списка.
-        this._pollRagIndexStatuses();
-        this._ragIndexPollTimer = setInterval(() => {
-            this._pollRagIndexStatuses();
-        }, RAG_INDEX_POLL_MS);
     }
 
     _semanticSearchAvailable() {

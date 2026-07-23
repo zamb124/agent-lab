@@ -1,15 +1,17 @@
-"""Agent tools work_item_create/complete/list — edge cases."""
+"""Agent tools work_item_* — create/list/list_mine/complete and related edge cases."""
 
 from __future__ import annotations
 
 import pytest
 
-from apps.flows.tools.work_item_tools import work_item_complete, work_item_create, work_item_list
-from core.identity.flow_employee import flow_employee_user_id
-from tests.fixtures.flow_employee_test_helpers import (
-    cleanup_flow_employee_for_tests,
-    provision_flow_employee_for_tests,
+from apps.flows.tools.work_item_tools import (
+    work_item_complete,
+    work_item_create,
+    work_item_get,
+    work_item_list,
+    work_item_list_mine,
 )
+from core.identity.flow_employee import flow_employee_user_id
 from core.state import ExecutionState
 from core.worktracker.models import (
     ActorKind,
@@ -19,6 +21,10 @@ from core.worktracker.models import (
     UserActor,
     UsersAssignment,
     WorkItemState,
+)
+from tests.fixtures.flow_employee_test_helpers import (
+    cleanup_flow_employee_for_tests,
+    provision_flow_employee_for_tests,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -47,10 +53,12 @@ async def test_work_item_create_agent_assignee(app, container, unique_id: str) -
             state,
         )
         assert result["work_item_id"]
+        assert result["board_id"]
         item = await container.work_item_service.get("system", result["work_item_id"])
         assert item.assignment.assignee_kind == AssigneeKind.USERS
         assert isinstance(item.assignment, UsersAssignment)
         assert item.assignment.user_ids == [flow_employee_user_id(flow_id)]
+        assert item.board_id is not None
     finally:
         await cleanup_flow_employee_for_tests(flow_id=flow_id)
 
@@ -81,6 +89,55 @@ async def test_work_item_list_state_filter(app, container, unique_id: str) -> No
     ids = {entry["work_item_id"] for entry in listed["items"]}
     assert open_item.work_item_id in ids
     assert done_item.work_item_id not in ids
+
+
+async def test_work_item_list_mine_scopes_to_current_user(
+    app, container, unique_id: str
+) -> None:
+    other_id = f"other_{unique_id}"
+    await container.work_item_service.create(
+        company_id="system",
+        title=f"other-{unique_id}",
+        created_by=SystemActor(),
+        assignment=UsersAssignment(user_ids=[other_id]),
+    )
+    mine = await container.work_item_service.create(
+        company_id="system",
+        title=f"mine-{unique_id}",
+        created_by=SystemActor(),
+        assignment=UsersAssignment(user_ids=["test_user"]),
+    )
+    state = ExecutionState(
+        task_id=f"tm-{unique_id}",
+        context_id=f"ctxm-{unique_id}",
+        user_id="test_user",
+        session_id=f"flowm_{unique_id}:ctxm",
+        branch_id="default",
+    )
+    listed = await work_item_list_mine.run({}, state)
+    ids = {entry["work_item_id"] for entry in listed["items"]}
+    assert mine.work_item_id in ids
+    assert listed["assignee_user_id"] == "test_user"
+
+
+async def test_work_item_get_returns_detail(app, container, unique_id: str) -> None:
+    item = await container.work_item_service.create(
+        company_id="system",
+        title=f"get-{unique_id}",
+        created_by=SystemActor(),
+        description="full body",
+    )
+    state = ExecutionState(
+        task_id=f"tg-{unique_id}",
+        context_id=f"ctxg-{unique_id}",
+        user_id="test_user",
+        session_id=f"flowg_{unique_id}:ctxg",
+        branch_id="default",
+    )
+    detail = await work_item_get.run({"work_item_id": item.work_item_id}, state)
+    assert detail["work_item_id"] == item.work_item_id
+    assert detail["description"] == "full body"
+    assert "assignment" in detail
 
 
 async def test_work_item_create_missing_assignee_flow_id_raises(app, unique_id: str) -> None:
@@ -161,6 +218,7 @@ async def test_work_item_create_records_actor_created_by(app, container, unique_
     assert item.created_by.actor_kind == ActorKind.USER
     assert isinstance(item.created_by, UserActor)
     assert item.created_by.user_id == "test_user"
+    assert item.board_id is not None
 
 
 async def test_work_item_create_user_and_unassigned(app, container, unique_id: str) -> None:
@@ -186,6 +244,7 @@ async def test_work_item_create_user_and_unassigned(app, container, unique_id: s
     none_item = await container.work_item_service.get("system", none["work_item_id"])
     assert isinstance(none_item.assignment, UnassignedAssignment)
     assert none_item.assignment.assignee_kind == AssigneeKind.UNASSIGNED
+    assert none_item.board_id is not None
 
 
 async def test_work_item_create_user_missing_id_raises(app, unique_id: str) -> None:

@@ -7,7 +7,7 @@ import pytest
 from core.context import clear_context, get_context, set_context
 from core.models.context_models import Context
 from core.models.i18n_models import Language
-from core.models.identity_models import Company, NamespaceKind, User
+from core.models.identity_models import NamespaceKind
 from core.namespace import personal_namespace_name
 from tests.sync.api._helpers import seed_namespace_via_repo
 

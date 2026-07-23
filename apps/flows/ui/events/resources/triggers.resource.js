@@ -126,6 +126,13 @@ export const triggerReregisterOp = createAsyncOp({
     },
 });
 
+export const platformEventsCatalogOp = createAsyncOp({
+    name: 'flows/platform_events_catalog',
+    silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/platform-events/catalog' },
+    request: async () => httpRequest({ method: 'GET', url: '/flows/api/v1/platform-events/catalog' }),
+});
+
 export const triggerTestOp = createAsyncOp({
     name: 'flows/trigger_test',
     successToastKey: 'flows:toast.trigger_tested',

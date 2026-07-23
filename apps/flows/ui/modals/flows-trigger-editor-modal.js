@@ -42,7 +42,7 @@ const CHANNEL_TYPES = Object.freeze([
 
 /**
  * Куда доставлять ответ flow — привязываем к типу входа: Telegram-вход = только ответ в Telegram
- * (отдельные сценарии: cron / webhook / redis с другими графами).
+ * (отдельные сценарии: cron / webhook / platform_event с другими графами).
  */
 function outputChannelTypesForTrigger(triggerType) {
     if (triggerType === 'telegram') {
@@ -55,13 +55,19 @@ function outputChannelTypesForTrigger(triggerType) {
 }
 
 /**
- * Вкладка «Вывод» не показывается для cron: пост-рассылка не используется.
+ * Вкладка «Вывод» не показывается для cron и platform_event: пост-рассылка не используется.
  * @param {string} typeId
  * @returns {boolean}
  */
 function showTriggerOutputTab(typeId) {
-    return typeId.length > 0 && typeId !== 'cron';
+    return typeId.length > 0 && typeId !== 'cron' && typeId !== 'platform_event';
 }
+
+const EVENT_FILTER_OPS = Object.freeze([
+    { id: 'eq', labelKey: 'event_filter_op_eq' },
+    { id: 'ne', labelKey: 'event_filter_op_ne' },
+    { id: 'contains', labelKey: 'event_filter_op_contains' },
+]);
 
 const OUTPUT_ACTIONS = Object.freeze([
     { id: 'send_message',  labelKey: 'action_send_message' },
@@ -143,9 +149,10 @@ const MAPPING_EXAMPLES = Object.freeze({
         { path: 'subject', descKey: 'examples_email_subject' },
         { path: 'body',    descKey: 'examples_email_body' },
     ],
-    redis: [
-        { path: 'channel', descKey: 'examples_redis_channel' },
-        { path: 'data',    descKey: 'examples_redis_data' },
+    platform_event: [
+        { path: 'event_type',        descKey: 'examples_platform_event_type' },
+        { path: 'payload',           descKey: 'examples_platform_event_payload' },
+        { path: 'actor_user_id',     descKey: 'examples_platform_event_actor' },
     ],
 });
 
@@ -170,6 +177,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         _hydrated: { state: true },
         _validationError: { state: true },
         _verifyHintText: { state: true },
+        _catalogItems: { state: true },
     };
 
     static styles = [
@@ -246,6 +254,13 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 margin-bottom: var(--space-2);
             }
             .mapping-arrow { color: var(--text-tertiary); font-family: var(--font-mono); }
+            .event-filter-row {
+                display: grid;
+                grid-template-columns: 1fr auto 1fr auto;
+                align-items: center;
+                gap: var(--space-2);
+                margin-bottom: var(--space-2);
+            }
             .mapping-empty {
                 padding: var(--space-3);
                 text-align: center;
@@ -342,6 +357,9 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this._hydrated = false;
         this._validationError = '';
         this._verifyHintText = '';
+        this._catalogItems = [];
+        this._catalogLoadStarted = false;
+        this._catalogOp = this.useOp('flows/platform_events_catalog');
         this._createOp = this.useOp('flows/trigger_create');
         this._updateOp = this.useOp('flows/trigger_update');
         this._listOp = this.useOp('flows/triggers_list');
@@ -745,7 +763,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             case 'cron':     return this._renderCronConfig();
             case 'webhook':  return this._renderWebhookConfig();
             case 'email':    return this._renderEmailConfig();
-            case 'redis':    return this._renderRedisConfig();
+            case 'platform_event': return this._renderPlatformEventConfig();
             default:         return '';
         }
     }
@@ -1027,35 +1045,159 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         };
     }
 
-    _renderRedisConfig() {
+    _ensurePlatformEventsCatalogLoaded() {
+        if (this._catalogLoadStarted) return;
+        this._catalogLoadStarted = true;
+        void this._catalogOp.run({}).then((r) => {
+            if (r && Array.isArray(r.items)) {
+                this._catalogItems = r.items;
+            }
+        });
+    }
+
+    _platformEventFilters() {
+        const raw = this._config.filters;
+        if (!Array.isArray(raw)) return [];
+        return raw.filter((f) => isPlainObject(f));
+    }
+
+    _setPlatformEventFilters(filters) {
+        this._setConfig('filters', filters);
+    }
+
+    /**
+     * Строка из инпута → JSON-скаляр там, где это очевидно (true/false/число).
+     * @param {string} raw
+     */
+    _parseFilterValue(raw) {
+        const s = raw.trim();
+        if (s === 'true') return true;
+        if (s === 'false') return false;
+        if (s.length > 0 && /^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+        return raw;
+    }
+
+    _renderPlatformEventConfig() {
+        this._ensurePlatformEventsCatalogLoaded();
         const c = this._config;
+        const selectedType = asString(c.event_type);
+        const items = Array.isArray(this._catalogItems) ? this._catalogItems : [];
+        const eventEnumValues = items.map((item) => ({
+            value: item.event_type,
+            label: item.description
+                ? `${item.event_type} — ${item.description}`
+                : item.event_type,
+        }));
+        if (selectedType.length > 0 && !eventEnumValues.some((v) => v.value === selectedType)) {
+            eventEnumValues.unshift({ value: selectedType, label: selectedType });
+        }
+        const filters = this._platformEventFilters();
+        const opEnumConfig = {
+            values: EVENT_FILTER_OPS.map((op) => ({
+                value: op.id,
+                label: this.t(`trigger_editor_modal.${op.labelKey}`),
+            })),
+        };
         return html`
             <div class="config-section">
-                <div class="config-section-title">${this.t('trigger_editor_modal.section_redis')}</div>
+                <div class="config-section-title">${this.t('trigger_editor_modal.section_platform_event')}</div>
                 <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_channel')}</label>
+                    <label>${this.t('trigger_editor_modal.field_event_type')}</label>
                     <platform-field
-                        type="string"
+                        type="enum"
                         mode="edit"
-                        .value=${asString(c.channel)}
-                        placeholder=${this.t('trigger_editor_modal.field_channel_placeholder')}
+                        .value=${selectedType}
+                        .config=${{ values: eventEnumValues }}
                         @change=${(e) => {
                             const v = e.detail.value;
                             if (typeof v !== 'string') {
-                                throw new TypeError('flows-trigger-editor-modal: channel expects string detail.value');
+                                throw new TypeError('flows-trigger-editor-modal: event_type expects string detail.value');
                             }
-                            this._setConfig('channel', v);
+                            this._setConfig('event_type', v);
                         }}
                     ></platform-field>
+                    <span class="hint">${this.t('trigger_editor_modal.hint_event_type')}</span>
                 </div>
-                <platform-field
-                    type="boolean"
-                    mode="edit"
-                    .label=${this.t('trigger_editor_modal.field_pattern')}
-                    .value=${Boolean(c.pattern)}
-                    @change=${(e) => this._setConfig('pattern', e.detail.value === true)}
-                ></platform-field>
-                <span class="hint">${this.t('trigger_editor_modal.hint_pattern')}</span>
+                <div class="mapping-add-row">
+                    <span style="font-weight: var(--font-medium); color: var(--text-secondary);">
+                        ${this.t('trigger_editor_modal.event_filters_label')}
+                    </span>
+                    <platform-button
+                        variant="ghost"
+                        density="compact"
+                        @click=${() => {
+                            this._setPlatformEventFilters([...filters, { path: '', op: 'eq', value: '' }]);
+                        }}
+                    >
+                        + ${this.t('trigger_editor_modal.event_filters_add')}
+                    </platform-button>
+                </div>
+                ${filters.length === 0
+                    ? html`<div class="mapping-empty">${this.t('trigger_editor_modal.event_filters_empty')}</div>`
+                    : filters.map((f, idx) => html`
+                        <div class="event-filter-row">
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                .value=${asString(f.path)}
+                                placeholder=${this.t('trigger_editor_modal.event_filter_path_placeholder')}
+                                @change=${(e) => {
+                                    const v = e.detail.value;
+                                    if (typeof v !== 'string') {
+                                        throw new TypeError('flows-trigger-editor-modal: filter path expects string detail.value');
+                                    }
+                                    this._setPlatformEventFilters(
+                                        filters.map((row, i) => (i === idx ? { ...row, path: v } : row)),
+                                    );
+                                }}
+                            ></platform-field>
+                            <platform-field
+                                type="enum"
+                                mode="edit"
+                                .value=${asString(f.op) || 'eq'}
+                                .config=${opEnumConfig}
+                                @change=${(e) => {
+                                    const v = e.detail.value;
+                                    if (typeof v !== 'string') {
+                                        throw new TypeError('flows-trigger-editor-modal: filter op expects string detail.value');
+                                    }
+                                    this._setPlatformEventFilters(
+                                        filters.map((row, i) => (i === idx ? { ...row, op: v } : row)),
+                                    );
+                                }}
+                            ></platform-field>
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                .value=${typeof f.value === 'string' ? f.value : JSON.stringify(f.value)}
+                                placeholder=${this.t('trigger_editor_modal.event_filter_value_placeholder')}
+                                @change=${(e) => {
+                                    const v = e.detail.value;
+                                    if (typeof v !== 'string') {
+                                        throw new TypeError('flows-trigger-editor-modal: filter value expects string detail.value');
+                                    }
+                                    this._setPlatformEventFilters(
+                                        filters.map((row, i) => (i === idx
+                                            ? { ...row, value: this._parseFilterValue(v) }
+                                            : row)),
+                                    );
+                                }}
+                            ></platform-field>
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="dense"
+                                danger
+                                title=${this.t('trigger_editor_modal.mapping_remove_title')}
+                                @click=${() => {
+                                    this._setPlatformEventFilters(filters.filter((_, i) => i !== idx));
+                                }}
+                            >
+                                <platform-icon name="trash" size="16"></platform-icon>
+                            </platform-button>
+                        </div>
+                    `)}
+                <span class="hint">${this.t('trigger_editor_modal.hint_event_filters')}</span>
             </div>
         `;
     }
@@ -1157,7 +1299,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         const showGeneralOutputIntro
             = Boolean(this._type)
             && this._type !== 'telegram'
-            && (this._type === 'email' || ['webhook', 'redis'].includes(this._type));
+            && (this._type === 'email' || this._type === 'webhook');
         const compactTelegram
             = this._postFlowOutputEnabled
             && this._type === 'telegram'
@@ -1408,7 +1550,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this._verifyHintText = '';
         this._type = typeId;
         this._outputTelegramExpanded = false;
-        if (typeId === 'cron') {
+        if (typeId === 'cron' || typeId === 'platform_event') {
             this._postFlowOutputEnabled = false;
             if (this._activeTab === 'output') {
                 this._activeTab = 'config';
@@ -1534,6 +1676,12 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             const mailboxId = this._config.mailbox_binding_id;
             if (typeof mailboxId !== 'string' || mailboxId.trim().length === 0) {
                 return { config: this.t('trigger_editor_modal.error_mailbox_required') };
+            }
+        }
+        if (this._type === 'platform_event') {
+            const eventType = this._config.event_type;
+            if (typeof eventType !== 'string' || eventType.trim().length === 0) {
+                return { config: this.t('trigger_editor_modal.error_event_type_required') };
             }
         }
         return {};

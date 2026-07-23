@@ -144,14 +144,13 @@ async def _ui_e2e_company_resources(
     _ = flows_service, taskiq_worker, crm_service
     from apps.crm.container import get_crm_container
     from apps.flows.src.tasks.company_init_tasks import init_company_resources
+    from tests.sync.api._helpers import _temporary_company_context
     from tests.ui.e2e_worker import (
         ui_e2e_company2_id,
         ui_e2e_company_id,
         ui_e2e_subdomain,
         ui_e2e_subdomain_company2,
     )
-
-    from tests.sync.api._helpers import _temporary_company_context
 
     for company_id, subdomain in (
         (ui_e2e_company_id(), ui_e2e_subdomain()),

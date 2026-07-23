@@ -41,7 +41,66 @@ export const documentsResource = createAsyncOp({
             }
             return { ...state, items: result.items };
         }
+        if (event.type === 'rag/document/status_updated') {
+            const payload = event.payload;
+            if (!payload || typeof payload !== 'object') {
+                return state;
+            }
+            const documentId = typeof payload.document_id === 'string' ? payload.document_id : '';
+            const namespaceId = typeof payload.namespace_id === 'string' ? payload.namespace_id : '';
+            const status = typeof payload.status === 'string' ? payload.status : '';
+            if (documentId.length === 0 || status.length === 0) {
+                return state;
+            }
+            if (namespaceId.length > 0 && state.loadedNamespaceId !== null && namespaceId !== state.loadedNamespaceId) {
+                return state;
+            }
+            const idx = state.items.findIndex((item) => item && item.document_id === documentId);
+            if (idx === -1) {
+                return state;
+            }
+            const prev = state.items[idx];
+            const nextItem = {
+                ...prev,
+                status,
+                name: typeof payload.document_name === 'string' ? payload.document_name : prev.name,
+                metadata: {
+                    ...(prev.metadata && typeof prev.metadata === 'object' ? prev.metadata : {}),
+                    error_message: typeof payload.error_message === 'string' ? payload.error_message : null,
+                    chunks_count: typeof payload.chunks_count === 'number' ? payload.chunks_count : null,
+                },
+            };
+            const items = state.items.map((item, i) => (i === idx ? nextItem : item));
+            return { ...state, items };
+        }
         return state;
+    },
+    extraEffect: async (event, ctx, events) => {
+        if (event.type !== 'rag/document/status_updated') {
+            return false;
+        }
+        const payload = event.payload;
+        if (!payload || typeof payload !== 'object') {
+            return true;
+        }
+        const status = typeof payload.status === 'string' ? payload.status : '';
+        const namespaceId = typeof payload.namespace_id === 'string' ? payload.namespace_id : '';
+        if (status !== 'completed' && status !== 'failed') {
+            return true;
+        }
+        if (namespaceId.length === 0) {
+            return true;
+        }
+        const slice = ctx.getState().ragDocuments;
+        if (!slice || slice.loadedNamespaceId !== namespaceId) {
+            return true;
+        }
+        ctx.dispatch(
+            events.REQUESTED,
+            { namespaceId },
+            { causation_id: event.id, source: 'ws' },
+        );
+        return true;
     },
 });
 

@@ -11,7 +11,7 @@ import json
 import pytest
 import pytest_asyncio
 
-from apps.flows.tools.lara_crm import (
+from apps.flows.tools.crm_tools import (
     crm_analyze_note_text,
     crm_create_note,
     crm_create_note_and_analyze,

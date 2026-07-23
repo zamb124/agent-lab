@@ -68,7 +68,7 @@ async def test_find_by_completion_correlation(
             WorkItemHook(
                 event=WorkItemHookEvent.COMPLETED,
                 service="flows",
-                path="/flows/api/v1/internal/work-items/completed",
+                path="platform:events",
                 binding={"correlation_id": correlation_id},
             )
         ],

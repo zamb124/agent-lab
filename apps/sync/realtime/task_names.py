@@ -1,21 +1,31 @@
-"""TaskIQ task-name contract for Sync realtime tasks."""
+"""Declaration-модуль Sync realtime задач (очередь ``sync``).
 
-SYNC_FINALIZE_RECORDING_TASK_NAME = "apps.sync.realtime.tasks:sync_finalize_recording_task"
-SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME = (
-    "apps.sync.realtime.tasks:sync_transcribe_audio_message_task"
+Лёгкий: только объявления. Импортируется и producer'ами (для ``enqueue``),
+и impl-модулями (для ``@platform_task``).
+"""
+
+from core.tasks import declare_task
+
+SYNC_FINALIZE_RECORDING = declare_task("sync_finalize_recording", queue="sync")
+SYNC_TRANSCRIBE_AUDIO_MESSAGE = declare_task("sync_transcribe_audio_message", queue="sync")
+SYNC_TRANSCRIBE_VIDEO_MESSAGE = declare_task("sync_transcribe_video_message", queue="sync")
+SYNC_AGGREGATE_CALL_TRANSCRIPT = declare_task(
+    "sync_aggregate_call_transcript", queue="sync"
 )
-SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME = (
-    "apps.sync.realtime.tasks:sync_transcribe_video_message_task"
+SYNC_SPEECH_TO_CHAT_POLL = declare_task("sync_speech_to_chat_poll", queue="sync")
+DELIVER_CHANNEL_MESSAGE_NOTIFICATION = declare_task(
+    "deliver_channel_message_notification", queue="sync"
 )
-SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME = (
-    "apps.sync.realtime.tasks:sync_aggregate_call_transcript_task"
+DELIVER_SYNC_MENTION_NOTIFICATION = declare_task(
+    "deliver_sync_mention_notification", queue="sync"
 )
-SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME = "apps.sync.realtime.tasks:sync_speech_to_chat_poll_task"
 
 __all__ = [
-    "SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME",
-    "SYNC_FINALIZE_RECORDING_TASK_NAME",
-    "SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME",
-    "SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME",
-    "SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME",
+    "DELIVER_CHANNEL_MESSAGE_NOTIFICATION",
+    "DELIVER_SYNC_MENTION_NOTIFICATION",
+    "SYNC_AGGREGATE_CALL_TRANSCRIPT",
+    "SYNC_FINALIZE_RECORDING",
+    "SYNC_SPEECH_TO_CHAT_POLL",
+    "SYNC_TRANSCRIBE_AUDIO_MESSAGE",
+    "SYNC_TRANSCRIBE_VIDEO_MESSAGE",
 ]

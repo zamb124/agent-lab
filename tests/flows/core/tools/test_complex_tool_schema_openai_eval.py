@@ -27,7 +27,7 @@ from apps.flows.src.tools.json_schema_parameters import (
     pydantic_model_to_parameters_schema,
     sanitize_parameters_schema_for_llm,
 )
-from apps.flows.tools.lara_crm import CrmSearchEntitiesArgs
+from apps.flows.tools.crm_tools import CrmSearchEntitiesArgs
 from core.state import ExecutionState
 
 

@@ -147,7 +147,7 @@ KEYS subdomain:*
 │   Agents    │
 │   Service   │
 └──────┬──────┘
-       │ TaskIQ.kiq()
+       │ enqueue()
        │ init_company_resources(company_id)
        ▼
 ┌──────────────────────┐

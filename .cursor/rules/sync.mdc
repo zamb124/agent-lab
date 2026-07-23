@@ -30,8 +30,8 @@ WebSocket /sync/api/ws/notifications           ──┘  (single command_router
 - **Все операции (read + mutating)** — `async def op_<entity>_<verb>(payload, *, user, container) -> Result | None` в `apps/sync/realtime/operations.py`. Один handler — оба транспорта.
 - **Транспорт:** `apps/sync/realtime/command_router.SYNC_OPERATIONS = {canonical_type → Operation(payload_model, fn)}`. `_make_ws_handler(op)` валидирует payload Pydantic'ом и зовёт `op.fn`. `WsCommandError` → WS `*_failed`-фрейм.
 - **REST-обвязка** — каждый route в `apps/sync/api/**` собирает Pydantic и зовёт ту же `op.fn`. `WsCommandError` маппится в `HTTPException` через `@app.exception_handler` в `apps/sync/main.py`.
-- **TaskIQ** — **только** для heavy-транскрипции (`messages.transcribe_audio/video/call` → `sync_transcribe_*_message_task.kiq()`). Все остальные mutating-команды — in-process в `op_*`.
-- **События домена** — `publish_realtime_events([...])` внутри `op_*`. Форвард — `core.ui_events.publish_ui_event_*` → `platform:ui_events` → `core.websocket.manager` доставляет в подключённые сокеты по `recipient_user_ids`.
+- **TaskIQ** — **только** для heavy-транскрипции (`messages.transcribe_audio/video/call` → `enqueue(SYNC_TRANSCRIBE_AUDIO_MESSAGE | SYNC_TRANSCRIBE_VIDEO_MESSAGE | SYNC_AGGREGATE_CALL_TRANSCRIPT, ...)`). Все остальные mutating-команды — in-process в `op_*`.
+- **События домена** — `publish_realtime_events([...])` внутри `op_*`. Форвард — `core.events.publish_event_*` → `platform:events` → `core.websocket.manager` доставляет в подключённые сокеты по `recipient_user_ids`.
 - **company_id** — `resolve_company_id(user)` из `operations.py`. Контекст пуст — `WsCommandError("ws_no_company", ...)`.
 
 ### Запрещено (zero-fallback canon)
@@ -59,11 +59,15 @@ Naming канон: `sync/<entity>/<verb>_requested` (3 сегмента, snake_c
 
 - **channels:** `list`, `create`, `update`, `mark_read`, `typing`, `notification_settings_update`, `add_member`, `list_members`.
 - **threads:** `list`, `item`, `create`.
-- **messages:** `list`, `send`, `edit`, `delete`, `forward`, `react`, `pin`, `mark_read`, `transcribe_audio`, `transcribe_video`, `transcribe_call`.
+- **messages:** `list`, `list_thread`, `send`, `edit`, `delete`, `forward`, `react`, `pin`, `mark_read`, `transcribe_audio`, `transcribe_video`, `transcribe_call`.
 - **git_resources:** `upsert`, `get`.
 - **calls:** `invite`, `accept`, `decline`, `hangup`, `recording_start`, `recording_stop`, `admin_transfer`, `signal`, `get`, `recordings_list`, `token`, `turn_credentials`, `links_list`, `links_create`, `links_update`, `links_remove`, `join_info`, `join_accept`.
 - **company_members:** `list`. **shared_channels:** `list`.
 - **files:** `upload_completed` (метаданные после REST multipart upload).
+
+### Flow-employee Sync tools (Lara)
+
+Tier-1 skill `sync-platform` → children `sync-messaging`, `sync-channels`, `sync-threads`, `team-directory`. Builtins в `apps/flows/tools/sync_*.py` ходят в Sync REST через `ServiceClient` (JWT employee + `op_*` ACL). Calls/Git/presence — UI-only (skill boundary). Methodology — `sync-platform/references/sync-employee-methodology.md`.
 
 Namespace-операции (`list`/`sync_settings update`) — REST-only через `apps/sync/api/namespaces.py` (HTTP-фабрики `sync/namespaces`, `sync/namespace_update`); зеркал по WS не нужно (админка namespace симметрична CRM — тоже HTTP).
 
@@ -92,7 +96,7 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 
 | Сценарий | Вход | Шаги | Выход | Отказ |
 |---|---|---|---|---|
-| Старт poll «речь в ленту» | `call.invite` при 1 участнике канала ИЛИ `call.accept` когда звонок `active`; канал с `speech_to_chat_enabled`; есть `livekit_room_name` | `handlers._maybe_start_speech_to_chat_poll` → `sync_speech_to_chat_poll_task.kiq` | Цепочка пока `SpeechToChatPollOutcome.schedule_next`. Задержка — `poll_*_seconds`; lock занят — `poll_lock_busy_retry_seconds` | флаг off; нет Redis URL; нет room name |
+| Старт poll «речь в ленту» | `call.invite` при 1 участнике канала ИЛИ `call.accept` когда звонок `active`; канал с `speech_to_chat_enabled`; есть `livekit_room_name` | `handlers._maybe_start_speech_to_chat_poll` → `enqueue(SYNC_SPEECH_TO_CHAT_POLL, ...)` | Цепочка пока `SpeechToChatPollOutcome.schedule_next`. Задержка — `poll_*_seconds`; lock занят — `poll_lock_busy_retry_seconds` | флаг off; нет Redis URL; нет room name |
 | Тик poll | TaskIQ после sleep | Redis lock + продление TTL → LiveKit → egress (если нужно) → `process_new_files…` → `messages.send` | `message.created` | S3/LiveKit; Twirp timeout — повтор |
 | Авто-STT голосового | `messages.send`; канал `transcribe_voice_messages`; первый `file/audio` IDLE (**не** `source_speech_to_chat`) | `sync_transcribe_audio_message_task` + Redis lock на сообщение | `sync/message/updated` | См. tasks |
 | Ручная расшифровка | `messages.transcribe_audio` | Тот же task | Как у авто | Нет членства; удалённое сообщение |
@@ -123,7 +127,7 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 
 - После `messages.send` (только корневая лента, без `thread_id`) для каждого участника кроме отправителя, **если его нет в `mentioned_user_ids`** — TaskIQ `deliver_channel_message_notification` (`apps/sync/realtime/notification_tasks.py`): есть presence `sync:ws:presence:{user_id}` — выход без `notify_user`; иначе проверка `notifications_muted`; иначе `notify_user(NotificationType.SYNC_NEW_MESSAGE, action_url=/sync/c/...)`.
 - Упоминания: `MessageCreate.mentioned_user_ids` (опц.); сервер валидирует участников канала, пишет в первый `text/plain` поле `mentions` в JSON контента. Для каждого упомянутого (кроме отправителя) — `deliver_sync_mention_notification` (`NotificationType.MENTION`, high), **без** пропуска по sync presence; учитывается `notifications_muted`. В тредах обычное канальное уведомление не шлётся; упоминания в треде доставляются через `deliver_sync_mention_notification`.
-- Flow-сотрудник в чате: employee-user (`flow_employee_{flow_id}`, → `main.mdc`/`flows.mdc`) — обычный участник канала (виден в `company_members`-автокомплите, меншенится штатно). При отправке сообщения, если упомянутый/DM-адресат — `is_flow_employee(user)` (`core.identity.flow_employee`), рядом с mention-нотификацией идёт TaskIQ-диспатч в flows employee inbox (`ServiceClient("flows", "/flows/api/v1/internal/employee/inbox")`, source `sync_message`). Sync не знает flows-домен. Ответ flow — обычный `messages.send` под собственным JWT сотрудника; builtin tools `sync_send_message`/`sync_list_messages` для проактивных действий.
+- Flow-сотрудник в чате (полный канон → **`flow_employee.mdc`**): employee-user (`flow_employee_{flow_id}`) — обычный участник канала (виден в `company_members`-автокомплите, меншенится штатно; human-only фильтра на add-member нет). После `messages.send` sync публикует `sync/message/created` на шину `platform:events` с `channel_type` + `mentioned_user_ids` + `recipient_user_ids` в payload; consumer group `flows` будит employee по правилу «DM или @mention» через `EmployeeInboxService` (никаких прямых HTTP Sync→flows). Обычный mention/channel toast employee-uid **не** шлётся (`_enqueue_channel_message_notifications` их пропускает). Group-member без @mention flow **не** будит (by design). Ответ в канал — не auto-post LLM: builtin tools `sync_send_message`/`sync_list_messages` под SESSION JWT сотрудника. Sync `CompanyMemberRead` пока без `is_flow_employee` (badge — в team API).
 - Presence в `apps/sync/realtime/presence_hooks.py` через `notification_manager.register_{connect,disconnect}_hook`. TTL — `ws_presence_ttl_seconds`. Снимается при закрытии последнего сокета. `sync:last_seen:{user_id}` — ISO при последнем disconnect.
 - UI: `platform-notification-manager` в `apps/sync/ui/index.html`; мьют — модалка `sync.channel_notifications` (`useOp('sync/channel_notifications_update')`). Deep link: `/sync/c/:channelId` через `createRouterEffect` (`SYNC_ROUTES`).
 
@@ -169,7 +173,7 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 
 - `messages.{edit,delete,forward,react,pin}`. Push: `sync/message/{updated,deleted,reaction_changed}`, `sync/channel/pins_changed`.
 - `channels.mark_read` — обновляет `sync_channel_members.last_read_at` до `max(sent_at)` корневой ленты. Push `sync/channel/read_updated` (`channel_id`, `reader_user_id`, `read_at`).
-- `channels.typing` — эфемерно, без записи; push `sync/channel/typing` через `platform:ui_events`. Reducer фабрики `sync/presence` обновляет `typingByChannel`; своя строка отбрасывается через сравнение `user.user_id`. TTL — локальный action `pruneTyping` (`extraEvents.TYPING_PRUNE`).
+- `channels.typing` — эфемерно, без записи; push `sync/channel/typing` через `platform:events`. Reducer фабрики `sync/presence` обновляет `typingByChannel`; своя строка отбрасывается через сравнение `user.user_id`. TTL — локальный action `pruneTyping` (`extraEvents.TYPING_PRUNE`).
 
 ## Namespace
 
@@ -213,7 +217,7 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 - **Сайдбар «Каналы» и `sync-channel-picker`:** `state.syncSpaces.sidebarSpaceFilterIds` — мультивыбор пространств (persist через `sync-persist.effect.js`). Пустой массив = все topic-каналы.
 - **Смена канала:** `this.navigate('channel', {channelId})` → `createRouterEffect` маршрутом `/sync/c/:channelId` проставит `channelId`; `sync-channel-page` диспатчит `channelsResource.actions.selectChannel({channelId})` и `messagesResource.run({channel_id, limit:50})`.
 - **Persist:** `sync-persist.effect.js` — bridge-effect между UI-actions и core `STORAGE_*`. Хранит `selectedSpaceId`, `selectedChannelId`, `sidebarSpaceFilterIds`.
-- **Переподключение WS:** Redis Pub/Sub историю не хранит. На втором и далее `WS_CONNECTED` (`_wsEverConnected` в `sync-app`) — диспатч `sync/channels/list_requested` и при выбранном канале `messagesResource.run({channel_id, limit:50})`.
+- **Переподключение WS:** tail шины `platform:events` историю не хранит (at-most-once). На втором и далее `WS_CONNECTED` (`_wsEverConnected` в `sync-app`) — диспатч `sync/channels/list_requested` и при выбранном канале `messagesResource.run({channel_id, limit:50})`.
 - **Нормализация форм данных** — на уровне фабрики (`mapItem` в `channelsResource`/`messagesResource`, `_normalizeMessage`/`_normalizeChannel` в `extraReducer`). `extraInitial` задаёт каноничную форму slice. `_getChannelData(state, channelId)` гарантирует полную форму. Выбор-источника отображения — `_helpers/sync-id-resolvers.js` (`resolveDisplayName`/`resolveChannelTitle`/`resolveNonEmptyString`/`resolveSpaceId`); `a || b` в pages/modals/components запрещён.
 
 ## Тестирование

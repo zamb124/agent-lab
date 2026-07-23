@@ -33,17 +33,16 @@ from apps.sync.models.messages import (
     MessageRead,
     TextPlainContent,
 )
-from apps.sync.realtime.broker import broker
 from apps.sync.realtime.events import event_call_recording_failed, event_message_updated
 from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.speech_to_chat_workflow import run_speech_to_chat_poll_cycle
 from apps.sync.realtime.task_names import (
-    SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME,
-    SYNC_FINALIZE_RECORDING_TASK_NAME,
-    SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME,
-    SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
-    SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME,
+    SYNC_AGGREGATE_CALL_TRANSCRIPT,
+    SYNC_FINALIZE_RECORDING,
+    SYNC_SPEECH_TO_CHAT_POLL,
+    SYNC_TRANSCRIBE_AUDIO_MESSAGE,
+    SYNC_TRANSCRIBE_VIDEO_MESSAGE,
 )
 from apps.sync.sender_display import guest_display_name_from_sender_id, sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
@@ -61,6 +60,7 @@ from core.files.s3_client import S3ClientFactory
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.models.identity_models import User
+from core.tasks import enqueue, platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import parse_json_object
 from core.utils.tokens import get_token_service
@@ -489,7 +489,7 @@ async def _register_platform_file_record_for_call_recording(
     return content_length
 
 
-@broker.task(task_name=SYNC_FINALIZE_RECORDING_TASK_NAME, queue_name="sync")
+@platform_task(SYNC_FINALIZE_RECORDING)
 async def sync_finalize_recording_task(recording_id: str, company_id: str, actor_user_id: str) -> None:
     logger.info(
         "sync_finalize_recording_task start: recording_id=%s company_id=%s actor=%s",
@@ -820,7 +820,7 @@ async def transcribe_audio_message_core(
         await r.aclose()
 
 
-@broker.task(task_name=SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME, queue_name="sync")
+@platform_task(SYNC_TRANSCRIBE_AUDIO_MESSAGE)
 async def sync_transcribe_audio_message_task(
     *,
     channel_id: str,
@@ -980,7 +980,7 @@ async def transcribe_video_message_core(
         )
 
 
-@broker.task(task_name=SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME, queue_name="sync")
+@platform_task(SYNC_TRANSCRIBE_VIDEO_MESSAGE)
 async def sync_transcribe_video_message_task(
     *,
     channel_id: str,
@@ -996,7 +996,7 @@ async def sync_transcribe_video_message_task(
     )
 
 
-@broker.task(task_name=SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME, queue_name="sync")
+@platform_task(SYNC_AGGREGATE_CALL_TRANSCRIPT)
 async def sync_aggregate_call_transcript_task(
     *,
     channel_id: str,
@@ -1134,7 +1134,7 @@ def _speech_to_chat_poll_sleep_seconds(*, is_continuation: bool) -> float:
     return float(stc.poll_interval_seconds if is_continuation else stc.poll_initial_delay_seconds)
 
 
-@broker.task(task_name=SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME, queue_name="sync")
+@platform_task(SYNC_SPEECH_TO_CHAT_POLL)
 async def sync_speech_to_chat_poll_task(
     *,
     call_id: str,
@@ -1175,9 +1175,11 @@ async def sync_speech_to_chat_poll_task(
             if outcome.next_delay == "lock_busy"
             else None
         )
-        _ = await sync_speech_to_chat_poll_task.kiq(
+        _ = await enqueue(
+            SYNC_SPEECH_TO_CHAT_POLL,
             call_id=call_id,
             company_id=company_id,
             is_continuation=True,
             delay_override_seconds=next_delay,
+            background_kind="sync_call",
         )

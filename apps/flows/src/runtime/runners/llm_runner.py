@@ -109,11 +109,11 @@ from core.config.testing import is_testing
 from core.context import get_context
 from core.errors import FlowExecutionError, ToolExecutionError
 from core.llm_context import (
-    LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION,
     LLMContextBlock,
     LLMContextProfile,
     LLMContextSourceRegistry,
 )
+from core.llm_context.memory_compaction import LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION
 from core.logging import get_logger
 from core.logging.attributes import (
     EVENT_FLOW_MEMORY_SUMMARIZE,

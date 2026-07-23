@@ -4,8 +4,8 @@
  * Маршрут `/rag/namespaces/:namespaceId` (router.effect передаёт namespaceId
  * как property). При смене namespaceId вызывает `useOp('rag/documents')` для
  * перезагрузки. Загрузка/удаление документа — отдельные ops; статус
- * индексации обновляется поллингом фабрики `rag/document_status`,
- * после `completed` страница перезагружает список через `useEvent`.
+ * индексации и список — через `rag/documents` (`extraReducer` /
+ * `extraEffect` на `rag/document/status_updated`).
  */
 
 import { html, css } from 'lit';
@@ -18,7 +18,6 @@ import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/glass-spinner.js';
 
 const ACCEPT_TYPES = '.pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.pptx';
-const DOC_STATUS_EVENT = 'rag/document_status/succeeded';
 
 export class NamespacePage extends PlatformPage {
     static i18nNamespace = 'rag';
@@ -87,11 +86,6 @@ export class NamespacePage extends PlatformPage {
 
     connectedCallback() {
         super.connectedCallback();
-        this.useEvent(DOC_STATUS_EVENT, () => {
-            if (typeof this.namespaceId === 'string' && this.namespaceId.length > 0) {
-                this._docs.run({ namespaceId: this.namespaceId });
-            }
-        });
     }
 
     updated(changed) {

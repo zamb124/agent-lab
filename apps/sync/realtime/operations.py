@@ -26,7 +26,7 @@ Zero-fallback canon (см. `main.mdc`):
 
 Mutating-операции исполняются in-process. TaskIQ — только для явно
 помеченных heavy-операций (`messages.transcribe_audio/video/call`),
-запускаемых через `.kiq(...)` внутри `op_*` после валидации/обновления
+запускаемых через `enqueue(SPEC, ...)` внутри `op_*` после валидации/обновления
 статуса.
 """
 
@@ -89,7 +89,6 @@ from apps.sync.models.messages import (
     ReactionEntry,
 )
 from apps.sync.models.threads import ThreadCreate, ThreadRead, ThreadRow
-from apps.sync.realtime.broker import broker as sync_worker_broker
 from apps.sync.realtime.call_handlers import (
     call_read_from_entities,
     handle_call_accept,
@@ -138,9 +137,9 @@ from apps.sync.realtime.handlers import (
 from apps.sync.realtime.livekit_sdk_boundary import read_livekit_egress_id
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.task_names import (
-    SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME,
-    SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
-    SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME,
+    SYNC_AGGREGATE_CALL_TRANSCRIPT,
+    SYNC_TRANSCRIBE_AUDIO_MESSAGE,
+    SYNC_TRANSCRIBE_VIDEO_MESSAGE,
 )
 from apps.sync.ws_presence import batch_peer_presence
 from core.calls.livekit_client import LiveKitClient
@@ -150,7 +149,8 @@ from core.config import BaseSettings, get_settings
 from core.files.models import AudioTranscriptionStatus, FileRecord
 from core.logging import get_logger
 from core.models.identity_models import User
-from core.tasks.kicker import kiq_task_name_with_context
+from core.platform_brand.resolver import resolve_context_host, resolve_livekit_public_url
+from core.tasks import enqueue
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 from core.websocket import WsCommandError
 
@@ -884,6 +884,77 @@ async def op_messages_list(
     return MessagesListResult(items=items, next_cursor=next_cursor, prev_cursor=prev_cursor)
 
 
+class MessagesListThreadPayload(BaseModel):
+    channel_id: str = Field(min_length=1)
+    thread_id: str = Field(min_length=1)
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
+class MessagesListThreadResult(BaseModel):
+    items: list[MessageRead]
+    total: int
+    limit: int
+    offset: int
+
+
+async def op_messages_list_thread(
+    payload: MessagesListThreadPayload,
+    *,
+    user: User,
+    container: SyncContainer,
+) -> MessagesListThreadResult:
+    company_id = resolve_company_id(user)
+    if not await container.channel_repository.is_member(
+        payload.channel_id, user.user_id, company_id=company_id
+    ):
+        raise WsCommandError("forbidden", "Not a channel member")
+    thread = await container.thread_repository.get(payload.thread_id)
+    if thread is None:
+        raise WsCommandError("not_found", f"Thread {payload.thread_id!r} not found.")
+    if thread.channel_id != payload.channel_id:
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "thread_id does not belong to channel_id",
+        )
+    rows = await container.message_repository.list_by_thread(
+        thread_id=payload.thread_id,
+        limit=payload.limit,
+        offset=payload.offset,
+        company_id=company_id,
+    )
+    if not rows:
+        return MessagesListThreadResult(
+            items=[],
+            total=0,
+            limit=payload.limit,
+            offset=payload.offset,
+        )
+    user_ids = list({m.sender_user_id for m in rows})
+    users_by_id = await container.user_repository.get_many(user_ids)
+    items: list[MessageRead] = []
+    for m in rows:
+        contents = await container.message_repository.list_contents(m.message_id)
+        u = users_by_id.get(m.sender_user_id)
+        if u is None:
+            sender = UserBrief(
+                user_id=m.sender_user_id,
+                display_name=m.sender_user_id,
+                avatar_url=None,
+            )
+        else:
+            sender = UserBrief(
+                user_id=m.sender_user_id, display_name=u.name, avatar_url=u.avatar_url
+            )
+        items.append(message_read_from_entity(m=m, contents=contents, sender=sender))
+    return MessagesListThreadResult(
+        items=items,
+        total=len(items),
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+
+
 async def op_messages_send(
     payload: MessagesSendPayload,
     *,
@@ -1069,10 +1140,16 @@ async def op_messages_forward(
     recipients = await channel_recipient_user_ids(
         container.channel_repository, payload.to_channel_id, company_id
     )
+    dst_ch = await container.channel_repository.get(payload.to_channel_id)
+    if dst_ch is None:
+        raise WsCommandError("not_found", "Целевой канал не найден.")
     await publish_realtime_events(
         [
             event_message_created(
-                new_read, company_id=company_id, recipient_user_ids=recipients
+                new_read,
+                company_id=company_id,
+                recipient_user_ids=recipients,
+                channel_type=dst_ch.type,
             ),
         ]
     )
@@ -1234,9 +1311,8 @@ async def op_messages_transcribe_audio(
     updated_read = await message_read_from_db(
         updated_entity, container.message_repository, container.user_repository
     )
-    _ = await kiq_task_name_with_context(
-        SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
-        sync_worker_broker,
+    _ = await enqueue(
+        SYNC_TRANSCRIBE_AUDIO_MESSAGE,
         channel_id=payload.channel_id,
         message_id=payload.message_id,
         company_id=company_id,
@@ -1295,9 +1371,8 @@ async def op_messages_transcribe_video(
     updated_read = await message_read_from_db(
         updated_entity, container.message_repository, container.user_repository
     )
-    _ = await kiq_task_name_with_context(
-        SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME,
-        sync_worker_broker,
+    _ = await enqueue(
+        SYNC_TRANSCRIBE_VIDEO_MESSAGE,
         channel_id=payload.channel_id,
         message_id=payload.message_id,
         company_id=company_id,
@@ -1331,9 +1406,8 @@ async def op_messages_transcribe_call(
     call = await container.call_repository.get_call(payload.call_id, company_id)
     if call.channel_id != payload.channel_id:
         raise WsCommandError("forbidden", "call_id не относится к этому каналу.")
-    _ = await kiq_task_name_with_context(
-        SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME,
-        sync_worker_broker,
+    _ = await enqueue(
+        SYNC_AGGREGATE_CALL_TRANSCRIPT,
         channel_id=payload.channel_id,
         call_id=payload.call_id,
         company_id=company_id,
@@ -1478,9 +1552,15 @@ async def op_calls_invite(
         company_id=company_id,
         container=container,
     )
+    invite_channel = await container.channel_repository.get(out.channel_id)
+    if invite_channel is None:
+        raise WsCommandError("not_found", f"Канал {out.channel_id} не найден.")
     evs.append(
         event_message_created(
-            started_read, company_id=company_id, recipient_user_ids=member_ids
+            started_read,
+            company_id=company_id,
+            recipient_user_ids=member_ids,
+            channel_type=invite_channel.type,
         ),
     )
     if len(member_ids) <= 1:
@@ -1591,9 +1671,15 @@ async def op_calls_hangup(
         recipients = await channel_recipient_user_ids(
             container.channel_repository, out.channel_id, company_id
         )
+        hangup_channel = await container.channel_repository.get(out.channel_id)
+        if hangup_channel is None:
+            raise WsCommandError("not_found", f"Канал {out.channel_id} не найден.")
         evs.append(
             event_message_created(
-                boundary_read, company_id=company_id, recipient_user_ids=recipients
+                boundary_read,
+                company_id=company_id,
+                recipient_user_ids=recipients,
+                channel_type=hangup_channel.type,
             ),
         )
     await publish_realtime_events(evs)
@@ -1900,8 +1986,6 @@ def _livekit_client(settings: BaseSettings) -> LiveKitClient:
 
 
 def _livekit_public_url(settings: BaseSettings) -> str:
-    from core.platform_brand.resolver import resolve_context_host, resolve_livekit_public_url
-
     host = resolve_context_host()
     if host is not None:
         try:

@@ -6,9 +6,10 @@ import pytest
 
 from apps.search.config import SearchCrawlConfig
 from apps.search.services.crawl.bootstrap_service import CrawlBootstrapService
-from apps.search_worker.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME
+from apps.search_worker.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS
 from core.crawl.models import CrawlDomainSeed, CrawlProfileCreateRequest
 from core.search.index_models import SearchIndexCreateRequest
+from tests.fixtures.taskiq_capture import taskiq_task_name
 from tests.search.conftest import make_search_index_slug
 
 pytestmark = pytest.mark.timeout(60, func_only=True)
@@ -81,12 +82,12 @@ async def test_bootstrap_queues_tranco_seed_when_profile_empty(
     crawl_profile_id = await _create_empty_profile(search_container, unique_id)
     queued: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
 
-    async def _capture_kiq(task_name: str, *args: object, **kwargs: object) -> None:
-        queued.append((task_name, args, kwargs))
+    async def _capture_enqueue(task: object, *args: object, **kwargs: object) -> None:
+        queued.append((taskiq_task_name(task), args, kwargs))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.bootstrap_service._kiq_task",
-        _capture_kiq,
+        "apps.search.services.crawl.bootstrap_service.enqueue",
+        _capture_enqueue,
     )
 
     bootstrap = CrawlBootstrapService(
@@ -107,7 +108,7 @@ async def test_bootstrap_queues_tranco_seed_when_profile_empty(
     assert len(queued) == 1
     task_name, args, kwargs = queued[0]
     _ = kwargs
-    assert task_name == CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME
+    assert task_name == CRAWL_IMPORT_SEED_DOMAINS.name
     assert args[0] == crawl_profile_id
     assert args[1] == "tranco"
     assert args[2] == 5

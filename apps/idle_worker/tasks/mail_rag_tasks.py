@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import get_container
 from apps.idle_worker.tasks.mail_job_context import (
     enter_mail_binding_context,
     leave_mail_binding_context,
 )
+from core.events import publish_event_to_users
 from core.mail.service import stored_to_list_item
+from core.mail.task_names import MAIL_RAG_INDEX
+from core.tasks import platform_task
 from core.types import JsonObject
-from core.ui_events.dispatcher import publish_ui_event_to_user
 
 
 async def _notify_users_for_binding(
@@ -37,11 +38,12 @@ async def _notify_users_for_binding(
     for member in members:
         if member.user_id not in user_ids:
             user_ids.append(member.user_id)
-    for user_id in user_ids:
-        await publish_ui_event_to_user(user_id, event_type, payload)
+    if len(user_ids) == 0:
+        return
+    await publish_event_to_users(user_ids, event_type, payload)
 
 
-@idle_broker.task(task_name="mail_rag_index", queue_name="idle")
+@platform_task(MAIL_RAG_INDEX)
 async def mail_rag_index_task(
     *,
     company_id: str,

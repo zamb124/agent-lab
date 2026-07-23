@@ -3,6 +3,7 @@
 import datetime
 
 from apps.flows.src.models.scheduled_task_payload import FlowScheduledTaskPayload
+from apps.flows.src.tasks.task_names import TASK_EXECUTE_SCHEDULED
 from core.clients.scheduler_client import SchedulerClient
 from core.context import get_context
 from core.logging import get_logger
@@ -19,6 +20,7 @@ from core.scheduler.service import SchedulerService
 from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
+
 
 
 class ScheduleService:
@@ -88,8 +90,8 @@ class ScheduleService:
         )
         request = PlatformScheduleCreateRequest(
             target_service="flows",
-            task_name="execute_scheduled_task",
-            queue_name="flows_worker",
+            task_name=TASK_EXECUTE_SCHEDULED.name,
+            queue_name=TASK_EXECUTE_SCHEDULED.queue,
             schedule_type=schedule_type,
             cron=cron,
             interval_seconds=interval_seconds,
@@ -271,7 +273,7 @@ class ScheduleService:
                 filters=PlatformScheduleFilter(
                     status=status,
                     target_service="flows",
-                    task_name="execute_scheduled_task",
+                    task_name=TASK_EXECUTE_SCHEDULED.name,
                     limit=500,
                     offset=0,
                 ),
@@ -281,7 +283,7 @@ class ScheduleService:
                 PlatformScheduleFilter(
                     status=status,
                     target_service="flows",
-                    task_name="execute_scheduled_task",
+                    task_name=TASK_EXECUTE_SCHEDULED.name,
                     limit=500,
                     offset=0,
                 )
@@ -335,7 +337,7 @@ class ScheduleService:
             )
         else:
             task = await self._scheduler_client.get_schedule(schedule_task_id)
-        if task.target_service != "flows" or task.task_name != "execute_scheduled_task":
+        if task.target_service != "flows" or task.task_name != TASK_EXECUTE_SCHEDULED.name:
             raise ValueError(f"Task {schedule_task_id} is not flows scheduled task")
         return self._map_task(task)
 

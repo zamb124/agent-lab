@@ -6,7 +6,7 @@ import pytest
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models import BranchConfig, Edge, FlowConfig
 from apps.flows.src.models.enums import MergeMode
-from core.llm_context import LLMContextMemoryEpisode
+from core.llm_context.memory import LLMContextMemoryEpisode
 from tests.flows.e2e.llm_context.harness import (
     call_text,
     cleanup_flow_context,

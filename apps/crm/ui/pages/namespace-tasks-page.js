@@ -403,17 +403,12 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
     connectedCallback() {
         super.connectedCallback();
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._loadTasks());
-        this.useEvent('crm/daily_summary/updated', () => this._loadTasks());
         this.useEvent(CoreEvents.WS_CONNECTED, () => {
             const items = this._tasks.items;
             if (items.some((row) => row && ACTIVE_STATUSES.has(row.status))) {
                 this._loadTasks();
             }
         });
-        this.useEvent(this._cancelOp.op.events.SUCCEEDED, () => this._loadTasks());
-        this.useEvent(this._retryOp.op.events.SUCCEEDED, () => this._loadTasks());
-        this.useEvent(this._rollbackOp.op.events.SUCCEEDED, () => this._loadTasks());
-        this.useEvent(this._reviewCompleteOp.op.events.SUCCEEDED, () => this._loadTasks());
         this._loadTasks();
     }
 

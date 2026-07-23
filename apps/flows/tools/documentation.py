@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from apps.flows.src.tools.decorator import tool
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
+from core.config import get_settings
 from core.docs.assistant import (
     DOCS_RAG_NAMESPACE_ID,
     docs_collection_for_language,
@@ -154,6 +155,7 @@ async def _search_docs(
     )
     collection_id = docs_collection_for_language(resolved_language)
     resolved_search_options = resolve_platform_search_options(
+        settings=get_settings(),
         per_channel_top_k=max(limit * 3, 8),
         overrides=RAGSearchOptions(rerank=False),
     )

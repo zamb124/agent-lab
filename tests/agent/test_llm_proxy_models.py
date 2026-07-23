@@ -16,9 +16,6 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from a2a.types.a2a_pb2 import ROLE_AGENT, TASK_STATE_COMPLETED
-
-from core.a2a import struct_from_mapping
-
 from fastapi import HTTPException
 
 from apps.agent.llm_proxy import (
@@ -34,6 +31,7 @@ from apps.agent.llm_proxy import (
     _stream_agent_llm_sse,
     _validate_requested_agent_model,
 )
+from core.a2a import struct_from_mapping
 from core.ai.models import AIModelRecord, ResolvedAIModel
 from core.ai.providers import (
     HUMANITEC_LLM_AUTO_MODEL,

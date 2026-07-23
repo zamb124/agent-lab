@@ -1,21 +1,11 @@
-"""Платформенный слой LLM-контекста."""
+"""Платформенный слой LLM-контекста.
+
+Memory / compaction не реэкспортируются здесь: иначе
+``config.base → llm_context → memory → config`` при импорте ``LLMContextConfig``.
+Импортируй из ``core.llm_context.memory`` / ``core.llm_context.memory_compaction``.
+"""
 
 from core.llm_context.compiler import LLMContextBudgetError, LLMContextCompiler
-from core.llm_context.memory import (
-    LLMContextMemoryEpisode,
-    LLMContextMemoryRecallRequest,
-    LLMContextMemoryRecord,
-    LLMContextMemorySource,
-    LLMContextMemoryStore,
-)
-from core.llm_context.memory_compaction import (
-    LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY,
-    LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION,
-    build_llm_context_memory_episode,
-    close_llm_context_memory_window,
-    compact_llm_context_memory_episode,
-    llm_context_memory_cursor_key,
-)
 from core.llm_context.models import (
     CompiledLLMContext,
     LLMContextBlock,
@@ -65,16 +55,9 @@ __all__ = [
     "LLMContextCompactionMode",
     "LLMContextCompileRequest",
     "LLMContextConfig",
-    "LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY",
-    "LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION",
     "LLM_CONTEXT_PROFILE_METADATA_KEY",
     "IdentityLLMContextProfileSource",
-    "LLMContextMemoryEpisode",
-    "LLMContextMemoryRecallRequest",
-    "LLMContextMemoryRecord",
     "LLMContextMemoryScope",
-    "LLMContextMemorySource",
-    "LLMContextMemoryStore",
     "LLMContextMessageRole",
     "LLMContextMode",
     "LLMContextPatch",
@@ -90,9 +73,5 @@ __all__ = [
     "StaticLLMContextSource",
     "TiktokenTokenCounter",
     "TokenCounter",
-    "build_llm_context_memory_episode",
     "build_identity_llm_context_profile_block",
-    "close_llm_context_memory_window",
-    "compact_llm_context_memory_episode",
-    "llm_context_memory_cursor_key",
 ]

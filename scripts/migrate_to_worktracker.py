@@ -216,13 +216,13 @@ async def migrate_operator_tasks(
                 WorkItemHook(
                     event=WorkItemHookEvent.COMPLETED,
                     service="flows",
-                    path="/flows/api/v1/internal/work-items/completed",
+                    path="platform:events",
                     binding=binding,
                 ),
                 WorkItemHook(
                     event=WorkItemHookEvent.COMMENT,
                     service="flows",
-                    path="/flows/api/v1/internal/work-items/comment",
+                    path="platform:events",
                     binding=binding,
                 ),
             ],

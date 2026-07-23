@@ -9,7 +9,7 @@ alwaysApply: true
 |---|---|---|---|
 | **Команда** `<svc>/<entity>/<verb>_requested` | **Обязательно** HTTP в `apps/<svc>/api/**` (тот же method+path+payload+response, что WS reply) | Опционально (`transport: 'ws'` фабрики) | Один handler в `apps/<svc>/services/` |
 | **Success/Failure** `<...>_succeeded`/`_failed` | Body HTTP-ответа = payload event'а | Reply-фрейм с тем же `request_id` | — |
-| **Push** `<svc>/<entity>/<verb>` (без `_requested`) | **Запрещено** (REST не делает push) | Только `publish_ui_event_*` → `platform:ui_events` → `/<svc>/api/ws/notifications` | `core/ui_events/dispatcher.py` |
+| **Push** `<svc>/<entity>/<verb>` (без `_requested`) | **Запрещено** (REST не делает push) | Только `publish_event_*` → `platform:events` → `/<svc>/api/ws/notifications` | `core/events/publisher.py` |
 
 Зачем REST-зеркало: SDK/CLI/интеграции без WS, гостевые/pre-WS-connect сценарии (call-join, lead form, embed), API-тесты без WS, отладка `curl`'ом.
 
@@ -35,7 +35,7 @@ CI `scripts/check_command_rest_mirror.py` (`make check-events-canon`):
 
 ### WebSocket request-reply
 
-Один сокет `/<svc>/api/ws/notifications` (`core.websocket.router`) несёт push (из `platform:ui_events`) и RPC request-reply. Сервис регистрирует handlers через `register_ws_command_handler(command_type, handler)` (`core.websocket.command_router`). Reply-тип механически: `*_requested` → `*_succeeded`/`*_failed`.
+Один сокет `/<svc>/api/ws/notifications` (`core.websocket.router`) несёт push (из `platform:events`) и RPC request-reply. Сервис регистрирует handlers через `register_ws_command_handler(command_type, handler)` (`core.websocket.command_router`). Reply-тип механически: `*_requested` → `*_succeeded`/`*_failed`.
 
 Frontend `core/.../events/effects/ws.effect.js` шлёт `{request_id, type, payload}`, ждёт reply. `wsTimeoutMs` обязателен у фабрики. **No-fallback:** WS оборвался / timeout — `*_failed` с `error_code: 'ws_disconnected'|'ws_timeout'`. Никакого retry через HTTP.
 
@@ -123,7 +123,15 @@ async def list_items(container: ContainerDep):
 
 ### Известные нарушения `core/ → apps/`
 
-Требуют архитектурной проработки: `core/scheduler/scheduler.py` (импорт `apps.*_worker` брокеров), `core/api/integrations.py::_resume_flow` (импорт `process_flow_task` из flows).
+После переноса crawl-fetch контракта в `core/clients/browser/crawl_fetch_types.py` runtime-импортов `core/ → apps.*` нет.
+
+- `core/clients/browser_fetch_client.py` импортирует только `core.clients.browser.*`.
+- `core/api/integrations.py::_resume_flow` зовёт зарегистрированный handler (`_flow_resume_handler`), без импорта `apps.*`.
+- `core/scheduler/` не импортирует `apps.*_worker`.
+- В docstring `core/app/factory.py` есть пример `from apps.flows...` — это не runtime-импорт.
+- `core/capabilities/source_sanitize.py` сравнивает строки исходника с префиксом `"from apps."` — не импорт.
+
+WebSocket: HTTP-хендлеры voice используют `ContainerDep` + `get_container()` в `apps/voice/dependencies.py`; WS session (`apps/voice/api/session.py`) берёт контейнер через `get_voice_container()` напрямую — см. «Допустимые исключения» выше (FastAPI `Depends()` ограничен на WS).
 
 ## Межсервисный доступ к данным
 

@@ -12,19 +12,20 @@ from apps.flows.src.services.mcp_catalog_provisioner import (
     provision_mcp_catalog_for_company,
     resync_catalog_tools_for_company,
 )
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import get_container
 from apps.idle_worker.tasks.llm_models_tasks import build_scheduler_auth_context
+from apps.idle_worker.tasks.task_names import (
+    TASK_MCP_CATALOG_CRAWL,
+    TASK_MCP_CATALOG_PROVISION_COMPANIES,
+    TASK_MCP_CATALOG_RESYNC_TOOLS,
+)
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from core.tasks import platform_task
 
 logger = get_logger(__name__)
-
-MCP_CATALOG_CRAWL_TASK_NAME = "mcp_catalog_crawl_task"
-MCP_CATALOG_PROVISION_COMPANIES_TASK_NAME = "mcp_catalog_provision_companies_task"
-MCP_CATALOG_RESYNC_TOOLS_TASK_NAME = "mcp_catalog_resync_tools_task"
 
 
 class MCPCatalogCrawlTaskResult(TypedDict):
@@ -69,7 +70,7 @@ async def _company_context(*, company: Company, trace_suffix: str) -> Context:
     )
 
 
-@idle_broker.task(task_name=MCP_CATALOG_CRAWL_TASK_NAME, queue_name="idle")
+@platform_task(TASK_MCP_CATALOG_CRAWL)
 async def mcp_catalog_crawl_task(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
@@ -89,8 +90,8 @@ async def mcp_catalog_crawl_task(
     container = get_container()
     scheduler_context = await build_scheduler_auth_context(
         container=container,
-        trace_id=f"scheduler:{MCP_CATALOG_CRAWL_TASK_NAME}:{schedule_task_id}",
-        session_id=f"{MCP_CATALOG_CRAWL_TASK_NAME}:{schedule_task_id}",
+        trace_id=f"scheduler:{TASK_MCP_CATALOG_CRAWL.name}:{schedule_task_id}",
+        session_id=f"{TASK_MCP_CATALOG_CRAWL.name}:{schedule_task_id}",
     )
     set_context(scheduler_context)
     try:
@@ -142,7 +143,7 @@ async def mcp_catalog_crawl_task(
         clear_context()
 
 
-@idle_broker.task(task_name=MCP_CATALOG_PROVISION_COMPANIES_TASK_NAME, queue_name="idle")
+@platform_task(TASK_MCP_CATALOG_PROVISION_COMPANIES)
 async def mcp_catalog_provision_companies_task(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
@@ -201,7 +202,7 @@ async def mcp_catalog_provision_companies_task(
     return totals
 
 
-@idle_broker.task(task_name=MCP_CATALOG_RESYNC_TOOLS_TASK_NAME, queue_name="idle")
+@platform_task(TASK_MCP_CATALOG_RESYNC_TOOLS)
 async def mcp_catalog_resync_tools_task(
     schedule_task_id: str | None = None,
     company_id: str | None = None,

@@ -2,6 +2,7 @@
 Главный файл приложения RAG Service.
 """
 
+import importlib
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -19,6 +20,9 @@ from .api import (
 )
 from .config import RAGSettings, get_rag_settings
 from .container import RAGContainer, get_rag_container
+
+# side-effect: register platform event catalog types
+_ = importlib.import_module("apps.rag.events")
 
 logger = get_logger(__name__)
 

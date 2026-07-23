@@ -43,6 +43,12 @@ import '@platform/lib/components/glass-spinner.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { formatDurationSeconds } from '@platform/lib/utils/format-duration.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
+import {
+    SYNC_CALL_ENDED,
+    SYNC_CALL_RECORDING_FAILED,
+    SYNC_CALL_RECORDING_STARTED,
+    SYNC_CALL_RECORDING_STOPPED,
+} from '../events/types.js';
 
 const SCROLL_TOP_THRESHOLD = 60;
 const COPY_LINK_FEEDBACK_MS = 2000;
@@ -826,10 +832,10 @@ export class SyncCallOverlayModal extends PlatformModal {
         this._authUserSel = this.select((s) => s.auth && s.auth.user);
         this._authStatusSel = this.select((s) => (s.auth && typeof s.auth.status === 'string' ? s.auth.status : 'unknown'));
 
-        this.useEvent('sync/call/ended', (event) => this._onCallEnded(event));
-        this.useEvent('sync/call/recording_started', (event) => this._onRecordingPush(event, 'recording'));
-        this.useEvent('sync/call/recording_stopped', (event) => this._onRecordingPush(event, 'idle'));
-        this.useEvent('sync/call/recording_failed', (event) => this._onRecordingPush(event, 'failed'));
+        this.useEvent(SYNC_CALL_ENDED, (event) => this._onCallEnded(event));
+        this.useEvent(SYNC_CALL_RECORDING_STARTED, (event) => this._onRecordingPush(event, 'recording'));
+        this.useEvent(SYNC_CALL_RECORDING_STOPPED, (event) => this._onRecordingPush(event, 'idle'));
+        this.useEvent(SYNC_CALL_RECORDING_FAILED, (event) => this._onRecordingPush(event, 'failed'));
 
         this._onFullscreenChange = this._onFullscreenChange.bind(this);
         this._onDocumentPointerDown = this._onDocumentPointerDown.bind(this);

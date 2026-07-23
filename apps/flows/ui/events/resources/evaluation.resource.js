@@ -443,6 +443,34 @@ export const evaluationRunsListOp = createAsyncOp({
             url: buildQuery(`${API_ROOT}/suites/${encoded(suiteId)}/runs`, [['limit', limit]]),
         });
     },
+    extraEffect: async (event, ctx, events) => {
+        if (event.type !== 'flows/evaluation/event') {
+            return false;
+        }
+        const payload = event.payload && typeof event.payload === 'object' ? event.payload : null;
+        const runId = payload && typeof payload.run_id === 'string' ? payload.run_id : '';
+        const ui = ctx.getState().flowsEvaluationUi;
+        if (!ui || typeof ui !== 'object') {
+            return true;
+        }
+        const selectedSuiteId = typeof ui.selectedSuiteId === 'string' ? ui.selectedSuiteId : '';
+        const selectedRunId = typeof ui.selectedRunId === 'string' ? ui.selectedRunId : '';
+        const meta = { causation_id: event.id, source: 'ws' };
+        if (selectedSuiteId.length > 0) {
+            ctx.dispatch(events.REQUESTED, { suite_id: selectedSuiteId, limit: 30 }, meta);
+            ctx.dispatch(
+                evaluationMatrixGetOp.events.REQUESTED,
+                { suite_id: selectedSuiteId, branch_id: 'default', limit: 16 },
+                meta,
+            );
+        }
+        if (runId.length > 0 && runId === selectedRunId) {
+            ctx.dispatch(evaluationRunGetOp.events.REQUESTED, { run_id: runId }, meta);
+            ctx.dispatch(evaluationRunEventsOp.events.REQUESTED, { run_id: runId }, meta);
+            ctx.dispatch(evaluationAnnotationsListOp.events.REQUESTED, { run_id: runId }, meta);
+        }
+        return true;
+    },
 });
 
 export const evaluationRunCreateOp = createAsyncOp({

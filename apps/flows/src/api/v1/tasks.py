@@ -25,12 +25,13 @@ from apps.flows.src.durable_execution.models import (
     WorkflowEventRecord,
 )
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
-from apps.flows.src.tasks.flow_tasks import process_flow_task
+from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.a2a import platform_task_state_to_a2a, set_task_status_state, struct_from_mapping
 from core.context import get_context
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.state import ExecutionState
+from core.tasks import enqueue
 from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
@@ -97,7 +98,8 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Js
             + f"is_resume={is_resume}"
         )
 
-    task = await process_flow_task.kiq(
+    task = await enqueue(
+        TASK_PROCESS_FLOW,
         flow_id=request.flow_id,
         session_id=session_id,
         user_id=user_id,

@@ -6,8 +6,8 @@ from collections.abc import Callable
 
 from apps.scheduler.container import SchedulerContainer
 from apps.search_worker.tasks.task_names import (
-    CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
-    CRAWL_RECLAIM_STALE_FETCHING_TASK_NAME,
+    CRAWL_ORCHESTRATOR_TICK,
+    CRAWL_RECLAIM_STALE_FETCHING,
 )
 from core.logging import get_logger
 from core.logging.attributes import (
@@ -200,7 +200,7 @@ async def _ensure_crawl_cron_schedule(
 async def ensure_search_crawl_schedules(*, container: SchedulerContainer) -> None:
     await _ensure_crawl_cron_schedule(
         container=container,
-        task_name=CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
+        task_name=CRAWL_ORCHESTRATOR_TICK.name,
         cron=CRAWL_ORCHESTRATOR_BACKUP_CRON,
         payload={"crawl_profile_id": CRAWL_ORCHESTRATOR_DEFAULT_PROFILE_ID},
         log_label="Search crawl orchestrator",
@@ -210,7 +210,7 @@ async def ensure_search_crawl_schedules(*, container: SchedulerContainer) -> Non
     )
     await _ensure_crawl_cron_schedule(
         container=container,
-        task_name=CRAWL_RECLAIM_STALE_FETCHING_TASK_NAME,
+        task_name=CRAWL_RECLAIM_STALE_FETCHING.name,
         cron=CRAWL_RECLAIM_STALE_FETCHING_CRON,
         payload={},
         log_label="Search crawl reclaim",

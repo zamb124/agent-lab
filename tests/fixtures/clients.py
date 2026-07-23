@@ -55,31 +55,43 @@ def patch_service_clients_asgi(
     from httpx import ASGITransport, AsyncClient
 
     from core.clients.service_client import ServiceClient
+    from core.config import get_settings, set_settings
+    from core.config.base import BaseSettings
 
-    _apps_cache = {}
+    _apps_cache: dict[str, Any] = {}
 
     def get_service_app(service: str) -> Any:
         if service in _apps_cache:
             return _apps_cache[service]
 
+        # Импорт apps.<svc>.main → create_service_app → set_settings(svc).
+        # Глобальный settings один на pytest-процесс: без preserve/restore
+        # вторичный сервис затирает demo/auth overrides текущего теста.
+        preserved: BaseSettings = get_settings()
         try:
             if service == "flows":
                 from apps.flows.main import app
+
                 _apps_cache[service] = app
             elif service == "rag":
                 from apps.rag.main import app
+
                 _apps_cache[service] = app
             elif service == "crm":
                 from apps.crm.main import create_app
+
                 _apps_cache[service] = create_app()
             elif service == "frontend":
                 from apps.frontend.main import app
+
                 _apps_cache[service] = app
             elif service == "sync":
                 from apps.sync.main import app
+
                 _apps_cache[service] = app
             elif service == "office":
                 from apps.office.main import app
+
                 _apps_cache[service] = app
             elif service == "voice":
                 # Как voice_app: batch /transcribe идёт в STTClient, без mock-бэкенда
@@ -122,6 +134,8 @@ def patch_service_clients_asgi(
                 return None
         except ImportError:
             return None
+        finally:
+            set_settings(preserved)
         return _apps_cache.get(service)
 
     original_request = ServiceClient.request
@@ -155,17 +169,23 @@ def patch_service_clients_asgi(
         if not path.startswith(f"/{service_prefix}/"):
             request_path = f"/{service_prefix}{path}"
 
-        async with AsyncClient(
-            transport=transport,
-            base_url=_PLATFORM_ASGI_BASE_URL,
-            timeout=timeout,
-            headers=_PLATFORM_ASGI_HOST_HEADERS,
-        ) as client:
-            response = await client.request(method, request_path, headers=headers, **req_kwargs)
+        preserved: BaseSettings = get_settings()
+        service_settings = getattr(app.state, "settings", None)
+        if isinstance(service_settings, BaseSettings):
+            set_settings(service_settings)
+        try:
+            async with AsyncClient(
+                transport=transport,
+                base_url=_PLATFORM_ASGI_BASE_URL,
+                timeout=timeout,
+                headers=_PLATFORM_ASGI_HOST_HEADERS,
+            ) as client:
+                response = await client.request(method, request_path, headers=headers, **req_kwargs)
             # Мы не используем response.raise_for_status() здесь, так как оригинальный request
             # обрабатывает ошибки самостоятельно (ServiceClientError)
             if response.is_error:
                 from core.clients.service_client import ServiceClientError
+
                 raise ServiceClientError(
                     f"HTTP {response.status_code} при запросе к {service} (ASGI): {response.text}"
                 )
@@ -173,6 +193,8 @@ def patch_service_clients_asgi(
             if response.content:
                 return response.json()
             return None
+        finally:
+            set_settings(preserved)
 
     monkeypatch.setattr(ServiceClient, "request", mocked_request)
 
@@ -494,7 +516,7 @@ async def sync_client(sync_app, sync_worker):
     """
     HTTP клиент для Sync API (ASGI, lifespan включён).
 
-    Зависит от sync_worker: эндпоинты с handle_command.kiq() ждут очередь sync.
+    Зависит от sync_worker: эндпоинты с enqueue(SYNC_*) ждут очередь sync.
     """
     transport = ASGITransport(app=sync_app)
     async with AsyncClient(

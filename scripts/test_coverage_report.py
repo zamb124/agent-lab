@@ -4,7 +4,7 @@
 Subcommands:
   reset  — reports/coverage/<run_id>/ + meta.json
   report — combine coverage, HTML, terminal summary, symlink latest
-  term   — per-file table из .coverage только для файлов ≤ порога (90%)
+  term   — top-N файлов с наименьшим line coverage из .coverage
 
 Opt-out: TEST_COVERAGE=0 make test
 HTML: reports/coverage/latest/report.html
@@ -25,17 +25,15 @@ from typing import TypedDict, cast
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _REPORTS_ROOT = _REPO_ROOT / "reports" / "coverage"
 
-# Порог отсечения: файлы/пакеты с покрытием выше не попадают в terminal/html
-# summary слабых мест. Фокус — на реально слабом коде.
-_LOW_COVERAGE_PCT_THRESHOLD = 90.0
+# Terminal/HTML summary: только топ файлов с наименьшим line coverage.
+_TOP_UNCOVERED_FILES = 20
 
 _PYTHON_SCOPE_NOTE = (
     "Python: apps + core из pytest phase 1/2/4 (без integration/network маркеров)."
 )
 _JS_SCOPE_NOTE = "JS: Vitest unit (core/frontend/static/lib/events/**)."
-_LOW_COVERAGE_NOTE = (
-    f"Terminal table: только файлы/пакеты с lines ≤{_LOW_COVERAGE_PCT_THRESHOLD:g}% "
-    "(выше порога скрыты)."
+_TOP_UNCOVERED_NOTE = (
+    f"Terminal table: top {_TOP_UNCOVERED_FILES} Python files by lowest lines %."
 )
 
 
@@ -299,8 +297,6 @@ def _parse_python_summary(
         bucket = package_stats.setdefault(package_key, [0, 0])
         bucket[0] += file_covered
         bucket[1] += file_total
-        if lines_pct > _LOW_COVERAGE_PCT_THRESHOLD:
-            continue
         missing_raw = file_data.get("missing_lines")
         missing_numbers: list[int] = []
         if isinstance(missing_raw, list):
@@ -324,8 +320,6 @@ def _parse_python_summary(
         lines_pct = _pct(covered, total)
         if lines_pct is None:
             continue
-        if lines_pct > _LOW_COVERAGE_PCT_THRESHOLD:
-            continue
         package_rows.append(
             {
                 "package": package,
@@ -336,7 +330,7 @@ def _parse_python_summary(
         )
     package_rows.sort(key=lambda row: (row["lines_pct"], row["package"]))
     file_rows.sort(key=lambda row: (row["lines_pct"], row["path"]))
-    return totals, package_rows[:10], file_rows
+    return totals, package_rows[:10], file_rows[:_TOP_UNCOVERED_FILES]
 
 
 def _parse_lcov(lcov_path: Path) -> CoverageTotals:
@@ -415,8 +409,8 @@ def _delta_metric(
 def _build_summary(run_dir: Path) -> CoverageSummary:
     meta = _load_meta(run_dir)
     notes = list(meta.get("notes", []))
-    if _LOW_COVERAGE_NOTE not in notes:
-        notes.append(_LOW_COVERAGE_NOTE)
+    if _TOP_UNCOVERED_NOTE not in notes:
+        notes.append(_TOP_UNCOVERED_NOTE)
     meta["notes"] = notes
     python_summary_path = run_dir / "python" / "summary.json"
     if python_summary_path.is_file():
@@ -492,34 +486,12 @@ def _format_ratio(totals: CoverageTotals) -> str:
 
 def _render_terminal(summary: CoverageSummary) -> str:
     lines: list[str] = []
-    lines.append("=== Test coverage (full) ===")
+    lines.append("=== Test coverage ===")
     lines.append(f"Run: {summary['run_id']}")
     python = summary["python"]
     js = summary["js"]
     lines.append(f"Python (apps+core): {_format_ratio(python)}")
-    if python.get("branches_pct") is not None:
-        lines.append(
-            f"  branches: {_format_pct(python.get('branches_pct'))} "
-            f"({python.get('branches_covered')}/{python.get('branches_total')})"
-        )
     lines.append(f"JS (core/frontend unit): {_format_ratio(js)}")
-    if js.get("branches_pct") is not None:
-        lines.append(
-            f"  branches: {_format_pct(js.get('branches_pct'))} "
-            f"({js.get('branches_covered')}/{js.get('branches_total')})"
-        )
-
-    low_packages = summary.get("python_packages_low")
-    if isinstance(low_packages, list) and low_packages:
-        lines.append("")
-        lines.append(f"Python packages ≤{_LOW_COVERAGE_PCT_THRESHOLD:g}% (lines %):")
-        for row in low_packages[:5]:
-            if not isinstance(row, dict):
-                continue
-            lines.append(
-                f"  {row.get('package', ''):<24} "
-                f"{_format_pct(row.get('lines_pct') if isinstance(row.get('lines_pct'), (int, float)) else None)}"
-            )
 
     low_files = summary.get("python_files_low")
     if isinstance(low_files, list) and low_files:
@@ -528,30 +500,19 @@ def _render_terminal(summary: CoverageSummary) -> str:
 
     delta = summary.get("delta_vs_previous")
     if isinstance(delta, dict) and delta.get("has_previous"):
-        lines.append("")
-        lines.append(f"Delta vs {delta.get('previous_run_id', 'previous')}:")
         py_delta = delta.get("python_lines_pct_delta")
-        js_delta = delta.get("js_lines_pct_delta")
         if isinstance(py_delta, (int, float)):
             sign = "+" if py_delta >= 0 else ""
-            lines.append(f"  Python lines: {sign}{py_delta:.2f} pp")
-        if isinstance(js_delta, (int, float)):
-            sign = "+" if js_delta >= 0 else ""
-            lines.append(f"  JS lines: {sign}{js_delta:.2f} pp")
+            lines.append("")
+            lines.append(f"Delta vs {delta.get('previous_run_id', 'previous')}: Python lines {sign}{py_delta:.2f} pp")
 
     lines.append("")
-    for note in summary.get("meta", {}).get("notes", []):
-        if isinstance(note, str):
-            lines.append(note)
     lines.append("HTML: reports/coverage/latest/report.html")
     return "\n".join(lines)
 
 
 def _render_python_files_table(file_rows: list[FileCoverageRow]) -> str:
-    header = (
-        f"Python files ≤{_LOW_COVERAGE_PCT_THRESHOLD:g}% "
-        f"({len(file_rows)} files; higher coverage omitted):"
-    )
+    header = f"Top {len(file_rows)} uncovered Python files (lowest lines %):"
     name_width = 70
     lines: list[str] = [
         header,
@@ -611,7 +572,7 @@ def _render_html(summary: CoverageSummary, *, run_dir: Path) -> str:
 
     low_packages = summary.get("python_packages_low")
     if isinstance(low_packages, list) and low_packages:
-        sections.append(f"<h2>Python packages ≤{_LOW_COVERAGE_PCT_THRESHOLD:g}%</h2><table>")
+        sections.append("<h2>Top Python packages (lowest lines %)</h2><table>")
         sections.append("<tr><th>Package</th><th>Lines %</th><th>Covered</th><th>Total</th></tr>")
         for row in low_packages:
             if not isinstance(row, dict):
@@ -628,14 +589,34 @@ def _render_html(summary: CoverageSummary, *, run_dir: Path) -> str:
 
     low_files = summary.get("python_files_low")
     if isinstance(low_files, list) and low_files:
+        sections.append(f"<h2>Top {len(low_files)} uncovered Python files</h2>")
+        sections.append("<table>")
         sections.append(
-            f"<h2>Python files ≤{_LOW_COVERAGE_PCT_THRESHOLD:g}% "
-            f"({len(low_files)} files)</h2>"
+            "<tr><th>File</th><th>Stmts</th><th>Miss</th><th>Cover %</th><th>Missing</th></tr>"
         )
+        for row in low_files:
+            if not isinstance(row, dict):
+                continue
+            lines_total = row.get("lines_total")
+            lines_covered = row.get("lines_covered")
+            miss = (
+                lines_total - lines_covered
+                if isinstance(lines_total, int) and isinstance(lines_covered, int)
+                else ""
+            )
+            sections.append(
+                "<tr>"
+                f"<td>{esc(row.get('path'))}</td>"
+                f"<td>{esc(lines_total)}</td>"
+                f"<td>{esc(miss)}</td>"
+                f"<td>{esc(row.get('lines_pct'))}</td>"
+                f"<td>{esc(row.get('missing'))}</td>"
+                "</tr>"
+            )
+        sections.append("</table>")
         sections.append(
-            "<p>Полный список — в terminal output / "
-            "<a href='python/html/index.html'>Python HTML coverage</a>. "
-            f"Файлы с покрытием &gt;{_LOW_COVERAGE_PCT_THRESHOLD:g}% скрыты.</p>"
+            "<p>Полный отчёт — "
+            "<a href='python/html/index.html'>Python HTML coverage</a>.</p>"
         )
 
     delta = summary.get("delta_vs_previous")
@@ -686,7 +667,7 @@ def cmd_report(run_id: str) -> Path:
 
 
 def cmd_term(*, coverage_file: Path | None = None) -> None:
-    """Печатает per-file table только для файлов ≤ порога из текущего .coverage."""
+    """Печатает top-N файлов с наименьшим line coverage из текущего .coverage."""
     if coverage_file is not None:
         data_path = coverage_file
     else:
@@ -715,14 +696,13 @@ def cmd_term(*, coverage_file: Path | None = None) -> None:
             raise RuntimeError(f"coverage json failed: {detail}")
         totals, _low_packages, low_files = _parse_python_summary(summary_path)
 
-    print("=== Python coverage (filtered) ===")
+    print("=== Python coverage ===")
     print(f"Overall: {_format_ratio(totals)}")
-    print(_LOW_COVERAGE_NOTE)
     if low_files:
         print()
         print(_render_python_files_table(low_files))
     else:
-        print(f"No files with lines ≤{_LOW_COVERAGE_PCT_THRESHOLD:g}%.")
+        print("No Python coverage files.")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -738,11 +718,7 @@ def main(argv: list[str] | None = None) -> int:
 
     term_parser = subparsers.add_parser(
         "term",
-        # argparse help uses %-formatting — literal percent must be escaped as %%.
-        help=(
-            f"Print per-file table for files ≤{_LOW_COVERAGE_PCT_THRESHOLD:g}%% "
-            "from .coverage"
-        ),
+        help=f"Print top {_TOP_UNCOVERED_FILES} uncovered Python files from .coverage",
     )
     _ = term_parser.add_argument(
         "--coverage-file",

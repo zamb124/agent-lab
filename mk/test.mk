@@ -25,7 +25,7 @@ _PYTEST_XDIST := -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART)
 COV_RUN_ID := $(if $(filter 1,$(TEST_COVERAGE)),$(shell date +%Y%m%dT%H%M%S),)
 ifeq ($(TEST_COVERAGE),1)
 # --cov-report= глушит дефолтный term-dump pytest-cov (все файлы).
-# Итоговый terminal report (только ≤90%) печатает scripts/test_coverage_report.py.
+# Итоговый terminal report (top-20 worst files) печатает scripts/test_coverage_report.py.
 _COV_ARGS := --cov=apps --cov=core --cov-report=
 _COV_ARGS_APPEND := --cov=apps --cov=core --cov-append --cov-report=
 else

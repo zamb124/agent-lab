@@ -296,8 +296,6 @@ export class CRMAccessRequestsPage extends PlatformPage {
         this._reload();
 
         this.useEvent(this._updateOp.op.events.SUCCEEDED, () => this._reload());
-        this.useEvent('crm/access_request/created', () => this._reload());
-        this.useEvent('crm/access_request/updated', () => this._reload());
     }
 
     _reload() {

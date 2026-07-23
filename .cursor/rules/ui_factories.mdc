@@ -70,7 +70,7 @@ REST и WS — два транспорта **тождественной** опе
 | Bus | `<svc>/<entity>/<verb>_requested` | `_succeeded` | `_failed` |
 | WS | `{request_id, type, payload}` | то же | `payload: {error_code, error_detail}` |
 | REST | `<METHOD> <restMirror.path>` body=payload | HTTP 2xx, body = payload `_succeeded` | HTTP 4xx/5xx, body = `{error_code, error_detail}` |
-| Push | — | `<svc>/<entity>/<verb>` (без `_requested`) через `platform:ui_events` | — |
+| Push | — | `<svc>/<entity>/<verb>` (без `_requested`) через `platform:events` | — |
 
 Push-события — **server-initiated broadcast**. Приходят только по WS. **REST-зеркала у push-событий запрещены.**
 
@@ -228,24 +228,37 @@ export class ApiKeysPage extends PlatformPage {
 
 ## Backend → UI
 
-«Кнопка из бэка» = бэк публикует событие, UI подписывается. Никаких отдельных RPC.
+«Кнопка из бэка» = бэк публикует `PlatformEvent` на шину `platform:events`
+(`publish_event*` / `publish_domain_event`). Tail-reader `NotificationManager`
+форвардит в WS `/svc/api/ws/notifications` **без** поля `delivery`.
+UI реагирует в `extraReducer` / `extraEffect` фабрики ресурса (эталон: Sync,
+worktracker). Page-level `useEvent` → full reload как канон push — запрещён.
+
+Wire на клиенте: `{ id, type, payload, meta }` — без `target` / `UIEventTarget`.
 
 ```python
-from core.ui_events import publish_ui_event_to_user
+from core.events import publish_event_to_users
 
-await publish_ui_event_to_user(
-    user_id=ctx.user.user_id,
+await publish_event_to_users(
+    user_ids=recipient_ids,
     type="crm/note/updated",
-    payload={"note_id": note.id},
+    payload={"note_id": note.entity_id, "namespace": note.namespace, "action": "updated", "note": note_snapshot, ...},
     correlation_id=trace_id,
 )
 ```
 
 ```js
-this.useEvent('crm/note/updated', () => this._notes.load());
+// apps/<svc>/ui/events/resources/*.resource.js
+extraReducer: (state, event) => {
+  if (event.type !== 'crm/task/updated') return state;
+  return mergeTask(state, event.payload.task);
+},
 ```
 
-Backend контракт: `core/ui_events/contract.py` (Pydantic `UIEvent`/`UIEventMeta`/`UIEventTarget`), `core/ui_events/dispatcher.py` (`publish_ui_event[_to_user|_to_company|_broadcast]`, канал `platform:ui_events`). WS-форвард: `core/websocket/manager.py` слушает канал и форвардит по `target`.
+Backend контракт: `core/events/contract.py` (`PlatformEvent`, `EventDelivery`),
+`core/events/publisher.py`, каталог `register_platform_event`. WS-форвард:
+`core/websocket/manager.py` читает Stream `platform:events` и шлёт клиентам
+по `delivery.user_ids | company_id | broadcast`.
 
 ## i18n-ключи фабрик
 

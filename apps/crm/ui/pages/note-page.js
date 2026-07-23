@@ -25,6 +25,7 @@
 import { html, css, nothing } from 'lit';
 import { CRMNamespacePage } from '../base/crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
+import { CRM_NOTE_UPDATED, CRM_TASK_UPDATED } from '../events/types.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
@@ -178,12 +179,13 @@ export class CRMNotePage extends CRMNamespacePage {
 
     connectedCallback() {
         super.connectedCallback();
-        this.useEvent('crm/note/updated', (event) => {
-            const noteId = event && event.payload ? event.payload.note_id : null;
+        this.useEvent(CRM_NOTE_UPDATED, (event) => {
+            const payload = event && event.payload ? event.payload : null;
+            const noteId = payload ? payload.note_id : null;
             if (typeof noteId !== 'string' || noteId !== this.noteId) {
                 return;
             }
-            const mf = event.payload && event.payload.markdown_format;
+            const mf = payload.markdown_format;
             const phase = mf && typeof mf.phase === 'string' ? mf.phase : '';
             if (phase === 'started') {
                 this._markdownFormatting = true;
@@ -195,13 +197,25 @@ export class CRMNotePage extends CRMNamespacePage {
                 const done = mf && typeof mf.chunks_done === 'number' ? mf.chunks_done : 0;
                 const total = mf && typeof mf.chunks_total === 'number' ? mf.chunks_total : 0;
                 this._markdownFormatProgress = { done, total };
-                this._reloadCurrent();
+                this.requestUpdate();
                 return;
             }
             this._clearMarkdownFormatUiTimeout();
             this._markdownFormatting = false;
             this._markdownFormatProgress = null;
-            this._reloadCurrent();
+            // Entity fields — из payload.note / crm/entities merge; related-граф
+            // не перезагружаем на каждый note push (analyze — через crm/task/updated).
+            const note = payload.note;
+            if (
+                note
+                && typeof note === 'object'
+                && typeof note.entity_id === 'string'
+                && this._card
+                && typeof this._card === 'object'
+            ) {
+                this._card = { ...this._card, entity: note };
+            }
+            this.requestUpdate();
         });
         this.useEvent(this._cardOp.op.events.SUCCEEDED, (event) => {
             if (this._isStaleEntityCardOpEvent(event)) {
@@ -225,7 +239,7 @@ export class CRMNotePage extends CRMNamespacePage {
         this.useEvent(this._tasks.resource.events.LIST_LOADED, () => {
             this.requestUpdate();
         });
-        this.useEvent('crm/task/updated', () => {
+        this.useEvent(CRM_TASK_UPDATED, () => {
             this.requestUpdate();
         });
         this.useEvent(CoreEvents.WS_CONNECTED, () => {

@@ -11,7 +11,7 @@ description: Frontend инженер Платформы. ZERO-FALLBACK, ZERO-IMP
 
 Главный закон: **ZERO-FALLBACK, ZERO-IMPORT, ZERO-COSTYL.**
 
-- Любое отклонение от канона = **сначала** правка `.cursor/rules/frontend.mdc` / `ui_events.mdc` / `ui_factories.mdc` / `ui_components.mdc`, **потом** код. Не наоборот.
+- Любое отклонение от канона = **сначала** правка `.cursor/rules/frontend.mdc` / `events.mdc` / `ui_factories.mdc` / `ui_components.mdc`, **потом** код. Не наоборот.
 - Костыль = «временный» хардкод, фолбек на пустой массив, тихий `try/catch`, дубль логики, обход контракта. Костыль **хуже** явной ошибки. Лучше потратить час на правку контракта, чем минуту на `|| []`.
 - «Потом отрефакторим» — запрещённая фраза. «Потом» в таком виде не наступает.
 - Если CI зелёный, но в коде костыль — значит CI неполный. Тогда:
@@ -22,7 +22,7 @@ description: Frontend инженер Платформы. ZERO-FALLBACK, ZERO-IMP
 
 Прежде чем тронуть `.js` под фронт, я обязан:
 
-1. Прочитать актуальные правила: [`frontend.mdc`](.cursor/rules/frontend.mdc), [`ui_events.mdc`](.cursor/rules/ui_events.mdc), [`ui_factories.mdc`](.cursor/rules/ui_factories.mdc), [`ui_components.mdc`](.cursor/rules/ui_components.mdc), [`architecture.mdc`](.cursor/rules/architecture.mdc) (REST-зеркало команд), и сервисное правило (`sync.mdc`/`crm.mdc`/`rag.mdc`/`flows.mdc`/`office.mdc`/`voice.mdc`).
+1. Прочитать актуальные правила: [`frontend.mdc`](.cursor/rules/frontend.mdc), [`events.mdc`](.cursor/rules/events.mdc), [`ui_factories.mdc`](.cursor/rules/ui_factories.mdc), [`ui_components.mdc`](.cursor/rules/ui_components.mdc), [`architecture.mdc`](.cursor/rules/architecture.mdc) (REST-зеркало команд), и сервисное правило (`sync.mdc`/`crm.mdc`/`rag.mdc`/`flows.mdc`/`office.mdc`/`voice.mdc`).
 2. Если есть визуальная правка — сверить раздел **Design Standard** ниже с [`tokens.css`](core/frontend/static/assets/css/tokens.css), shared styles и базовыми макетами Figma `Networkle / Макеты / node 30:556`.
 3. Понять, к какой из шести фабрик сводится моя задача (или это slice-only через `createSlice`).
 4. Перед declaration «готово» прогнать чек-лист из последнего раздела и убедиться, что **`make check-events-canon`** зелёный.
@@ -191,7 +191,7 @@ this._keys = this.useResource('frontend/api_keys', { autoload: true });
 
 WS-команды (фрейм клиент → сервер) обязаны заканчиваться на `_requested` — `core.websocket.command_router` отказывает в регистрации handler'а с типом без этого суффикса. Reply-типы выводятся механически: `<type без _requested>_succeeded` / `_failed`.
 
-Push-события (server-initiated broadcast) приходят по WebSocket из `core/ui_events/dispatcher.py::publish_ui_event_*` через канал `platform:ui_events`. Их имя НЕ должно совпадать с командой (нельзя `sync/messages/send` и `sync/messages/send_requested` одновременно — используй разные entity-имена, например `sync/messages/send_requested` (команда) vs `sync/message/created` (push)).
+Push-события (server-initiated broadcast) приходят по WebSocket из `core/events/publisher.py::publish_event_*` через шину `platform:events`. Их имя НЕ должно совпадать с командой (нельзя `sync/messages/send` и `sync/messages/send_requested` одновременно — используй разные entity-имена, например `sync/messages/send_requested` (команда) vs `sync/message/created` (push)).
 
 Запрет: имя события без формата `<scope>/<entity>/<verb>` ≥ 3 сегмента. Детектор: [`scripts/check_ui_canon.sh`](scripts/check_ui_canon.sh) п.12.
 
@@ -203,7 +203,7 @@ Push-события (server-initiated broadcast) приходят по WebSocket
 |---|---|---|
 | **Команда** (`<svc>/<entity>/<verb>_requested`) | **Обязательно** HTTP в `apps/<svc>/api/**` с тем же method+path+payload+response. | Опционально (через `transport: 'ws'`). |
 | **Success/Failure** | Body HTTP-ответа = payload event-а. | Reply-фрейм с тем же `request_id`. |
-| **Push** (без `_requested`) | **Запрещено** REST-зеркало. | Только через `publish_ui_event_*`. |
+| **Push** (без `_requested`) | **Запрещено** REST-зеркало. | Только через `publish_event_*`. |
 
 CI: [`scripts/check_command_rest_mirror.py`](scripts/check_command_rest_mirror.py) (входит в `make check-events-canon`) проверяет:
 
@@ -653,11 +653,11 @@ CI:
 
 ## Backend → UI: «нажать кнопку из бэка»
 
-Backend публикует событие в общий канал `platform:ui_events` через [`core/ui_events/dispatcher.py`](core/ui_events/dispatcher.py):
+Backend публикует событие в общий шину `platform:events` через [`core/events/publisher.py`](core/events/publisher.py):
 
 ```python
-from core.ui_events import publish_ui_event_to_user
-await publish_ui_event_to_user(
+from core.events import publish_event_to_user
+await publish_event_to_user(
     user_id=...,
     type="crm/note/updated",
     payload={"note_id": note_id},
@@ -810,7 +810,7 @@ make ui
 - Типовые сценарии end-to-end (новый ресурс / команда / **идемпотентная цепочка с ожиданием ответа** / страница / модалка / форма / cursor-list / facets / slice / WS-команда / push-подписка / toast+clipboard / новый i18n-ключ) — [`recipes.md`](.cursor/skills/frontend-engineer/recipes.md).
 - Правила платформы:
   - [`.cursor/rules/frontend.mdc`](.cursor/rules/frontend.mdc) — структура `apps/<svc>/ui/`, helpers базы, zero-import canon.
-  - [`.cursor/rules/ui_events.mdc`](.cursor/rules/ui_events.mdc) — bus, contract, backend → UI.
+  - [`.cursor/rules/events.mdc`](.cursor/rules/events.mdc) — bus, contract, backend → UI.
   - [`.cursor/rules/ui_factories.mdc`](.cursor/rules/ui_factories.mdc) — полный контракт 6 фабрик.
   - [`.cursor/rules/ui_components.mdc`](.cursor/rules/ui_components.mdc) — core UI Kit, модалки, sidebar, breadcrumbs, user-chip.
   - [`.cursor/rules/architecture.mdc`](.cursor/rules/architecture.mdc) — REST-зеркало команд (платформенный инвариант).

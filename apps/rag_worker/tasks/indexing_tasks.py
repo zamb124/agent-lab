@@ -4,7 +4,12 @@ Tasks для индексации документов через pgvector.
 
 import core.tracing.attributes as trace_attributes
 from apps.rag.container import get_rag_container
-from apps.rag_worker.broker import broker
+from apps.rag.events import publish_rag_document_status_updated
+from apps.rag_worker.tasks.task_names import (
+    RAG_DELETE_DOCUMENT,
+    RAG_INDEX_DOCUMENT_S3,
+    RAG_INDEX_OFFICE_CATALOG,
+)
 from core.config import get_settings
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
@@ -18,7 +23,7 @@ from core.rag.indexable import (
 from core.rag.models import RAGMetadata
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue, platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, require_json_object
 
@@ -58,16 +63,7 @@ async def _embedding_context_for_rag_worker(
     )
 
 
-RAG_INDEX_DOCUMENT_S3_TASK_NAME = "rag.index_document_s3"
-RAG_INDEX_OFFICE_CATALOG_TASK_NAME = "rag.index_office_catalog"
-
-
-@broker.task(
-    task_name=RAG_INDEX_DOCUMENT_S3_TASK_NAME,
-    retry_on_error=True,
-    max_retries=3,
-    queue_name="rag",
-)
+@platform_task(RAG_INDEX_DOCUMENT_S3)
 async def index_rag_document_s3_task(
     company_id: str,
     namespace_id: str,
@@ -124,6 +120,13 @@ async def index_rag_document_s3_task(
             binding = UploadProfileBinding(config=settings.rag.document_indexing)
 
             await status_repo.try_mark_processing(document_id)
+            await publish_rag_document_status_updated(
+                company_id=str(trace_company_id).strip(),
+                document_id=document_id,
+                namespace_id=namespace_id,
+                status="processing",
+                document_name=document_name,
+            )
 
             meta_file_category = metadata.get("file_category")
             if isinstance(meta_file_category, str) and meta_file_category.strip() != "":
@@ -142,6 +145,14 @@ async def index_rag_document_s3_task(
                     resolved_category,
                 )
                 _ = await status_repo.record_indexing_done(document_id, 0)
+                await publish_rag_document_status_updated(
+                    company_id=str(trace_company_id).strip(),
+                    document_id=document_id,
+                    namespace_id=namespace_id,
+                    status="completed",
+                    document_name=document_name,
+                    chunks_count=0,
+                )
                 return {
                     "document_id": document_id,
                     "document_name": document_name,
@@ -170,6 +181,14 @@ async def index_rag_document_s3_task(
                 )
             except Exception as e:
                 await status_repo.record_indexing_failed(document_id, str(e))
+                await publish_rag_document_status_updated(
+                    company_id=str(trace_company_id).strip(),
+                    document_id=document_id,
+                    namespace_id=namespace_id,
+                    status="failed",
+                    document_name=document_name,
+                    error_message=str(e),
+                )
                 raise
 
             raw_chunks = document.metadata.get("total_chunks")
@@ -185,6 +204,14 @@ async def index_rag_document_s3_task(
                     if runtime is not None
                     else None
                 ),
+            )
+            await publish_rag_document_status_updated(
+                company_id=str(trace_company_id).strip(),
+                document_id=document_id,
+                namespace_id=namespace_id,
+                status="completed",
+                document_name=document_name,
+                chunks_count=chunks,
             )
 
             logger.info(
@@ -203,12 +230,7 @@ async def index_rag_document_s3_task(
         clear_context()
 
 
-@broker.task(
-    task_name=RAG_INDEX_OFFICE_CATALOG_TASK_NAME,
-    retry_on_error=True,
-    max_retries=3,
-    queue_name="rag",
-)
+@platform_task(RAG_INDEX_OFFICE_CATALOG)
 async def index_office_catalog_task(
     company_id: str,
     workspace_namespace: str,
@@ -309,9 +331,8 @@ async def index_office_catalog_task(
             ttl_seconds=ttl_sec,
             extra_metadata={},
         )
-        task = await kiq_task_name_with_context(
-            RAG_INDEX_DOCUMENT_S3_TASK_NAME,
-            broker,
+        task = await enqueue(
+            RAG_INDEX_DOCUMENT_S3,
             company_id=company_id.strip(),
             namespace_id=rag_namespace_id.strip(),
             s3_key=file_record.s3_key,
@@ -337,7 +358,7 @@ async def index_office_catalog_task(
     }
 
 
-@broker.task(retry_on_error=True, max_retries=3, queue_name="rag")
+@platform_task(RAG_DELETE_DOCUMENT)
 async def delete_document_task(
     namespace_id: str,
     document_id: str,

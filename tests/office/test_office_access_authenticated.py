@@ -8,8 +8,8 @@ from tests.office.access_helpers import (
     create_nested_catalog,
     create_private_catalog,
     create_public_catalog,
-    enable_document_link,
     enable_catalog_link,
+    enable_document_link,
     extract_public_token,
     upload_txt_document,
 )

@@ -37,7 +37,6 @@ from tests.ui.e2e.hitl_e2e_bridge import (
     hitl_operator_claim_and_complete,
     hitl_return_to_chat_session,
     hitl_trigger_deterministic,
-    hitl_wait_chat_resume,
 )
 from tests.ui.e2e.worktracker_e2e_helpers import (
     worktracker_api_list_work_items,

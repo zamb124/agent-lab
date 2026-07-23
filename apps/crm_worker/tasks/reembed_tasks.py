@@ -12,19 +12,14 @@ from datetime import datetime, timezone
 
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMTask
-from apps.crm.scheduled_task_constants import CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME
 from apps.crm.services.task_service import ALL_NAMESPACES_TASK_KEY
-from apps.crm_worker.broker import broker
+from apps.crm_worker.tasks.task_names import CRM_REEMBED_STALE_DOCUMENTS
 from core.rag.models import RAGReembedTickResult
 from core.rag.reembed_stale_documents import execute_reembed_tick
+from core.tasks import platform_task
 
 
-@broker.task(
-    task_name=CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
-    queue_name="crm",
-    retry_on_error=True,
-    max_retries=2,
-)
+@platform_task(CRM_REEMBED_STALE_DOCUMENTS)
 async def crm_reembed_stale_documents_tick(
     schedule_task_id: str,
     company_id: str | None = None,

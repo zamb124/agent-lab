@@ -49,7 +49,6 @@ from core.test_scope import TEST_SCOPE_DEFAULT_ENV, TEST_SCOPE_STATIC_E2E
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 from tests.fixtures.test_database_env import (
     TEST_DATABASE_ENV,
-    TEST_HS256_JWT_SECRET,
     TEST_LIVEKIT_API_SECRET,
     TEST_OFFICE_JWT_SECRET,
 )

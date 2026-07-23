@@ -1,15 +1,15 @@
 /**
- * MyTasksPage — задачи текущего пользователя.
+ * MyTasksPage — задачи текущего пользователя (thin host над platform-work-item-row).
  */
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
-import '../components/worktracker-work-item-card.js';
 import '../components/worktracker-icon-action.js';
 import '../components/worktracker-list-section.js';
 import '../components/worktracker-page-header.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-work-item-row.js';
 
 export class WorktrackerMyTasksPage extends PlatformPage {
     static i18nNamespace = 'worktracker';
@@ -50,14 +50,6 @@ export class WorktrackerMyTasksPage extends PlatformPage {
         this._workItems.load({ assignee_user_id: user.user_id, exclude_terminal: true });
     }
 
-    _reloadList() {
-        const user = this._userSel.value;
-        if (!user || typeof user.user_id !== 'string' || user.user_id.length === 0) {
-            throw new Error('WorktrackerMyTasksPage: auth user required');
-        }
-        this._workItems.load({ assignee_user_id: user.user_id, exclude_terminal: true });
-    }
-
     _openCreateTask() {
         this.openModal('worktracker.work_item_create', {});
     }
@@ -81,12 +73,10 @@ export class WorktrackerMyTasksPage extends PlatformPage {
                 <worktracker-list-section title=${this.t('my_page.title')} .count=${items.length}>
                     ${items.map((item) => html`
                         <div class="wt-list-row">
-                            <worktracker-work-item-card
+                            <platform-work-item-row
                                 .item=${item}
-                                variant="row"
                                 ?show-preview=${false}
-                                @changed=${() => this._reloadList()}
-                            ></worktracker-work-item-card>
+                            ></platform-work-item-row>
                         </div>
                     `)}
                 </worktracker-list-section>

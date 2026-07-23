@@ -63,7 +63,7 @@ async def test_connect_personal_without_company_connection(
     assert await mail_service.get_connection(company_id=company_id) is None
 
     candidates = await mail_service.list_sync_candidates(
-        limit=50,
+        limit=10_000,
         auth_error_cooldown_seconds=0,
     )
     assert any(item.mailbox_binding_id == binding.mailbox_binding_id for item in candidates)
@@ -136,7 +136,7 @@ async def test_company_and_personal_share_sync_candidates(
         company_id=company_id,
     )
     candidates = await mail_service.list_sync_candidates(
-        limit=50,
+        limit=10_000,
         auth_error_cooldown_seconds=0,
     )
     ids = {item.mailbox_binding_id for item in candidates}

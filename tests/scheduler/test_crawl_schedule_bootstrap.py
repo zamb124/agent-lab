@@ -12,7 +12,7 @@ from apps.scheduler.crawl_schedule_bootstrap import (
     CRAWL_ORCHESTRATOR_DEFAULT_PROFILE_ID,
     ensure_search_crawl_schedules,
 )
-from apps.search_worker.tasks.task_names import CRAWL_ORCHESTRATOR_TICK_TASK_NAME
+from apps.search_worker.tasks.task_names import CRAWL_ORCHESTRATOR_TICK
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,
@@ -148,7 +148,7 @@ def _orchestrator_task(*, cron: str) -> PlatformScheduledTask:
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         schedule_id="redis-crawl-tick-old",
         target_service="search",
-        task_name=CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
+        task_name=CRAWL_ORCHESTRATOR_TICK.name,
         queue_name="search",
         schedule_type=PlatformScheduleType.CRON,
         cron=cron,

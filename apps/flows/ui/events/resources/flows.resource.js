@@ -28,6 +28,73 @@ export const flowsResource = createResourceCollection({
         }
         return query;
     },
+    extraReducer: (state, event) => {
+        if (event.type === 'flows/flow/deleted') {
+            const flowId = event.payload && typeof event.payload.flow_id === 'string'
+                ? event.payload.flow_id
+                : '';
+            if (flowId.length === 0) {
+                return state;
+            }
+            const items = state.items.filter((item) => item && item.flow_id !== flowId);
+            const byId = { ...state.byId };
+            delete byId[flowId];
+            return { ...state, items, byId };
+        }
+        if (event.type === 'flows/flow/updated') {
+            const payload = event.payload;
+            if (!payload || typeof payload.flow_id !== 'string') {
+                return state;
+            }
+            const existing = state.byId[payload.flow_id];
+            if (!existing || typeof existing !== 'object') {
+                return state;
+            }
+            const version = typeof payload.version === 'string' ? payload.version : existing.version;
+            const patched = { ...existing, version };
+            const idx = state.items.findIndex((x) => x && x.flow_id === payload.flow_id);
+            const items = idx === -1
+                ? state.items
+                : state.items.map((x, i) => (i === idx ? patched : x));
+            return {
+                ...state,
+                items,
+                byId: { ...state.byId, [payload.flow_id]: patched },
+            };
+        }
+        return state;
+    },
+    extraEffect: async (event, ctx, events) => {
+        const refreshTypes = new Set([
+            'flows/flow/updated',
+            'flows/branch/created',
+            'flows/branch/updated',
+            'flows/branch/deleted',
+        ]);
+        if (refreshTypes.has(event.type)) {
+            const flowId = event.payload && typeof event.payload.flow_id === 'string'
+                ? event.payload.flow_id
+                : '';
+            if (flowId.length === 0) {
+                return true;
+            }
+            ctx.dispatch(
+                events.ITEM_REQUESTED,
+                { flow_id: flowId },
+                { causation_id: event.id, source: 'ws' },
+            );
+            return true;
+        }
+        if (event.type === 'flows/flow/deleted') {
+            ctx.dispatch(
+                events.LIST_REQUESTED,
+                {},
+                { causation_id: event.id, source: 'ws' },
+            );
+            return true;
+        }
+        return false;
+    },
 });
 
 // Бэкенд требует PUT (а не PATCH, как у дефолтного `createResourceCollection.update`),

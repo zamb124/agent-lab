@@ -58,7 +58,7 @@ TaskIQ остаётся ТОЛЬКО для heavy-операций (`sync_transc
 | **WS=REST identity** | `integration/test_ops_ws_rest_identical.py` | Каждая op из `SYNC_OPERATIONS` даёт одинаковый result через WS и REST |
 | **Zero-fallback red-tests** | `integration/test_ops_zero_fallback.py` | Missing field → `ws_invalid_payload`, no company → `ws_no_company`, not_found → 404/`not_found` |
 | **AST-сканер** | `integration/test_no_silent_except_in_ops.py` | Запрет `except Exception: pass`, `or default` фолбеков в `operations.py` |
-| **Push-events** | `integration/test_op_publish_realtime_events.py` | После op в `platform:ui_events` опубликован нужный фрейм с правильным `recipient_user_ids` |
+| **Push-events** | `integration/test_op_publish_realtime_events.py` | После op в `platform:events` опубликован нужный фрейм с правильным `recipient_user_ids` |
 | **op_messages_*** | `integration/test_op_messages_send.py`, `_edit_delete_forward.py`, `_react_pin.py` | Send + auto-transcribe; edit/delete/forward; react/pin |
 | **op_channels_*** | `integration/test_op_channels_lifecycle.py`, `_notification_settings.py` | direct/topic/calendar_meeting; mute/unmute |
 | **op_calls_*** | `integration/test_op_calls_lifecycle.py`, `_links.py` | invite/accept/hangup + recording; calendar links + join |

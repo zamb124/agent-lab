@@ -8,11 +8,19 @@ from typing import override
 
 import pytest
 
-from apps.voice.services.speak_worker import enqueue_end_of_utterance, enqueue_speak, run_speak_worker
+from apps.voice.services.speak_worker import (
+    enqueue_end_of_utterance,
+    enqueue_speak,
+    run_speak_worker,
+)
 from apps.voice.services.voice_session import VoiceSession
 from core.clients.tts_streaming import BaseTTSStreamer
 from core.logging.attributes import LOG_TTS_PROVIDER, LOG_TTS_TTFA_MS
-from tests.fixtures.observability_log_capture import find_caplog_record, require_log_fields, require_numeric_field
+from tests.fixtures.observability_log_capture import (
+    find_caplog_record,
+    require_log_fields,
+    require_numeric_field,
+)
 from tests.observability.contracts import VOICE_TTS_RESPONSE
 
 pytestmark = pytest.mark.timeout(30)

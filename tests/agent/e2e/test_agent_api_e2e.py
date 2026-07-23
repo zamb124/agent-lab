@@ -10,6 +10,7 @@ from httpx import AsyncClient
 
 from apps.agent.service import AUDIT_KEY_PREFIX, PAIRING_RATE_PREFIX, REGISTER_RATE_PREFIX
 from core.utils.tokens import get_token_service
+from scripts.agent_build import detect_host_platform
 from tests.agent._helpers import (
     AGENT_API_PREFIX,
     assert_audit_event_in_redis,
@@ -18,9 +19,8 @@ from tests.agent._helpers import (
     seed_pairing_in_storage,
     user_id_from_auth_token,
 )
-from tests.agent.fixtures.local_releases import require_local_release_asset_name
-from scripts.agent_build import detect_host_platform
 from tests.agent._realtime_helpers import connect_agent_tunnel_ws, wait_tunnel_json
+from tests.agent.fixtures.local_releases import require_local_release_asset_name
 
 
 @pytest.mark.asyncio
@@ -28,8 +28,9 @@ async def test_e2e_download_redirect_local_artifact(
     agent_frontend_http_client: AsyncClient,
     agent_local_release_artifact,
 ) -> None:
-    from apps.agent.config import reset_agent_settings
     from pathlib import Path
+
+    from apps.agent.config import reset_agent_settings
 
     reset_agent_settings()
     artifact_path = Path(agent_local_release_artifact)
@@ -50,8 +51,9 @@ async def test_e2e_releases_status_ready(
     agent_frontend_http_client: AsyncClient,
     agent_local_release_artifact,
 ) -> None:
-    from apps.agent.config import reset_agent_settings
     from pathlib import Path
+
+    from apps.agent.config import reset_agent_settings
 
     reset_agent_settings()
     _ = require_local_release_asset_name(Path(agent_local_release_artifact))

@@ -123,6 +123,15 @@ async def _ensure_namespace(
     )
 
 
+async def ensure_crm_namespace(
+    crm_client: AsyncClient,
+    headers: dict[str, Any],
+    namespace_id: str,
+) -> None:
+    """Создать namespace для теста (201/409 — ок)."""
+    await _ensure_namespace(crm_client, headers, namespace_id)
+
+
 async def ensure_crm_per_test_namespace_and_types(
     crm_client: AsyncClient,
     unique_id: str,

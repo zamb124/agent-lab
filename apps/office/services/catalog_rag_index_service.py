@@ -17,8 +17,7 @@ from apps.office.models.api import (
     OfficeCatalogSemanticSearchRequest,
     OfficeCatalogSemanticSearchResponse,
 )
-from apps.rag_worker.broker import broker as rag_worker_broker
-from apps.rag_worker.tasks.indexing_tasks import RAG_INDEX_OFFICE_CATALOG_TASK_NAME
+from apps.rag_worker.tasks.task_names import RAG_INDEX_OFFICE_CATALOG
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
@@ -31,7 +30,7 @@ from core.rag.rag_http_namespace_search import (
     merge_search_request_options,
 )
 from core.rag.search_options_resolver import resolve_platform_search_options
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue
 from core.types import JsonObject, JsonValue, require_json_object
 
 if TYPE_CHECKING:
@@ -289,9 +288,8 @@ class OfficeCatalogRagIndexService:
             for binding in bindings
         ]
         rag_namespace_id = self.rag_namespace_id(catalog.catalog_id)
-        task = await kiq_task_name_with_context(
-            RAG_INDEX_OFFICE_CATALOG_TASK_NAME,
-            rag_worker_broker,
+        task = await enqueue(
+            RAG_INDEX_OFFICE_CATALOG,
             company_id=company_id,
             workspace_namespace=workspace_namespace,
             catalog_id=catalog.catalog_id,

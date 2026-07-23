@@ -283,8 +283,7 @@ class AuthService:
         if norm(email) != norm(demo.email):
             return AuthResult(success=False, error_message="Неверные учётные данные")
 
-        users = await self._user_repository.list(limit=10000)
-        matched = [u for u in users if any(norm(e) == norm(demo.email) for e in u.emails)]
+        matched = await self._user_repository.find_all_by_email_ci(demo.email)
         if len(matched) != 1:
             return AuthResult(success=False, error_message="Неверные учётные данные")
 

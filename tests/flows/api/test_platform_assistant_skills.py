@@ -50,6 +50,8 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
         assert "document-workspace" in documents_platform.depends_on
         assert "documents-catalog" in documents_platform.depends_on
         assert "diagrams-viz" in documents_platform.depends_on
+        assert "team-directory" in documents_platform.depends_on
+        assert documents_platform.references
         documents_catalog = await container.agent_skill_service.get("documents-catalog")
         catalog_tool_ids = {ref.tool_id for ref in documents_catalog.tool_refs}
         assert catalog_tool_ids == {
@@ -57,22 +59,79 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
             "documents_find",
             "documents_read",
             "documents_get_link",
+            "documents_create_catalog",
+            "documents_update_catalog",
+            "documents_list_catalog_members",
+            "documents_add_catalog_member",
+            "documents_get_access",
+            "documents_patch_access",
+            "documents_rotate_public_link",
+            "documents_catalog_rag_status",
+            "documents_catalog_rag_enable",
+            "documents_catalog_rag_disable",
+            "documents_catalog_rag_rebuild",
         }
         networkle = await container.agent_skill_service.get("networkle")
         assert "crm-entities" in networkle.depends_on
         assert "crm-notes" in networkle.depends_on
+        assert "crm-graph" in networkle.depends_on
+        assert "crm-ops" in networkle.depends_on
+        assert "work-items" in networkle.depends_on
+        assert "document-workspace" in networkle.depends_on
+        assert "team-directory" in networkle.depends_on
+        crm_entities = await container.agent_skill_service.get("crm-entities")
+        entity_tools = {ref.tool_id for ref in crm_entities.tool_refs}
+        assert "crm_update_entity" in entity_tools
+        assert "crm_delete_entity" in entity_tools
+        assert "crm_merge_entities" in entity_tools
+        assert "crm_period_summary" in entity_tools
+        assert "crm_create_activity_task" in entity_tools
+        crm_notes = await container.agent_skill_service.get("crm-notes")
+        note_tools = {ref.tool_id for ref in crm_notes.tool_refs}
+        assert "crm_list_notes" in note_tools
+        assert "crm_apply_analysis_draft" in note_tools
+        assert "crm_discard_analysis_draft" in note_tools
+        crm_graph = await container.agent_skill_service.get("crm-graph")
+        graph_tools = {ref.tool_id for ref in crm_graph.tool_refs}
+        assert graph_tools == {
+            "crm_list_relationships",
+            "crm_delete_relationship",
+            "crm_list_relationship_types",
+            "crm_entity_related",
+            "crm_shortest_path",
+        }
+        crm_ops = await container.agent_skill_service.get("crm-ops")
+        ops_tools = {ref.tool_id for ref in crm_ops.tool_refs}
+        assert ops_tools == {
+            "crm_list_suggests",
+            "crm_resolve_suggest",
+            "crm_dismiss_suggest",
+            "crm_knowledge_import_status",
+        }
         addon = await container.agent_skill_service.get("docx-templates")
         assert addon.depends_on == []
         assert "fill_docx_template" in [ref.tool_id for ref in addon.tool_refs]
         docs = await container.agent_skill_service.get("document-workspace")
         assert docs.depends_on == ["docx-templates"]
-        assert "create_file" in [ref.tool_id for ref in docs.tool_refs]
+        docs_tool_ids = {ref.tool_id for ref in docs.tool_refs}
+        assert "create_file" in docs_tool_ids
+        assert "documents_create_empty" in docs_tool_ids
+        assert "documents_delete" in docs_tool_ids
+        assert "documents_move" in docs_tool_ids
         assert docs.references
         sync = await container.agent_skill_service.get("sync-platform")
-        assert [ref.tool_id for ref in sync.tool_refs] == [
-            "sync_list_messages",
-            "sync_send_message",
-        ]
+        assert sync.tool_refs == []
+        assert set(sync.depends_on) == {
+            "sync-messaging",
+            "sync-channels",
+            "sync-threads",
+            "team-directory",
+        }
+        sync_messaging = await container.agent_skill_service.get("sync-messaging")
+        sync_msg_tools = {ref.tool_id for ref in sync_messaging.tool_refs}
+        assert "sync_list_messages" in sync_msg_tools
+        assert "sync_send_message" in sync_msg_tools
+        assert sync.references
         work = await container.agent_skill_service.get("work-tracking")
         work_tool_ids = [ref.tool_id for ref in work.tool_refs]
         assert "schedule_cron_task" in work_tool_ids

@@ -70,7 +70,7 @@ async def _cleanup_employee(flow_id: str) -> None:
 
 
 async def test_human_assignment_notifies(
-    app, flows_service, worktracker_service, worktracker_ui_events_listener, unique_id
+    app, flows_service, worktracker_service, platform_events_listener, unique_id
 ):
     _ = app, flows_service
     human_id = f"human_{unique_id}"
@@ -80,12 +80,12 @@ async def test_human_assignment_notifies(
         created_by=SystemActor(),
         assignment=UsersAssignment(user_ids=[human_id]),
     )
-    events = await worktracker_ui_events_listener(_NOTIFY_ASSIGNED, human_id, 3.0)
+    events = await platform_events_listener(_NOTIFY_ASSIGNED, human_id, 3.0)
     assert any(e["payload"]["data"].get("work_item_id") == item.work_item_id for e in events)
 
 
 async def test_employee_assignment_not_notified(
-    app, flows_service, worktracker_service, worktracker_ui_events_listener, unique_id
+    app, flows_service, worktracker_service, platform_events_listener, unique_id
 ):
     _ = app, flows_service
     flow_id = f"disp_emp_{unique_id}"
@@ -99,7 +99,7 @@ async def test_employee_assignment_not_notified(
             assignment=UsersAssignment(user_ids=[emp_id]),
         )
         # сотрудник-агент не получает human-нотификацию (его работа — в inbox flows)
-        events = await worktracker_ui_events_listener(_NOTIFY_ASSIGNED, emp_id, 2.0)
+        events = await platform_events_listener(_NOTIFY_ASSIGNED, emp_id, 2.0)
         assert events == []
         fetched = await worktracker_service.get("system", item.work_item_id)
         assert isinstance(fetched.assignment, UsersAssignment)
@@ -109,7 +109,7 @@ async def test_employee_assignment_not_notified(
 
 
 async def test_mixed_assignment_notifies_only_human(
-    app, flows_service, worktracker_service, worktracker_ui_events_listener, unique_id
+    app, flows_service, worktracker_service, platform_events_listener, unique_id
 ):
     _ = app, flows_service
     flow_id = f"disp_mix_{unique_id}"
@@ -122,9 +122,9 @@ async def test_mixed_assignment_notifies_only_human(
             created_by=SystemActor(),
             assignment=UsersAssignment(user_ids=[human_id, emp_id]),
         )
-        human_events = await worktracker_ui_events_listener(_NOTIFY_ASSIGNED, human_id, 3.0)
+        human_events = await platform_events_listener(_NOTIFY_ASSIGNED, human_id, 3.0)
         assert len(human_events) >= 1
-        emp_events = await worktracker_ui_events_listener(_NOTIFY_ASSIGNED, emp_id, 1.0)
+        emp_events = await platform_events_listener(_NOTIFY_ASSIGNED, emp_id, 1.0)
         assert emp_events == []
     finally:
         await _cleanup_employee(flow_id)

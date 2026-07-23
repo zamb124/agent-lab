@@ -26,8 +26,8 @@ alwaysApply: false
     → core.websocket.command_router → _make_ws_handler из SYNC_OPERATIONS
     → op_calls_<verb>(payload, *, user, container) (apps/sync/realtime/operations.py)
     → БД sync_calls / sync_call_participants (in-process, без TaskIQ)
-    → publish_realtime_events → core.ui_events.publish_ui_event_to_*
-    → Redis platform:ui_events
+    → publish_realtime_events → core.events.publish_event_to_*
+    → шина platform:events
     → core.websocket.manager → fanout target_user_ids → /sync/api/ws/notifications
 
 REST-зеркало (apps/sync/api/calls.py) собирает Pydantic payload и зовёт ту же op_calls_<verb>.
@@ -68,7 +68,7 @@ REST-зеркала (`apps/sync/api/calls.py`): `POST /sync/api/v1/calls/{call_i
 
 ## WS Push-события
 
-Сервер публикует через `publish_ui_event_to_user`/`_to_company`; адресация в `recipient_user_ids` = участники канала (для `signal` — один `target_user_id`). UI диспатчит в bus, slice `sync/call_ui` (`createSlice`) реагирует через `extraReducer`.
+Сервер публикует через `publish_event_to_user`/`_to_company`; адресация в `recipient_user_ids` = участники канала (для `signal` — один `target_user_id`). UI диспатчит в bus, slice `sync/call_ui` (`createSlice`) реагирует через `extraReducer`.
 
 Типы: `sync/call/incoming|accepted|declined|ended|signal|participant_joined|participant_left|recording_started|recording_stopped|recording_failed|admin_changed|transcribe_*`.
 

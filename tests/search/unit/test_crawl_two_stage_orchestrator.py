@@ -18,6 +18,7 @@ from core.crawl.models import (
     CrawlUrl,
 )
 from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from tests.fixtures.taskiq_capture import taskiq_task_name
 from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
 
 pytestmark = pytest.mark.unit
@@ -90,11 +91,11 @@ async def test_fetch_layer1_never_calls_enrichment_synchronously(
 ) -> None:
     enqueued: list[tuple[object, ...]] = []
 
-    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
-        enqueued.append((task_name, *args))
+    async def _capture(task: object, *args: object, **kwargs: object) -> None:
+        enqueued.append((taskiq_task_name(task), *args))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _capture,
     )
 
@@ -149,11 +150,11 @@ async def test_fetch_layer1_skips_enrich_kiq_when_llm_disabled(
 ) -> None:
     enqueued: list[tuple[object, ...]] = []
 
-    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
-        enqueued.append((task_name, *args))
+    async def _capture(task: object, *args: object, **kwargs: object) -> None:
+        enqueued.append((taskiq_task_name(task), *args))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _capture,
     )
 
@@ -383,16 +384,16 @@ async def test_enrich_failure_keeps_indexed_status(
 
 
 @pytest.mark.asyncio
-async def test_enqueue_enrichment_backfill_kiqs_missing_urls(
+async def test_enqueue_enrichment_backfill_enqueues_missing_urls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     enqueued: list[tuple[object, ...]] = []
 
-    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
-        enqueued.append((task_name, *args))
+    async def _capture(task: object, *args: object, **kwargs: object) -> None:
+        enqueued.append((taskiq_task_name(task), *args))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _capture,
     )
 

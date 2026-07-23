@@ -6,17 +6,23 @@ import datetime
 
 import pytest
 
+from apps.crm_worker.tasks.task_names import (
+    CRM_RECONCILE_DAILY_SUMMARY,
+    CRM_REEMBED_STALE_DOCUMENTS,
+)
+from apps.idle_worker.tasks.task_names import (
+    TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK,
+    TASK_CALENDAR_SYNC_TICK,
+    TASK_FILE_RETENTION_PURGE_TICK,
+    TASK_SPAN_BILLING_SETTLEMENT_TICK,
+)
+from apps.rag_worker.tasks.task_names import (
+    RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK,
+    RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK,
+    RAG_REEMBED_STALE_DOCUMENTS_TICK,
+)
 from apps.scheduler.main import (
-    CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
-    CALENDAR_SYNC_TASK_NAME,
     CRM_RECONCILE_DAILY_SUMMARY_CRON,
-    CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
-    CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
-    FILE_RETENTION_PURGE_TASK_NAME,
-    RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME,
-    RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME,
-    RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME,
-    SPAN_BILLING_SETTLEMENT_TASK_NAME,
     SYSTEM_SCHEDULER_COMPANY_ID,
     on_startup,
 )
@@ -248,23 +254,23 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
 
         async def list(self, company_id, filters):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
-            if filters.task_name == CALENDAR_SYNC_TASK_NAME:
+            if filters.task_name == TASK_CALENDAR_SYNC_TICK.name:
                 return []
-            if filters.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME:
+            if filters.task_name == TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK.name:
                 return []
-            if filters.task_name == SPAN_BILLING_SETTLEMENT_TASK_NAME:
+            if filters.task_name == TASK_SPAN_BILLING_SETTLEMENT_TICK.name:
                 return []
-            if filters.task_name == RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME:
+            if filters.task_name == RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK.name:
                 return []
-            if filters.task_name == RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME:
+            if filters.task_name == RAG_REEMBED_STALE_DOCUMENTS_TICK.name:
                 return []
-            if filters.task_name == RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME:
+            if filters.task_name == RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK.name:
                 return []
-            if filters.task_name == CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME:
+            if filters.task_name == CRM_REEMBED_STALE_DOCUMENTS.name:
                 return []
-            if filters.task_name == CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME:
+            if filters.task_name == CRM_RECONCILE_DAILY_SUMMARY.name:
                 return []
-            if filters.task_name == FILE_RETENTION_PURGE_TASK_NAME:
+            if filters.task_name == TASK_FILE_RETENTION_PURGE_TICK.name:
                 return []
             raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
@@ -287,27 +293,27 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
     assert len(fake_service.created_requests) == 8
     names = {r.task_name for r in fake_service.created_requests}
     assert names == {
-        CALENDAR_SYNC_TASK_NAME,
-        CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
-        FILE_RETENTION_PURGE_TASK_NAME,
-        RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME,
-        RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME,
-        RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME,
-        CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
-        CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
+        TASK_CALENDAR_SYNC_TICK.name,
+        TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK.name,
+        TASK_FILE_RETENTION_PURGE_TICK.name,
+        RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK.name,
+        RAG_REEMBED_STALE_DOCUMENTS_TICK.name,
+        RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK.name,
+        CRM_REEMBED_STALE_DOCUMENTS.name,
+        CRM_RECONCILE_DAILY_SUMMARY.name,
     }
     by_name = {r.task_name: r for r in fake_service.created_requests}
-    assert by_name[CALENDAR_SYNC_TASK_NAME].schedule_type == PlatformScheduleType.CRON
-    assert by_name[CALENDAR_SYNC_TASK_NAME].cron == "*/15 * * * *"
+    assert by_name[TASK_CALENDAR_SYNC_TICK.name].schedule_type == PlatformScheduleType.CRON
+    assert by_name[TASK_CALENDAR_SYNC_TICK.name].cron == "*/15 * * * *"
     assert (
-        by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].schedule_type == PlatformScheduleType.CRON
+        by_name[TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK.name].schedule_type == PlatformScheduleType.CRON
     )
-    assert by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].cron == "*/15 * * * *"
+    assert by_name[TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK.name].cron == "*/15 * * * *"
     assert (
-        by_name[RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME].schedule_type == PlatformScheduleType.CRON
+        by_name[RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK.name].schedule_type == PlatformScheduleType.CRON
     )
-    assert by_name[CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME].queue_name == "crm"
-    assert by_name[CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME].cron == CRM_RECONCILE_DAILY_SUMMARY_CRON
+    assert by_name[CRM_RECONCILE_DAILY_SUMMARY.name].queue_name == "crm"
+    assert by_name[CRM_RECONCILE_DAILY_SUMMARY.name].cron == CRM_RECONCILE_DAILY_SUMMARY_CRON
 
 
 @pytest.mark.asyncio
@@ -338,23 +344,23 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
 
         async def list(self, company_id, filters):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
-            if filters.task_name == CALENDAR_SYNC_TASK_NAME:
+            if filters.task_name == TASK_CALENDAR_SYNC_TICK.name:
                 return [paused_task]
-            if filters.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME:
+            if filters.task_name == TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK.name:
                 return []
-            if filters.task_name == SPAN_BILLING_SETTLEMENT_TASK_NAME:
+            if filters.task_name == TASK_SPAN_BILLING_SETTLEMENT_TICK.name:
                 return []
-            if filters.task_name == RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME:
+            if filters.task_name == RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK.name:
                 return []
-            if filters.task_name == RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME:
+            if filters.task_name == RAG_REEMBED_STALE_DOCUMENTS_TICK.name:
                 return []
-            if filters.task_name == RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME:
+            if filters.task_name == RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK.name:
                 return []
-            if filters.task_name == CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME:
+            if filters.task_name == CRM_REEMBED_STALE_DOCUMENTS.name:
                 return []
-            if filters.task_name == CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME:
+            if filters.task_name == CRM_RECONCILE_DAILY_SUMMARY.name:
                 return []
-            if filters.task_name == FILE_RETENTION_PURGE_TASK_NAME:
+            if filters.task_name == TASK_FILE_RETENTION_PURGE_TICK.name:
                 return []
             raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
@@ -384,7 +390,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
                 schedule_id="schedule-2",
                 exists_in_redis=True,
                 status=ScheduledTaskStatus.PENDING,
-                task_name=CALENDAR_SYNC_TASK_NAME,
+                task_name=TASK_CALENDAR_SYNC_TICK.name,
                 cron="*/15 * * * *",
                 kwargs={
                     "schedule_task_id": schedule_task_id,
@@ -419,7 +425,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
         async def create(self, company_id, user_id, request):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
             assert user_id is None
-            if request.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME:
+            if request.task_name == TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK.name:
                 self.meeting_reminder_create = request
             return type(
                 "CreatedTask",
@@ -438,7 +444,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
     assert fake_service.resumed_schedule_task_id == "paused-1"
     assert fake_service.meeting_reminder_create is not None
     assert (
-        fake_service.meeting_reminder_create.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME
+        fake_service.meeting_reminder_create.task_name == TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK.name
     )
 
 
@@ -484,7 +490,7 @@ async def test_scheduler_startup_creates_span_billing_schedule_when_enabled() ->
     await on_startup(app=None, container=fake_container, settings=_FakeSettings())
 
     span_reqs = [
-        r for r in fake_service.created_requests if r.task_name == SPAN_BILLING_SETTLEMENT_TASK_NAME
+        r for r in fake_service.created_requests if r.task_name == TASK_SPAN_BILLING_SETTLEMENT_TICK.name
     ]
     assert len(span_reqs) == 1
     assert span_reqs[0].schedule_type == PlatformScheduleType.CRON

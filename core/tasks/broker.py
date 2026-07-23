@@ -14,15 +14,16 @@ from typing import Protocol, TypeAlias, TypedDict, cast
 
 import redis.asyncio as redis
 from redis.exceptions import ResponseError as RedisResponseError
-from taskiq import TaskiqScheduler, TaskiqState
+from taskiq import TaskiqState
 from taskiq.events import TaskiqEvents
 from taskiq.middlewares.simple_retry_middleware import SimpleRetryMiddleware
-from taskiq_redis import ListRedisScheduleSource, RedisAsyncResultBackend, RedisStreamBroker
+from taskiq_redis import RedisAsyncResultBackend, RedisStreamBroker
 
 from core.config import get_settings
 from core.logging import get_logger
 from core.logging.setup import setup_logging
 from core.tasks.logging_middleware import build_logging_middleware
+from core.tasks.registry import TaskSpec, get_task_spec, queue_broker, register_queue_broker
 from core.tasks.session_lock import session_lock_middleware
 from core.types import JsonValue
 
@@ -159,26 +160,21 @@ def create_broker(
         )
     )
 
+    register_queue_broker(effective_queue, broker)
+
     return broker
 
 
-def create_scheduler(broker: RedisStreamBroker) -> TaskiqScheduler:
-    """
-    Создает scheduler для broker.
+def resolve_broker_for_task(task: TaskSpec | str) -> RedisStreamBroker:
+    """Брокер очереди задачи. В producer-процессе создаётся kick-only брокер лениво."""
+    spec = get_task_spec(task)
+    existing = queue_broker(spec.queue)
+    if existing is not None:
+        if not isinstance(existing, RedisStreamBroker):
+            raise TypeError(f"queue {spec.queue!r} broker is not RedisStreamBroker")
+        return existing
+    return create_broker(queue_name=spec.queue)
 
-    Аргументы:
-        broker: TaskIQ broker
-
-    Возвращает:
-        TaskiqScheduler с Redis source
-    """
-    settings = get_settings()
-    broker_url = settings.tasks.broker_url
-
-    schedule_source = ListRedisScheduleSource(url=broker_url, prefix="platform_schedules")
-    scheduler = TaskiqScheduler(broker, sources=[schedule_source])
-
-    return scheduler
 
 
 def create_stale_tasks_recovery(queue_name: str = "taskiq") -> Callable[[], Awaitable[None]]:

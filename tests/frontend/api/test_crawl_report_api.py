@@ -129,13 +129,13 @@ async def test_crawl_report_run_domain_system(
 ):
     _ = search_system_context
 
-    async def _noop_enqueue(task_name: str, *args: object, **kwargs: object) -> None:
-        _ = task_name
+    async def _noop_enqueue(task: object, *args: object, **kwargs: object) -> None:
+        _ = task
         _ = args
         _ = kwargs
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _noop_enqueue,
     )
 

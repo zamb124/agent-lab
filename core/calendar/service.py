@@ -15,11 +15,13 @@ from zoneinfo import ZoneInfo
 import httpx
 from pydantic import ConfigDict, Field
 
+from core.calendar.events import CALENDAR_EVENT_CREATED
 from core.calendar.repositories import CalendarEventSqlRepository
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.config import get_settings
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.user_repository import UserRepository
+from core.events import publish_event_to_users
 from core.http import get_httpx_client
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
@@ -780,6 +782,20 @@ class CalendarService:
         event_timezone = ZoneInfo(event.timezone)
         event_start_local = event.start_at.astimezone(event_timezone)
         event_start_label = event_start_local.strftime("%d.%m.%Y %H:%M")
+        domain_payload = {
+            "event_id": event.event_id,
+            "company_id": event.company_id,
+            "start_at": event.start_at.isoformat(),
+            "end_at": event.end_at.isoformat(),
+            "timezone": event.timezone,
+            "title": event.title,
+        }
+        await publish_event_to_users(
+            invited_user_ids,
+            CALENDAR_EVENT_CREATED,
+            domain_payload,
+            company_id=event.company_id,
+        )
         for invited_user_id in invited_user_ids:
             await notify_user(
                 user_id=invited_user_id,

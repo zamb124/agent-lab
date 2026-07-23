@@ -57,6 +57,8 @@ _lint-py:
 	@bash scripts/check_variables_legacy.sh
 	@echo "=== lint: redis ttl canon ==="
 	uv run python scripts/check_redis_ttl_canon.py
+	@echo "=== lint: taskiq canon ==="
+	uv run python scripts/check_taskiq_canon.py
 
 lint-file:
 	@test -n "$(FILE)" || (echo "usage: make lint FILE=<path>  или  make lint <path>" >&2; exit 1)

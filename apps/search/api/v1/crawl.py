@@ -7,11 +7,9 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.search.dependencies import ContainerDep
-from apps.search_worker.broker import broker as search_worker_broker
-from apps.search_worker.tasks import crawl_tasks as _search_crawl_tasks
 from apps.search_worker.tasks.task_names import (
-    CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
-    CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
+    CRAWL_IMPORT_SEED_DOMAINS,
+    CRAWL_ORCHESTRATOR_TICK,
 )
 from core.crawl.models import (
     CrawlDomain,
@@ -34,17 +32,9 @@ from core.crawl.models import (
     UpsertStats,
 )
 from core.pagination import OffsetPage
+from core.tasks import enqueue
 
 router = APIRouter(prefix="/crawl", tags=["crawl"])
-
-_ = _search_crawl_tasks
-
-
-async def _kiq_task(task_name: str, *args: object, **kwargs: object) -> None:
-    task = search_worker_broker.find_task(task_name)
-    if task is None:
-        raise RuntimeError(f"task is not registered: {task_name}")
-    _ = await task.kiq(*args, **kwargs)
 
 
 @router.get("/profiles", response_model=OffsetPage[CrawlProfileWithIndex])
@@ -82,7 +72,7 @@ async def patch_crawl_profile(
 @router.post("/jobs", response_model=CrawlJobQueuedResponse, status_code=202)
 async def start_crawl_job(body: CrawlJobCreateRequest, container: ContainerDep) -> CrawlJobQueuedResponse:
     _ = container
-    await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, body.crawl_profile_id)
+    _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, body.crawl_profile_id)
     return CrawlJobQueuedResponse(crawl_profile_id=body.crawl_profile_id, status="queued")
 
 
@@ -201,7 +191,7 @@ async def create_crawl_domain(
         domain = await container.crawl_service.create_domain(crawl_profile_id, body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
+    _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
     return domain
 
 
@@ -241,7 +231,7 @@ async def add_crawl_domain_urls(
         stats = await container.crawl_service.add_domain_urls(crawl_domain_id, crawl_profile_id, body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
+    _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
     return stats
 
 
@@ -255,15 +245,15 @@ async def recrawl_crawl_url(
         crawl_url = await container.crawl_service.recrawl_url(crawl_url_id, crawl_profile_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
+    _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
     return crawl_url
 
 
 @router.post("/seed/import", response_model=SeedImportResult)
 async def import_crawl_seed(body: SeedImportRequest, container: ContainerDep) -> SeedImportResult:
     if body.seed_source == "tranco":
-        await _kiq_task(
-            CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
+        _ = await enqueue(
+            CRAWL_IMPORT_SEED_DOMAINS,
             body.crawl_profile_id,
             body.seed_source,
             body.tranco_limit,
@@ -286,8 +276,8 @@ async def import_tranco_seed_for_profile(
     if body.seed_source != "tranco":
         raise HTTPException(status_code=400, detail="seed_source must be tranco")
     _ = container
-    await _kiq_task(
-        CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
+    _ = await enqueue(
+        CRAWL_IMPORT_SEED_DOMAINS,
         crawl_profile_id,
         "tranco",
         body.tranco_limit,

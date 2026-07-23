@@ -55,7 +55,7 @@ from core.logging.attributes import (
     LOG_TASK_QUEUE_WAIT_MS,
     LOG_TASK_RETRY,
 )
-from core.tasks.kicker import build_log_labels
+from core.tasks.log_labels import build_log_labels
 from core.tasks.message_contract import (
     set_task_message_string_label,
     set_task_message_string_labels,

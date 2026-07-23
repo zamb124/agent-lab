@@ -214,7 +214,7 @@ class BillingService:
                     priority="high",
                     action_url="/billing",
                     data={
-                        "event": "billing.balance_blocked",
+                        "event": "billing/balance/blocked",
                         "company_id": cid,
                         "operation_code": operation_code,
                         "code": "billing_balance_blocked",

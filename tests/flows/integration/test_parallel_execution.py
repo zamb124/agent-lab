@@ -15,7 +15,8 @@ import uuid
 import pytest
 
 from apps.flows.src.models import FlowConfig
-from apps.flows.src.tasks.flow_tasks import process_flow_task
+from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
+from core.tasks import enqueue
 from tests.fixtures.taskiq_timeouts import TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS
 
 pytestmark = pytest.mark.real_taskiq
@@ -92,7 +93,8 @@ class TestParallelNodeExecution:
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
         overall_start = time.time()
-        task = await process_flow_task.kiq(
+        task = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id="test-user",
@@ -132,7 +134,8 @@ class TestParallelNodeExecution:
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-        task = await process_flow_task.kiq(
+        task = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id="test-user",
@@ -217,7 +220,8 @@ class TestParallelNodesMerge:
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-        task = await process_flow_task.kiq(
+        task = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id="test-user",

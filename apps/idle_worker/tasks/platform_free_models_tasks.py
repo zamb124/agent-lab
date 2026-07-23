@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 from apps.flows.config import get_settings
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import get_container
+from apps.idle_worker.tasks.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS
 from core.ai.free_pool import refresh_platform_free_models_cache
 from core.logging import get_logger
+from core.tasks import platform_task
 from core.types import JsonObject
 
 logger = get_logger(__name__)
 
 
-@idle_broker.task(task_name="refresh_platform_free_models_task", queue_name="idle")
+@platform_task(TASK_REFRESH_PLATFORM_FREE_MODELS)
 async def refresh_platform_free_models_task(
     schedule_task_id: str | None = None,
     company_id: str | None = None,

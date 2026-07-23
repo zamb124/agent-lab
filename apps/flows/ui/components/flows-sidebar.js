@@ -108,6 +108,7 @@ export class FlowsSidebar extends PlatformElement {
             <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/agents_logo.svg"
                 logo-text="Flows"
+                width="320px"
                 ?logo-opens-services=${true}
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}

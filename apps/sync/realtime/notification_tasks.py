@@ -6,16 +6,20 @@
 from __future__ import annotations
 
 from apps.sync.container import get_sync_container
-from apps.sync.realtime.broker import broker
+from apps.sync.realtime.task_names import (
+    DELIVER_CHANNEL_MESSAGE_NOTIFICATION,
+    DELIVER_SYNC_MENTION_NOTIFICATION,
+)
 from apps.sync.ws_presence import is_user_sync_ws_online
 from core.config import get_settings
 from core.logging import get_logger
+from core.tasks import platform_task
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
 
 
-@broker.task
+@platform_task(DELIVER_CHANNEL_MESSAGE_NOTIFICATION)
 async def deliver_channel_message_notification(
     recipient_user_id: str,
     channel_id: str,
@@ -72,7 +76,7 @@ async def deliver_channel_message_notification(
     )
 
 
-@broker.task
+@platform_task(DELIVER_SYNC_MENTION_NOTIFICATION)
 async def deliver_sync_mention_notification(
     recipient_user_id: str,
     channel_id: str,

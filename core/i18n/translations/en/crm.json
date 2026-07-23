@@ -31,6 +31,8 @@
         "entities": "Entities",
         "entity": "Entity",
         "entity_new": "New entity",
+        "tasks": "Tasks",
+        "task": "Task",
         "graph": "Graph",
         "suggests": "AI suggestions",
         "access_requests": "Access requests",
@@ -43,9 +45,24 @@
     },
     "bottom_nav": {
         "notes": "Notes",
+        "tasks": "Tasks",
         "graph": "Graph",
         "entities": "Entities",
         "profile": "Profile"
+    },
+    "tasks_page": {
+        "title": "Tasks",
+        "create": "Create task",
+        "create_title": "New task",
+        "empty": "No tasks in this namespace yet. Create the first one.",
+        "field_title": "Title",
+        "field_description": "Description",
+        "field_priority": "Priority",
+        "field_due": "Due date",
+        "priority_low": "Low",
+        "priority_normal": "Normal",
+        "priority_high": "High",
+        "priority_urgent": "Urgent"
     },
     "workspace_picker": {
         "title": "Namespace",
@@ -1165,6 +1182,8 @@
             "update_failed": "Failed to update Entity",
             "updated": "Entity updated"
         },
+        "activity_task_created": "Task created",
+        "activity_task_create_failed": "Failed to create task",
         "entity_type": {
             "created": "Entity type created",
             "public_fields_update_failed": "Public fields update failed",

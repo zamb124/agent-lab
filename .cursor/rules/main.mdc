@@ -142,7 +142,7 @@ alwaysApply: true
 | Namespace | `namespace`, `Namespace` | Workspace-slug внутри `company_id`; `kind ∈ {company_workspace, personal, technical}`; personal slug `user-{user_id}`, `owner_user_id` обязателен. UI copy — workspace/space; API/DB — `namespace`/`namespaces`. Канон → **`namespace.mdc`**. |
 | RAG/vector namespace | `namespace_id` | Id векторного каталога; для platform Namespace обычно равен `Namespace.name` (не `{company_id}_{namespace}`). Не подменяет CRM/Sync/Office `namespace` как продукт. |
 | Flow | `flow_id`, `FlowConfig`, `flow` | Исполняемый граф. Не `agent_id`; термин `agent` допустим только в A2A (`agent-card`, wire `ROLE_AGENT`, helpers вроде `new_agent_text_message`) и legacy test names до миграции. |
-| Flow employee | `flow_employee_{flow_id}` (user_id), `attributes.kind=flow_employee` | Flow как сотрудник — обычный `User` (двустороннее членство в `company.members`), а не отдельная сущность Agent. Ось идентичности агента одна — `user_id`; `AgentActor`/`AgentAssignment`/`platform-agent:*` запрещены. У сотрудника обязателен `attributes.curator_user_ids` (минимум один человек). Хелперы — `core.identity.flow_employee`. |
+| Flow employee | `flow_employee_{flow_id}` (user_id), `attributes.kind=flow_employee` | Flow как сотрудник — обычный `User` (двустороннее членство в `company.members`), а не отдельная сущность Agent. Ось идентичности агента одна — `user_id`; `AgentActor`/`AgentAssignment`/`platform-agent:*` запрещены. У сотрудника обязателен `attributes.curator_user_ids` (минимум один человек). Хелперы — `core.identity.flow_employee`. Inbox / Sync DM/@mention / WorkItem / матрица готовности → **`flow_employee.mdc`**. |
 | Branch | `branch_id`, `BranchConfig`, `branch` | Вариант графа внутри `flow_id`; не `skill_id`, не `scenario_id`. |
 | Agent Skill | `agent_skill_id`, `AgentSkill` | Progressive procedure pack для `llm_node` (body/tools/files); UI copy — Skill; не `skill_id`, не `BranchConfig`, не `AgentToolkit`. Детали → **`agent_skills.mdc`**. |
 | Node | `node_id`, `NodeConfig`, `node` | `node_type` для типа ноды; не голый `id`, не голый `type` в доменном коде. |
@@ -164,7 +164,8 @@ alwaysApply: true
 | Payment transaction | `transaction_id`, `Transaction` | `payment_provider`, `external_payment_id`, `payment_url`; не `payment_id`. |
 | API key | `key_id`, `ApiKeyRecord` | `key_hash`, `key_prefix`, `scopes`, `created_by`; не `id`. |
 | Schedule | `schedule_task_id`, `schedule_id`, `PlatformScheduledTask` | `schedule_task_id` — запись платформенного scheduler/API/TaskIQ kwargs/state, `schedule_id` — id RedisScheduleSource; `taskiq_task_id` — id сообщения TaskIQ. Запрещены `id`, `task_id`, `scheduler_task_id`, `scheduled_task_id` для schedule-записи. |
-| UI event | `UIEvent.id`, `type`, `payload`, `meta` | `payload` разрешён только для event envelope/transport. Доменную часть внутри payload называть конкретно. |
+| Platform event | `PlatformEvent` (`event_id`, `type`, `payload`, `meta`, `delivery?`) | Envelope шины `platform:events` / WS frame. Не `UIEvent`. |
+| Client pending frames (flows/A2A) | `ui_events_pending`, `PendingUIEvent` | Pending client frames в `ExecutionState`; **≠** шина `platform:events`. |
 | WorkItem (ядро задач) | `work_item_id`, `WorkItem` | `kind`, `state`, `board_id`, `board_column_id`, `assignment`, `created_by`, `blocking`, `hooks` (`assigned`/`comment`/`completed`), `resolution`, `links`, `variables: VariableMap`, `attachments: list[FileRef]`; не `task_id`, не `operator_task_id`. Детали → **`worktracker.mdc`**. |
 | Work queue | `work_queue_id`, `WorkQueue`, `work_queue_slug` | `WorkQueueMember(work_queue_id, user_id, role)`; полная замена `OperatorQueues`; не `queue_id`. |
 | Board / column | `board_id`, `Board`, `board_column_id`, `BoardColumn` | `label`, `state`, `position`; единая доска для людей/операторов/CRM. |
@@ -194,7 +195,7 @@ alwaysApply: true
 | Тип сущности | `<entity>_type` или `kind` по закрытому enum | голый `type` в доменной модели, кроме внешней спеки |
 | Произвольные кастомные поля | `attributes` | `attrs`, `data`, `payload`, если это не envelope |
 | Служебные метаданные | `metadata` | `data`, `attrs` |
-| Event/transport body | `payload` | `data`, если это platform `UIEvent`/WS envelope |
+| Event/transport body | `payload` | `data`, если это platform `PlatformEvent`/WS envelope |
 | HTTP request/response JSON | `request_body`, `response_payload` | `data`, `result`, `raw`, `response` без уточнения |
 
 ### Порядок миграции имён
@@ -339,6 +340,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 - **Тесты:** единственный мок — `MockLLM`; реальные Postgres/Redis/MinIO/TaskIQ; тестовые id — через фикстуру `unique_id`; внутренние компоненты не мокаются → **`testing.mdc`**.
 - **Миграции:** у каждой сервисной БД своё дерево Alembic; один физический URL во все `DATABASE__*_URL` — нельзя → **`migrations.mdc`**.
 - **Терминология:** **flow** (`flow_id`), **`llm_node`** (не `react_node`), **`user_id`** → **`domain_naming.mdc`**.
+- **События платформы:** единая шина Redis Stream `platform:events` (`core/events`): один `publish_event*` из любого процесса, UI-доставка — tail-consumer WS-форвардера, durable-потребители — consumer groups (первая — `flows`: триггеры `platform_event` + employee inbox). Вторая шина / Pub/Sub для событий запрещены → **`events.mdc`**.
 - **Уведомления:** только `notify_user` из `core.websocket.publisher`; персистентного хранилища нет → **`notifications.mdc`**.
 - **Scheduler:** control-plane в `apps/scheduler`; вызов из других сервисов — только `core/clients/scheduler_client.py`, не прямой `httpx`; изоляция по `company_id` → **`taskiq.mdc`**.
 - **Трейсинг:** OTEL `trace_id`+`parent_span_id`, БД `platform_tracing`, корневой span сущности через `resource_root_span` → **`tracing.mdc`**.
@@ -363,6 +365,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | Сессии | `session.mdc` |
 | Инвайты | `invites.mdc` |
 | Flows: сервис, ноды, триггеры, ресурсы | `flows.mdc` |
+| Flow как сотрудник (identity, inbox, Sync, WorkItem) | `flow_employee.mdc` |
 | Runtime flows: ноды, tools, branches, FlowInterrupt | `flows_logic.mdc` |
 | Agent handoff / handback между flows | `handoff.mdc` |
 | ExecutionState | `execution_state.mdc` |
@@ -378,6 +381,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | Office (OnlyOffice) | `office.mdc` |
 | Voice gateway + Speech providers | `voice.mdc` |
 | Frontend: Lit 3, helpers, i18n, design system | `frontend.mdc` |
+| Единая шина событий платформы (core/events, platform:events, каталог, consumer groups) | `events.mdc` |
 | UI Factories + Events (createAsyncOp/Resource/CursorList/Facets/Form, bus, push) | `ui_factories.mdc` |
 | UI Components (core UI Kit, модалки, sidebar, breadcrumbs, platform-field) | `ui_components.mdc` |
 | Типы данных атрибутов | `data-types.mdc` |

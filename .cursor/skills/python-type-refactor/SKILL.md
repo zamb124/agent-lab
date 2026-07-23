@@ -23,7 +23,7 @@ description: Бескомпромиссный Staff Python Architect для ст
 2. Все `.cursor/rules/*.mdc` — сначала список и заголовки, затем полностью файлы затронутых доменов.
 3. Для backend-типизации почти всегда полностью нужны: `architecture.mdc`, `database.mdc`, `configuration.mdc`, `testing.mdc`, `testing_invariants.mdc`, `logging.mdc`, `tracing.mdc`.
 4. Для конкретного сервиса дополнительно читай его правило: `flows.mdc`, `crm.mdc`, `sync.mdc`, `rag.mdc`, `office.mdc`, `voice.mdc`, `browser`-связанные правила, если затронуты эти зоны.
-5. Если правка задевает UI/event/API-контракты, читай `frontend.mdc`, `ui_events.mdc`, `ui_factories.mdc`, `ui_components.mdc`, `data-types.mdc`.
+5. Если правка задевает UI/event/API-контракты, читай `frontend.mdc`, `events.mdc`, `ui_factories.mdc`, `ui_components.mdc`, `data-types.mdc`.
 
 Команды для первичного обзора:
 

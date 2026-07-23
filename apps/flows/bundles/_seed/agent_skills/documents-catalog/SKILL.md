@@ -1,28 +1,29 @@
 ---
 name: documents-catalog
-description: Browse, search, read and link Documents library catalogs and documents. Platform builtins for Flows llm_node and Lara — tags documents/office/catalog.
-allowed-tools: documents_list_catalog documents_find documents_read documents_get_link
+description: Browse, search, read, link, administer Documents catalogs (folders, members, ACL, public links) and catalog RAG index. Platform builtins for Flows llm_node and Lara.
+allowed-tools: documents_list_catalog documents_find documents_read documents_get_link documents_create_catalog documents_update_catalog documents_list_catalog_members documents_add_catalog_member documents_get_access documents_patch_access documents_rotate_public_link documents_catalog_rag_status documents_catalog_rag_enable documents_catalog_rag_disable documents_catalog_rag_rebuild
 ---
 
 # Documents catalog
 
 ## Goal
 
-Navigate the Documents library (catalogs + documents) without inventing ids. These tools are platform builtins: attach them on any `llm_node.tools` in Flows, or unlock via this skill.
+Navigate and administer the Documents library (catalogs + documents) without inventing ids.
 
 ## Procedure
 
-1. Browse — `documents_list_catalog` without `catalog_id` for root catalogs; with `catalog_id` for child catalogs + documents in that folder (non-recursive).
-2. Find — `documents_find(query, catalog_id?, mode=auto|semantic|lexical)`. Prefer `auto`: semantic when the catalog has RAG index enabled, otherwise lexical title search. If explicit `semantic` fails with `rag_index_disabled`, retry with `lexical` or `auto`.
-3. Read content — `documents_read(file_id, page_start, page_end)` via FileReader pagination.
-4. Share path — `documents_get_link(file_id, kind=editor|preview)` for a UI URL. Do not claim a public internet share was created.
+1. Browse — `documents_list_catalog` without `catalog_id` for root catalogs; with `catalog_id` for children + documents (non-recursive).
+2. Find — `documents_find(query, catalog_id?, mode=auto|semantic|lexical)`. Prefer `auto`.
+3. Read — `documents_read(file_id, page_start, page_end)`.
+4. SPA path — `documents_get_link(file_id, kind=editor|preview)`. Does **not** create a public internet share.
+5. Folders — `documents_create_catalog` / `documents_update_catalog`.
+6. Members — `documents_list_catalog_members` → resolve `user_id` via `team-directory` → `documents_add_catalog_member`.
+7. ACL — `documents_get_access` / `documents_patch_access` (`resource_kind=catalog|document`).
+8. Public share — enable link via patch, then `documents_rotate_public_link` for a fresh `/documents/p/…` URL.
+9. Catalog RAG — `documents_catalog_rag_status` → `enable` / `rebuild` / `disable`; then semantic `documents_find`.
 
 ## Rules
 
 - Never invent `catalog_id` or `file_id`.
-- Mutations (create/edit file, replace text, templates, viz) — load skill `document-workspace` (or attach those tools on the node).
-- Catalog admin, members, public link rotate, trash — no tools here; explain the Documents UI path.
-
-## Cross-domain
-
-Company vector knowledge ingest outside a catalog index — skill `knowledge-rag`. External web — `web-research`.
+- File create/edit/trash — load `document-workspace`.
+- Company knowledge outside catalog index — `knowledge-rag`.

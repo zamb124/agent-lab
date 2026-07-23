@@ -21,22 +21,17 @@ from apps.flows.src.services.mcp_sync import (
 )
 from apps.flows.src.services.platform_assistant_skills import seed_platform_assistant_skills
 from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
-from apps.flows_worker.broker_core import broker
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from core.tasks import platform_task
 from core.types import JsonObject
 
 logger = get_logger(__name__)
 
 
-@broker.task(
-    task_name=TASK_INIT_COMPANY_RESOURCES,
-    retry_on_error=True,
-    max_retries=3,
-    queue_name="flows_worker"
-)
+@platform_task(TASK_INIT_COMPANY_RESOURCES)
 async def init_company_resources(
     company_id: str,
     company_name: str = "",

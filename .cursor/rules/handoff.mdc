@@ -36,12 +36,14 @@ In-process `run_flow`: child `unique_id` = `child_context_id.removeprefix("conte
 ## Channel layer — единственное место маршрутизации user reply
 
 1. **`BaseChannel._prepare_task_params`**: parent с `HandoffInterrupt` → `is_handoff_user_reply=True` + child routing fields (`resolve_active_handoff_child`).
-2. **`create_task`**: **`resolve_execution_target`** материализует `FlowExecutionTarget` (flow_id, session_id, context_id, branch_id, is_resume) **до** `kiq_task_name_with_context`.
+2. **`create_task`**: **`resolve_execution_target`** материализует `FlowExecutionTarget` (flow_id, session_id, context_id, branch_id, is_resume) **до** `enqueue(TASK_PROCESS_FLOW, ...)`.
 3. User reply при active handoff → **child session**, не parent.
 4. **`process_task` worker** — dumb executor; **не** патчит routing (удалён legacy `apply_active_handoff_routing`).
 5. **`_handle_handoff`**: depth++, `InterruptManager.apply_handoff_interrupt`, `ChildWorkflowLink(handoff=True)`, durable `handoff_initiated`, `kickoff_child_flow`.
 6. **`complete_handback`**: tool result в parent messages, merge `handback_return_variables`, `handback_completed`, parent `process_flow_task` resume.
 7. **Cancel parent** → `_cancel_handoff_children` (рекурсивно по `child_workflows` с `handoff=True`).
+
+**Flow-employee identity на handoff:** последующие user replies к active child идут через `create_task` → там `resolve_execution_context` для child-flow. Первый `kickoff_child_flow` сейчас передаёт `context_data=self.context.to_dict()` (parent/channel), без employee JWT child — долг → **`flow_employee.mdc`**.
 
 Файлы: `apps/flows/src/channels/base.py`, `apps/flows/src/channels/types.py` (`FlowExecutionTarget`, `PreparedTaskParams`), `apps/flows/src/services/handoff_orchestrator_service.py`.
 
@@ -113,6 +115,6 @@ In-process `run_flow`: child `unique_id` = `child_context_id.removeprefix("conte
 
 Полные LLM-driven E2E выше используют детерминированный MockLLM только на границе выбора tool-call. Строгий kernel/API слой отдельно обязан работать без test doubles; этот инвариант защищён AST-gate.
 
-**`sync_tools`:** `handoff_orchestrator_service` в patch list для `kiq_task_name_with_context` (`tests/conftest.py`).
+**`sync_tools`:** `handoff_orchestrator_service` в patch list для `enqueue` (`tests/conftest.py`).
 
 Запрещено: `monkeypatch` settings для depth (использовать `assert_handoff_depth_allowed` или default config).

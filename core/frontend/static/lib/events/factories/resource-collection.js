@@ -129,6 +129,7 @@ export function createResourceCollection(options) {
         ? options.extraInitial
         : null;
     const extraReducer = typeof options.extraReducer === 'function' ? options.extraReducer : null;
+    const extraEffect = typeof options.extraEffect === 'function' ? options.extraEffect : null;
     const extraEventsConfig = options.extraEvents && typeof options.extraEvents === 'object'
         ? options.extraEvents
         : null;
@@ -435,6 +436,12 @@ export function createResourceCollection(options) {
     }
 
     async function effect(event, ctx) {
+        if (extraEffect) {
+            const handled = await extraEffect(event, ctx, events);
+            if (handled === true) {
+                return;
+            }
+        }
         switch (event.type) {
             case events.LIST_REQUESTED: {
                 if (!operations.includes('list')) return;

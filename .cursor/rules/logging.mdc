@@ -24,7 +24,7 @@ alwaysApply: false
 | TaskIQ из system scope | `LoggingMiddleware.pre_send` + WARN `task.kiq_request_id_missing` | `kiq-orphan:<uuid>` |
 | Scheduler dispatch | `apps/scheduler/dispatch.py` | `sched:<uuid>` |
 | Background через `run_with_log_context` | наследует/генерирует по `background_kind` | как у источника или `<kind>:<uuid>` |
-| UI event delivery | `core/websocket/manager.py::_deliver_envelope` | из `event.meta.request_id` или `ui-deliver:<uuid>` |
+| UI event delivery | `core/websocket/manager.py::deliver_platform_event` | из `event.meta.request_id` или `ui-deliver:<uuid>` |
 
 ### Прокидывание между сервисами
 
@@ -34,7 +34,7 @@ alwaysApply: false
 | Dev inter-service proxy | `X-Request-Id` | `core/middleware/dev_inter_service_proxy.py` | `AccessLogMiddleware` |
 | TaskIQ `kiq()` | `message.labels["request_id"]` | `LoggingMiddleware.pre_send` | `LoggingMiddleware.pre_execute` |
 | Scheduler → worker | `task.labels["request_id"]` | `apps/scheduler/dispatch.py` | `LoggingMiddleware.pre_execute` |
-| UI event Pub/Sub | `meta.request_id` | `core/ui_events/dispatcher.py` | `core/websocket/manager.py::_deliver_envelope` |
+| Platform event stream | `meta.request_id` | `core/events/publisher.py` | `core/websocket/manager.py::deliver_platform_event` |
 
 ### Контракт `enforce_required_fields`
 
@@ -176,9 +176,9 @@ HTTP access — `AccessLogMiddleware` пишет одну строку `event="h
 
 Голый `asyncio.create_task(...)` запрещён. Только `core.utils.background.run_with_log_context(coro, name=..., background_kind=...)`. Из request scope — `request_id`/`trace_id`/`user_id`/`company_id` наследуются автоматически (`background_kind` опционален). Из system scope — `background_kind` обязателен (`startup`/`recovery`/`polling`/`cron`); генерирует `request_id="<kind>:<uuid>"`, `trace_id="<kind>:<uuid>"`.
 
-### Redis Pub/Sub UI events
+### Шина `platform:events` (request_id в meta)
 
-`core/ui_events/dispatcher.py::publish_ui_event_*` автоматически проставляет `meta.trace_id` и `meta.request_id` из лог-контекста (можно явно через kwargs). Подписчик `core/websocket/manager.py::_deliver_envelope` делает `enter_request_scope` с этими полями (или генерирует `ui-deliver:<uuid>`).
+`core/events/publisher.py::publish_event_*` автоматически проставляет `meta.trace_id` и `meta.request_id` из лог-контекста (можно явно через kwargs). Подписчик `core/websocket/manager.py::deliver_platform_event` делает `enter_request_scope` с этими полями (или генерирует `ui-deliver:<uuid>`).
 
 ### Inter-service HTTP
 
@@ -232,7 +232,7 @@ Exit 1 на нарушении:
 8. Мягкий счётчик `logger.<level>(f"...")` — лимит снижается с миграцией на kwargs.
 9. `enter_request_scope(...)` — только в платформенных точках входа.
 10. `clear_log_context()` запрещён вне `core/logging/**`.
-11. Прямые `task.kiq()` — info, не запрет (`pre_send` инжектит). Для документирования предпочтителен `core.tasks.kicker.kiq_with_context(task, *args, **kwargs)`.
+11. Прямые `.kiq(` / `find_task(` / `AsyncKicker(` / `create_broker(` вне whitelist — **FAIL**. Канон постановки в очередь — `core.tasks.enqueue`. Полный реестр/wiring — `scripts/check_taskiq_canon.py` / `make check-taskiq-canon`.
 
 ## Сбор логов
 

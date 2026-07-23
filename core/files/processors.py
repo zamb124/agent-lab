@@ -8,22 +8,21 @@ import re
 import uuid
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 from core.context import require_active_company
 from core.files.default_storage import initialize_default_storage
+from core.files.file_repository import FileRepository
 from core.files.media.transcriber import MediaTranscriber
 from core.files.models import (
     AudioRecord,
     AudioTranscriptionStatus,
+    FileRecord,
     FileStatus,
 )
 from core.files.s3_client import S3Client, S3ClientFactory
 from core.logging import get_logger
 from core.types import JsonObject
-
-if TYPE_CHECKING:
-    from core.files.file_repository import FileRepository
 
 logger = get_logger(__name__)
 FILE_MESSAGE_RE = re.compile(
@@ -33,13 +32,11 @@ FILE_MESSAGE_RE = re.compile(
     re.MULTILINE,
 )
 
-_default_audio_processor: "AudioProcessor | None" = None
+_default_audio_processor: AudioProcessor | None = None
 _default_file_repository: FileRepository | None = None
 
 
 def _to_ascii_s3_metadata(metadata: JsonObject) -> dict[str, str]:
-    from urllib.parse import quote
-
     out: dict[str, str] = {}
     for raw_key, raw_value in metadata.items():
         key = raw_key.strip()
@@ -54,8 +51,6 @@ def _to_ascii_s3_metadata(metadata: JsonObject) -> dict[str, str]:
 
 
 def format_file_message(file_record: object) -> str:
-    from core.files.models import FileRecord
-
     if not isinstance(file_record, FileRecord):
         raise TypeError("file_record must be FileRecord")
     size_mb = file_record.file_size / (1024 * 1024)

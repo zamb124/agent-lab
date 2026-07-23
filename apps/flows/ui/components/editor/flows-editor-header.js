@@ -338,6 +338,43 @@ export class FlowsEditorHeader extends PlatformElement {
                 pointer-events: none;
             }
 
+            .employee-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                height: var(--flows-chrome-control-size);
+                padding: 0 var(--space-2) 0 var(--space-1);
+                border-radius: var(--radius-full);
+                border: 1px solid var(--border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                letter-spacing: 0.02em;
+                cursor: pointer;
+                transition: var(--motion-transition-interactive);
+            }
+
+            .employee-chip:hover {
+                border-color: var(--flows-employee-chip-active-border);
+                color: var(--text-primary);
+                background: var(--glass-solid-medium);
+            }
+
+            .employee-chip[data-active='true'] {
+                color: var(--accent);
+                border-color: var(--flows-employee-chip-active-border);
+                background: var(--flows-employee-chip-active-bg);
+                box-shadow: var(--flows-employee-badge-glow);
+            }
+
+            .employee-chip-label {
+                max-width: 9rem;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
             @media (max-width: 767px) {
                 .desktop-only-actions {
                     display: none;
@@ -577,6 +614,13 @@ export class FlowsEditorHeader extends PlatformElement {
         return html`
             ${this._isMobile
                 ? this._renderMenuButton({
+                    label: this.t('editor_header.menu_employee'),
+                    icon: 'ai',
+                    onClick: this._openEmployeeSettings,
+                })
+                : nothing}
+            ${this._isMobile
+                ? this._renderMenuButton({
                     label: this.t('editor_header.menu_settings'),
                     icon: 'settings',
                     onClick: this._openFlowSettings,
@@ -772,6 +816,57 @@ export class FlowsEditorHeader extends PlatformElement {
             return;
         }
         this.openModal('flows.flow_edit', { flowId: this.flowId });
+    }
+
+    _openEmployeeSettings() {
+        this._closeOverflow();
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return;
+        }
+        this.openModal('flows.employee_settings', { flowId: this.flowId });
+    }
+
+    _isEmployeeEnabled(state, flow) {
+        const fromConfig =
+            isPlainObject(state.flowConfig) && isPlainObject(state.flowConfig.employee)
+                ? state.flowConfig.employee.enabled === true
+                : false;
+        if (fromConfig) {
+            return true;
+        }
+        return Boolean(
+            flow && isPlainObject(flow.employee) && flow.employee.enabled === true,
+        );
+    }
+
+    _renderEmployeeChip(active) {
+        const title = active
+            ? this.t('editor_header.employee_active_aria')
+            : this.t('editor_header.employee_settings');
+        const label = active
+            ? this.t('editor_header.employee_chip_active')
+            : this.t('editor_header.employee_chip');
+        return html`
+            <article
+                class="employee-chip"
+                role="button"
+                tabindex="0"
+                data-active=${active ? 'true' : 'false'}
+                data-action="employee-settings"
+                aria-label=${title}
+                title=${title}
+                @click=${this._openEmployeeSettings}
+                @keydown=${(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        this._openEmployeeSettings();
+                    }
+                }}
+            >
+                <platform-icon name="ai" size="14"></platform-icon>
+                <span class="employee-chip-label">${label}</span>
+            </article>
+        `;
     }
 
     _openPreviewShare() {
@@ -994,7 +1089,7 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems, issues) {
+    _renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems, issues, employeeActive) {
         const showBranches = typeof this.flowId === 'string' && this.flowId.length > 0;
         return html`
             <div class="chrome-row chrome-row-primary">
@@ -1053,6 +1148,9 @@ export class FlowsEditorHeader extends PlatformElement {
                         ></platform-help-hint>
                         ${this._renderProblemsButton(issues)}
                         <div class="desktop-only-actions">
+                            ${typeof this.flowId === 'string' && this.flowId.length > 0
+                                ? this._renderEmployeeChip(employeeActive)
+                                : nothing}
                             ${this._renderHeaderIconButton({
                                 title: this.t('editor_header.flow_settings'),
                                 icon: 'settings',
@@ -1108,13 +1206,14 @@ export class FlowsEditorHeader extends PlatformElement {
         const branchIds = flow && flow.branches ? Object.keys(flow.branches) : [];
         const branchItems = this._branchItems(flow, branchIds);
         const issues = this._dataflowIssues(state);
+        const employeeActive = this._isEmployeeEnabled(state, flow);
 
         if (this._problemsOpen) {
             queueMicrotask(() => this._syncProblemsPortal());
         }
 
         return html`
-            ${this._renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems, issues)}
+            ${this._renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems, issues, employeeActive)}
             ${this._renderBranchesRow(branchItems)}
         `;
     }

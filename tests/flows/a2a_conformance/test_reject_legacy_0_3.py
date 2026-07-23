@@ -6,7 +6,6 @@ import uuid
 
 import pytest
 
-from tests.flows._a2a_v1 import A2A_HEADERS, a2a_headers
 from tests.flows.a2a_conformance.helpers.flows import create_echo_flow, delete_flow
 from tests.flows.a2a_conformance.helpers.rpc import post_rpc
 

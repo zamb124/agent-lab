@@ -16,6 +16,7 @@ from core.config.models import (
     CalendarSyncConfig,
     CallsConfig,
     DatabaseConfig,
+    EventsConfig,
     FilesConfig,
     GoogleWorkspaceConfig,
     LegalConfig,
@@ -117,6 +118,7 @@ class BaseSettings(PydanticBaseSettings):
     tracing: TracingConfig = Field(default_factory=TracingConfig)
     billing: BillingConfig = Field(default_factory=BillingConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
+    events: EventsConfig = Field(default_factory=EventsConfig)
     calendar_sync: CalendarSyncConfig = Field(default_factory=CalendarSyncConfig)
     mail_sync: MailSyncConfig = Field(default_factory=MailSyncConfig)
     mail: MailConfig = Field(default_factory=MailConfig)
@@ -301,6 +303,10 @@ class _SettingsProxy:
     @property
     def tasks(self) -> TasksConfig:
         return get_settings().tasks
+
+    @property
+    def events(self) -> EventsConfig:
+        return get_settings().events
 
     @property
     def calendar_sync(self) -> CalendarSyncConfig:

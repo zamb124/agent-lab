@@ -500,10 +500,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         });
 
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._reloadAll());
-        this.useEvent('crm/entity/updated', () => this._reloadCurrentMode());
-        this.useEvent('crm/entity/removed', () => this._reloadAll());
-        this.useEvent('crm/relationship/created', () => this._reloadCurrentMode());
-        this.useEvent('crm/relationship/removed', () => this._reloadCurrentMode());
+        // Merge меняет топологию рёбер — one-shot full reload (граф не patchable).
         this.useEvent('crm/entity_merge/succeeded', () => this._reloadAll());
 
         this.useEvent(this._timelineBoundsOp.op.events.SUCCEEDED, (event) => this._onTimelineBoundsLoaded(event.payload.result));

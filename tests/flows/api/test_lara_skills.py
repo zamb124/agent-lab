@@ -170,6 +170,7 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 "work-tracking",
                 "agent-planning",
                 "google-sheets",
+                "team-directory",
             }
             work = _load_payload(
                 await load_agent_skill.run({"agent_skill_id": "work-tracking"}, state)
@@ -188,6 +189,7 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 {
                     "work_item_create",
                     "work_item_list",
+                    "work_item_list_mine",
                     "work_item_complete",
                     "schedule_cron_task",
                     "schedule_interval_task",
@@ -201,10 +203,20 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 await load_agent_skill.run({"agent_skill_id": "sync-platform"}, state)
             )
             assert sync["depth"] == 0
-            assert _tools_unlocked(sync) == [
+            assert set(sync["depends_on"]) == {
+                "sync-messaging",
+                "sync-channels",
+                "sync-threads",
+                "team-directory",
+            }
+            assert _tools_unlocked(sync) == []
+            sync_messaging = _load_payload(
+                await load_agent_skill.run({"agent_skill_id": "sync-messaging"}, state)
+            )
+            assert set(_tools_unlocked(sync_messaging)) >= {
                 "sync_list_messages",
                 "sync_send_message",
-            ]
+            }
 
             documents = _load_payload(
                 await load_agent_skill.run(
@@ -218,6 +230,7 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 "documents-catalog",
                 "diagrams-viz",
                 "knowledge-rag",
+                "team-directory",
             }
             documents_catalog = _load_payload(
                 await load_agent_skill.run(
@@ -268,7 +281,13 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                 )
             )
             assert worktracker["depth"] == 0
-            assert worktracker["depends_on"] == ["work-tracking"]
+            assert set(worktracker["depends_on"]) == {
+                "work-tracking",
+                "work-items",
+                "work-queues",
+                "work-boards",
+                "team-directory",
+            }
 
             console = _load_payload(
                 await load_agent_skill.run(

@@ -1,13 +1,6 @@
-"""
-Точка входа для TaskIQ flows worker.
+"""Flows Worker (очередь ``flows_worker``).
 
 Запуск: taskiq worker apps.flows_worker.worker:worker_app
-
-Этот модуль:
-1. Инициализирует settings сервисов
-2. Импортирует worker app из apps.flows_worker.broker
-3. Регистрирует startup/shutdown события
-4. Регистрирует tasks всех сервисов
 """
 
 # ruff: noqa: E402, I001
@@ -22,47 +15,44 @@ _flow_worker_settings = FlowSettings.model_validate(_merged_flows)
 setup_worker_logging_early("flows_worker", logging_config=_flow_worker_settings.logging)
 set_flow_settings(_flow_worker_settings)
 
-import asyncio  # noqa: E402
-import os  # noqa: E402
+import os
+import socket
 
-os.environ["FLOWS_WORKER_REGISTER_TASKS"] = "true"
+from taskiq import TaskiqState
 
-from taskiq import TaskiqState  # noqa: E402
-
-from apps.flows.config import get_settings  # noqa: E402
-from apps.flows_worker.task_registry import recovery_handler, worker_app  # noqa: E402
-from apps.flows.src.container import FlowContainer, get_container  # noqa: E402
-from core.billing import set_billing_service  # noqa: E402
-from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro  # noqa: E402
-from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once  # noqa: E402
-from core.clients.llm.mock import configure_mock_llm_redis, get_or_create_global_mock_llm  # noqa: E402
-from core.config import set_settings as set_core_settings  # noqa: E402
-from core.config.testing import is_testing  # noqa: E402
-from core.files.processors import initialize_default_processors  # noqa: E402
-from core.files.writer import FileWriter  # noqa: E402
-from core.logging import get_logger  # noqa: E402
-from core.tasks.broker import register_worker_events  # noqa: E402
-from core.tracing import setup_tracing  # noqa: E402
-from core.tracing.tracer import set_span_repository, set_tracing_service_name  # noqa: E402
-from core.utils.background import run_with_log_context  # noqa: E402
+from apps.flows.config import get_settings
+from apps.flows.src.container import get_container
+from apps.platform_tasks.wiring import wire_worker
+from core.billing import set_billing_service
+from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro
+from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
+from core.clients.llm.mock import configure_mock_llm_redis, get_or_create_global_mock_llm
+from core.config import set_settings as set_core_settings
+from core.config.testing import is_testing
+from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
+from core.files.processors import initialize_default_processors
+from core.files.registry import default_retention_for_source
+from core.files.writer import FileWriter
+from core.logging import get_logger
+from core.tasks.worker_bootstrap import (
+    build_worker,
+    connect_redis_with_backoff,
+    init_worker_tracing,
+)
+from core.utils.background import run_with_log_context
 
 logger = get_logger(__name__)
 
-_worker_container: FlowContainer | None = None
+broker = wire_worker("flows_worker")
 
 
-async def _initialize_worker_state(state: TaskiqState, service_name: str) -> None:
-    """Инициализация контейнера при старте worker."""
-    global _worker_container
-
+async def _startup(state: TaskiqState) -> None:
+    service_name = "flows_worker"
     settings = get_settings()
     set_core_settings(settings)
 
     container = get_container()
-    _worker_container = container
     state.container = container
-
-    await recovery_handler()
 
     set_billing_service(container.billing_service)
     logger.info("worker.billing_initialized", service=service_name)
@@ -78,9 +68,6 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
 
     initialize_default_processors(container.file_repository)
 
-    from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
-    from core.files.registry import default_retention_for_source
-
     FileWriter.configure_process_upload(
         files_service=container.files_service,
         default_spec=FileCreateSpec(
@@ -92,37 +79,19 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
 
     container.use_worker = False
 
-    logger.info("worker.redis_connecting", service=service_name)
-    max_retries = 5
-    for attempt in range(max_retries):
-        try:
-            await container.redis_client.connect()
-            logger.info("worker.redis_connected", service=service_name)
-            break
-        except Exception:
-            if attempt < max_retries - 1:
-                wait_seconds = 1 << attempt
-                logger.warning(
-                    "worker.redis_connect_retry",
-                    service=service_name,
-                    attempt=attempt + 1,
-                    wait_seconds=wait_seconds,
-                )
-                await asyncio.sleep(wait_seconds)
-            else:
-                logger.error("worker.redis_connect_failed", service=service_name)
-                raise
+    await connect_redis_with_backoff(container.redis_client, service_name=service_name)
 
-    if settings.tracing.enabled:
-        setup_tracing(settings.tracing)
-        if settings.tracing.postgres_enabled and hasattr(container, "span_repository"):
-            if not settings.database.tracing_url:
-                raise ValueError(
-                    "tracing.postgres_enabled требует database.tracing_url (DATABASE__TRACING_URL)"
-                )
-            set_tracing_service_name("flows_worker")
-            set_span_repository(container.span_repository)
-        logger.info("worker.tracing_initialized", service=service_name)
+    init_worker_tracing(service_name, container)
+
+    platform_events_consumer = container.platform_event_consumer_service.build_group_consumer(
+        consumer_name=f"{socket.gethostname()}-{os.getpid()}",
+    )
+    _ = run_with_log_context(
+        platform_events_consumer.run(),
+        name="platform_events.flows_consumer",
+        background_kind="startup",
+    )
+    logger.info("worker.platform_events_consumer_started", service=service_name)
 
     logger.info(
         "worker.testing_flag",
@@ -139,36 +108,25 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
     logger.info("worker.container_initialized", service=service_name)
 
 
-async def worker_startup(state: TaskiqState) -> None:
-    """Инициализация контейнера при старте platform worker."""
-    await _initialize_worker_state(state=state, service_name="flows_worker")
-
-
-async def worker_shutdown(state: TaskiqState) -> None:
-    """Закрытие контейнера при остановке worker."""
+async def _shutdown(state: TaskiqState) -> None:
+    container = get_container()
     _ = state
-    global _worker_container
-
-    container = _worker_container
-    if container is not None:
-        try:
-            await container.redis_client.close()
-            logger.info("worker.redis_disconnected")
-        except Exception as exc:
-            logger.exception(
-                "worker.redis_close_failed",
-                **{"exception.type": type(exc).__name__},
-            )
-        finally:
-            _worker_container = None
-    logger.info("worker.container_closed")
+    try:
+        await container.redis_client.close()
+        logger.info("worker.redis_disconnected")
+    except Exception as exc:
+        logger.exception(
+            "worker.redis_close_failed",
+            **{"exception.type": type(exc).__name__},
+        )
 
 
-register_worker_events(
-    worker_app,
-    worker_startup,
-    worker_shutdown,
+worker_app = build_worker(
+    broker,
     service_name="flows_worker",
+    queue="flows_worker",
+    on_startup=_startup,
+    on_shutdown=_shutdown,
 )
 
 __all__ = ["worker_app"]

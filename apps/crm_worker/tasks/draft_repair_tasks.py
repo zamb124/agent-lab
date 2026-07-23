@@ -8,12 +8,12 @@ from typing import Literal
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.container import CRMContainer, get_crm_container
 from apps.crm.db.repositories.task_repository import CRM_TASK_TERMINAL_STATUSES
-from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
-from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
-from apps.crm_worker.broker import broker
-from apps.crm_worker.task_names import CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME
+from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
+from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
+from apps.crm_worker.tasks.task_names import CRM_REPAIR_NOTE_ANALYSIS_DRAFT
 from core.logging import get_logger
+from core.tasks import platform_task
 from core.types import JsonObject
 
 logger = get_logger(__name__)
@@ -42,6 +42,7 @@ async def _broadcast_draft_repair_phase(
         note_id=note_id,
         note_date_iso=note_date_iso,
         action="updated",
+        note=entity,
         company_repository=container.company_repository,
         access_grant_repository=container.access_grant_repository,
         skip_notification_center=True,
@@ -105,7 +106,7 @@ async def _journal_completed(
     )
 
 
-@broker.task(task_name=CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME, queue_name="crm")
+@platform_task(CRM_REPAIR_NOTE_ANALYSIS_DRAFT)
 async def repair_note_analysis_draft_task(
     note_id: str,
     company_id: str,

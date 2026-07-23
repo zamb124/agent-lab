@@ -5,6 +5,7 @@ NetWorkle Service - FastAPI приложение для управления Net
 БД: crm_db (service) + shared_db
 """
 
+import importlib
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -22,6 +23,10 @@ from core.integrations.oauth_service import set_oauth_credential_saved_hook
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
+
+# side-effect: register platform event catalog types
+_ = importlib.import_module("apps.crm.services.crm_entity_events")
+_ = importlib.import_module("apps.crm.services.crm_realtime_events")
 
 logger = get_logger(__name__)
 

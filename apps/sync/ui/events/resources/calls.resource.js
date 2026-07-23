@@ -188,6 +188,60 @@ export const callLinksScheduledOp = createAsyncOp({
     onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/links_list_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/links/scheduled' },
+    extraEvents: {
+        ITEM_REMOVED: 'item_removed',
+    },
+    extraReducer: (state, event, events) => {
+        const page = state.lastResult;
+        const items = Array.isArray(page)
+            ? page
+            : (page && Array.isArray(page.items) ? page.items : null);
+        if (items === null) {
+            return state;
+        }
+
+        if (event.type === events.ITEM_REMOVED) {
+            const linkToken = event.payload && typeof event.payload.link_token === 'string'
+                ? event.payload.link_token
+                : null;
+            if (linkToken === null) {
+                return state;
+            }
+            const nextItems = items.filter((row) => row && row.link_token !== linkToken);
+            if (nextItems.length === items.length) {
+                return state;
+            }
+            if (Array.isArray(page)) {
+                return { ...state, lastResult: nextItems };
+            }
+            return {
+                ...state,
+                lastResult: { ...page, items: nextItems },
+            };
+        }
+
+        if (
+            event.type !== 'sync/call_link_create/succeeded'
+            && event.type !== 'sync/call_link_update/succeeded'
+        ) {
+            return state;
+        }
+        const result = event.payload && event.payload.result;
+        if (!result || typeof result !== 'object' || typeof result.link_token !== 'string') {
+            return state;
+        }
+        const idx = items.findIndex((row) => row && row.link_token === result.link_token);
+        const nextItems = idx === -1
+            ? [result, ...items]
+            : items.map((row, i) => (i === idx ? result : row));
+        if (Array.isArray(page)) {
+            return { ...state, lastResult: nextItems };
+        }
+        return {
+            ...state,
+            lastResult: { ...page, items: nextItems },
+        };
+    },
 });
 
 export const callLinkCreateOp = createAsyncOp({
@@ -218,13 +272,26 @@ export const callLinkRemoveOp = createAsyncOp({
     errorToastKey: 'sync:calls.err_link_remove',
     commandType: 'sync/calls/links_remove_requested',
     restMirror: { method: 'DELETE', path: '/sync/api/v1/calls/links/:link_token' },
+    onSuccess: (ctx, _result, event) => {
+        const linkToken = event.payload && typeof event.payload.link_token === 'string'
+            ? event.payload.link_token
+            : null;
+        if (linkToken === null) {
+            throw new Error('callLinkRemoveOp.onSuccess: payload.link_token required');
+        }
+        ctx.dispatch(
+            'sync/call_links_scheduled/item_removed',
+            { link_token: linkToken },
+            { causation_id: event.id, source: 'local' },
+        );
+    },
 });
 
 // ============================================================================
 // UI-состояние звонков (slice activeCall, incomingCall, recordingStatus и пр.)
 //
 // Чистая `createSlice` фабрика без HTTP/WS — slice реагирует на push-события
-// `sync/call/*` (server -> client через `platform:ui_events`) и локальные
+// `sync/call/*` (server -> client через `platform:events`) и локальные
 // UI-действия overlay/incoming.
 //
 // Компоненты используют `this.useSlice('sync/call_ui')` -> читают `.value`
@@ -243,6 +310,10 @@ export const callUiResource = createSlice({
         recordingStatus: 'idle',
         recordingError: null,
         activeCallChannels: Object.freeze({}),
+        /** @type {Record<string, ReadonlyArray<string>>} call_id → participant user_id[] */
+        callParticipants: Object.freeze({}),
+        /** Последний P2P/LiveKit signal (для peer path; SFU может игнорировать). */
+        lastSignal: null,
     },
     extraEvents: {
         OVERLAY_OPENED: 'overlay_opened',
@@ -358,11 +429,81 @@ export const callUiResource = createSlice({
                     recordingError: typeof p.error === 'string' ? p.error : null,
                 };
             }
+            case 'sync/call/accepted': {
+                const p = event.payload;
+                if (!p || typeof p.call_id !== 'string') return state;
+                const clearIncoming =
+                    state.incomingCall && state.incomingCall.call_id === p.call_id
+                        ? null
+                        : state.incomingCall;
+                return { ...state, incomingCall: clearIncoming };
+            }
+            case 'sync/call/declined': {
+                const p = event.payload;
+                if (!p || typeof p.call_id !== 'string') return state;
+                const clearIncoming =
+                    state.incomingCall && state.incomingCall.call_id === p.call_id
+                        ? null
+                        : state.incomingCall;
+                return { ...state, incomingCall: clearIncoming };
+            }
+            case 'sync/call/participant_joined': {
+                const p = event.payload;
+                if (!p || typeof p.call_id !== 'string' || typeof p.user_id !== 'string') {
+                    return state;
+                }
+                const prev = Array.isArray(state.callParticipants[p.call_id])
+                    ? state.callParticipants[p.call_id]
+                    : [];
+                if (prev.includes(p.user_id)) return state;
+                return {
+                    ...state,
+                    callParticipants: Object.freeze({
+                        ...state.callParticipants,
+                        [p.call_id]: Object.freeze([...prev, p.user_id]),
+                    }),
+                };
+            }
+            case 'sync/call/participant_left': {
+                const p = event.payload;
+                if (!p || typeof p.call_id !== 'string' || typeof p.user_id !== 'string') {
+                    return state;
+                }
+                const prev = Array.isArray(state.callParticipants[p.call_id])
+                    ? state.callParticipants[p.call_id]
+                    : [];
+                if (!prev.includes(p.user_id)) return state;
+                const nextList = prev.filter((uid) => uid !== p.user_id);
+                const nextMap = { ...state.callParticipants };
+                if (nextList.length === 0) {
+                    delete nextMap[p.call_id];
+                } else {
+                    nextMap[p.call_id] = Object.freeze(nextList);
+                }
+                return { ...state, callParticipants: Object.freeze(nextMap) };
+            }
+            case 'sync/call/signaled': {
+                const p = event.payload;
+                if (!p || typeof p.call_id !== 'string') return state;
+                return {
+                    ...state,
+                    lastSignal: Object.freeze({
+                        call_id: p.call_id,
+                        signal_type: typeof p.signal_type === 'string' ? p.signal_type : null,
+                        sender_user_id:
+                            typeof p.sender_user_id === 'string' ? p.sender_user_id : null,
+                        target_user_id:
+                            typeof p.target_user_id === 'string' ? p.target_user_id : null,
+                    }),
+                };
+            }
             case 'sync/call/ended': {
                 const p = event.payload;
                 if (!p || typeof p.call_id !== 'string') return state;
                 const tracker = { ...state.activeCallChannels };
                 if (typeof p.channel_id === 'string') delete tracker[p.channel_id];
+                const participants = { ...state.callParticipants };
+                delete participants[p.call_id];
                 return {
                     ...state,
                     activeCall: state.activeCall && state.activeCall.call_id === p.call_id ? null : state.activeCall,
@@ -372,6 +513,11 @@ export const callUiResource = createSlice({
                         state.activeCall && state.activeCall.call_id === p.call_id ? 0 : state.bannerHangupGuardUntil,
                     recordingStatus: state.activeCall && state.activeCall.call_id === p.call_id ? 'idle' : state.recordingStatus,
                     activeCallChannels: Object.freeze(tracker),
+                    callParticipants: Object.freeze(participants),
+                    lastSignal:
+                        state.lastSignal && state.lastSignal.call_id === p.call_id
+                            ? null
+                            : state.lastSignal,
                 };
             }
             case 'sync/call/recording_started':

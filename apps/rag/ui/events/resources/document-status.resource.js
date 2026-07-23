@@ -1,30 +1,34 @@
 /**
- * Document Status — поллинг статуса асинхронной индексации документа.
+ * Document Status — статус асинхронной индексации документа.
  *
- * Backend (`/rag/api/v1/documents/{document_id}/status`):
- *   GET → DocumentProcessingStatus { document_id, status, document_name, ... }
- *
- * Семантика:
- *   - dispatch REQUESTED { documentId, namespaceId } — один HTTP-запрос
- *     текущего статуса.
- *   - Если статус `pending`/`processing`, эффект сам перезаписывает
- *     REQUESTED через setTimeout (поллинг).
- *   - Если статус `completed` или `failed`, диспатчим тост из эффекта
- *     (внутри фабрики `dispatch(CoreEvents.UI_TOAST_SHOW, ...)` разрешён
- *     каноном — запрет действует только в pages/modals/components).
- *   - Перезагрузку списка документов делает компонент через
- *     `useEvent(documentStatusResource.events.SUCCEEDED, ...)` —
- *     factory не знает namespaceId списка.
- *
- * Slice фиксирует последний полученный статус, чтобы UI мог отрисовать
- * progress без отдельной подписки на каждое событие.
+ * Push `rag/document/status_updated` обновляет `lastResult`; стартовый GET
+ * после upload — снимок. HTTP poll удалён.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 
-const POLL_INTERVAL_MS = 2_000;
+const RAG_DOCUMENT_STATUS_UPDATED = 'rag/document/status_updated';
+
+function _toastTerminal(ctx, status, documentId, causationId) {
+    const documentName = typeof status.document_name === 'string' ? status.document_name : documentId;
+    if (status.status === 'completed') {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'success', i18n_key: 'rag:toast.document_processed', i18n_vars: { name: documentName } },
+            { causation_id: causationId },
+        );
+        return;
+    }
+    if (status.status === 'failed') {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'error', i18n_key: 'rag:toast.document_process_failed', i18n_vars: { name: documentName } },
+            { causation_id: causationId },
+        );
+    }
+}
 
 export const documentStatusResource = createAsyncOp({
     name: 'rag/document_status',
@@ -40,32 +44,36 @@ export const documentStatusResource = createAsyncOp({
         });
     },
     onSuccess: (ctx, status, event) => {
-        const { documentId, namespaceId } = event.payload;
-        const documentName = typeof status.document_name === 'string' ? status.document_name : documentId;
-        if (status.status === 'pending' || status.status === 'processing') {
-            setTimeout(() => {
-                ctx.dispatch(
-                    documentStatusResource.events.REQUESTED,
-                    { documentId, namespaceId },
-                    { source: 'timer' },
-                );
-            }, POLL_INTERVAL_MS);
-            return;
+        const { documentId } = event.payload;
+        _toastTerminal(ctx, status, documentId, event.id);
+    },
+    extraReducer: (state, event) => {
+        if (event.type !== RAG_DOCUMENT_STATUS_UPDATED) {
+            return state;
         }
-        if (status.status === 'completed') {
-            ctx.dispatch(
-                CoreEvents.UI_TOAST_SHOW,
-                { type: 'success', i18n_key: 'rag:toast.document_processed', i18n_vars: { name: documentName } },
-                { causation_id: event.id },
-            );
-            return;
+        const payload = event.payload;
+        if (!payload || typeof payload !== 'object') {
+            return state;
         }
-        if (status.status === 'failed') {
-            ctx.dispatch(
-                CoreEvents.UI_TOAST_SHOW,
-                { type: 'error', i18n_key: 'rag:toast.document_process_failed', i18n_vars: { name: documentName } },
-                { causation_id: event.id },
-            );
+        const documentId = payload.document_id;
+        if (typeof documentId !== 'string' || documentId.length === 0) {
+            return state;
         }
+        const nextStatus = {
+            document_id: documentId,
+            status: payload.status,
+            document_name: typeof payload.document_name === 'string' ? payload.document_name : documentId,
+            error_message: typeof payload.error_message === 'string' ? payload.error_message : null,
+            chunks_count: typeof payload.chunks_count === 'number' ? payload.chunks_count : null,
+            namespace_id: payload.namespace_id,
+        };
+        return {
+            ...state,
+            lastResult: nextStatus,
+            busy: false,
+            error: null,
+        };
     },
 });
+
+export { RAG_DOCUMENT_STATUS_UPDATED };

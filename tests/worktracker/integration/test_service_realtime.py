@@ -1,4 +1,4 @@
-"""Push-события worktracker в Redis platform:ui_events."""
+"""Push-события worktracker в Redis platform:events."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ pytestmark = pytest.mark.asyncio
 
 async def test_create_publishes_created_event(
     worktracker_service,
-    worktracker_ui_events_listener,
+    platform_events_listener,
     unique_id: str,
 ) -> None:
     item = await worktracker_service.create_manual_task(
@@ -28,7 +28,7 @@ async def test_create_publishes_created_event(
         created_by=UserActor(user_id=f"user_{unique_id}"),
     )
     event = await wait_work_item_event(
-        worktracker_ui_events_listener,
+        platform_events_listener,
         WORK_ITEM_CREATED,
         item.work_item_id,
     )
@@ -37,7 +37,7 @@ async def test_create_publishes_created_event(
 
 async def test_update_publishes_updated_event(
     worktracker_service,
-    worktracker_ui_events_listener,
+    platform_events_listener,
     unique_id: str,
 ) -> None:
     item = await worktracker_service.create(
@@ -51,7 +51,7 @@ async def test_update_publishes_updated_event(
         title=f"rt-upd-new-{unique_id}",
     )
     event = await wait_work_item_event(
-        worktracker_ui_events_listener,
+        platform_events_listener,
         WORK_ITEM_UPDATED,
         item.work_item_id,
     )
@@ -60,7 +60,7 @@ async def test_update_publishes_updated_event(
 
 async def test_move_publishes_moved_event(
     worktracker_service,
-    worktracker_ui_events_listener,
+    platform_events_listener,
     worktracker_board,
     unique_id: str,
 ) -> None:
@@ -77,7 +77,7 @@ async def test_move_publishes_moved_event(
         board_column_id="done",
     )
     event = await wait_work_item_event(
-        worktracker_ui_events_listener,
+        platform_events_listener,
         WORK_ITEM_MOVED,
         item.work_item_id,
     )
@@ -86,7 +86,7 @@ async def test_move_publishes_moved_event(
 
 async def test_complete_publishes_completed_event(
     worktracker_service,
-    worktracker_ui_events_listener,
+    platform_events_listener,
     unique_id: str,
 ) -> None:
     item = await worktracker_service.create(
@@ -96,7 +96,7 @@ async def test_complete_publishes_completed_event(
     )
     await worktracker_service.complete(company_id="system", work_item_id=item.work_item_id)
     event = await wait_work_item_event(
-        worktracker_ui_events_listener,
+        platform_events_listener,
         WORK_ITEM_COMPLETED,
         item.work_item_id,
     )
@@ -105,7 +105,7 @@ async def test_complete_publishes_completed_event(
 
 async def test_comment_publishes_comment_created_event(
     worktracker_service,
-    worktracker_ui_events_listener,
+    platform_events_listener,
     unique_id: str,
 ) -> None:
     item = await worktracker_service.create(
@@ -119,7 +119,7 @@ async def test_comment_publishes_comment_created_event(
         author=SystemActor(),
         text="hello",
     )
-    events = await worktracker_ui_events_listener(WORK_ITEM_COMMENT_CREATED, None, 3.0)
+    events = await platform_events_listener(WORK_ITEM_COMMENT_CREATED, None, 3.0)
     matching = [
         e
         for e in events

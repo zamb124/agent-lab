@@ -7,6 +7,7 @@ from typing import Protocol
 
 from pydantic import Field, field_validator, model_validator
 
+from core.config import get_settings
 from core.llm_context.models import LLMContextBlock, LLMContextMemoryScope
 from core.llm_context.retrieval_rag_bridge import rag_search_options_override_from_retrieval
 from core.llm_context.sources import LLMContextSourceRequest
@@ -183,7 +184,10 @@ def _chronological(records: list[LLMContextMemoryRecord]) -> list[LLMContextMemo
 
 def _search_options_from_request(request: LLMContextSourceRequest) -> RAGSearchOptions:
     policy_override = rag_search_options_override_from_retrieval(request.policy.retrieval)
-    return resolve_platform_search_options(overrides=policy_override)
+    return resolve_platform_search_options(
+        settings=get_settings(),
+        overrides=policy_override,
+    )
 
 
 def _record_to_block(record: LLMContextMemoryRecord, *, rank: int) -> LLMContextBlock:

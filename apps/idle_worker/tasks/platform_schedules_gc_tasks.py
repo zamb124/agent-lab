@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.broker import broker as idle_broker
+from apps.idle_worker.tasks.task_names import TASK_PLATFORM_SCHEDULES_GC_TICK
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.logging import get_logger
 from core.scheduler.platform_schedules_gc import PlatformSchedulesGcService
 from core.scheduler.repository import SchedulerTaskRepository
+from core.tasks import platform_task
 
 logger = get_logger(__name__)
 
-PLATFORM_SCHEDULES_GC_TASK_NAME = "platform_schedules_gc_tick"
 
-
-@idle_broker.task(task_name=PLATFORM_SCHEDULES_GC_TASK_NAME, queue_name="idle")
+@platform_task(TASK_PLATFORM_SCHEDULES_GC_TICK)
 async def platform_schedules_gc_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,

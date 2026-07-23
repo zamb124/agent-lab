@@ -9,8 +9,8 @@ from typing import List
 
 import pytest
 import pytest_asyncio
-from a2a.types import Message
 from a2a.helpers.proto_helpers import get_message_text
+from a2a.types import Message
 
 from apps.flows.src.models.flow_config import SimpleEdgeCondition
 

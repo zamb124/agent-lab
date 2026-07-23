@@ -5,7 +5,7 @@ import json
 import pytest
 import pytest_asyncio
 
-from apps.flows.tools.lara_crm import (
+from apps.flows.tools.flows_editor_tools import (
     flows_get_node,
     flows_list_nodes,
     flows_patch_flow,

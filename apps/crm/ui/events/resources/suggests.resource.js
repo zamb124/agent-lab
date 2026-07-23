@@ -58,6 +58,37 @@ export const suggestsListOp = createAsyncOp({
             query: { status, limit, offset },
         });
     },
+    extraReducer: (state, event) => {
+        if (
+            event.type !== 'crm/suggest_resolve/succeeded'
+            && event.type !== 'crm/suggest_dismiss/succeeded'
+        ) {
+            return state;
+        }
+        const result = event.payload && event.payload.result;
+        if (!result || typeof result !== 'object' || typeof result.suggest_id !== 'string') {
+            return state;
+        }
+        const page = state.lastResult;
+        if (!page || typeof page !== 'object' || !Array.isArray(page.items)) {
+            return state;
+        }
+        const nextItems = page.items.filter(
+            (row) => row && row.suggest_id !== result.suggest_id,
+        );
+        if (nextItems.length === page.items.length) {
+            return state;
+        }
+        const prevTotal = typeof page.total === 'number' ? page.total : page.items.length;
+        return {
+            ...state,
+            lastResult: {
+                ...page,
+                items: nextItems,
+                total: Math.max(0, prevTotal - 1),
+            },
+        };
+    },
 });
 
 export const suggestResolveOp = createAsyncOp({

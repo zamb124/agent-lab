@@ -44,7 +44,6 @@ from core.logging.attributes import (
     LOG_TOOL_NAME,
     LOG_TTS_PROVIDER,
     LOG_TTS_TTFA_MS,
-    LOG_TTS_VOICE,
     LOG_WS_COMMAND,
     LOG_WS_COMMAND_DURATION_MS,
     LOG_WS_COMMAND_STATUS,

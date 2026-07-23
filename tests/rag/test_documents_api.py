@@ -7,7 +7,6 @@
 - DELETE /rag/api/v1/namespaces/{id}/documents/{doc_id} - удаление документа
 """
 
-from io import BytesIO
 from pathlib import Path
 
 import pytest

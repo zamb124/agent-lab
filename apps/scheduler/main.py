@@ -4,9 +4,29 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 
-from apps.crm.scheduled_task_constants import (
-    CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
-    CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+from apps.crm_worker.tasks.task_names import (
+    CRM_RECONCILE_DAILY_SUMMARY,
+    CRM_REEMBED_STALE_DOCUMENTS,
+)
+from apps.idle_worker.tasks.task_names import (
+    TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK,
+    TASK_CALENDAR_SYNC_TICK,
+    TASK_FILE_RETENTION_BACKFILL_TICK,
+    TASK_FILE_RETENTION_PURGE_TICK,
+    TASK_MCP_CATALOG_CRAWL,
+    TASK_MCP_CATALOG_RESYNC_TOOLS,
+    TASK_PAYMENT_SYNC_TICK,
+    TASK_PLATFORM_SCHEDULES_GC_TICK,
+    TASK_REDIS_INVENTORY_TICK,
+    TASK_REFRESH_PLATFORM_FREE_MODELS,
+    TASK_SPAN_BILLING_SETTLEMENT_TICK,
+    TASK_SYNC_LLM_MODELS,
+    TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK,
+)
+from apps.rag_worker.tasks.task_names import (
+    RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK,
+    RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK,
+    RAG_REEMBED_STALE_DOCUMENTS_TICK,
 )
 from apps.scheduler.api.v1 import api_v1_router
 from apps.scheduler.config import SchedulerSettings, get_scheduler_settings
@@ -18,6 +38,7 @@ from core.identity.system_bootstrap import (
     ensure_system_company_exists,
 )
 from core.logging import get_logger
+from core.mail.task_names import MAIL_IDLE_SUPERVISOR, MAIL_SYNC_TICK
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,
@@ -30,24 +51,6 @@ from core.types import JsonObject
 
 logger = get_logger(__name__)
 
-CALENDAR_SYNC_TASK_NAME = "calendar_sync_tick"
-CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME = "calendar_sync_meeting_reminder_tick"
-MAIL_SYNC_TASK_NAME = "mail_sync_tick"
-MAIL_IDLE_SUPERVISOR_TASK_NAME = "mail_idle_supervisor"
-SPAN_BILLING_SETTLEMENT_TASK_NAME = "span_billing_settlement_tick"
-PAYMENT_SYNC_TASK_NAME = "payment_sync_tick"
-LLM_MODELS_SYNC_TASK_NAME = "sync_llm_models_task"
-PLATFORM_FREE_MODELS_SYNC_TASK_NAME = "refresh_platform_free_models_task"
-RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME = "rag_cleanup_expired_documents_tick"
-RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME = "rag_reembed_stale_documents_tick"
-RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME = "rag_cleanup_orphan_company_chunks_tick"
-FILE_RETENTION_PURGE_TASK_NAME = "file_retention_purge_tick"
-FILE_RETENTION_BACKFILL_TASK_NAME = "file_retention_backfill_tick"
-PLATFORM_SCHEDULES_GC_TASK_NAME = "platform_schedules_gc_tick"
-REDIS_INVENTORY_TASK_NAME = "redis_inventory_tick"
-MCP_CATALOG_CRAWL_TASK_NAME = "mcp_catalog_crawl_task"
-MCP_CATALOG_RESYNC_TOOLS_TASK_NAME = "mcp_catalog_resync_tools_task"
-TOOL_TAG_GROUPS_DESCRIBE_TASK_NAME = "tool_tag_groups_describe_tick"
 CRM_RECONCILE_DAILY_SUMMARY_CRON = "0 * * * *"
 TOOL_TAG_GROUPS_DESCRIBE_CRON = "0 3 * * *"
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
@@ -485,14 +488,14 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=config.enabled,
-        task_name=CALENDAR_SYNC_TASK_NAME,
+        task_name=TASK_CALENDAR_SYNC_TICK.name,
         cron=config.cron,
         log_label="Calendar sync",
     )
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=config.sync_meeting_reminder_enabled,
-        task_name=CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
+        task_name=TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK.name,
         cron=config.sync_meeting_reminder_cron,
         log_label="Calendar Sync meeting reminder",
     )
@@ -500,7 +503,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=mail_sync_cfg.enabled,
-        task_name=MAIL_SYNC_TASK_NAME,
+        task_name=MAIL_SYNC_TICK.name,
         cron=mail_sync_cfg.cron,
         log_label="Mail sync",
         run_now_on_start=True,
@@ -508,7 +511,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=mail_sync_cfg.enabled and mail_sync_cfg.idle_enabled,
-        task_name=MAIL_IDLE_SUPERVISOR_TASK_NAME,
+        task_name=MAIL_IDLE_SUPERVISOR.name,
         cron=mail_sync_cfg.cron,
         log_label="Mail IDLE supervisor",
         run_now_on_start=False,
@@ -517,7 +520,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=billing_cfg.enabled,
-        task_name=SPAN_BILLING_SETTLEMENT_TASK_NAME,
+        task_name=TASK_SPAN_BILLING_SETTLEMENT_TICK.name,
         cron=billing_cfg.cron,
         log_label="Span billing settlement",
     )
@@ -525,14 +528,14 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=payment_cfg.sync_enabled,
-        task_name=PAYMENT_SYNC_TASK_NAME,
+        task_name=TASK_PAYMENT_SYNC_TICK.name,
         cron=payment_cfg.sync_cron,
         log_label="Payment sync",
     )
     await _ensure_idle_interval_schedule(
         container=container,
         config_enabled=not is_testing(),
-        task_name=LLM_MODELS_SYNC_TASK_NAME,
+        task_name=TASK_SYNC_LLM_MODELS.name,
         interval_seconds=3600,
         payload={"system_task": LLM_MODELS_SYNC_PAYLOAD_MARKER},
         log_label="LLM models sync",
@@ -541,7 +544,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     await _ensure_idle_interval_schedule(
         container=container,
         config_enabled=(not is_testing()) and settings.llm.platform_free_pool.enabled,
-        task_name=PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
+        task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
         interval_seconds=settings.llm.platform_free_pool.refresh_interval_seconds,
         payload={"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER},
         log_label="Platform free-pool sync",
@@ -550,21 +553,21 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=settings.files.retention.purge_enabled,
-        task_name=FILE_RETENTION_PURGE_TASK_NAME,
+        task_name=TASK_FILE_RETENTION_PURGE_TICK.name,
         cron=settings.files.retention.purge_cron,
         log_label="File retention purge",
     )
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=not is_testing(),
-        task_name=FILE_RETENTION_BACKFILL_TASK_NAME,
+        task_name=TASK_FILE_RETENTION_BACKFILL_TICK.name,
         cron=settings.files.retention.purge_cron,
         log_label="File retention backfill",
     )
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=not is_testing(),
-        task_name=PLATFORM_SCHEDULES_GC_TASK_NAME,
+        task_name=TASK_PLATFORM_SCHEDULES_GC_TICK.name,
         cron="0 4 * * *",
         log_label="Platform schedules Redis GC",
     )
@@ -572,7 +575,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         await _ensure_idle_interval_schedule(
             container=container,
             config_enabled=True,
-            task_name=REDIS_INVENTORY_TASK_NAME,
+            task_name=TASK_REDIS_INVENTORY_TICK.name,
             interval_seconds=settings.database.redis_inventory_interval_seconds,
             payload={},
             log_label="Redis inventory metrics",
@@ -581,7 +584,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=settings.mcp_catalog.enabled and not is_testing(),
-        task_name=MCP_CATALOG_CRAWL_TASK_NAME,
+        task_name=TASK_MCP_CATALOG_CRAWL.name,
         cron=settings.mcp_catalog.crawl_cron,
         log_label="MCP catalog crawl",
         run_now_on_start=settings.mcp_catalog.crawl_run_on_start,
@@ -591,14 +594,14 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         config_enabled=settings.mcp_catalog.enabled
         and settings.mcp_catalog.auto_provision != "disabled"
         and not is_testing(),
-        task_name=MCP_CATALOG_RESYNC_TOOLS_TASK_NAME,
+        task_name=TASK_MCP_CATALOG_RESYNC_TOOLS.name,
         cron=settings.mcp_catalog.resync_tools_cron,
         log_label="MCP catalog resync tools",
     )
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=not is_testing(),
-        task_name=TOOL_TAG_GROUPS_DESCRIBE_TASK_NAME,
+        task_name=TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK.name,
         cron=TOOL_TAG_GROUPS_DESCRIBE_CRON,
         log_label="Tool tag groups describe",
     )
@@ -606,35 +609,35 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     await _ensure_rag_ttl_cleanup_schedule(
         container=container,
         config_enabled=cfg.cleanup_enabled,
-        task_name=RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME,
+        task_name=RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK.name,
         cron=cfg.cleanup_cron,
         log_label="RAG TTL cleanup",
     )
     await _ensure_rag_ttl_cleanup_schedule(
         container=container,
         config_enabled=cfg.reembed_enabled,
-        task_name=RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+        task_name=RAG_REEMBED_STALE_DOCUMENTS_TICK.name,
         cron=cfg.reembed_cron,
         log_label="RAG reembed stale",
     )
     await _ensure_rag_ttl_cleanup_schedule(
         container=container,
         config_enabled=cfg.orphan_cleanup_enabled,
-        task_name=RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME,
+        task_name=RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK.name,
         cron=cfg.orphan_cleanup_cron,
         log_label="RAG orphan company chunks cleanup",
     )
     await _ensure_crm_cron_schedule(
         container=container,
         config_enabled=cfg.reembed_enabled,
-        task_name=CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+        task_name=CRM_REEMBED_STALE_DOCUMENTS.name,
         cron=cfg.reembed_cron,
         log_label="CRM reembed stale",
     )
     await _ensure_crm_cron_schedule(
         container=container,
         config_enabled=True,
-        task_name=CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
+        task_name=CRM_RECONCILE_DAILY_SUMMARY.name,
         cron=CRM_RECONCILE_DAILY_SUMMARY_CRON,
         log_label="CRM daily summary reconcile",
     )

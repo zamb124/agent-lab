@@ -6,7 +6,13 @@ import json
 
 import pytest
 
-from core.viz.models import VIZ_CONTENT_TYPE, VizDocument, VizEngine, VizKind, parse_viz_document_bytes
+from core.viz.models import (
+    VIZ_CONTENT_TYPE,
+    VizDocument,
+    VizEngine,
+    VizKind,
+    parse_viz_document_bytes,
+)
 from tests.fixtures.s3 import require_s3_configured
 from tests.office.access_helpers import parse_viz_stream_url
 from tests.office.helpers import upload_office_file_bytes

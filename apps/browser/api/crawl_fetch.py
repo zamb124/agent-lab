@@ -13,10 +13,6 @@ from playwright.async_api import Route
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from apps.browser.contracts.control_types import BrowserCapabilityError
-from apps.browser.contracts.crawl_fetch_types import (
-    BrowserCrawlFetchRequest,
-    BrowserCrawlFetchResponse,
-)
 from apps.browser.dependencies import ContainerDep
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
@@ -26,6 +22,10 @@ from apps.browser.engine.types import (
 )
 from apps.browser.interaction.human_interaction import HumanInteraction, InteractionRng
 from apps.browser.interaction.interaction_profiles import get_interaction_profile
+from core.clients.browser.crawl_fetch_types import (
+    BrowserCrawlFetchRequest,
+    BrowserCrawlFetchResponse,
+)
 from core.logging import get_logger
 from core.logging.attributes import (
     EVENT_BROWSER_CRAWL_FETCH_COMPLETED,

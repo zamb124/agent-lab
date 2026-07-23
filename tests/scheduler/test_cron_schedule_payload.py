@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
+from apps.idle_worker.tasks.task_names import TASK_CALENDAR_SYNC_TICK
 from apps.scheduler.main import (
-    CALENDAR_SYNC_TASK_NAME,
     SYSTEM_SCHEDULER_COMPANY_ID,
     _ensure_calendar_schedule,
 )
@@ -147,7 +147,7 @@ def _task(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         schedule_id=f"redis-{schedule_task_id}",
         target_service="flows",
-        task_name=CALENDAR_SYNC_TASK_NAME,
+        task_name=TASK_CALENDAR_SYNC_TICK.name,
         queue_name="idle",
         schedule_type=PlatformScheduleType.CRON,
         cron=cron,
@@ -178,7 +178,7 @@ async def test_ensure_calendar_schedule_reconciles_legacy_scheduler_task_id_payl
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=True,
-        task_name=CALENDAR_SYNC_TASK_NAME,
+        task_name=TASK_CALENDAR_SYNC_TICK.name,
         cron="0 * * * *",
         log_label="Calendar sync",
     )

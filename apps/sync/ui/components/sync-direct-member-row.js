@@ -16,6 +16,7 @@ import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { getPeerPresenceSubtitle } from '../_helpers/sync-presence.js';
 import '@platform/lib/components/platform-icon.js';
+import { SYNC_CHANNELS_CREATED } from '../events/types.js';
 
 export class SyncDirectMemberRow extends PlatformElement {
     static properties = {
@@ -119,7 +120,7 @@ export class SyncDirectMemberRow extends PlatformElement {
         this._pendingOpenDmPeerId = null;
         this._channels = this.useResource('sync/channels');
         this._presenceSel = this.select((s) => s.syncPresence);
-        this.useEvent('sync/channels/created', (e) => this._onChannelsCreated(e));
+        this.useEvent(SYNC_CHANNELS_CREATED, (e) => this._onChannelsCreated(e));
         this.useEvent('sync/channels/create_failed', () => {
             this._pendingOpenDmPeerId = null;
         });

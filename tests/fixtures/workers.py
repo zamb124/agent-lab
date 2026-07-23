@@ -153,7 +153,7 @@ def search_worker(rag_worker, rag_service, search_service):
 
 @pytest.fixture(scope="session")
 def sync_worker(frontend_service):
-    """sync_worker стека: handle_command.kiq, транскрипция, файлы через frontend."""
+    """sync_worker стека: транскрипция сообщений/звонков, файлы через frontend."""
     _ = frontend_service
     require_taskiq_worker("sync_worker", "sync")
 

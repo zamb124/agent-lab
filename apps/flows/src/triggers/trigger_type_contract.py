@@ -9,7 +9,7 @@ from apps.flows.src.models.enums import TriggerType
 
 
 def trigger_supports_post_flow_output(trigger_type: TriggerType) -> bool:
-    if trigger_type == TriggerType.CRON:
+    if trigger_type in (TriggerType.CRON, TriggerType.PLATFORM_EVENT):
         return False
     return True
 

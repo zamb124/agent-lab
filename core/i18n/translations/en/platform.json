@@ -247,6 +247,26 @@
         "open": "Open task",
         "not_found": "Task not found"
     },
+    "work_item": {
+        "update_success": "Task updated",
+        "update_error": "Failed to update task",
+        "assign_success": "Assignee updated",
+        "assign_error": "Failed to assign",
+        "detail_title": "Task",
+        "open_full": "Open full page",
+        "open_entity": "Open in graph",
+        "close_panel": "Close",
+        "empty_description": "Add a description…",
+        "description_label": "Description",
+        "due_label": "Due date",
+        "priority_label": "Priority",
+        "state_label": "State",
+        "assignee_label": "Assignee",
+        "section_properties": "Properties",
+        "section_attachments": "Attachments",
+        "board_empty": "No tasks in this column",
+        "row_unassigned": "Unassigned"
+    },
     "user_info_modal": {
         "header": "Profile",
         "roles_label": "Roles",

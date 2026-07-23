@@ -12,12 +12,11 @@ from typing import Any, Dict
 
 import pytest
 
-from tests.flows._a2a_v1 import A2A_HEADERS
-
 from apps.flows.src.container import get_container
 from core.context import Context, clear_context, set_context
 from core.files.file_ref import FileRef
 from core.models.identity_models import Company, User
+from tests.flows._a2a_v1 import A2A_HEADERS
 from tests.sync.api._helpers import platform_auxiliary_file_spec_json
 
 

@@ -156,6 +156,7 @@ from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm import LLMClient, MockLLM
 from core.context import get_context, require_active_company
+from core.events import publish_event_to_company
 from core.llm_context import LLMContextPatch
 from core.logging import get_logger
 from core.models import StrictBaseModel
@@ -173,7 +174,6 @@ from core.types import (
     require_json_array,
     require_json_object,
 )
-from core.ui_events.dispatcher import publish_ui_event_to_company
 
 logger = get_logger(__name__)
 
@@ -1028,9 +1028,9 @@ class EvaluationLabService:
         run_id: str,
         execution: EvaluationTaskiqExecutionContext,
     ) -> EvaluationRunWithCases:
-        if execution.task_name != TASK_EXECUTE_EVALUATION_RUN:
+        if execution.task_name != TASK_EXECUTE_EVALUATION_RUN.name:
             raise EvaluationLabValidationError(
-                f"Evaluation run can only be executed by TaskIQ task {TASK_EXECUTE_EVALUATION_RUN}"
+                f"Evaluation run can only be executed by TaskIQ task {TASK_EXECUTE_EVALUATION_RUN.name}"
             )
         if execution.evaluation_run_id != run_id:
             raise EvaluationLabValidationError(
@@ -3252,7 +3252,7 @@ class EvaluationLabService:
             event.model_dump(mode="json"),
             "evaluation_run_event",
         )
-        await publish_ui_event_to_company(
+        await publish_event_to_company(
             require_active_company().company_id,
             FLOWS_EVALUATION_EVENT_RECORDED,
             event_payload,

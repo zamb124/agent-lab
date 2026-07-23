@@ -447,3 +447,490 @@ async def documents_get_link(
         "url": preview_url.strip(),
         "editor_url": editor_path,
     }
+
+
+class DocumentsCreateCatalogArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    title: str = Field(..., min_length=1, max_length=500, description="Catalog folder title.")
+    is_public: bool = Field(
+        True,
+        description="company_visible for the whole company in this namespace.",
+    )
+    parent_catalog_id: str | None = Field(
+        None,
+        description="Optional parent folder. Only parent owner may create a child.",
+    )
+
+
+class DocumentsUpdateCatalogArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    catalog_id: str = Field(..., min_length=1, description="catalog_id to update.")
+    title: str | None = Field(None, min_length=1, max_length=500, description="New title.")
+    is_public: bool | None = Field(None, description="Company-visible flag.")
+
+
+class DocumentsCatalogIdArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    catalog_id: str = Field(..., min_length=1, description="catalog_id.")
+
+
+class DocumentsAddCatalogMemberArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    catalog_id: str = Field(..., min_length=1, description="catalog_id.")
+    user_id: str = Field(
+        ...,
+        min_length=1,
+        description="Member user_id from team_resolve_user / team_list_members.",
+    )
+
+
+class DocumentsAccessArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    resource_kind: Literal["catalog", "document"] = Field(
+        ...,
+        description="catalog — folder ACL; document — file_id binding ACL.",
+    )
+    resource_id: str = Field(
+        ...,
+        min_length=1,
+        description="catalog_id when resource_kind=catalog; file_id when document.",
+    )
+
+
+class DocumentsPatchAccessArgs(DocumentsAccessArgs):
+    company_visible: bool | None = Field(None, description="Whole-company visibility.")
+    link_enabled: bool | None = Field(None, description="Enable/disable public link.")
+    link_permission: Literal["view", "edit"] | None = Field(
+        None,
+        description="Public link permission when link is enabled.",
+    )
+    member_user_ids: list[str] | None = Field(
+        None,
+        description="Full replacement member list when provided.",
+    )
+
+
+@tool(
+    name="documents_create_catalog",
+    description=(
+        "Creates a Documents catalog (folder). Optional parent_catalog_id for nesting. "
+        "Returns catalog_id, title, is_public."
+    ),
+    tags=_DOCUMENTS_CATALOG_TAGS,
+    parameters_model=DocumentsCreateCatalogArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_create_catalog(
+    title: str,
+    is_public: bool = True,
+    parent_catalog_id: str | None = None,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsCreateCatalogArgs(
+        title=title,
+        is_public=is_public,
+        parent_catalog_id=parent_catalog_id,
+    )
+    body: JsonObject = {"title": args.title, "is_public": args.is_public}
+    if args.parent_catalog_id is not None:
+        body["parent_catalog_id"] = args.parent_catalog_id
+    try:
+        raw = await ServiceClient().post(
+            "office",
+            "/documents/api/v1/catalogs",
+            headers=_ns_headers(),
+            json=body,
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.create_catalog")
+    return {
+        "success": True,
+        "catalog_id": result.get("catalog_id"),
+        "title": result.get("title"),
+        "parent_catalog_id": result.get("parent_catalog_id"),
+        "is_public": result.get("is_public"),
+        "is_owner": result.get("is_owner"),
+    }
+
+
+@tool(
+    name="documents_update_catalog",
+    description=(
+        "Updates catalog title and/or is_public. Owner only. "
+        "Provide at least one of title/is_public."
+    ),
+    tags=_DOCUMENTS_CATALOG_TAGS,
+    parameters_model=DocumentsUpdateCatalogArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_update_catalog(
+    catalog_id: str,
+    title: str | None = None,
+    is_public: bool | None = None,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsUpdateCatalogArgs(
+        catalog_id=catalog_id,
+        title=title,
+        is_public=is_public,
+    )
+    body: JsonObject = {}
+    if args.title is not None:
+        body["title"] = args.title
+    if args.is_public is not None:
+        body["is_public"] = args.is_public
+    if not body:
+        return {"success": False, "error": "Provide title and/or is_public"}
+    try:
+        raw = await ServiceClient().patch(
+            "office",
+            f"/documents/api/v1/catalogs/{quote(args.catalog_id, safe='')}",
+            headers=_ns_headers(),
+            json=body,
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.update_catalog")
+    return {
+        "success": True,
+        "catalog_id": result.get("catalog_id"),
+        "title": result.get("title"),
+        "is_public": result.get("is_public"),
+        "is_owner": result.get("is_owner"),
+    }
+
+
+@tool(
+    name="documents_list_catalog_members",
+    description=(
+        "Lists explicit members of a catalog (not the whole company). "
+        "Returns items[] with user_id, display_name."
+    ),
+    tags=_DOCUMENTS_CATALOG_TAGS,
+    parameters_model=DocumentsCatalogIdArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_list_catalog_members(
+    catalog_id: str,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsCatalogIdArgs(catalog_id=catalog_id)
+    try:
+        raw = await ServiceClient().get(
+            "office",
+            f"/documents/api/v1/catalogs/{quote(args.catalog_id, safe='')}/members",
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    body = require_json_object(raw, "documents.catalog_members")
+    items = _as_object_list(body.get("members"), "documents.catalog_members.members")
+    return {
+        "success": True,
+        "catalog_id": args.catalog_id,
+        "items": [
+            {
+                "user_id": item.get("user_id"),
+                "display_name": item.get("display_name"),
+            }
+            for item in items
+        ],
+    }
+
+
+@tool(
+    name="documents_add_catalog_member",
+    description=(
+        "Adds a user_id to catalog members. Resolve user via team_resolve_user first. "
+        "Returns updated members list."
+    ),
+    tags=_DOCUMENTS_CATALOG_TAGS,
+    parameters_model=DocumentsAddCatalogMemberArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_add_catalog_member(
+    catalog_id: str,
+    user_id: str,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsAddCatalogMemberArgs(catalog_id=catalog_id, user_id=user_id)
+    try:
+        raw = await ServiceClient().post(
+            "office",
+            f"/documents/api/v1/catalogs/{quote(args.catalog_id, safe='')}/members",
+            headers=_ns_headers(),
+            json={"user_id": args.user_id},
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    body = require_json_object(raw, "documents.add_catalog_member")
+    items = _as_object_list(body.get("members"), "documents.add_catalog_member.members")
+    return {
+        "success": True,
+        "catalog_id": args.catalog_id,
+        "user_id": args.user_id,
+        "items": [
+            {
+                "user_id": item.get("user_id"),
+                "display_name": item.get("display_name"),
+            }
+            for item in items
+        ],
+    }
+
+
+def _access_path(resource_kind: Literal["catalog", "document"], resource_id: str) -> str:
+    rid = quote(resource_id, safe="")
+    if resource_kind == "catalog":
+        return f"/documents/api/v1/catalogs/{rid}/access"
+    return f"/documents/api/v1/documents/{rid}/access"
+
+
+@tool(
+    name="documents_get_access",
+    description=(
+        "Reads unified access for a catalog or document: company_visible, members, "
+        "link_enabled, public_url. Not the same as documents_get_link (SPA path)."
+    ),
+    tags=_DOCUMENTS_CATALOG_TAGS,
+    parameters_model=DocumentsAccessArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_get_access(
+    resource_kind: Literal["catalog", "document"],
+    resource_id: str,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsAccessArgs(resource_kind=resource_kind, resource_id=resource_id)
+    try:
+        raw = await ServiceClient().get(
+            "office",
+            _access_path(args.resource_kind, args.resource_id),
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.get_access")
+    return {"success": True, **result}
+
+
+@tool(
+    name="documents_patch_access",
+    description=(
+        "Patches catalog/document access: company_visible, link_enabled, "
+        "link_permission, member_user_ids (full replace when set). "
+        "After enabling link, call documents_rotate_public_link for a fresh public_url."
+    ),
+    tags=_DOCUMENTS_CATALOG_TAGS,
+    parameters_model=DocumentsPatchAccessArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_patch_access(
+    resource_kind: Literal["catalog", "document"],
+    resource_id: str,
+    company_visible: bool | None = None,
+    link_enabled: bool | None = None,
+    link_permission: Literal["view", "edit"] | None = None,
+    member_user_ids: list[str] | None = None,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsPatchAccessArgs(
+        resource_kind=resource_kind,
+        resource_id=resource_id,
+        company_visible=company_visible,
+        link_enabled=link_enabled,
+        link_permission=link_permission,
+        member_user_ids=member_user_ids,
+    )
+    body: JsonObject = {}
+    if args.company_visible is not None:
+        body["company_visible"] = args.company_visible
+    if args.link_enabled is not None:
+        body["link_enabled"] = args.link_enabled
+    if args.link_permission is not None:
+        body["link_permission"] = args.link_permission
+    if args.member_user_ids is not None:
+        body["member_user_ids"] = args.member_user_ids
+    if not body:
+        return {"success": False, "error": "Provide at least one access field to patch"}
+    try:
+        raw = await ServiceClient().patch(
+            "office",
+            _access_path(args.resource_kind, args.resource_id),
+            headers=_ns_headers(),
+            json=body,
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.patch_access")
+    return {"success": True, **result}
+
+
+@tool(
+    name="documents_rotate_public_link",
+    description=(
+        "Rotates the public link token for a catalog or document and returns public_url "
+        "(/documents/p/…). Enable link via documents_patch_access first. "
+        "Not documents_get_link (SPA editor path)."
+    ),
+    tags=_DOCUMENTS_CATALOG_TAGS,
+    parameters_model=DocumentsAccessArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_rotate_public_link(
+    resource_kind: Literal["catalog", "document"],
+    resource_id: str,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsAccessArgs(resource_kind=resource_kind, resource_id=resource_id)
+    try:
+        raw = await ServiceClient().post(
+            "office",
+            f"{_access_path(args.resource_kind, args.resource_id)}/link/rotate",
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.rotate_public_link")
+    return {
+        "success": True,
+        "resource_kind": args.resource_kind,
+        "resource_id": args.resource_id,
+        "public_url": result.get("public_url"),
+    }
+
+
+@tool(
+    name="documents_catalog_rag_status",
+    description=(
+        "Returns catalog RAG index status: enabled, totals, rag_namespace_id. "
+        "Use before documents_find(mode=semantic) or after enable/rebuild."
+    ),
+    tags=_DOCUMENTS_CATALOG_TAGS,
+    parameters_model=DocumentsCatalogIdArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_catalog_rag_status(
+    catalog_id: str,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsCatalogIdArgs(catalog_id=catalog_id)
+    try:
+        raw = await ServiceClient().get(
+            "office",
+            f"/documents/api/v1/catalogs/{quote(args.catalog_id, safe='')}/rag-index/status",
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.catalog_rag_status")
+    return {"success": True, "catalog_id": args.catalog_id, **result}
+
+
+@tool(
+    name="documents_catalog_rag_enable",
+    description=(
+        "Enables semantic RAG index for a catalog (creates office-catalog-{id} namespace "
+        "and enqueues initial index). Then use documents_find(mode=semantic)."
+    ),
+    tags=_DOCUMENTS_CATALOG_TAGS,
+    parameters_model=DocumentsCatalogIdArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_catalog_rag_enable(
+    catalog_id: str,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsCatalogIdArgs(catalog_id=catalog_id)
+    try:
+        raw = await ServiceClient().post(
+            "office",
+            f"/documents/api/v1/catalogs/{quote(args.catalog_id, safe='')}/rag-index/enable",
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.catalog_rag_enable")
+    return {"success": True, "catalog_id": args.catalog_id, **result}
+
+
+@tool(
+    name="documents_catalog_rag_disable",
+    description=(
+        "Disables catalog RAG index and removes vector index for that catalog namespace. "
+        "Use only when the user explicitly asks to turn semantic search off."
+    ),
+    tags=_DOCUMENTS_CATALOG_TAGS,
+    parameters_model=DocumentsCatalogIdArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_catalog_rag_disable(
+    catalog_id: str,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsCatalogIdArgs(catalog_id=catalog_id)
+    try:
+        raw = await ServiceClient().post(
+            "office",
+            f"/documents/api/v1/catalogs/{quote(args.catalog_id, safe='')}/rag-index/disable",
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.catalog_rag_disable")
+    return {"success": True, "catalog_id": args.catalog_id, **result}
+
+
+@tool(
+    name="documents_catalog_rag_rebuild",
+    description=(
+        "Rebuilds the catalog RAG index (TaskIQ job). Catalog must already have "
+        "rag_index_enabled. Returns task_id."
+    ),
+    tags=_DOCUMENTS_CATALOG_TAGS,
+    parameters_model=DocumentsCatalogIdArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_catalog_rag_rebuild(
+    catalog_id: str,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsCatalogIdArgs(catalog_id=catalog_id)
+    try:
+        raw = await ServiceClient().post(
+            "office",
+            f"/documents/api/v1/catalogs/{quote(args.catalog_id, safe='')}/rag-index/rebuild",
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.catalog_rag_rebuild")
+    return {"success": True, "catalog_id": args.catalog_id, **result}

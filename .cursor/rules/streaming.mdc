@@ -127,7 +127,7 @@ Wire SSE `result` — `StreamResponse`: `statusUpdate` | `artifactUpdate` | `tas
 
 ```python
 # A2AChannel: SendStreamingMessage — запустить worker, подписаться
-await process_flow_task.kiq(flow_id=..., task_id=..., ...)
+await enqueue(TASK_PROCESS_FLOW, flow_id=..., task_id=..., ...)
 async for event in subscriber.subscribe(task_id):
     yield event  # → StreamResponse на SSE
 

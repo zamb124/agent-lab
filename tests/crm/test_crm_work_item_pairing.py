@@ -26,10 +26,6 @@ from httpx import AsyncClient, Response
 
 from apps.crm.services.crm_work_item_service import CrmTaskWorkSeed
 from core.identity.flow_employee import flow_employee_user_id
-from tests.fixtures.flow_employee_test_helpers import (
-    cleanup_flow_employee_for_tests,
-    provision_flow_employee_for_tests,
-)
 from core.worktracker.models import (
     CrmEntityLink,
     QueueAssignment,
@@ -38,6 +34,10 @@ from core.worktracker.models import (
     WorkItemKind,
     WorkItemPriority,
     WorkItemState,
+)
+from tests.fixtures.flow_employee_test_helpers import (
+    cleanup_flow_employee_for_tests,
+    provision_flow_employee_for_tests,
 )
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -239,7 +239,66 @@ async def test_reassign_crm_work_item_to_agent_and_queue(app, crm_container, uni
 # ======================= Часть B: пара через CRM API (HTTP) =======================
 
 
-async def test_create_task_via_api_pairs_work_item(crm_client: AsyncClient, unique_id, auth_headers_system):
+async def test_activity_tasks_api_create_and_list(
+    crm_client: AsyncClient,
+    crm_container,
+    unique_id,
+    auth_headers_system,
+):
+    namespace = f"g_{unique_id}"
+    create = await crm_client.post(
+        "/crm/api/v1/activity-tasks",
+        json={
+            "title": f"Activity {unique_id}",
+            "namespace": namespace,
+            "priority": "high",
+            "description": "from facade",
+        },
+        headers=auth_headers_system,
+    )
+    assert create.status_code == 200
+    body = _http_json(create)
+    entity = body.get("entity")
+    work_item = body.get("work_item")
+    assert isinstance(entity, dict)
+    assert isinstance(work_item, dict)
+    assert entity.get("entity_type") == "task"
+    assert entity.get("name") == f"Activity {unique_id}"
+    assert work_item.get("kind") == "crm_activity"
+    assert work_item.get("priority") == "high"
+    assert work_item.get("namespace") == namespace
+    assert isinstance(work_item.get("work_item_id"), str)
+
+    listed = await crm_client.get(
+        "/crm/api/v1/activity-tasks",
+        params={"namespace": namespace, "limit": 50, "offset": 0},
+        headers=auth_headers_system,
+    )
+    assert listed.status_code == 200
+    listed_body = _http_json(listed)
+    items = listed_body.get("items")
+    assert isinstance(items, list)
+    assert any(
+        isinstance(row, dict) and row.get("work_item_id") == work_item.get("work_item_id")
+        for row in items
+    )
+
+    entity_id = entity.get("entity_id")
+    assert isinstance(entity_id, str)
+    persisted = await crm_container.crm_work_item_service.get_for_task(
+        company_id="system",
+        entity_id=entity_id,
+    )
+    assert persisted is not None
+    assert persisted.work_item_id == work_item.get("work_item_id")
+
+
+async def test_create_task_via_api_pairs_work_item(
+    crm_client: AsyncClient,
+    crm_container,
+    unique_id,
+    auth_headers_system,
+):
     namespace = f"g_{unique_id}"
     resp = await crm_client.post(
         "/crm/api/v1/entities/",
@@ -249,7 +308,7 @@ async def test_create_task_via_api_pairs_work_item(crm_client: AsyncClient, uniq
     assert resp.status_code == 200
     entity_id = _entity_id(resp)
 
-    item = await _get_crm_container().work_item_service.find_by_crm_entity("system", entity_id)
+    item = await crm_container.work_item_service.find_by_crm_entity("system", entity_id)
     assert item is not None
     assert item.kind is WorkItemKind.CRM_ACTIVITY
     assert item.namespace == namespace
@@ -271,7 +330,12 @@ async def test_task_api_response_has_no_work_fields(crm_client: AsyncClient, uni
     assert "assignees" not in body
 
 
-async def test_note_entity_has_no_paired_work_item(crm_client: AsyncClient, unique_id, auth_headers_system):
+async def test_note_entity_has_no_paired_work_item(
+    crm_client: AsyncClient,
+    crm_container,
+    unique_id,
+    auth_headers_system,
+):
     resp = await crm_client.post(
         "/crm/api/v1/entities/",
         json={"entity_type": "note", "name": f"note {unique_id}", "namespace": f"g_{unique_id}"},
@@ -279,11 +343,16 @@ async def test_note_entity_has_no_paired_work_item(crm_client: AsyncClient, uniq
     )
     assert resp.status_code == 200
     entity_id = _entity_id(resp)
-    item = await _get_crm_container().work_item_service.find_by_crm_entity("system", entity_id)
+    item = await crm_container.work_item_service.find_by_crm_entity("system", entity_id)
     assert item is None
 
 
-async def test_update_task_name_syncs_work_item_title(crm_client: AsyncClient, unique_id, auth_headers_system):
+async def test_update_task_name_syncs_work_item_title(
+    crm_client: AsyncClient,
+    crm_container,
+    unique_id,
+    auth_headers_system,
+):
     create = await crm_client.post(
         "/crm/api/v1/entities/",
         json={"entity_type": "task", "name": f"orig {unique_id}", "namespace": f"g_{unique_id}"},
@@ -296,12 +365,17 @@ async def test_update_task_name_syncs_work_item_title(crm_client: AsyncClient, u
         headers=auth_headers_system,
     )
     assert upd.status_code == 200
-    item = await _get_crm_container().work_item_service.find_by_crm_entity("system", entity_id)
+    item = await crm_container.work_item_service.find_by_crm_entity("system", entity_id)
     assert item is not None
     assert item.title == f"renamed {unique_id}"
 
 
-async def test_update_task_board_status_moves_work_item(crm_client: AsyncClient, unique_id, auth_headers_system):
+async def test_update_task_board_status_moves_work_item(
+    crm_client: AsyncClient,
+    crm_container,
+    unique_id,
+    auth_headers_system,
+):
     create = await crm_client.post(
         "/crm/api/v1/entities/",
         json={"entity_type": "task", "name": f"st {unique_id}", "namespace": f"g_{unique_id}"},
@@ -314,31 +388,40 @@ async def test_update_task_board_status_moves_work_item(crm_client: AsyncClient,
         headers=auth_headers_system,
     )
     assert upd.status_code == 200
-    # Канбан-статус не остаётся на CRM-узле.
     body = _http_json(upd)
     attrs = body.get("attributes")
     assert isinstance(attrs, dict)
     assert "status" not in attrs
-    item = await _get_crm_container().work_item_service.find_by_crm_entity("system", entity_id)
+    item = await crm_container.work_item_service.find_by_crm_entity("system", entity_id)
     assert item is not None
     assert item.state is WorkItemState.DONE
 
 
-async def test_delete_task_removes_paired_work_item(crm_client: AsyncClient, unique_id, auth_headers_system):
+async def test_delete_task_removes_paired_work_item(
+    crm_client: AsyncClient,
+    crm_container,
+    unique_id,
+    auth_headers_system,
+):
     create = await crm_client.post(
         "/crm/api/v1/entities/",
         json={"entity_type": "task", "name": f"del {unique_id}", "namespace": f"g_{unique_id}"},
         headers=auth_headers_system,
     )
     entity_id = _entity_id(create)
-    wi_svc = _get_crm_container().work_item_service
+    wi_svc = crm_container.work_item_service
     assert await wi_svc.find_by_crm_entity("system", entity_id) is not None
     delete = await crm_client.delete(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
     assert delete.status_code in (200, 204)
     assert await wi_svc.find_by_crm_entity("system", entity_id) is None
 
 
-async def test_merge_tasks_keeps_survivor_work_item(crm_client: AsyncClient, unique_id, auth_headers_system):
+async def test_merge_tasks_keeps_survivor_work_item(
+    crm_client: AsyncClient,
+    crm_container,
+    unique_id,
+    auth_headers_system,
+):
     namespace = f"g_{unique_id}"
     survivor = _entity_id(await crm_client.post(
         "/crm/api/v1/entities/",
@@ -350,7 +433,7 @@ async def test_merge_tasks_keeps_survivor_work_item(crm_client: AsyncClient, uni
         json={"entity_type": "task", "name": f"dup {unique_id}", "namespace": namespace},
         headers=auth_headers_system,
     ))
-    wi_svc = _get_crm_container().work_item_service
+    wi_svc = crm_container.work_item_service
     assert await wi_svc.find_by_crm_entity("system", survivor) is not None
     assert await wi_svc.find_by_crm_entity("system", source) is not None
 
@@ -364,7 +447,48 @@ async def test_merge_tasks_keeps_survivor_work_item(crm_client: AsyncClient, uni
     assert await wi_svc.find_by_crm_entity("system", source) is None
 
 
-def _get_crm_container():
-    from apps.crm.container import get_crm_container
+async def test_sync_partial_update_preserves_unset_work_fields(app, crm_container, unique_id):
+    """Rename/title-only sync не сбрасывает priority/assignees/state."""
+    svc = crm_container.crm_work_item_service
+    entity_id = f"ent_partial_{unique_id}"
+    first = await svc.sync_for_task(
+        company_id="system",
+        entity_id=entity_id,
+        namespace=f"ns-{unique_id}",
+        title="t1",
+        seed=CrmTaskWorkSeed(priority="high", assignees=["u1"], board_status="in_progress"),
+    )
+    assert first.priority is WorkItemPriority.HIGH
+    assert isinstance(first.assignment, UsersAssignment)
+    assert first.state is WorkItemState.IN_PROGRESS
 
-    return get_crm_container()
+    second = await svc.sync_for_task(
+        company_id="system",
+        entity_id=entity_id,
+        namespace=f"ns-{unique_id}",
+        title="renamed-only",
+        seed=CrmTaskWorkSeed(),
+    )
+    assert second.work_item_id == first.work_item_id
+    assert second.title == "renamed-only"
+    assert second.priority is WorkItemPriority.HIGH
+    assert isinstance(second.assignment, UsersAssignment)
+    assert second.assignment.user_ids == ["u1"]
+    assert second.state is WorkItemState.IN_PROGRESS
+
+
+async def test_sync_create_places_on_task_board(app, crm_container, unique_id):
+    svc = crm_container.crm_work_item_service
+    wi_svc = crm_container.work_item_service
+    namespace = f"ns-{unique_id}"
+    item = await svc.sync_for_task(
+        company_id="system",
+        entity_id=f"ent_board_{unique_id}",
+        namespace=namespace,
+        title="boarded",
+        seed=CrmTaskWorkSeed(),
+    )
+    assert item.board_id is not None
+    board = await wi_svc.get_board(company_id="system", board_id=item.board_id)
+    assert board.board_key == "task"
+    assert board.namespace == namespace

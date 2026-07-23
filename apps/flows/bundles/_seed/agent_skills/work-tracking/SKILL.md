@@ -1,28 +1,37 @@
 ---
 name: work-tracking
-description: Create and complete WorkItems and manage one-time or recurring schedules. Use for work, follow-ups, reminders, recurring checks, and work lists.
-allowed-tools: work_item_create work_item_list work_item_complete schedule_cron_task schedule_interval_task schedule_one_time_task list_scheduled_tasks cancel_scheduled_task
+description: Create and complete WorkItems, list mine/company work, and manage one-time or recurring schedules. Use for work, follow-ups, reminders, and work lists.
+allowed-tools: work_item_create work_item_list work_item_list_mine work_item_complete schedule_cron_task schedule_interval_task schedule_one_time_task list_scheduled_tasks cancel_scheduled_task
+depends_on: team-directory
 ---
 
 # Work tracking
 
 ## Goal
 
-Track work items and lightweight one-time schedules.
+Track WorkItems and lightweight schedules. Prefer this shared leaf from any service; load `work-items` / `work-queues` / `work-boards` under `worktracker-platform` for full lifecycle.
+
+## Intent → tool
+
+| Intent | Tool |
+|---|---|
+| What is on me? | `work_item_list_mine` |
+| Filtered company / board / queue list | `work_item_list` (never for «mine») |
+| Create work | `work_item_create` (board via create_manual_task semantics) |
+| Complete done/failed | `work_item_complete` |
+| Assign to a named person | `team_resolve_user` → then create/assign with `user_id` |
+| One-time / cron / interval reminder | `schedule_*` / `list_scheduled_tasks` / `cancel_scheduled_task` |
 
 ## Procedure
 
-1. List open work — `work_item_list`.
-2. Create a task — `work_item_create` with a clear title and assignment if known.
-3. Complete — `work_item_complete` with `work_item_id` from list/create.
-4. One-time reminder — `schedule_one_time_task` with an explicit ISO 8601 `run_at`.
-5. Calendar recurrence — `schedule_cron_task` when the user gives a wall-clock pattern such as weekdays at 09:00.
-6. Fixed cadence — `schedule_interval_task` when the user gives elapsed minutes between runs.
-7. Inspect schedules with `list_scheduled_tasks`; cancel with `cancel_scheduled_task`.
+1. Open work for the current actor — `work_item_list_mine` (default excludes terminal).
+2. Create — `work_item_create` with a clear title; for a person resolve `user_id` via `team_resolve_user` first; for a queue use `assignee_queue_slug`.
+3. Complete — `work_item_complete` with exact `work_item_id` from list/create (optional `terminal_state=failed`).
+4. Schedules — `schedule_one_time_task` / `schedule_cron_task` / `schedule_interval_task`; inspect with `list_scheduled_tasks`; cancel with `cancel_scheduled_task`.
 
-## Notes
+## Rules
 
-- Use canonical `work_item_id` / schedule ids from tool responses.
-- Ask the user before cancelling schedules they did not request to cancel.
-- Clarify timezone before creating a wall-clock schedule when it is not explicit in context.
-- For `content_type=tool_call`, use only a tool already available to the flow and provide its arguments explicitly.
+- Never invent `work_item_id` / `user_id` / `work_queue_id`.
+- Do not use `work_item_list` for «my tasks».
+- Cancel is not complete — load `work-items` for `work_item_cancel`.
+- Clarify timezone before wall-clock schedules when not explicit.

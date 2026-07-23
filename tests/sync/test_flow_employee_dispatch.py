@@ -1,15 +1,15 @@
-"""Sync-диспатч сотруднику-агенту (`apps/sync/realtime/handlers.py`).
+"""Диспатч sync-сообщения сотруднику-агенту через employee inbox flows.
 
-Проверяет механизм диспатча входящего sync-сообщения в единый employee inbox flows
-через реальный flows-сервис. Сотрудник-агент провижнится как обычный участник;
-человек сотрудником не является и в inbox не диспатчится.
+Wake-up flow-сотрудника идёт по событию `sync/message/created` шины
+`platform:events`: consumer group `flows` вызывает `EmployeeInboxService`.
+Здесь проверяется сам inbox-сервис (резолв сотрудника + enqueue) и то, что
+человек сотрудником не является.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from apps.sync.realtime.handlers import _dispatch_flow_employee_inbox
 from core.identity.flow_employee import (
     deactivate_flow_employee,
     ensure_flow_employee,
@@ -55,15 +55,16 @@ async def test_dispatch_to_employee_inbox_succeeds(
     from apps.flows.src.container import get_container
 
     try:
-        # диспатч проходит без ошибок: flows inbox нашёл сотрудника и flow, поставил в очередь
-        await _dispatch_flow_employee_inbox(
+        # диспатч проходит без ошибок: inbox нашёл сотрудника и flow, поставил в очередь
+        dispatched = await get_container().employee_inbox_service.dispatch_sync_message(
+            company_id=company_id,
             employee_user_id=emp_id,
             sender_user_id=sync_user_id,
             channel_id=f"chan_{unique_id}",
             message_id=f"msg_{unique_id}",
-            company_id=company_id,
             text="employee, please help",
         )
+        assert dispatched is True
         # провижн сделал сотрудника обычным участником-User
         employee = await get_container().user_repository.get(emp_id)
         assert employee is not None

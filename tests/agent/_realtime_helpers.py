@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 FRONTEND_WS_BASE = "ws://127.0.0.1:9004"

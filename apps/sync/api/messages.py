@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from apps.sync.dependencies import ContainerDep
@@ -17,6 +17,7 @@ from apps.sync.realtime.operations import (
     MessagesEditPayload,
     MessagesForwardPayload,
     MessagesListPayload,
+    MessagesListThreadPayload,
     MessagesMarkReadPayload,
     MessagesPinPayload,
     MessagesReactPayload,
@@ -28,6 +29,7 @@ from apps.sync.realtime.operations import (
     op_messages_edit,
     op_messages_forward,
     op_messages_list,
+    op_messages_list_thread,
     op_messages_mark_read,
     op_messages_pin,
     op_messages_react,
@@ -36,6 +38,7 @@ from apps.sync.realtime.operations import (
     op_messages_transcribe_call,
     op_messages_transcribe_video,
 )
+from core.pagination import OffsetPage
 
 router = APIRouter()
 MESSAGES_DEFAULT_LIMIT = 20
@@ -86,6 +89,37 @@ async def list_messages(
         items=result.items,
         next_cursor=result.next_cursor,
         prev_cursor=result.prev_cursor,
+    )
+
+
+@router.get(
+    "/{channel_id}/threads/{thread_id}/messages",
+    response_model=OffsetPage[MessageRead],
+)
+async def list_thread_messages(
+    channel_id: str,
+    thread_id: str,
+    container: ContainerDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> OffsetPage[MessageRead]:
+    """REST-зеркало `sync/messages/list_thread_requested`."""
+    user = require_current_user()
+    result = await op_messages_list_thread(
+        MessagesListThreadPayload(
+            channel_id=channel_id,
+            thread_id=thread_id,
+            limit=limit,
+            offset=offset,
+        ),
+        user=user,
+        container=container,
+    )
+    return OffsetPage[MessageRead](
+        items=result.items,
+        total=result.total,
+        limit=result.limit,
+        offset=result.offset,
     )
 
 

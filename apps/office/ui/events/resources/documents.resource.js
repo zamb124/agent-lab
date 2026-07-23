@@ -272,6 +272,66 @@ export const documentsOp = createAsyncOp({
             });
             return changed ? { ...state, items } : state;
         }
+        if (event.type === 'rag/document/status_updated') {
+            const payload = event.payload;
+            if (!payload || typeof payload !== 'object') {
+                return state;
+            }
+            const documentId = typeof payload.document_id === 'string' ? payload.document_id : '';
+            if (documentId.length === 0) {
+                return state;
+            }
+            const ragStatus = typeof payload.status === 'string' ? payload.status : '';
+            let nextStatus = null;
+            if (ragStatus === 'completed') {
+                nextStatus = 'ready';
+            } else if (ragStatus === 'failed') {
+                nextStatus = 'failed';
+            } else if (ragStatus === 'processing' || ragStatus === 'pending' || ragStatus === 'queued') {
+                nextStatus = 'pending';
+            } else {
+                return state;
+            }
+            let changed = false;
+            const items = state.items.map((item) => {
+                if (!item || item.file_id !== documentId) {
+                    return item;
+                }
+                if (item.rag_index_status === nextStatus) {
+                    return item;
+                }
+                changed = true;
+                return { ...item, rag_index_status: nextStatus };
+            });
+            return changed ? { ...state, items } : state;
+        }
+        if (event.type === 'office/document/saved') {
+            const payload = event.payload;
+            if (!payload || typeof payload !== 'object') {
+                return state;
+            }
+            const fileId = typeof payload.file_id === 'string' ? payload.file_id : '';
+            if (fileId.length === 0) {
+                return state;
+            }
+            const title = typeof payload.title === 'string' && payload.title.length > 0
+                ? payload.title
+                : null;
+            const savedAt = new Date().toISOString();
+            let changed = false;
+            const items = state.items.map((item) => {
+                if (!item || item.file_id !== fileId) {
+                    return item;
+                }
+                changed = true;
+                const next = { ...item, updated_at: savedAt };
+                if (title !== null) {
+                    next.title = title;
+                }
+                return next;
+            });
+            return changed ? { ...state, items } : state;
+        }
         if (event.type === events.SET_ACTIVE_CATALOG) {
             const catalogId = event.payload && typeof event.payload.catalogId === 'string'
                 ? event.payload.catalogId
@@ -453,56 +513,6 @@ export const documentsOp = createAsyncOp({
             return { ...state, recentFileIds: recent };
         }
         return state;
-    },
-});
-
-/**
- * Лёгкий poll статусов RAG: только statuses по file_ids → точечный PATCH в items.
- * Не трогает list REQUESTED и не мигает таблицей.
- */
-export const documentsRagStatusesOp = createAsyncOp({
-    name: 'office/documents_rag_statuses',
-    silent: true,
-    restMirror: { method: 'POST', path: '/documents/api/v1/documents/rag-index-statuses' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('office/documents_rag_statuses: payload required');
-        }
-        if (!Array.isArray(payload.fileIds) || payload.fileIds.length === 0) {
-            throw new Error('office/documents_rag_statuses: payload.fileIds required');
-        }
-        const fileIds = [];
-        const seen = new Set();
-        for (const rawId of payload.fileIds) {
-            if (typeof rawId !== 'string') {
-                throw new Error('office/documents_rag_statuses: fileIds must be strings');
-            }
-            const fileId = rawId.trim();
-            if (fileId.length === 0 || seen.has(fileId)) {
-                continue;
-            }
-            seen.add(fileId);
-            fileIds.push(fileId);
-        }
-        if (fileIds.length === 0) {
-            throw new Error('office/documents_rag_statuses: payload.fileIds must contain ids');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: '/documents/api/v1/documents/rag-index-statuses',
-            body: { file_ids: fileIds },
-            headers: nsHeader(ctx),
-        });
-    },
-    onSuccess: (ctx, result, event) => {
-        if (!result || typeof result !== 'object' || !result.statuses || typeof result.statuses !== 'object') {
-            throw new Error('office/documents_rag_statuses: result.statuses object required');
-        }
-        ctx.dispatch(
-            documentsOp.events.PATCH_RAG_INDEX_STATUSES,
-            { statuses: result.statuses },
-            { causation_id: event.id, source: 'local' },
-        );
     },
 });
 

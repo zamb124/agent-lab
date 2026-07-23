@@ -750,19 +750,30 @@ export class CRMNoteCardView extends PlatformElement {
                 background: var(--crm-note-summary-bg);
             }
             .summary-card .card-title {
+                color: var(--text-primary);
+            }
+            .summary-card .summary-title-text {
                 background: var(--crm-note-summary-title-gradient);
                 -webkit-background-clip: text;
                 background-clip: text;
                 -webkit-text-fill-color: transparent;
                 color: transparent;
             }
-            .summary-spark {
-                width: 24px;
-                height: 24px;
-                background: var(--crm-note-icon-gradient);
-                -webkit-mask: var(--summary-spark-mask) center / contain no-repeat;
-                mask: var(--summary-spark-mask) center / contain no-repeat;
+            .summary-title-icon {
+                width: 20px;
+                height: 20px;
                 flex-shrink: 0;
+                background: var(--crm-note-icon-gradient);
+                -webkit-mask: var(--crm-note-summary-spark-mask) center / contain no-repeat;
+                mask: var(--crm-note-summary-spark-mask) center / contain no-repeat;
+            }
+            .summary-card .summary-refresh-icon {
+                width: 16px;
+                height: 16px;
+                display: block;
+                background: var(--crm-note-icon-gradient);
+                -webkit-mask: var(--crm-note-summary-refresh-mask) center / contain no-repeat;
+                mask: var(--crm-note-summary-refresh-mask) center / contain no-repeat;
             }
             .summary-meta {
                 margin: 0;
@@ -3561,8 +3572,8 @@ export class CRMNoteCardView extends PlatformElement {
             <section class="card summary-card">
                 <div class="card-header">
                     <h3 class="card-title">
-                        <platform-icon name="ai" size="20" colored></platform-icon>
-                        ${this.t('note_view.summary_title')}
+                        <span class="summary-title-icon" aria-hidden="true"></span>
+                        <span class="summary-title-text">${this.t('note_view.summary_title')}</span>
                     </h3>
                     <button
                         type="button"
@@ -3572,11 +3583,10 @@ export class CRMNoteCardView extends PlatformElement {
                         @click=${() => this.emit('refresh-summary')}
                         style="width: 36px; height: 36px;"
                     >
-                        <platform-icon
+                        <span
                             class=${`summary-refresh-icon ${this.aiAnalyzing ? 'spinning' : ''}`}
-                            name="refresh"
-                            size="16"
-                        ></platform-icon>
+                            aria-hidden="true"
+                        ></span>
                     </button>
                 </div>
                 ${summaryTime
@@ -3671,7 +3681,6 @@ export class CRMNoteCardView extends PlatformElement {
                                     ${workItemId.length > 0
                                         ? html`<platform-work-item-badge
                                             work-item-id=${workItemId}
-                                            .item=${task}
                                             variant="chip"
                                             size="sm"
                                             interactive

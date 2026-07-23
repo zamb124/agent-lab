@@ -46,7 +46,6 @@ import { createOfficeCatalogsLegacyRoutesEffect } from '../events/office-catalog
 import { companyMembersOp } from '../events/resources/company-members.resource.js';
 import {
     documentsOp,
-    documentsRagStatusesOp,
     buildDocumentsListPayload,
     documentCreateEmptyOp,
     documentUploadOp,
@@ -157,7 +156,6 @@ export class OfficeApp extends PlatformApp {
         catalogRagSearchOp,
         companyMembersOp,
         documentsOp,
-        documentsRagStatusesOp,
         documentCreateEmptyOp,
         documentUploadOp,
         documentRenameOp,

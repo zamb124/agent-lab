@@ -19,7 +19,6 @@ from tests.ui.e2e.flows_e2e_helpers import (
 )
 from tests.ui.e2e.hitl_e2e_bridge import (
     EXAMPLE_GRAPH_ID,
-    EXAMPLE_REACT_ID,
     GREEN_GARDEN_HITL_MESSAGE,
     GREEN_GARDEN_OPERATOR_REPLY,
     GREEN_GARDEN_TAKEOVER_MESSAGE,

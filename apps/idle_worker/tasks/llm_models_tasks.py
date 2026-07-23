@@ -2,8 +2,8 @@
 
 from typing import TypedDict
 
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import IdleWorkerContainer, get_container
+from apps.idle_worker.tasks.task_names import TASK_SYNC_LLM_MODELS
 from core.context import Context, clear_context, set_context
 from core.identity.system_bootstrap import (
     SYSTEM_ADMIN_EMAIL,
@@ -12,6 +12,7 @@ from core.identity.system_bootstrap import (
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from core.tasks import platform_task
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
@@ -54,7 +55,7 @@ async def build_scheduler_auth_context(
     )
 
 
-@idle_broker.task(task_name="sync_llm_models_task", queue_name="idle")
+@platform_task(TASK_SYNC_LLM_MODELS)
 async def sync_llm_models_task(
     schedule_task_id: str | None = None,
     company_id: str | None = None,

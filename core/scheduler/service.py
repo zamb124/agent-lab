@@ -22,7 +22,7 @@ from core.scheduler.models import (
 )
 from core.scheduler.repository import SchedulerTaskRepository
 from core.scheduler.source import get_schedule_source
-from core.tasks.kicker import build_log_labels
+from core.tasks.log_labels import build_log_labels
 from core.types import JsonObject
 
 BrokerForQueue: TypeAlias = Callable[[str], AsyncBroker]

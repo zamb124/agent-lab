@@ -67,10 +67,9 @@ from apps.flows.src.models.evaluation_lab import (
     EvaluationTraceCaseCreateRequest,
 )
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_EVALUATION_RUN
-from apps.flows_worker.broker_core import broker as flows_broker
 from core.context import get_context
 from core.pagination import ListResponse
-from core.tasks.kicker import kicker_for_task_name_with_log_labels
+from core.tasks import kicker_for_task_name_with_log_labels, resolve_broker_for_task
 from core.tracing.context import get_current_trace_context
 from core.types import JsonObject
 
@@ -92,8 +91,8 @@ async def _enqueue_evaluation_run_job(run_id: str, container: ContainerDep) -> N
     _ = await container.evaluation_lab_service.mark_run_job_enqueued(run_id)
     try:
         kicker = kicker_for_task_name_with_log_labels(
-            TASK_EXECUTE_EVALUATION_RUN,
-            flows_broker,
+            TASK_EXECUTE_EVALUATION_RUN.name,
+            resolve_broker_for_task(TASK_EXECUTE_EVALUATION_RUN),
             background_kind="evaluation",
             extra_labels={"evaluation_run_id": run_id},
         )

@@ -36,15 +36,17 @@ alwaysApply: false
 
 ## HITL и задачи оператора
 
-Доменных WS-команд у flows нет. HITL и задачи оператора ведутся в платформенном ядре `WorkItem` (сервис **worktracker**, `/worktracker/api/v1/work-items*`, → **`worktracker.mdc`**). flows предоставляет internal-эндпоинты для хуков: `POST /flows/api/v1/internal/work-items/{completed,assigned}` и HITL-диалог `/flows/api/v1/hitl/{work_item_id}/conversation*` (`HitlConversationService`).
+Доменных WS-команд у flows нет. HITL и задачи оператора ведутся в платформенном ядре `WorkItem` (сервис **worktracker**, `/worktracker/api/v1/work-items*`, → **`worktracker.mdc`**). Завершение HITL: worktracker публикует `worktracker/work_item/completed` на шину `platform:events` → consumer group `flows` (`PlatformEventConsumerService` → `HitlWorkItemService.resume_from_completion`). Диалог HITL: `/flows/api/v1/hitl/{work_item_id}/conversation*` (`HitlConversationService`). HTTP wake `/internal/work-items/*` удалён.
 
 ## Flow как сотрудник (employee)
 
-`FlowConfig.employee` (`FlowEmployeeConfig`: `enabled`, `roles`, `curator_user_ids` ≥1, `display_name`, `avatar_url`) при `create_flow`/`update_flow` провижнит flow как платформенного `User` `flow_employee_{flow_id}` (`core.identity.flow_employee`, двустороннее членство `company.members`), при `enabled=False`/удалении — деактивирует. Employee-flow **всегда** исполняется от своего имени: `apps/flows/src/services/execution_identity.resolve_execution_context` минтит SESSION JWT через `build_job_context` во всех точках входа (channels, tasks, handoff, scheduler, inbox) до сериализации `context_data`; `ExecutionState.initiator_user_id` хранит запустившего (уведомления/`ask_user`/prompt-переменные собеседника — от инициатора, identity/memory — от актора). Направление «платформа → flow» — единый **inbox** `POST /flows/api/v1/internal/employee/inbox` (typed `sync_message | work_item_assigned`, signed internal headers). Куратор: эскалации фоновых запусков/сбоев идут `curator_user_ids`; act-as (вход как сотрудник) — `POST /{svc}/api/team/employees/{user_id}/act-as` (только flow-сотрудник, только куратор/админ, `impersonated_by` в JWT metadata → `Context.metadata`). Ось идентичности одна — `user_id`; `AgentActor`/`AgentAssignment`/`platform-agent:*` удалены.
+Полный канон (Sync DM/@mention, WorkItem, матрица готовности, долг) → **`flow_employee.mdc`**.
+
+`FlowConfig.employee` (`FlowEmployeeConfig`: `enabled`, `roles`, `curator_user_ids` ≥1, `display_name`, `avatar_url`) при `create_flow`/`update_flow` провижнит flow как платформенного `User` `flow_employee_{flow_id}` (`core.identity.flow_employee`, двустороннее членство `company.members`), при `enabled=False`/удалении — деактивирует. Employee-flow **всегда** исполняется от своего имени: `apps/flows/src/services/execution_identity.resolve_execution_context` минтит SESSION JWT через `build_job_context` на точках входа **channels / tasks / scheduler / employee inbox** (и на **последующих** user replies к handoff-child через `create_task`) до сериализации `context_data`. **Handoff kickoff** (`BaseChannel._handle_handoff` → `kickoff_child_flow`) пока передаёт `context_data` parent-канала — employee JWT child на первом kickoff не резолвится (долг, → `flow_employee.mdc`). `ExecutionState.initiator_user_id` хранит запустившего (уведомления/`ask_user`/prompt-переменные собеседника — от инициатора, identity/memory — от актора). Направление «платформа → flow» — consumer group `flows` на шине `platform:events` (`PlatformEventConsumerService` → `EmployeeInboxService`; typed `sync_message | work_item_assigned`). HTTP `/internal/employee/inbox` удалён. Куратор: эскалации фоновых запусков/сбоев идут `curator_user_ids`; act-as (вход как сотрудник) — `POST /{svc}/api/team/employees/{user_id}/act-as` (только flow-сотрудник, только куратор/админ, `impersonated_by` в JWT metadata → `Context.metadata`). Ось идентичности одна — `user_id`; `AgentActor`/`AgentAssignment`/`platform-agent:*` удалены.
 
 ## Push-события (sync открытых редакторов)
 
-Бэкенд публикует через `core.ui_events.publish_ui_event_to_user` после успешного REST PUT/DELETE flow, POST `reload-from-bundle`, и POST/PUT/DELETE branch:
+Бэкенд публикует через `core.events.publish_event_to_user` после успешного REST PUT/DELETE flow, POST `reload-from-bundle`, и POST/PUT/DELETE branch:
 
 | Push | Источник | Слушатель |
 |---|---|---|
@@ -129,7 +131,7 @@ alwaysApply: false
 
 ## Triggers
 
-Хранятся в `FlowConfig.triggers`. Типы: `telegram`, `webhook`, `cron`, `email`, `redis`.
+Хранятся в `FlowConfig.triggers`. Типы: `telegram`, `webhook`, `cron`, `email`, `platform_event`. Живые handlers — `telegram`, `email`, `platform_event`; `webhook`/`cron` — контракт без runtime (см. `apps/flows/docs/triggers_runtime_matrix.md`).
 
 ```json
 "triggers": {
@@ -166,6 +168,8 @@ alwaysApply: false
 Webhook URL: `/flows/api/v1/triggers/{telegram|webhook}/{flow_id}/{trigger_id}`.
 
 **Email (platform mail):** `EmailTriggerConfig.mailbox_binding_id` — ящик текущего пользователя (`GET .../api/mail/bindings/me`). Фильтр опционален: `allowed_senders` (substring по `from`), `subject_contains` (пусто = все). Runtime: `EmailTriggerHandler` пишет Redis-индекс `flows:email_triggers:{mailbox_binding_id}`; `mail_sync_tick` после non-bootstrap new INBOX вызывает `dispatch_email_triggers_for_messages` → `TriggerExecutor`. UI: 1-клик default-ящик или CTA `openModal('platform.mail', { openSettings: true })`. Сырой IMAP/Mailgun в UI не используется.
+
+**Platform event (шина `platform:events`, → `events.mdc`):** `PlatformEventTriggerConfig` — `event_type` (из каталога, endpoint `GET /flows/api/v1/platform-events/catalog`) + `filters: list[EventFilter(path, op: eq|ne|contains, value)]` (AND, dot-path по payload). Runtime: `PlatformEventTriggerHandler` пишет Redis-индекс `flows:event_triggers:{event_type}` (member `company_id|flow_id|trigger_id`); consumer group `flows` (`PlatformEventConsumerService`, фоновая задача `flows_worker`) на каждое событие вызывает `dispatch_platform_event_triggers` → `TriggerExecutor`. Payload для `output_mapping`: `{event_id, event_type, company_id, payload, actor_user_id, occurred_ts}`. Идемпотентность at-least-once: `task_id`/`context_id` = `uuid5(event_id + trigger_id)`. Пост-выход в канал у типа отключён (как у cron). Тот же consumer выполняет системный employee-routing (→ `flow_employee.mdc`).
 
 **Email ChannelNode (outbound):** `channel=email`, `channel_config.delivery` = `mailbox` | `smtp` (XOR).
 - `mailbox`: `mailbox_binding_id` (picker `GET .../bindings/me`, user+role); runtime → `MailService.send_message`.

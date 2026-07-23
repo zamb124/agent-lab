@@ -1,17 +1,18 @@
 """
 Менеджер WebSocket каналов платформы.
 
-Единственный публичный канал uplink → UI: `platform:ui_events`. В этот канал
-бэкенд-сервисы публикуют `UIEvent` через `core/ui_events/dispatcher.py`. Менеджер
-парсит конверт `{ "target": ..., "event": ... }`, проверяет адресацию (user/company/broadcast)
-и форвардит сериализованный `event` в WS-сокеты адресатов.
+Источник UI-доставки — единая шина событий `platform:events`
+(`core/events`). Менеджер читает live-хвост стрима (`PlatformEventTailReader`),
+берёт события с непустым ``delivery``, проверяет адресацию
+(user/company/broadcast) и форвардит сериализованное событие (без поля
+``delivery``) в WS-сокеты адресатов.
 
 Никакой бизнес-логики; никакой кастомной формы фрейма — фронту приходит
-ровно сериализованный `UIEvent` (type/payload/meta), как в контракте
-`core/ui_events/contract.py`.
+ровно `PlatformEvent` без ``delivery`` (event_id/type/company_id/payload/meta),
+как в контракте `core/events/contract.py`.
 
 Каждое доставленное событие логируется в request-лог-скоупе на основе
-``meta.request_id`` и ``meta.trace_id`` из конверта (если их нет —
+``meta.request_id`` и ``meta.trace_id`` события (если их нет —
 генерируется уникальный ``ui-deliver:<uuid>``), чтобы факт пуша попадал
 в общий поток событий запроса в Loki/Grafana.
 """
@@ -21,120 +22,17 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Protocol, Self, TypedDict, cast
 
 from fastapi import WebSocket
-from pydantic import ValidationError
-from redis.asyncio.client import PubSub, Redis
 
 from core.config import get_settings
+from core.events.consumer import PlatformEventTailReader
+from core.events.contract import PlatformEvent
 from core.logging import enter_request_scope, exit_request_scope, get_logger
-from core.ui_events.contract import UI_EVENTS_REDIS_CHANNEL, UIEventEnvelope
 
 logger = get_logger(__name__)
 
 ConnectionHook = Callable[[str, str | None, bool], Awaitable[None]]
-
-
-class _RedisPubSubMessage(TypedDict):
-    type: str
-    data: str | bytes | bytearray | None
-
-
-class _RedisFromUrlCommand(Protocol):
-    def __call__(self, url: str) -> Redis: ...
-
-
-class _RedisPublishCommand(Protocol):
-    def __call__(self, channel: str, message: str) -> Awaitable[int]: ...
-
-
-class _RedisPubSubFactory(Protocol):
-    def __call__(self) -> PubSub: ...
-
-
-class _RedisDisconnectCommand(Protocol):
-    def __call__(self, *, inuse_connections: bool) -> Awaitable[None]: ...
-
-
-class _RedisCloseCommand(Protocol):
-    def __call__(self) -> Awaitable[None]: ...
-
-
-class _RedisSubscribeCommand(Protocol):
-    def __call__(self, channel: str) -> Awaitable[None]: ...
-
-
-class _RedisGetMessageCommand(Protocol):
-    def __call__(
-        self,
-        *,
-        ignore_subscribe_messages: bool,
-        timeout: float,
-    ) -> Awaitable[_RedisPubSubMessage | None]: ...
-
-
-class _RedisUnsubscribeCommand(Protocol):
-    def __call__(self, *channels: str) -> Awaitable[None]: ...
-
-
-class _RedisPubSubAcloseCommand(Protocol):
-    def __call__(self) -> Awaitable[None]: ...
-
-
-class _RedisPubSub:
-    def __init__(self, pubsub: PubSub) -> None:
-        self._pubsub: PubSub = pubsub
-
-    async def subscribe(self, channel: str) -> None:
-        subscribe = cast(_RedisSubscribeCommand, self._pubsub.subscribe)
-        await subscribe(channel)
-
-    async def unsubscribe(self, *channels: str) -> None:
-        unsubscribe = cast(_RedisUnsubscribeCommand, self._pubsub.unsubscribe)
-        await unsubscribe(*channels)
-
-    async def aclose(self) -> None:
-        aclose = cast(_RedisPubSubAcloseCommand, self._pubsub.aclose)
-        await aclose()
-
-    async def get_message(
-        self,
-        *,
-        ignore_subscribe_messages: bool,
-        timeout: float,
-    ) -> _RedisPubSubMessage | None:
-        get_message = cast(_RedisGetMessageCommand, self._pubsub.get_message)
-        return await get_message(
-            ignore_subscribe_messages=ignore_subscribe_messages,
-            timeout=timeout,
-        )
-
-
-class _RedisConnection:
-    def __init__(self, client: Redis) -> None:
-        self._client: Redis = client
-
-    @classmethod
-    def from_url(cls, redis_url: str) -> Self:
-        from_url = cast(_RedisFromUrlCommand, Redis.from_url)
-        return cls(from_url(redis_url))
-
-    async def publish(self, channel: str, message: str) -> int:
-        publish = cast(_RedisPublishCommand, self._client.publish)
-        return await publish(channel, message)
-
-    def pubsub(self) -> _RedisPubSub:
-        pubsub = cast(_RedisPubSubFactory, self._client.pubsub)
-        return _RedisPubSub(pubsub())
-
-    async def disconnect_pool(self) -> None:
-        disconnect = cast(_RedisDisconnectCommand, self._client.connection_pool.disconnect)
-        await disconnect(inuse_connections=True)
-
-    async def close(self) -> None:
-        close = cast(_RedisCloseCommand, self._client.aclose)
-        await close()
 
 
 class NotificationManager:
@@ -150,9 +48,7 @@ class NotificationManager:
         self._connections: dict[str, set[WebSocket]] = {}
         self._socket_meta: dict[WebSocket, tuple[str, str | None]] = {}
         self._connection_lock: asyncio.Lock = asyncio.Lock()
-        self._redis_task: asyncio.Task[None] | None = None
-        self._redis_client: _RedisConnection | None = None
-        self._redis_pubsub: _RedisPubSub | None = None
+        self._tail_task: asyncio.Task[None] | None = None
         self._connect_hooks: list[ConnectionHook] = []
         self._disconnect_hooks: list[ConnectionHook] = []
 
@@ -211,31 +107,6 @@ class NotificationManager:
         sockets = self._connections.get(user_id)
         return bool(sockets) and len(sockets) > 0
 
-    async def publish_ui_envelope(self, envelope_json: str) -> None:
-        """Публикация уже сериализованного UI-конверта (вызывается dispatcher'ом).
-
-        В HTTP-процессах `_redis_client` инициализирован `start_redis_listener`
-        на `on_startup`. В TaskIQ worker отдельного listener нет — клиент
-        поднимается лениво из `DATABASE__REDIS_URL` (см. `core/config`),
-        чтобы один и тот же dispatcher работал из любого процесса платформы.
-        """
-        client = await self._ensure_publisher_client()
-        if client is None:
-            logger.warning("Redis client not available; UI event dropped")
-            return
-        _ = await client.publish(UI_EVENTS_REDIS_CHANNEL, envelope_json)
-
-    async def _ensure_publisher_client(self) -> _RedisConnection | None:
-        if self._redis_client is not None:
-            return self._redis_client
-        settings = get_settings()
-        redis_url = settings.database.redis_url
-        if not redis_url:
-            return None
-        self._redis_client = _RedisConnection.from_url(redis_url)
-        logger.info("Redis publisher client lazy-initialized for UI events")
-        return self._redis_client
-
     async def _send_event_to_sockets(
         self,
         sockets: set[WebSocket],
@@ -261,9 +132,12 @@ class NotificationManager:
                             if not bucket:
                                 _ = self._connections.pop(uid, None)
 
-    async def _deliver_envelope(self, envelope: UIEventEnvelope) -> None:
-        target = envelope.target
-        event = envelope.event
+    async def deliver_platform_event(self, event: PlatformEvent) -> None:
+        """Доставить событие шины в сокеты адресата (`event.delivery`)."""
+        delivery = event.delivery
+        if delivery is None:
+            return
+
         request_id = event.meta.request_id
         trace_id = event.meta.trace_id
 
@@ -278,20 +152,24 @@ class NotificationManager:
             trace_id=trace_id,
             service_name=settings.server.name,
             ui_event_type=event.type,
-            ui_event_id=event.id,
+            ui_event_id=event.event_id,
         )
 
-        event_text = event.model_dump_json()
-        user_id = target.user_id
-        company_id = target.company_id
-        broadcast = target.broadcast
+        event_text = event.ws_frame_json()
+        user_ids = delivery.user_ids
+        company_id = delivery.company_id
+        broadcast = delivery.broadcast
 
         try:
-            if user_id is not None:
-                sockets = self._connections.get(user_id)
-                if not sockets:
+            if user_ids is not None:
+                matched_users: set[WebSocket] = set()
+                for user_id in user_ids:
+                    matched_users.update(self._connections.get(user_id, set()))
+                if not matched_users:
                     return
-                await self._send_event_to_sockets(sockets, event_text, f"user={user_id}")
+                await self._send_event_to_sockets(
+                    matched_users, event_text, f"users={len(user_ids)}"
+                )
                 return
 
             if company_id is not None:
@@ -312,141 +190,36 @@ class NotificationManager:
             exit_request_scope(scope_token)
 
     async def start_redis_listener(self, redis_url: str) -> None:
-        if self._redis_task is not None:
-            logger.warning("Redis UI events listener already running")
+        """Запустить tail-чтение шины `platform:events` для UI-доставки."""
+        if self._tail_task is not None:
+            logger.warning("Platform events tail listener already running")
             return
-        self._redis_client = _RedisConnection.from_url(redis_url)
-        self._redis_task = asyncio.create_task(self._redis_loop())
-        logger.info("Redis UI events listener started on channel %s", UI_EVENTS_REDIS_CHANNEL)
-
-    async def _close_redis_pubsub(self, pubsub: _RedisPubSub | None) -> None:
-        if pubsub is None:
-            return
-        try:
-            await asyncio.wait_for(
-                pubsub.unsubscribe(UI_EVENTS_REDIS_CHANNEL),
-                timeout=3.0,
-            )
-        except (TimeoutError, Exception) as exc:
-            logger.warning("notification_manager.pubsub_unsubscribe_failed: %s", exc)
-        try:
-            await asyncio.wait_for(pubsub.aclose(), timeout=3.0)
-        except (TimeoutError, Exception) as exc:
-            logger.warning("notification_manager.pubsub_aclose_failed: %s", exc)
+        reader = PlatformEventTailReader(redis_url, self.deliver_platform_event)
+        self._tail_task = asyncio.create_task(reader.run())
+        logger.info("Platform events tail listener started")
 
     async def stop_redis_listener(self) -> None:
-        """Остановить pub/sub loop и закрыть клиент.
-
-        Сначала ``unsubscribe``/``aclose`` pub/sub — иначе ``get_message`` держит
-        сокет и ``cancel`` не завершает ``_redis_loop`` до закрытия Runner (pytest session).
-
-        Затем ``cancel`` + ожидание задачи; если цикл всё ещё жив,
-        ``connection_pool.disconnect`` рвёт сокет — затем снова ожидание задачи.
-
-        Затем ``disconnect`` пула (если ещё нужен) и ``aclose`` клиента.
-        """
-        task = self._redis_task
-        client = self._redis_client
-        pubsub = self._redis_pubsub
-
-        self._redis_task = None
-        self._redis_pubsub = None
-
-        await self._close_redis_pubsub(pubsub)
-
-        if task is not None and not task.done():
+        """Остановить tail-чтение шины."""
+        task = self._tail_task
+        self._tail_task = None
+        if task is None:
+            return
+        if not task.done():
             _ = task.cancel()
-        if task is not None:
-            try:
-                await asyncio.wait_for(task, timeout=8.0)
-            except asyncio.CancelledError:
-                pass
-            except asyncio.TimeoutError:
-                logger.warning("notification_manager.redis_task_join_timed_out_phase1")
-            except Exception as exc:
-                logger.warning("notification_manager.redis_task_failed: %s", exc)
-
-        if task is not None and not task.done() and client is not None:
-            try:
-                await asyncio.wait_for(
-                    client.disconnect_pool(),
-                    timeout=5.0,
-                )
-            except (asyncio.TimeoutError, Exception) as exc:
-                logger.warning("notification_manager.pool_disconnect_phase2_failed: %s", exc)
-            try:
-                await asyncio.wait_for(task, timeout=8.0)
-            except asyncio.CancelledError:
-                pass
-            except asyncio.TimeoutError:
-                logger.warning("notification_manager.redis_task_join_timed_out_phase2")
-            except Exception as exc:
-                logger.warning("notification_manager.redis_task_failed_phase2: %s", exc)
-
-        if task is not None and not task.done():
-            logger.error("notification_manager.redis_task_still_running_after_stop")
-
-        self._redis_client = None
-        if client is not None:
-            try:
-                await asyncio.wait_for(
-                    client.disconnect_pool(),
-                    timeout=5.0,
-                )
-            except (asyncio.TimeoutError, Exception) as exc:
-                logger.warning("notification_manager.pool_disconnect_final_failed: %s", exc)
-            try:
-                await asyncio.wait_for(client.close(), timeout=5.0)
-            except (asyncio.TimeoutError, Exception) as exc:
-                logger.warning("notification_manager.redis_client_aclose_failed: %s", exc)
-
-    async def _redis_loop(self) -> None:
-        assert self._redis_client is not None
-        pubsub = self._redis_client.pubsub()
-        self._redis_pubsub = pubsub
-        await pubsub.subscribe(UI_EVENTS_REDIS_CHANNEL)
         try:
-            while True:
-                # Таймаут даёт точки уступки циклу: cancel и shutdown Runner
-                # (gather по задачам) не зависают на вечном блокирующем read в listen().
-                message = await pubsub.get_message(
-                    ignore_subscribe_messages=True,
-                    timeout=1.0,
-                )
-                if message is None:
-                    continue
-                if message["type"] != "message":
-                    continue
-                data = message["data"]
-                if not isinstance(data, (str, bytes, bytearray)):
-                    logger.warning("ui_event.redis_message_data_invalid")
-                    continue
-                try:
-                    envelope = UIEventEnvelope.model_validate_json(data)
-                except ValidationError as exc:
-                    logger.error("Failed to parse UI envelope: %s", exc)
-                    continue
-                try:
-                    await self._deliver_envelope(envelope)
-                except Exception as exc:
-                    logger.error("Failed to deliver UI envelope: %s", exc, exc_info=True)
+            await asyncio.wait_for(task, timeout=8.0)
         except asyncio.CancelledError:
-            raise
-        finally:
-            if self._redis_pubsub is pubsub:
-                self._redis_pubsub = None
-                try:
-                    await pubsub.unsubscribe(UI_EVENTS_REDIS_CHANNEL)
-                    await pubsub.aclose()
-                except Exception as exc:
-                    logger.warning("notification_manager.redis_loop_pubsub_close_failed: %s", exc)
+            pass
+        except asyncio.TimeoutError:
+            logger.warning("notification_manager.tail_task_join_timed_out")
+        except Exception as exc:
+            logger.warning("notification_manager.tail_task_failed: %s", exc)
 
     def get_stats(self) -> dict[str, int | bool]:
         return {
             "active_users": len(self._connections),
             "total_connections": sum(len(s) for s in self._connections.values()),
-            "redis_connected": self._redis_client is not None,
-            "redis_task_running": self._redis_task is not None and not self._redis_task.done(),
+            "tail_task_running": self._tail_task is not None and not self._tail_task.done(),
         }
 
 

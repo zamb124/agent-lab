@@ -582,6 +582,8 @@
     --crm-summary-bg: rgba(95, 101, 150, 0.26);
     --crm-summary-stroke: rgba(136, 145, 204, 0.42);
     --crm-summary-title-gradient: var(--crm-main-gradient);
+    --crm-summary-spark-mask: url('/static/core/assets/icons/sparkle.svg');
+    --crm-summary-refresh-mask: url('/static/core/assets/icons/refresh.svg');
     --crm-summary-meta: rgba(255, 255, 255, 0.58);
     --crm-summary-chip-blue-bg: rgba(126, 142, 255, 0.25);
     --crm-summary-chip-cyan-bg: rgba(117, 219, 246, 0.28);
@@ -612,6 +614,8 @@
     --crm-note-summary-title-gradient: linear-gradient(80.46deg, #FAD17A 9.08%, #FF9A76 44.12%, #99A6F9 85.61%);
     --crm-note-icon-gradient: linear-gradient(80.46deg, #FAD17A 9.08%, #FF9A76 44.12%, #99A6F9 85.61%);
     --crm-note-related-icon-gradient: linear-gradient(312.35deg, #FAD17A 18.71%, #FF9A76 82.25%, #99A6F9 157.48%);
+    --crm-note-summary-spark-mask: var(--crm-summary-spark-mask);
+    --crm-note-summary-refresh-mask: var(--crm-summary-refresh-mask);
 
     /* ========== FLOWS SEMANTIC TOKENS ========== */
 
@@ -650,6 +654,12 @@
     --flows-avatar-text: var(--text-inverse);
     --flows-avatar-shadow: var(--glass-shadow-subtle);
     --flows-avatar-hover-shadow: var(--glass-shadow-medium);
+    --flows-employee-badge-size: 16px;
+    --flows-employee-badge-ring: color-mix(in srgb, var(--accent) 55%, var(--accent-secondary) 45%);
+    --flows-employee-badge-glow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent),
+        0 0 12px color-mix(in srgb, var(--accent-secondary) 35%, transparent);
+    --flows-employee-chip-active-bg: color-mix(in srgb, var(--accent) 16%, var(--glass-solid-medium));
+    --flows-employee-chip-active-border: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
     --flows-micro-control-size: 28px;
     --flows-card-action-size: var(--flows-micro-control-size);
 
@@ -1161,6 +1171,8 @@
     --crm-summary-bg: rgba(174, 180, 224, 0.28);
     --crm-summary-stroke: rgba(141, 149, 205, 0.45);
     --crm-summary-title-gradient: var(--crm-main-gradient);
+    --crm-summary-spark-mask: url('/static/core/assets/icons/sparkle.svg');
+    --crm-summary-refresh-mask: url('/static/core/assets/icons/refresh.svg');
     --crm-summary-meta: rgba(15, 23, 42, 0.45);
     --crm-summary-chip-blue-bg: rgba(126, 142, 255, 0.25);
     --crm-summary-chip-cyan-bg: rgba(117, 219, 246, 0.32);

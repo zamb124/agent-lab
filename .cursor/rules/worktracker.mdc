@@ -22,11 +22,11 @@ alwaysApply: false
 
 | Слой | Где | Знает про |
 |---|---|---|
-| Домен (нейтральный) | `core/worktracker/` | модели, репозиторий, `WorkItemService` (стейт-машина, валидация), диспатч хуков через инъектируемый `WorkItemHookDispatcher` (Protocol). **Не** знает про flows/crm, **не** делает прямых кросс-сервисных вызовов |
-| Сервис | `apps/worktracker/` | API (REST + push) + UI + `ServiceClientHookDispatcher` (POST хука через `ServiceClient`) |
-| Потребители | `apps/flows`, `apps/crm` | пишут WorkItem через `core/worktracker` репозиторий+сервис (БД доступна), инъектируют `ServiceClientHookDispatcher` |
+| Домен (нейтральный) | `core/worktracker/` | модели, репозиторий, `WorkItemService` (стейт-машина, валидация, publish на `platform:events`). **Не** знает про flows/crm, **не** делает кросс-сервисных HTTP |
+| Сервис | `apps/worktracker/` | API (REST + push) + UI |
+| Потребители | `apps/flows`, `apps/crm` | пишут WorkItem через `core/worktracker` репозиторий+сервис (БД доступна) |
 
-`core/ → apps/` запрещён: ядро нейтрально. Хуки жизненного цикла декуплены через инъектируемый `WorkItemHookDispatcher` (`core/worktracker/hook_dispatcher.py`); реализация `ServiceClientHookDispatcher` дёргает `{hook.service, hook.path}` через `ServiceClient`. flows реализует internal-эндпоинты `/flows/api/v1/internal/work-items/{completed,assigned}`; HITL-диалог — `/flows/api/v1/hitl/{work_item_id}/conversation*` (`HitlConversationService`), не через хук `comment`.
+`core/ → apps/` запрещён: ядро нейтрально. HITL resume — consumer group `flows` на `worktracker/work_item/completed` (binding в `WorkItem.hooks`, path=`platform:events`). HITL-диалог — `/flows/api/v1/hitl/{work_item_id}/conversation*` (`HitlConversationService`). Wake-up flow-сотрудника — `worktracker/work_item/assigned` (→ `events.mdc`, `flow_employee.mdc`). HTTP hook dispatcher для resume удалён; единственный side-effect complete — publish на шину.
 
 ## Каноническая модель (`core/worktracker/models.py`)
 
@@ -84,7 +84,9 @@ REST API (`apps/worktracker/api/**`):
 - `/worktracker/api/v1/work-queues` — CRUD очередей + участники (user|agent), `PATCH`, `i_am_member`
 - `/worktracker/api/v1/boards` — list/get/create + `PATCH` (колонки)
 
-Push (зеркал не имеют): `worktracker/work_item/created|updated|moved|completed|comment_created` через `publish_ui_event_*` → `platform:ui_events`. Транспорт — HTTP + push (как CRM tasks / office namespaces), без WS command-router.
+Push (зеркал не имеют): `worktracker/work_item/created|updated|moved|completed|comment_created` через `publish_event_*` → шина `platform:events`. Транспорт — HTTP + push (как CRM tasks / office namespaces), без WS command-router.
+
+Доменное событие без UI-доставки: `worktracker/work_item/assigned` (`publish_work_item_assigned`, payload `{work_item, assigned_by_user_id}`, `delivery=None`) публикуется на create/reassign — его читает consumer group `flows` (wake-up flow-сотрудника + пользовательские триггеры `platform_event`). Все типы зарегистрированы в каталоге событий (`core/worktracker/events.py`, → `events.mdc`).
 
 AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API `/worktracker/api/v1/*` (`context_type=api`, auth), SPA `/worktracker/*` (anonymous, как sync), health `/worktracker/health` в `SKIP_PATHS`.
 
@@ -92,7 +94,7 @@ AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API
 
 `handoff_mode` на hitl_node — режим HITL (`single_reply`/`takeover`), **не** agent handoff между flows (→ **`handoff.mdc`**).
 
-1. `hitl_node` / tool `hitl_operator_task` бросает `OperatorTaskInterrupt` (поле `work_item_id`; контракт в `core/state/interrupt.py`) и через `HitlWorkItemService` (flows) создаёт `WorkItem(kind=operator_handoff, blocking=true)` с хуком `completed`→`/flows/api/v1/internal/work-items/completed` + `flow_session` link. Диалог HITL пишется durable-append'ом в `ExecutionState.messages` (`HitlConversationService`), **не** в `WorkItemComment`.
+1. `hitl_node` / tool `hitl_operator_task` бросает `OperatorTaskInterrupt` (поле `work_item_id`; контракт в `core/state/interrupt.py`) и через `HitlWorkItemService` (flows) создаёт `WorkItem(kind=operator_handoff, blocking=true)` с `hooks.completed` (binding + path=`platform:events`) + `flow_session` link. Resume — consumer `flows` на `worktracker/work_item/completed`. Диалог HITL пишется durable-append'ом в `ExecutionState.messages` (`HitlConversationService`), **не** в `WorkItemComment`.
 2. Оператор:
    - **Доступ:** claim/complete требуют членства в `WorkQueue` задачи. Демо-очередь `example_hitl` при `ensure_example_hitl_queue` получает owner/admin компании как members (иначе UI скрывает «Ответить и завершить», claim → «Нет доступа к очереди»).
    - **`single_reply`:** ответ через embedded `<platform-chat profile="operator_handoff">` (полный composer, в т.ч. attach); Send = `complete` + closing reply durable-append + Emitter в `stream:{a2a_task_id}`.
@@ -104,15 +106,15 @@ AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API
 
 ## Агент как исполнитель
 
-Назначение задачи на flow-сотрудника = `UsersAssignment(user_ids=[flow_employee_{flow_id}])`. В `_after_assignment_change` для employee-исполнителей вместо notify идёт автодиспатч в flows employee inbox (`POST /flows/api/v1/internal/employee/inbox`, source `work_item_assigned`) — flow запускается с WorkItem на входе от собственного имени. Агент создаёт задачи себе/другому агенту/оператору/человеку через tools `work_item_create/complete/list` (self/agent → `UsersAssignment` на employee user_id, `created_by` — `UserActor` актора). Для HITL критичен хук `completed`; диалог — через `hitl_conversation`, не через `comment`-хук.
+Назначение задачи на flow-сотрудника = `UsersAssignment(user_ids=[flow_employee_{flow_id}])` (полный канон → **`flow_employee.mdc`**). В `_after_assignment_change` employee-исполнители не получают notify; ядро публикует `worktracker/work_item/assigned` на шину `platform:events`, consumer group `flows` (`PlatformEventConsumerService` в `flows_worker`) вызывает `EmployeeInboxService` — flow запускается с WorkItem на входе от собственного имени, а задача получает write-back: `WorkItemLink(flow_session)` + системный `WorkItemComment` («Агент взял задачу» / ошибка запуска). Агент работает через builtins: `work_item_list_mine` / `get` / `create` / `update` / `assign` / `move` / `claim` / `complete` / `cancel` / comments + `work_queue_*` / `work_board_*`; людей резолвит `team_list_members` / `team_resolve_user` (skill `team-directory`). Create идёт через `create_manual_task` (доска generic). HITL-диалог — не employee Worktracker tool.
 
 ## CRM (Networkle)
 
-Задача в CRM — узел графа (`CRMEntity` `entity_type=task`) для графа/AI/эмбеддинга; вся work-семантика (state/priority/due/assignee/доска/блокировка) — в парном `WorkItem(kind=crm_activity)`, связь 1:1 через `WorkItemLink(crm_entity)`. Синхронизация — `apps/crm/services/crm_work_item_service.py::CrmWorkItemService` из `EntityService` (create/update/AI-apply/AmoCRM); удаление/слияние CRM-узла чистит парный WorkItem. На CRM-узле задачи нет колонок `priority`/`due_date`/`assignees` и канбан-`attributes.status` — источник истины work-полей только WorkItem. Детали — `crm.mdc`.
+Задача в CRM — узел графа (`CRMEntity` `entity_type=task`) для графа/AI/эмбеддинга; вся work-семантика (state/priority/due/assignee/доска/блокировка) — в парном `WorkItem(kind=crm_activity)`, связь 1:1 через `WorkItemLink(crm_entity)`. Синхронизация — `CrmWorkItemService` из `EntityService` (create/update/AI-apply/AmoCRM); create пары из Networkle — `POST /crm/api/v1/activity-tasks`. На create WorkItem кладётся на доску `board_key=task` / `task:<subtype>`. Partial sync: поля seed применяются только из `model_fields_set` (rename CRM-узла не сбрасывает work-поля). Primary UX задач в Networkle — `/crm/tasks` на shared `platform-work-item-*`; worktracker SPA остаётся хостом inbox/queues/HITL/full editor. Детали — `crm.mdc`.
 
 ## Уведомления
 
-Назначение исполнителю (`UsersAssignment`) → `NotificationType.WORK_ITEM_ASSIGNED`; обновление → `WORK_ITEM_UPDATED`; `action_url` ведёт в worktracker (`/worktracker/tasks/{work_item_id}`). Доски слушают push `worktracker/work_item/*` и обновляют slice.
+Назначение исполнителю (`UsersAssignment`) → `NotificationType.WORK_ITEM_ASSIGNED`; изменение title/description → `WORK_ITEM_UPDATED`; комментарий → `WORK_ITEM_COMMENT` (assignees, кроме автора и flow-employee); `action_url` ведёт в worktracker (`/worktracker/tasks/{work_item_id}`). Доски слушают push `worktracker/work_item/*` и обновляют slice.
 
 ## UI surfaces & shared styles
 
@@ -140,7 +142,18 @@ Mobile properties на detail page — bottom sheet `worktracker.task_properties
 
 Desktop: клик по карточке → боковая панель quick view (`work-item-detail-panel`) с кнопкой «Открыть полностью». Mobile: клик → сразу страница `tasks/:workItemId`. Cross-service badge → всегда canonical page.
 
-Cross-service отображение задачи — **только** `<platform-work-item-badge>` / `<platform-work-item-preview>` из core UI Kit; локальные карточки задач в `apps/` запрещены. Parent передаёт `.item` при list/read, чтобы избежать N+1.
+Cross-service отображение и workspace задач — **только** core UI Kit:
+
+| Компонент | Назначение |
+|---|---|
+| `<platform-work-item-badge>` / `<platform-work-item-preview>` | chip/preview |
+| `<platform-work-item-row>` | Linear-style list row |
+| `<platform-work-item-board>` | kanban по `WorkItem.state` |
+| `<platform-work-item-detail>` | panel/page editor без HITL; UX как worktracker quick view (`layout=panel\|page`) |
+
+Локальные task cards / list rows / kanban в `apps/**` (кроме thin host в `apps/worktracker` поверх тех же platform-компонентов и HITL-only editor) запрещены. Parent передаёт `.item` при list/read, чтобы избежать N+1. Badge: только `work-item-id` (+ optional `.item` как WorkItem), **запрещено** передавать CRM entity как `.item`.
+
+Мутации/list cross-service — фабрики `platform/work_item_*` / `platform/work_items` → `/worktracker/api/v1/...`.
 
 Платформенные фабрики: `platform/work_item_get`, `platform/work_item_counts` — регистрируются автоматически в `PlatformApp` (все сервисы).
 
@@ -155,5 +168,5 @@ Cross-service отображение задачи — **только** `<platfor
 
 - Имя `task`/`task_id`/`operator_task_id` для WorkItem-сущностей.
 - Возрождение таблиц `operator_*` или дублирование work-полей в CRM/flows.
-- Кросс-сервисный вызов из `core/worktracker` (только через инъектируемый `WorkItemHookDispatcher`).
+- Кросс-сервисный HTTP из `core/worktracker` (wake/resume — только шина `platform:events`).
 - Resume flow через что-либо кроме `completed`-хука; стрим takeover — кроме `comment`-хука.

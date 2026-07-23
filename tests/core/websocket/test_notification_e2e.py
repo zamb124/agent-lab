@@ -1,7 +1,7 @@
 """
 E2E тесты для системы уведомлений с реальными WebSocket и Redis.
 
-Канон: notify_user(...) публикует UIEvent в `platform:ui_events`. WS-роутер
+Канон: notify_user(...) публикует событие в шину `platform:events`. WS-роутер
 форвардит событие в сокеты `/<svc>/api/ws/notifications` как фрейм
 `{type: 'notify/<service>/<kind>_received', payload: {title, message, data,
 priority, action_url, created_at, service, kind}}`.
@@ -41,7 +41,7 @@ def _payload_data(payload: dict[str, object]) -> dict[str, object]:
 
 
 async def _recv_event_by_type(ws, expected_type: str, timeout: float = 5.0) -> dict[str, object]:
-    """Ждать UIEvent с конкретным `type` (отбрасывает чужие push'и из канала)."""
+    """Ждать событие с конкретным `type` (отбрасывает чужие push'и из шины)."""
     deadline = time.monotonic() + timeout
     while True:
         remaining = deadline - time.monotonic()
@@ -370,7 +370,7 @@ async def test_ws_stats_endpoint(crm_client, auth_headers_system, ws_cookie_syst
             )
 
             stats = stats_resp.json()
-            # Новый формат stats: active_users / total_connections / redis_connected.
+            # Формат stats: active_users / total_connections / tail_task_running.
             assert "active_users" in stats
             assert "total_connections" in stats
             assert stats["total_connections"] >= 3

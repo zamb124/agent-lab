@@ -135,8 +135,8 @@ function _ensureAllFirstInNode(node, labelBag) {
             id: 'nav-tasks-all',
             label: labelBag.allTasks,
             icon: 'list',
-            routeKey: 'entities',
-            search: '?entity_type=task',
+            routeKey: 'tasks',
+            search: '',
         });
     } else if (gid === 'grp-entities') {
         nextChildren = _prependCanonicalAllLeaf(nextChildren, {
@@ -517,8 +517,8 @@ export function buildDefaultSidebarNav(opts) {
             id: 'nav-tasks-all',
             label: allTasks,
             icon: 'list',
-            routeKey: 'entities',
-            search: '?entity_type=task',
+            routeKey: 'tasks',
+            search: '',
         });
     }
     for (const tid of taskSubIds) {
@@ -528,8 +528,8 @@ export function buildDefaultSidebarNav(opts) {
             id: `nav-task-${tid}`,
             label,
             icon: _resolvedTypeIcon(byId, tid, 'check'),
-            routeKey: 'entities',
-            search: `?entity_type=task&entity_subtype=${encodeURIComponent(tid)}`,
+            routeKey: 'tasks',
+            search: `?entity_subtype=${encodeURIComponent(tid)}`,
         });
     }
     if (taskChildren.length > 0) {

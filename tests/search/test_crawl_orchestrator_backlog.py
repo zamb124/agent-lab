@@ -11,6 +11,7 @@ from apps.search.config import get_search_settings
 from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
 from core.crawl.models import CrawlDomain, CrawlJob, CrawlProfile, CrawlProfileWithIndex, CrawlUrl
 from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from tests.fixtures.taskiq_capture import taskiq_task_name
 
 
 def _profile_bundle(*, max_domains_per_tick: int = 2) -> CrawlProfileWithIndex:
@@ -87,11 +88,11 @@ def _orchestrator(
 async def test_run_tick_prioritizes_backlog_over_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
     enqueued: list[tuple[object, ...]] = []
 
-    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
-        enqueued.append((task_name, *args))
+    async def _capture(task: object, *args: object, **kwargs: object) -> None:
+        enqueued.append((taskiq_task_name(task), *args))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _capture,
     )
 
@@ -168,11 +169,11 @@ async def test_run_tick_prioritizes_backlog_over_cooldown(monkeypatch: pytest.Mo
 async def test_fetch_one_url_reenqueues_while_pending(monkeypatch: pytest.MonkeyPatch) -> None:
     enqueued: list[tuple[object, ...]] = []
 
-    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
-        enqueued.append((task_name, *args))
+    async def _capture(task: object, *args: object, **kwargs: object) -> None:
+        enqueued.append((taskiq_task_name(task), *args))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _capture,
     )
 
@@ -230,11 +231,11 @@ async def test_fetch_one_url_enqueues_tick_when_domain_drained_but_profile_pendi
 ) -> None:
     enqueued: list[tuple[object, ...]] = []
 
-    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
-        enqueued.append((task_name, *args))
+    async def _capture(task: object, *args: object, **kwargs: object) -> None:
+        enqueued.append((taskiq_task_name(task), *args))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _capture,
     )
 
@@ -297,11 +298,11 @@ async def test_run_tick_reenqueues_while_profile_pending_even_without_new_fetch(
 ) -> None:
     enqueued: list[tuple[object, ...]] = []
 
-    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
-        enqueued.append((task_name, *args))
+    async def _capture(task: object, *args: object, **kwargs: object) -> None:
+        enqueued.append((taskiq_task_name(task), *args))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _capture,
     )
 
@@ -352,11 +353,11 @@ async def test_fetch_and_index_url_enqueues_enrich_when_llm_enabled(
 ) -> None:
     enqueued: list[tuple[object, ...]] = []
 
-    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
-        enqueued.append((task_name, *args))
+    async def _capture(task: object, *args: object, **kwargs: object) -> None:
+        enqueued.append((taskiq_task_name(task), *args))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _capture,
     )
 

@@ -9,9 +9,14 @@
       "ask_user"
     ],
     "agent_skills": [
+      "console-platform",
       "networkle",
       "flows-platform",
       "flows-code",
+      "sync-platform",
+      "documents-platform",
+      "worktracker-platform",
+      "litserve-platform",
       "docs-knowledge",
       "platform-workspace"
     ],

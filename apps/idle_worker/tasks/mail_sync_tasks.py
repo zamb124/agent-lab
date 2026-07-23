@@ -14,23 +14,25 @@ import httpx
 from apps.flows.config import get_settings
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.triggers.handlers.email import dispatch_email_triggers_for_messages
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import IdleWorkerContainer, get_container
 from apps.idle_worker.tasks.mail_job_context import (
     enter_mail_binding_context,
     leave_mail_binding_context,
 )
+from core.events import publish_event_to_users
 from core.logging import get_logger
 from core.mail.enqueue import enqueue_mail_sync_tick_continuation
+from core.mail.events import MAIL_MESSAGE_UPSERTED
 from core.mail.models import (
     InboundMailMessage,
     MailboxBinding,
     MailSyncErrorKind,
 )
 from core.mail.service import to_message_list_item
+from core.mail.task_names import MAIL_SYNC_BINDING, MAIL_SYNC_TICK
 from core.mail.threads import thread_id_for_message
+from core.tasks import platform_task
 from core.types import JsonObject
-from core.ui_events.dispatcher import publish_ui_event_to_user
 from core.websocket.publisher import (
     Notification,
     NotificationAction,
@@ -114,12 +116,12 @@ async def _publish_message_upserted(
         }
         if message.message_id is not None:
             payload["message_id"] = message.message_id
-        for user_id in recipients:
-            await publish_ui_event_to_user(
-                user_id,
-                "mail/message/upserted",
-                payload,
-            )
+        await publish_event_to_users(
+            recipients,
+            MAIL_MESSAGE_UPSERTED,
+            payload,
+            company_id=binding.company_id,
+        )
 
 
 async def _send_new_mail_notifications(
@@ -256,7 +258,7 @@ def _empty_tick_result() -> dict[str, int]:
     }
 
 
-@idle_broker.task(task_name="mail_sync_tick", queue_name="idle")
+@platform_task(MAIL_SYNC_TICK)
 async def mail_sync_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
@@ -398,7 +400,7 @@ async def mail_sync_tick(
     }
 
 
-@idle_broker.task(task_name="mail_sync_binding", queue_name="idle")
+@platform_task(MAIL_SYNC_BINDING)
 async def mail_sync_binding_task(
     *,
     company_id: str,

@@ -21,28 +21,27 @@ from apps.crm.models.api import (
     NoteProcessingConfig,
     TaskCreatedEntitiesResponse,
 )
-from apps.crm.services.crm_task_ws_broadcast import broadcast_crm_task_updated_for_user
+from apps.crm.services.crm_task_broadcast import broadcast_crm_task_updated_for_user
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     store_pending_import_text,
 )
-from apps.crm_worker.broker import broker as crm_worker_broker
-from apps.crm_worker.task_names import (
-    CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN_TASK_NAME,
-    CRM_PROCESS_NOTE_TASK_NAME,
-    CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
-    CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
-    CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME,
-    CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME,
-    CRM_RUN_NAMESPACE_INTEGRATION_JOB_TASK_NAME,
+from apps.crm_worker.tasks.task_names import (
+    CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN,
+    CRM_PROCESS_NOTE,
+    CRM_REBUILD_DAILY_SUMMARY,
+    CRM_REBUILD_PERIOD_SUMMARY,
+    CRM_REPAIR_NOTE_ANALYSIS_DRAFT,
+    CRM_RUN_KNOWLEDGE_IMPORT,
+    CRM_RUN_NAMESPACE_INTEGRATION_JOB,
 )
 from core.context import clear_context, get_context, resolve_namespace_or_raise, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import User
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue
 from core.types import JsonObject
 from core.utils.knowledge_text_split import validate_chunk_max_chars
 
@@ -300,9 +299,8 @@ class TaskService:
         if ctx is None:
             raise ValueError("Для старта импорта нужен контекст запроса")
         try:
-            task = await kiq_task_name_with_context(
-                CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME,
-                crm_worker_broker,
+            task = await enqueue(
+                CRM_RUN_KNOWLEDGE_IMPORT,
                 task_id=task_id,
                 company_id=row.company_id,
                 auth_token=self._auth_token_from_context(),
@@ -377,9 +375,8 @@ class TaskService:
         if ctx is None:
             raise ValueError("Для старта фоновой задачи интеграции нужен контекст запроса")
         try:
-            task = await kiq_task_name_with_context(
-                CRM_RUN_NAMESPACE_INTEGRATION_JOB_TASK_NAME,
-                crm_worker_broker,
+            task = await enqueue(
+                CRM_RUN_NAMESPACE_INTEGRATION_JOB,
                 task_id=task_id,
                 company_id=row.company_id,
                 auth_token=self._auth_token_from_context(),
@@ -466,9 +463,8 @@ class TaskService:
         if ctx is None:
             raise ValueError("Для старта анализа нужен контекст запроса")
         try:
-            task = await kiq_task_name_with_context(
-                CRM_PROCESS_NOTE_TASK_NAME,
-                crm_worker_broker,
+            task = await enqueue(
+                CRM_PROCESS_NOTE,
                 task_id=task_id,
                 note_id=note_id,
                 company_id=row.company_id,
@@ -539,9 +535,8 @@ class TaskService:
             raise ValueError("Для старта починки черновика нужен контекст запроса")
         auth_token = ctx.auth_token
         try:
-            task = await kiq_task_name_with_context(
-                CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME,
-                crm_worker_broker,
+            task = await enqueue(
+                CRM_REPAIR_NOTE_ANALYSIS_DRAFT,
                 note_id=note_id,
                 company_id=row.company_id,
                 namespace=namespace,
@@ -620,9 +615,8 @@ class TaskService:
             raise ValueError("Для старта форматирования заметки нужен контекст запроса")
         auth_token = ctx.auth_token
         try:
-            task = await kiq_task_name_with_context(
-                CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN_TASK_NAME,
-                crm_worker_broker,
+            task = await enqueue(
+                CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN,
                 note_id=note_id,
                 company_id=row.company_id,
                 namespace=ns,
@@ -902,9 +896,8 @@ class TaskService:
         if ctx is None:
             raise ValueError("Для старта сводки нужен контекст запроса")
         try:
-            task = await kiq_task_name_with_context(
-                CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
-                crm_worker_broker,
+            task = await enqueue(
+                CRM_REBUILD_DAILY_SUMMARY,
                 company_id=row.company_id,
                 date_str=date_str,
                 namespace=worker_namespace,
@@ -971,9 +964,8 @@ class TaskService:
         if ctx is None:
             raise ValueError("Для старта сводки нужен контекст запроса")
         try:
-            task = await kiq_task_name_with_context(
-                CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
-                crm_worker_broker,
+            task = await enqueue(
+                CRM_REBUILD_PERIOD_SUMMARY,
                 company_id=row.company_id,
                 date_from=date_from,
                 date_to=date_to,

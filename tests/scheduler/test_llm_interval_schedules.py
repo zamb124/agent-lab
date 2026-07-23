@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 
+from apps.idle_worker.tasks.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS
 from apps.scheduler.main import (
     PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER,
-    PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
     SYSTEM_SCHEDULER_COMPANY_ID,
     _ensure_idle_interval_schedule,
 )
@@ -166,7 +166,7 @@ def _task(
     *,
     status: ScheduledTaskStatus,
     interval_seconds: int,
-    task_name: str = PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
+    task_name: str = TASK_REFRESH_PLATFORM_FREE_MODELS.name,
     payload: dict[str, Any] | None = None,
 ) -> PlatformScheduledTask:
     return PlatformScheduledTask(
@@ -193,7 +193,7 @@ async def test_ensure_idle_interval_schedule_creates_idle_schedule_and_kicks_it(
     await _ensure_idle_interval_schedule(
         container=container,
         config_enabled=True,
-        task_name=PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
+        task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
         interval_seconds=3300,
         payload={"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER},
         log_label="Platform free-pool sync",
@@ -227,7 +227,7 @@ async def test_ensure_idle_interval_schedule_resumes_compatible_paused_schedule(
     await _ensure_idle_interval_schedule(
         container=container,
         config_enabled=True,
-        task_name=PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
+        task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
         interval_seconds=3300,
         payload={"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER},
         log_label="Platform free-pool sync",
@@ -256,7 +256,7 @@ async def test_ensure_idle_interval_schedule_leaves_incompatible_pending_and_cre
     await _ensure_idle_interval_schedule(
         container=container,
         config_enabled=True,
-        task_name=PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
+        task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
         interval_seconds=3300,
         payload={"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER},
         log_label="Platform free-pool sync",
@@ -290,7 +290,7 @@ async def test_ensure_idle_interval_schedule_reconciles_payload_without_task_fal
     await _ensure_idle_interval_schedule(
         container=container,
         config_enabled=True,
-        task_name=PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
+        task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
         interval_seconds=3300,
         payload={"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER},
         log_label="Platform free-pool sync",

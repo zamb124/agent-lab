@@ -2,9 +2,10 @@
 
 import pytest
 
-from apps.search_worker.tasks.crawl_tasks import crawl_import_seed_domains
+from apps.search_worker.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS
 from core.crawl.models import CrawlProfileCreateRequest
 from core.search.index_models import SearchIndexCreateRequest
+from core.tasks import enqueue
 from tests.fixtures.taskiq_timeouts import TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS
 from tests.search.conftest import make_search_index_slug
 
@@ -52,7 +53,8 @@ async def test_bootstrap_queues_tranco_import_via_search_worker(
     )
     assert await search_container.crawl_domain_repository.count_for_profile(crawl_profile_id) == 0
 
-    task = await crawl_import_seed_domains.kiq(
+    task = await enqueue(
+        CRAWL_IMPORT_SEED_DOMAINS,
         crawl_profile_id,
         "tranco",
         _TRANCO_IMPORT_LIMIT,

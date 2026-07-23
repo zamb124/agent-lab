@@ -6,13 +6,13 @@ import hashlib
 from datetime import datetime
 
 from core.context import get_context
-from core.llm_context import (
-    LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY,
+from core.llm_context.memory import (
     LLMContextMemoryEpisode,
     LLMContextMemoryRecallRequest,
     LLMContextMemoryRecord,
-    LLMContextMemoryScope,
 )
+from core.llm_context.memory_compaction import LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY
+from core.llm_context.models import LLMContextMemoryScope
 from core.models.identity_models import NamespaceKind
 from core.namespace import NamespaceService
 from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchResult

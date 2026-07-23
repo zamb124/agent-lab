@@ -1,7 +1,7 @@
 import pytest
 import pytest_asyncio
 
-import apps.search_worker.tasks.crawl_tasks as _search_crawl_tasks  # noqa: F401
+from apps.platform_tasks.wiring import wire_worker
 from apps.search.config import SearchIntegrationConfig, get_search_settings, reset_search_settings
 from apps.search.container import SearchContainer, get_search_container, reset_search_container
 from apps.search.services import MetaSearchService
@@ -9,6 +9,9 @@ from apps.search.services.provider_availability import ProviderAvailabilityStore
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.search.index_models import SearchIndexCrawlTaxonomy
+
+_ = wire_worker("search")
+import apps.search_worker.tasks.crawl_tasks as _search_crawl_tasks  # noqa: E402, F401
 
 _SEARCH_PROVIDER_AVAILABILITY_SCOPES = ("platform", "company_system")
 

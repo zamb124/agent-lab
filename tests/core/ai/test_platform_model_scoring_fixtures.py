@@ -23,7 +23,6 @@ from tests.core.ai.scoring_fixture_support import (
 )
 from tests.core.clients.live_llm_provider_helpers import build_scored_free_pool
 
-
 pytestmark = pytest.mark.timeout(30)
 
 

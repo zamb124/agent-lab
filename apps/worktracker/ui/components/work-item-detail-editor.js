@@ -5,6 +5,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
+import { TEAM_EVENTS } from '@platform/lib/events/index.js';
 import {
     WORK_ITEM_EVENTS,
     WORK_ITEM_MUTATION_SUCCEEDED,
@@ -185,6 +186,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._assignOp = this.useOp('worktracker/work_item_assign');
         this._localeSel = this.select((s) => s.i18n.locale);
         this._teamSel = this.select((s) => s.team.members);
+        this._teamLoadingSel = this.select((s) => s.team.loading);
 
         const syncItem = (event) => {
             const item = workItemFromEventPayload(event.payload);
@@ -217,6 +219,7 @@ export class WorkItemDetailEditor extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._ensureTeamMembers();
         if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
             this._mql = window.matchMedia('(max-width: 767px)');
             this._isMobile = this._mql.matches;
@@ -242,6 +245,7 @@ export class WorkItemDetailEditor extends PlatformElement {
             throw new Error(`WorkItemDetailEditor: invalid layout "${this.layout}"`);
         }
         if ((changed.has('workItemId') || changed.has('active')) && this.active && this.workItemId) {
+            this._ensureTeamMembers();
             this._load();
         }
         if (changed.has('workItemId')) {
@@ -295,10 +299,19 @@ export class WorkItemDetailEditor extends PlatformElement {
         }
     }
 
+    _ensureTeamMembers() {
+        const members = this._teamSel.value;
+        const loading = this._teamLoadingSel.value;
+        if ((!Array.isArray(members) || members.length === 0) && !loading) {
+            this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
+        }
+    }
+
     _load() {
         if (!this.workItemId) {
             return;
         }
+        this._ensureTeamMembers();
         this._workItems.get(this.workItemId);
         this._commentsOp.run({ work_item_id: this.workItemId });
     }
@@ -520,13 +533,17 @@ export class WorkItemDetailEditor extends PlatformElement {
         if (!Array.isArray(members)) {
             return [];
         }
+        const flowBadge = this.t('detail_page.assignee_flow_badge');
         return members
             .filter((member) => member && typeof member.user_id === 'string' && member.user_id.length > 0)
             .map((member) => {
                 const name = typeof member.name === 'string' && member.name.length > 0
                     ? member.name
                     : member.user_id;
-                return { value: member.user_id, label: name };
+                const label = member.is_flow_employee === true
+                    ? `${name} (${flowBadge})`
+                    : name;
+                return { value: member.user_id, label };
             });
     }
 

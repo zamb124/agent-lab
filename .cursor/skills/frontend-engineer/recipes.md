@@ -845,15 +845,15 @@ this.openModal('<scope>.<entity>_create', { /* props */ });
 
 Каноничные примеры:
 
-- Backend: [`core/ui_events/dispatcher.py::publish_ui_event_to_user`](core/ui_events/dispatcher.py).
+- Backend: [`core/events/publisher.py::publish_event_to_user`](core/events/publisher.py).
 - Frontend: `useEvent('sync/call/incoming', ...)` в `sync-app.js`; `extraReducer` push-событий в [`apps/sync/ui/events/resources/messages.resource.js`](apps/sync/ui/events/resources/messages.resource.js).
 
 ### Backend
 
 ```python
-from core.ui_events import publish_ui_event_to_user
+from core.events import publish_event_to_user
 
-await publish_ui_event_to_user(
+await publish_event_to_user(
     user_id=note.author_user_id,
     type="crm/note/updated",
     payload={"note_id": note.id, "text": note.text},

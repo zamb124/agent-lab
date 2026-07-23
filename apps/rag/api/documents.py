@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import Field
 
 from apps.rag.config import get_rag_settings
-from apps.rag_worker.broker import broker as rag_worker_broker
+from apps.rag_worker.tasks.task_names import RAG_INDEX_DOCUMENT_S3
 from core.context import require_active_company, require_context
 from core.logging import get_logger
 from core.models import StrictBaseModel
@@ -22,7 +22,7 @@ from core.rag.models import (
     RAGMetadata,
 )
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue
 from core.types import JsonObject
 
 from ..dependencies import ContainerDep
@@ -213,9 +213,8 @@ async def _enqueue_s3_indexing_task(
     )
 
     company_id = require_active_company().company_id
-    task = await kiq_task_name_with_context(
-        "rag.index_document_s3",
-        rag_worker_broker,
+    task = await enqueue(
+        RAG_INDEX_DOCUMENT_S3,
         company_id=company_id,
         namespace_id=namespace_id,
         s3_key=s3_key,

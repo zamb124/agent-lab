@@ -12,9 +12,12 @@
  *   - useOp('crm/note_analyze_start')   — старт AI-анализа заметки
  *   - useOp('crm/entity_cards_bulk')    — batch-загрузка карточек связанных entity
  *
- * В реальном времени: подписка на WS-события `crm/note/updated`, `crm/daily_summary/updated`,
+ * В реальном времени: push `crm/note/updated` → merge в `crm/notes_list`;
+ * страница обновляет локальный card/summary/tasks map, без HTTP list reload.
+ * `crm/daily_summary/updated` / `crm/period_summary/updated` → summary ops
+ * extraReducer; `crm/task/updated` → tasks resource.
  * `crm/period_summary/updated`, `crm/task/updated` (прогресс `note_analyze` в slice
- * `crm/tasks` без поллинга). Backend публикует через `core/ui_events/dispatcher.py`.
+ * `crm/tasks` без поллинга). Backend публикует через `core/events/dispatcher.py`.
  * Изменение namespace приходит как `ui/namespace/changed` (CoreEvents.UI_NAMESPACE_CHANGED) —
  * page перезапрашивает ленту и сводку.
  *
@@ -31,6 +34,7 @@
 import { html, css } from 'lit';
 import { CRMNamespacePage } from '../base/crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
+import { CRM_NOTE_UPDATED, CRM_TASK_UPDATED } from '../events/types.js';
 import { stripOuterMarkdownCodeFence } from '@platform/lib/utils/strip-outer-markdown-fence.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
@@ -469,12 +473,13 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             }
             .summary-title {
                 display: flex;
-                align-items: flex-start;
+                align-items: center;
                 gap: var(--space-2);
                 margin: 0;
+                min-width: 0;
             }
             .summary-title-text {
-                flex: 1 1 12rem;
+                flex: 1 1 auto;
                 min-width: 0;
                 font-size: 20px;
                 font-weight: 700;
@@ -485,31 +490,35 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 -webkit-text-fill-color: transparent;
             }
             .summary-title-icon {
+                width: 20px;
+                height: 20px;
+                flex-shrink: 0;
+                background: var(--crm-summary-title-gradient);
+                -webkit-mask: var(--crm-summary-spark-mask) center / contain no-repeat;
+                mask: var(--crm-summary-spark-mask) center / contain no-repeat;
+            }
+            .summary-refresh-btn {
                 width: 24px;
                 height: 24px;
                 border-radius: var(--radius-full);
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                background: var(--crm-summary-title-gradient);
-            }
-            .summary-title-icon platform-icon { color: var(--platform-btn-primary-text); }
-            .summary-refresh-btn {
-                width: 32px;
-                height: 32px;
-                border-radius: var(--radius-full);
                 border: none;
                 background: transparent;
-                color: var(--accent-secondary);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 cursor: pointer;
-                margin-top: 2px;
                 padding: 0;
+                flex-shrink: 0;
             }
-            .summary-refresh-btn:hover { color: var(--accent); }
             .summary-refresh-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+            .summary-refresh-icon {
+                width: 18px;
+                height: 18px;
+                display: block;
+                background: var(--crm-summary-title-gradient);
+                -webkit-mask: var(--crm-summary-refresh-mask) center / contain no-repeat;
+                mask: var(--crm-summary-refresh-mask) center / contain no-repeat;
+            }
             .summary-refresh-icon.spinning {
                 animation: summary-spin 0.9s linear infinite;
                 transform-origin: center;
@@ -832,9 +841,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             }
             this._reloadNotes();
         });
-        this.useEvent('crm/note/updated', (event) => this._onNoteWsUpdate(event.payload));
-        this.useEvent('crm/daily_summary/updated', (event) => this._onSummaryWsUpdate(event.payload, false));
-        this.useEvent('crm/period_summary/updated', (event) => this._onSummaryWsUpdate(event.payload, true));
+        this.useEvent(CRM_NOTE_UPDATED, (event) => this._onNoteWsUpdate(event.payload));
 
         this.useEvent('crm/note_search/succeeded', (event) => {
             const causationId = event.meta && typeof event.meta.causation_id === 'string' ? event.meta.causation_id : null;
@@ -866,7 +873,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         });
 
         this.useEvent(this._tasks.resource.events.LIST_LOADED, () => this._rebuildAnalyzeTaskMap());
-        this.useEvent('crm/task/updated', () => this._rebuildAnalyzeTaskMap());
+        this.useEvent(CRM_TASK_UPDATED, () => this._rebuildAnalyzeTaskMap());
         this.useEvent(CoreEvents.WS_CONNECTED, () => {
             const items = this._tasks.items;
             const hasActiveAnalyze = items.some(
@@ -1024,38 +1031,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         }
     }
 
-    _onSummaryWsUpdate(payload, periodEvent) {
-        if (!payload || typeof payload !== 'object') return;
-        const ns = this._currentNamespace();
-        const payloadNs = payload.namespace === null || payload.namespace === undefined
-            ? null
-            : (typeof payload.namespace === 'string' && payload.namespace.length > 0 ? payload.namespace : null);
-        if (ns !== payloadNs) return;
-        const st = payload.state;
-        if (!st || typeof st !== 'object') return;
-        if (periodEvent === true) {
-            if (!this._isPeriod()) return;
-            if (payload.date_from !== this._dailyNotesUi.value.range.from || payload.date_to !== this._dailyNotesUi.value.range.to) return;
-            this._periodSummary.applyWsPatch({
-                summary: typeof st.summary === 'string' ? st.summary : '',
-                entities: Array.isArray(st.entities) ? st.entities : [],
-                entity_links: Array.isArray(st.entity_links) ? st.entity_links : [],
-                revalidating: false,
-                generated_at: typeof st.generated_at === 'string' ? st.generated_at : new Date().toISOString(),
-            });
-            return;
-        }
-        if (this._isPeriod()) return;
-        if (payload.date !== this._dailyNotesUi.value.range.from) return;
-        this._dailySummary.applyWsPatch({
-            summary: typeof st.summary === 'string' ? st.summary : '',
-            entities: Array.isArray(st.entities) ? st.entities : [],
-            entity_links: Array.isArray(st.entity_links) ? st.entity_links : [],
-            revalidating: false,
-            generated_at: typeof st.generated_at === 'string' ? st.generated_at : new Date().toISOString(),
-        });
-    }
-
     _onNoteWsUpdate(payload) {
         if (!payload || typeof payload !== 'object') return;
         if (typeof payload.note_id !== 'string' || payload.note_id.trim().length === 0) return;
@@ -1070,12 +1045,12 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             return;
         }
         if (payload.note_date < this._dailyNotesUi.value.range.from || payload.note_date > this._dailyNotesUi.value.range.to) return;
+        // Лента notes_list мержится в extraReducer; summary — crm/daily_summary/updated;
+        // analyze map — crm/task/updated / LIST_LOADED. Здесь только invalidate card cache.
         const next = { ...this._noteEntitiesByNoteId };
         delete next[payload.note_id.trim()];
         this._noteEntitiesByNoteId = next;
-        this._reloadNotes();
-        this._reloadSummary();
-        this._loadAnalyzeTasks();
+        this.requestUpdate();
     }
 
     _onSearchInput(event) {
@@ -1491,9 +1466,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         return html`
             <div class="summary-header">
                 <h3 class="summary-title">
-                    <span class="summary-title-icon">
-                        <platform-icon name="ai" size="20" colored></platform-icon>
-                    </span>
+                    <span class="summary-title-icon" aria-hidden="true"></span>
                     <span class="summary-title-text">${this._summaryPanelTitle()}</span>
                 </h3>
                 <button
@@ -1503,11 +1476,10 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                     ?disabled=${busy}
                     @click=${this._onRefreshSummary}
                 >
-                    <platform-icon
+                    <span
                         class="summary-refresh-icon ${busy ? 'spinning' : ''}"
-                        name="refresh"
-                        size="18"
-                    ></platform-icon>
+                        aria-hidden="true"
+                    ></span>
                 </button>
             </div>
             <div class="summary-meta">${this._summaryMetaLine()}</div>

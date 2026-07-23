@@ -4,7 +4,7 @@
 WorkItem(operator_handoff). flows владеет и durable-леджером, и доступом к БД
 worktracker, поэтому авторизует оператора по членству в очереди / claim прямо
 здесь. Realtime — push `flows/hitl_conversation/turn_appended` через
-`platform:ui_events` -> WS; клиент загружает snapshot и дописывает turns по push.
+`platform:events` -> WS; клиент загружает snapshot и дописывает turns по push.
 """
 
 from __future__ import annotations

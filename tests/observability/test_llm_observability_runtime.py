@@ -12,7 +12,11 @@ from core.logging.attributes import (
     LOG_LLM_PROVIDER,
     LOG_LLM_TTFT_MS,
 )
-from tests.fixtures.observability_log_capture import find_caplog_record, require_log_fields, require_numeric_field
+from tests.fixtures.observability_log_capture import (
+    find_caplog_record,
+    require_log_fields,
+    require_numeric_field,
+)
 from tests.observability.contracts import LLM_CONTEXT_COMPILED, LLM_STREAM_RESPONSE
 
 pytestmark = pytest.mark.timeout(30)

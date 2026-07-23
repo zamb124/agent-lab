@@ -99,6 +99,7 @@
     "no_id": "Task ID is missing.",
     "not_found": "Task not found.",
     "unassigned": "Unassigned",
+    "assignee_flow_badge": "AI employee",
     "label_state": "Status",
     "label_priority": "Priority",
     "label_assignee": "Assignee",

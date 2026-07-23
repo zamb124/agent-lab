@@ -1725,13 +1725,46 @@ export class CRMEntityCard extends PlatformElement {
         return html`<div class="form-error">${this.t(error_key)}</div>`;
     }
 
+    _isTaskEntityType() {
+        const type = this._selectedType();
+        if (type && typeof type.type_id === 'string' && type.type_id === 'task') {
+            return true;
+        }
+        if (type && typeof type.parent_type === 'string' && type.parent_type === 'task') {
+            return true;
+        }
+        if (this.panelMode !== MODE_VIEW) {
+            const draft = this._activeForm().draft;
+            if (draft && typeof draft.entity_type === 'string' && draft.entity_type === 'task') {
+                return true;
+            }
+        }
+        const viewEnt = this._resolveEntity();
+        return Boolean(viewEnt && viewEnt.entity_type === 'task');
+    }
+
+    _isWorkAttributeKey(key) {
+        return key === 'due_date'
+            || key === 'priority'
+            || key === 'title'
+            || key === 'status'
+            || key === 'assignees'
+            || key === 'assignee'
+            || key === 'due';
+    }
+
     _attributesSchema(type) {
         const required = type && type.required_fields && typeof type.required_fields === 'object' ? type.required_fields : {};
         const optional = type && type.optional_fields && typeof type.optional_fields === 'object' ? type.optional_fields : {};
+        const hideWork = this._isTaskEntityType();
         const out = [];
-        for (const [key, def] of Object.entries(required)) out.push({ key, def, required: true });
+        for (const [key, def] of Object.entries(required)) {
+            if (hideWork && this._isWorkAttributeKey(key)) continue;
+            out.push({ key, def, required: true });
+        }
         for (const [key, def] of Object.entries(optional)) {
             if (key in required) continue;
+            if (hideWork && this._isWorkAttributeKey(key)) continue;
             out.push({ key, def, required: false });
         }
         return out;
@@ -1776,9 +1809,13 @@ export class CRMEntityCard extends PlatformElement {
 
         if (schema.length === 0) {
             if (this.panelMode !== MODE_CREATE && Object.keys(attributes).length > 0) {
+                const hideWork = this._isTaskEntityType();
                 return html`
                     <div class="attrs-grid">
                         ${Object.entries(attributes).map(([key, value]) => {
+                            if (hideWork && this._isWorkAttributeKey(key)) {
+                                return nothing;
+                            }
                             const inferred = this._inferAttrFieldType(key, value);
                             const readOnlyExternal = key === 'external_refs';
                             const editable = uiMode === 'edit' && !readOnlyExternal;
@@ -2783,7 +2820,6 @@ export class CRMEntityCard extends PlatformElement {
                                     && entity.work_item_id.length > 0
                                     ? html`<platform-work-item-badge
                                         work-item-id=${entity.work_item_id}
-                                        .item=${entity}
                                         variant="chip"
                                         size="sm"
                                         interactive

@@ -31,6 +31,7 @@ from core.state import ExecutionState
 from core.state.interrupt import HandoffMode
 from core.variables.models import normalize_variables_map
 from core.worktracker.models import (
+    TERMINAL_WORK_ITEM_STATES,
     BoardColumn,
     CrmEntityLink,
     QueueAssignment,
@@ -320,7 +321,7 @@ async def test_hitl_register_creates_operator_handoff_work_item(app, container, 
     assert len(completed_hooks) == 1
     completed_hook = completed_hooks[0]
     assert completed_hook.service == "flows"
-    assert completed_hook.path == "/flows/api/v1/internal/work-items/completed"
+    assert completed_hook.path == "platform:events"
     assert completed_hook.binding["correlation_id"] == str(cid)
     assert completed_hook.binding["session_id"] == state.session_id
     # HITL больше не регистрирует comment-хук: диалог идёт durable append в лог сессии
@@ -758,30 +759,22 @@ async def test_cancel_and_reject_terminal_states(app, container, unique_id):
 # ============================ Единый механизм хуков ============================
 
 
-class _RecordingHookDispatcher:
-    def __init__(self) -> None:
-        self.events: list[str] = []
-
-    async def dispatch(self, work_item, hook, payload):  # noqa: ANN001
-        _ = (work_item, payload)
-        self.events.append(hook.event.value)
-
-
-async def test_hooks_dispatched_on_assigned_comment_completed(app, container, unique_id):
+async def test_hooks_metadata_persisted_without_http_dispatch(app, container, unique_id):
+    """hooks хранят binding для bus-потребителей; HTTP dispatcher удалён."""
     agent_flow_id = f"flow_{unique_id}"
     await provision_flow_employee_for_tests(
         flow_id=agent_flow_id,
         curator_user_id=f"cur_{unique_id}",
     )
     try:
-        recorder = _RecordingHookDispatcher()
-        svc = WorkItemService(
-            repository=container.worktracker_repository, hook_dispatcher=recorder
-        )
+        svc = WorkItemService(repository=container.worktracker_repository)
         hooks = [
-            WorkItemHook(event=WorkItemHookEvent.ASSIGNED, service="flows", path="/x"),
-            WorkItemHook(event=WorkItemHookEvent.COMMENT, service="flows", path="/y"),
-            WorkItemHook(event=WorkItemHookEvent.COMPLETED, service="flows", path="/z"),
+            WorkItemHook(
+                event=WorkItemHookEvent.COMPLETED,
+                service="flows",
+                path="platform:events",
+                binding={"probe": unique_id},
+            ),
         ]
         item = await svc.create(
             company_id="system",
@@ -791,20 +784,15 @@ async def test_hooks_dispatched_on_assigned_comment_completed(app, container, un
             assignment=UsersAssignment(user_ids=[flow_employee_user_id(agent_flow_id)]),
             hooks=hooks,
         )
-        # create с назначением на flow-сотрудника → assigned-хук
-        assert "assigned" in recorder.events
-
-        await svc.add_comment(
-            company_id="system",
-            work_item_id=item.work_item_id,
-            author=UserActor(user_id="op1"),
-            role=WorkItemCommentRole.OPERATOR,
-            text="hi",
-        )
-        assert "comment" in recorder.events
+        loaded = await svc.get("system", item.work_item_id)
+        completed = loaded.hooks_for(WorkItemHookEvent.COMPLETED)
+        assert len(completed) == 1
+        assert completed[0].binding["probe"] == unique_id
+        assert completed[0].path == "platform:events"
 
         _ = await svc.complete(company_id="system", work_item_id=item.work_item_id)
-        assert "completed" in recorder.events
+        done = await svc.get("system", item.work_item_id)
+        assert done.state in TERMINAL_WORK_ITEM_STATES
     finally:
         await cleanup_flow_employee_for_tests(flow_id=agent_flow_id)
 
@@ -851,29 +839,36 @@ async def test_work_item_attachments_variables_comment_files_roundtrip(app, cont
     assert fetched.variables["tier"].value == "gold"
 
 
-async def test_reassign_to_agent_dispatches_assigned_hook(app, container, unique_id):
+async def test_reassign_publishes_assigned_bus_event(
+    app, container, platform_events_listener, unique_id
+):
+    from core.worktracker.events import WORK_ITEM_ASSIGNED
+
     agent_flow_id = f"flow_{unique_id}"
     await provision_flow_employee_for_tests(
         flow_id=agent_flow_id,
         curator_user_id=f"cur_{unique_id}",
     )
     try:
-        recorder = _RecordingHookDispatcher()
-        svc = WorkItemService(
-            repository=container.worktracker_repository, hook_dispatcher=recorder
-        )
+        svc = container.work_item_service
         item = await svc.create(
             company_id="system",
             title=f"reassign-hook-{unique_id}",
             created_by=SystemActor(),
-            hooks=[WorkItemHook(event=WorkItemHookEvent.ASSIGNED, service="flows", path="/x")],
         )
-        recorder.events.clear()
         await svc.reassign(
             company_id="system",
             work_item_id=item.work_item_id,
             assignment=UsersAssignment(user_ids=[flow_employee_user_id(agent_flow_id)]),
         )
-        assert recorder.events == ["assigned"]
+        events = await platform_events_listener(WORK_ITEM_ASSIGNED, None, 3.0)
+        matched = [
+            event
+            for event in events
+            if isinstance(event.get("payload"), dict)
+            and isinstance(event["payload"].get("work_item"), dict)
+            and event["payload"]["work_item"].get("work_item_id") == item.work_item_id
+        ]
+        assert matched, "ожидалось worktracker/work_item/assigned после reassign"
     finally:
         await cleanup_flow_employee_for_tests(flow_id=agent_flow_id)

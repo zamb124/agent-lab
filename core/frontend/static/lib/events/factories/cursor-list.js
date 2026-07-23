@@ -21,6 +21,8 @@
  *     в payload `*_failed` как `error_code: 'http_<status>'` или равные
  *     ws-кодам — фабрика мапит по тому же statusMap.
  *   - errorToastKey: опционально; если задан — на FAILED показываем toast.
+ *   - extraReducer(state, event, events) — после базового reducer (push merge).
+ *   - extraEffect(event, ctx, events) — до базового effect; return true = handled.
  */
 
 import { CoreEvents } from '../contract.js';
@@ -74,6 +76,8 @@ export function createCursorList(options) {
     if (errorToastKey) {
         requireI18nKey(errorToastKey, `createCursorList(${name}).errorToastKey`);
     }
+    const extraReducer = typeof options.extraReducer === 'function' ? options.extraReducer : null;
+    const extraEffect = typeof options.extraEffect === 'function' ? options.extraEffect : null;
 
     const sliceKey = options.sliceKey || deriveSliceKey(name);
     registerResourceName(name, 'cursor-list');
@@ -106,7 +110,7 @@ export function createCursorList(options) {
         filters: freeze({ ...initialFilters }),
     });
 
-    function reducer(state = initialSlice, event) {
+    function _baseReducer(state, event) {
         switch (event.type) {
             case events.LOAD_REQUESTED: {
                 _assertObjectPayload(event, 'LOAD_REQUESTED');
@@ -179,6 +183,17 @@ export function createCursorList(options) {
         }
     }
 
+    function reducer(state = initialSlice, event) {
+        const next = _baseReducer(state, event);
+        if (extraReducer) {
+            const extended = extraReducer(next, event, events);
+            if (extended && extended !== next) {
+                return freeze(extended);
+            }
+        }
+        return next;
+    }
+
     function _assertObjectPayload(event, eventKey) {
         if (event.payload === undefined || event.payload === null || typeof event.payload !== 'object') {
             throw new Error(`createCursorList(${name}): ${eventKey} payload must be object`);
@@ -222,6 +237,12 @@ export function createCursorList(options) {
     }
 
     async function effect(event, ctx) {
+        if (extraEffect) {
+            const handled = await extraEffect(event, ctx, events);
+            if (handled === true) {
+                return;
+            }
+        }
         if (event.type !== events.LOAD_REQUESTED) return;
         if (!event.payload || typeof event.payload !== 'object') {
             throw new Error(`createCursorList(${name}): LOAD_REQUESTED payload must be object`);

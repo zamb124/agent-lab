@@ -10,11 +10,13 @@ from a2a.types import Message
 from pydantic import Field
 
 from core.clients.llm.messages import messages_to_openai
-from core.llm_context import (
+from core.llm_context import LLMContextProfile
+from core.llm_context.memory import (
     LLMContextMemoryEpisode,
     LLMContextMemorySource,
     LLMContextMemoryStore,
-    LLMContextProfile,
+)
+from core.llm_context.memory_compaction import (
     build_llm_context_memory_episode,
     compact_llm_context_memory_episode,
     llm_context_memory_cursor_key,

@@ -9,9 +9,9 @@ import pytest
 from core.mail.models import (
     CompanyMailConnectionUpsertPayload,
     InboundMailMessage,
-    MailMessageFlagPayload,
     MailboxBindingCreatePayload,
     MailboxBindingKind,
+    MailMessageFlagPayload,
     MailProvider,
 )
 from core.mail.repositories import MailMessageRepository

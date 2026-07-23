@@ -203,6 +203,20 @@ def test_task_root_is_not_context_anchor() -> None:
     assert by_id["task"].get("is_context_anchor") is False
 
 
+def test_task_root_optional_fields_are_effort_only() -> None:
+    """Work-поля (due_date/priority/title) не живут в CRM template attributes."""
+    by_id = {spec["type_id"]: spec for spec in SYSTEM_ENTITY_TYPE_TEMPLATES}
+    task = by_id["task"]
+    optional = object_dict(task.get("optional_fields") or {}, field="optional_fields")
+    assert set(optional.keys()) == {"effort"}
+    required = object_dict(task.get("required_fields") or {}, field="required_fields")
+    assert "due_date" not in required
+    assert "priority" not in required
+    assert "due_date" not in optional
+    assert "priority" not in optional
+    assert "title" not in optional
+
+
 def test_member_and_contact_are_voice_targets() -> None:
     """Voice заметки можно ставить только на person-сущностей."""
     by_id = {spec["type_id"]: spec for spec in SYSTEM_ENTITY_TYPE_TEMPLATES}

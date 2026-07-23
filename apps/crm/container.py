@@ -46,7 +46,6 @@ from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
 from core.rag.post_retrieval_rerank import RerankScoreCache
 from core.worktracker.db import WorktrackerDatabase
-from core.worktracker.hook_dispatcher import ServiceClientHookDispatcher
 from core.worktracker.repository import WorktrackerRepository
 from core.worktracker.service import WorkItemService
 
@@ -205,10 +204,7 @@ class CRMContainer(BaseContainer):
 
     @lazy
     def work_item_service(self) -> WorkItemService:
-        return WorkItemService(
-            repository=self.worktracker_repository,
-            hook_dispatcher=ServiceClientHookDispatcher(service_client=self.service_client),
-        )
+        return WorkItemService(repository=self.worktracker_repository)
 
     @lazy
     def crm_work_item_service(self) -> CrmWorkItemService:

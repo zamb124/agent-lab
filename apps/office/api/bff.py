@@ -27,6 +27,7 @@ from apps.office.config import OfficeSettings, get_office_settings
 from apps.office.container import OfficeContainer
 from apps.office.db.models import OfficeDocumentBinding
 from apps.office.dependencies import ContainerDep
+from apps.office.events import OFFICE_DOCUMENT_SAVED
 from apps.office.models.api import (
     OfficeCatalogCreateRequest,
     OfficeCatalogDetailResponse,
@@ -117,6 +118,7 @@ from core.config import get_settings
 from core.context import Context, clear_context, get_context, set_context
 from core.context.job_context import build_job_context
 from core.documents.placement import DocsBindResult, DocsPlacement
+from core.events import publish_event_to_user
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.registry import default_retention_for_source
 from core.files.s3_client import S3ClientFactory
@@ -3080,6 +3082,16 @@ async def onlyoffice_callback(
         )
 
         if notification_user_id is not None:
+            await publish_event_to_user(
+                notification_user_id,
+                OFFICE_DOCUMENT_SAVED,
+                {
+                    "file_id": file_id,
+                    "company_id": company_id,
+                    "title": notification_message,
+                },
+                company_id=company_id,
+            )
             await notify_user(
                 notification_user_id,
                 Notification(

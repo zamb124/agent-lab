@@ -24,7 +24,11 @@ from core.logging.attributes import (
 )
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode
-from tests.fixtures.observability_log_capture import find_caplog_record, require_log_fields, require_numeric_field
+from tests.fixtures.observability_log_capture import (
+    find_caplog_record,
+    require_log_fields,
+    require_numeric_field,
+)
 from tests.observability.contracts import HANDOFF_WALL_TIME, HITL_OPERATOR_RESPONDED
 
 pytestmark = pytest.mark.timeout(60)

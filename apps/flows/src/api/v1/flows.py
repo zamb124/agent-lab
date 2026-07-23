@@ -57,6 +57,7 @@ from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from core.ai.runtime import resolve_voice_tts_ws_voice
 from core.config import get_settings
 from core.context import get_context
+from core.events import publish_event_to_user
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.flow_preview_handoff import store_flow_preview_handoff
 from core.identity.runtime_users import ensure_persisted_runtime_user
@@ -73,7 +74,6 @@ from core.types import (
     require_json_object,
     require_json_value,
 )
-from core.ui_events.dispatcher import publish_ui_event_to_user
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
@@ -942,6 +942,7 @@ async def list_flows(
                     has_bundle_update=bundle_update_flags.get(f.flow_id, False),
                     store_card_image_url=f.store_card_image_url,
                     chat=f.chat,
+                    employee=f.employee,
                     agent_toolkit_ids=await _flow_agent_toolkit_ids(container, f.flow_id),
                     entry=f.entry,
                     nodes=f.nodes,
@@ -961,6 +962,7 @@ async def list_flows(
                     tags=f.tags,
                     hidden=f.hidden,
                     source=f.source,
+                    employee=f.employee,
                     agent_toolkit_ids=await _flow_agent_toolkit_ids(container, f.flow_id),
                     has_bundle_update=bundle_update_flags.get(f.flow_id, False),
                     store_card_image_url=f.store_card_image_url,
@@ -1336,7 +1338,7 @@ async def reload_flow_from_bundle(
 
     ctx = get_context()
     if ctx and ctx.user and ctx.user.user_id:
-        await publish_ui_event_to_user(
+        await publish_event_to_user(
             user_id=ctx.user.user_id,
             type="flows/flow/updated",
             payload={"flow_id": loaded_id, "version": reloaded_cfg.version or ""},
@@ -1531,7 +1533,7 @@ async def update_flow(
 
     ctx = get_context()
     if ctx and ctx.user and ctx.user.user_id:
-        await publish_ui_event_to_user(
+        await publish_event_to_user(
             user_id=ctx.user.user_id,
             type="flows/flow/updated",
             payload={"flow_id": flow_id, "version": flow_config.version or ""},
@@ -1638,7 +1640,7 @@ async def bulk_delete_nodes(
 
     ctx = get_context()
     if ctx and ctx.user and ctx.user.user_id:
-        await publish_ui_event_to_user(
+        await publish_event_to_user(
             user_id=ctx.user.user_id,
             type="flows/flow/updated",
             payload={"flow_id": flow_id, "version": flow_config.version or ""},
@@ -1712,7 +1714,7 @@ async def delete_flow(flow_id: str, container: ContainerDep) -> JsonObject:
 
     ctx = get_context()
     if ctx and ctx.user and ctx.user.user_id:
-        await publish_ui_event_to_user(
+        await publish_event_to_user(
             user_id=ctx.user.user_id,
             type="flows/flow/deleted",
             payload={"flow_id": flow_id},

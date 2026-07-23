@@ -5,7 +5,14 @@ Tasks для обслуживания и очистки vector_documents.
 from datetime import datetime, timezone
 
 from apps.rag.container import get_rag_container
-from apps.rag_worker.broker import broker
+from apps.rag_worker.tasks.task_names import (
+    RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK,
+    RAG_CLEANUP_NAMESPACE,
+    RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK,
+    RAG_LIST_DOCUMENTS,
+    RAG_REEMBED_STALE_DOCUMENTS_TICK,
+    RAG_REINDEX_DOCUMENT,
+)
 from core.config import get_settings
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
@@ -21,12 +28,13 @@ from core.rag.models import (
 from core.rag.reembed_stale_documents import execute_reembed_tick
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
+from core.tasks import platform_task
 from core.types import JsonObject
 
 logger = get_logger(__name__)
 
 
-@broker.task(queue_name="rag")
+@platform_task(RAG_CLEANUP_NAMESPACE)
 async def cleanup_namespace_task(namespace_id: str) -> RAGCleanupNamespaceTaskResult:
     """
     Очистка namespace -- удаление всех документов.
@@ -51,7 +59,7 @@ async def cleanup_namespace_task(namespace_id: str) -> RAGCleanupNamespaceTaskRe
     }
 
 
-@broker.task(queue_name="rag")
+@platform_task(RAG_LIST_DOCUMENTS)
 async def list_documents_task(namespace_id: str) -> list[RAGListedDocumentTaskItem]:
     """
     Получить список всех документов в namespace.
@@ -78,7 +86,7 @@ async def list_documents_task(namespace_id: str) -> list[RAGListedDocumentTaskIt
     ]
 
 
-@broker.task(queue_name="rag", retry_on_error=True, max_retries=3)
+@platform_task(RAG_REINDEX_DOCUMENT)
 async def reindex_document_task(
     context_data: JsonObject,
     namespace_id: str,
@@ -147,12 +155,7 @@ async def reindex_document_task(
         clear_context()
 
 
-@broker.task(
-    task_name="rag_cleanup_expired_documents_tick",
-    queue_name="rag",
-    retry_on_error=True,
-    max_retries=2,
-)
+@platform_task(RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK)
 async def rag_cleanup_expired_documents_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
@@ -221,12 +224,7 @@ async def rag_cleanup_expired_documents_tick(
     }
 
 
-@broker.task(
-    task_name="rag_reembed_stale_documents_tick",
-    queue_name="rag",
-    retry_on_error=True,
-    max_retries=2,
-)
+@platform_task(RAG_REEMBED_STALE_DOCUMENTS_TICK)
 async def rag_reembed_stale_documents_tick(
     schedule_task_id: str,
     company_id: str | None = None,
@@ -239,12 +237,7 @@ async def rag_reembed_stale_documents_tick(
     )
 
 
-@broker.task(
-    task_name="rag_cleanup_orphan_company_chunks_tick",
-    queue_name="rag",
-    retry_on_error=True,
-    max_retries=2,
-)
+@platform_task(RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK)
 async def rag_cleanup_orphan_company_chunks_tick(
     schedule_task_id: str,
     company_id: str | None = None,

@@ -22,10 +22,6 @@ logger = get_logger(__name__)
 DEMO_OWNER_ROLES = ["owner", "admin"]
 
 
-def _normalize_email(value: str) -> str:
-    return value.strip().lower()
-
-
 async def ensure_demo_company_and_user(
     *,
     company_repository: CompanyRepository,
@@ -48,7 +44,6 @@ async def ensure_demo_company_and_user(
             "auth.demo.login_enabled=true, но пароль пустой: задайте AUTH__DEMO__PASSWORD"
         )
 
-    email_norm = _normalize_email(demo.email)
     company_id = demo.company_id
     subdomain = demo.subdomain
     company_name = demo.company_name
@@ -77,12 +72,7 @@ async def ensure_demo_company_and_user(
         if updated:
             logger.info("Demo bootstrap: обновлены поля компании %s", company_id)
 
-    users = await user_repository.list(limit=10000)
-    matched = [
-        u
-        for u in users
-        if any(_normalize_email(e) == email_norm for e in u.emails)
-    ]
+    matched = await user_repository.find_all_by_email_ci(demo.email)
     if len(matched) > 1:
         raise ValueError(
             f"Несколько пользователей с email {demo.email}: "

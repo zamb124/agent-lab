@@ -82,18 +82,60 @@ async def test_flows_enable_flow_employee(
     page = ui_page_system
     try:
         await flows_open_editor(page, flows_ui, flow_id, layout="agent")
+        employee_chip = page.locator(
+            'flows-editor-header article.employee-chip[data-action="employee-settings"]'
+        )
+        await expect(employee_chip).to_be_visible(timeout=30_000)
+        await expect(employee_chip).to_have_attribute("data-active", "true")
         await scenario.step(
             "Откройте опубликованного агента-сотрудника",
             page,
             screenshot_name="employee-agent-in-editor",
             label_en="Open the employee agent in the editor",
             details=(
-                "Откройте «Помощника Зелёного сада» в редакторе. Когда агент включён как "
-                "сотрудник компании, он получает учётную запись в команде."
+                "Откройте «Помощника Зелёного сада» в редакторе. В шапке виден chip "
+                "«AI-сотрудник» — агент включён как сотрудник компании."
             ),
             details_en=(
-                "Open the Green Garden Assistant in the editor. When the agent is enabled "
-                "as a company employee, it gets a team account."
+                "Open the Green Garden Assistant in the editor. The header shows an "
+                "AI employee chip when the agent is enabled as a company employee."
+            ),
+        )
+
+        await employee_chip.click()
+        employee_modal = page.locator("flows-employee-settings-modal")
+        await expect(employee_modal).to_be_visible(timeout=15_000)
+        await scenario.step(
+            "Откройте настройки AI-сотрудника",
+            page,
+            screenshot_name="employee-settings-modal",
+            label_en="Open AI employee settings",
+            details=(
+                "Нажмите chip в шапке. Откроется меню: включение сотрудника, имя и "
+                "кураторы-люди."
+            ),
+            details_en=(
+                "Click the header chip. The settings menu opens: enable employee, "
+                "display name, and human curators."
+            ),
+        )
+        await page.keyboard.press("Escape")
+        await expect(employee_modal).to_be_hidden(timeout=10_000)
+
+        card = page.locator(f'.flow-card[data-flow-id="{flow_id}"]').first
+        await expect(card.locator(".employee-avatar-badge")).to_be_visible(timeout=15_000)
+        await scenario.step(
+            "Убедитесь в значке сотрудника в списке flow",
+            page,
+            screenshot_name="employee-sidebar-badge",
+            label_en="Confirm the employee badge in the flow list",
+            details=(
+                "В сайдбаре у карточки агента виден значок AI на аватаре — flow является "
+                "сотрудником."
+            ),
+            details_en=(
+                "In the sidebar the agent card shows an AI badge on the avatar — the flow "
+                "is an employee."
             ),
         )
 

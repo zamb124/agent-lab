@@ -1,27 +1,31 @@
 ---
 name: crm-entities
-description: Search, create, and relate CRM NetWorkle entities and daily summaries. Use for people, organizations, relationships, entity types, and daily CRM digest.
-allowed-tools: crm_search_entities crm_create_entity crm_get_entity crm_create_relationship crm_list_entity_types crm_daily_summary push_embed_blocks
+description: Search, create, update, delete, merge CRM NetWorkle entities; types; daily/period summaries; activity-task bridge; embed blocks.
+allowed-tools: crm_search_entities crm_create_entity crm_get_entity crm_update_entity crm_delete_entity crm_merge_entities crm_create_relationship crm_list_entity_types crm_daily_summary crm_period_summary crm_create_activity_task crm_list_activity_tasks push_embed_blocks
 ---
 
 # CRM entities
 
 ## Goal
 
-Work with NetWorkle CRM graph entities (search, create, get, relationships, types, daily summary) and optional UI embed blocks.
+Work with NetWorkle CRM graph entities (CRUD, merge, relationships create, types, summaries) and create CRM activity tasks (pair with WorkItem).
 
 ## Procedure
 
 1. Discover types — `crm_list_entity_types` when the user is unsure about `entity_type` / `entity_subtype`.
-2. Search — `crm_search_entities` with the user's query string; set type filters only if the user asked; do not invent `namespace` (session supplies it); default `limit` 100.
-3. Details — `crm_get_entity` with a real `entity_id` from search/results.
+2. Search — `crm_search_entities`; set type filters only if the user asked; namespace from session.
+3. Details — `crm_get_entity` with a real `entity_id`.
 4. Create — `crm_create_entity` only with fields the user provided; never invent ids.
-5. Relationships — `crm_create_relationship` with real source/target entity ids.
-6. Daily digest — `crm_daily_summary` when the user asks for a day overview.
-7. Structured UI — `push_embed_blocks` with `blocks_json` (`card`, `table`, `actions`, `file_card`, `text`) when a visual summary helps.
+5. Update — `crm_update_entity` with real `entity_id` and only changed fields.
+6. Delete — `crm_delete_entity` only after explicit user confirmation.
+7. Merge — `crm_merge_entities` with real survivor/source ids (survivor keeps `entity_id`).
+8. Relationships create — `crm_create_relationship`; list/delete/neighborhood — load parent `crm-graph`.
+9. Digests — `crm_daily_summary` / `crm_period_summary`.
+10. Activity task — `crm_create_activity_task` / `crm_list_activity_tasks`; then load `work-items` for state/board/assignee.
+11. Structured UI — `push_embed_blocks` when a visual summary helps.
 
 ## Rules
 
-- Never invent `entity_id`.
-- After a successful tool call, briefly summarize for the user; do not dump raw JSON.
-- Confirm-first mutations follow `propose` → user confirm → `apply` when the tool supports that lifecycle.
+- Never invent `entity_id` / `work_item_id`.
+- Work fields (priority/due/assignee/state/board) after create — only via Worktracker tools.
+- After a successful tool call, briefly summarize; do not dump raw JSON.

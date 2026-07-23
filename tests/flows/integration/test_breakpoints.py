@@ -22,7 +22,9 @@ import pytest_asyncio
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.flow import Flow
+from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.state import ExecutionState
+from core.tasks import enqueue
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 
@@ -483,14 +485,13 @@ class TestBreakpointsAPIIntegration:
         Проверяет что breakpoints из metadata передаются через весь путь:
         API -> process_flow_task -> process_task -> ExecutionState -> Agent
         """
-        from apps.flows.src.tasks.flow_tasks import process_flow_task
-
         flow_id = setup_breakpoint_flow
         session_id = f"{flow_id}:bp-taskiq-{unique_id}"
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-        task = await process_flow_task.kiq(
+        task = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id="test-user",
@@ -547,14 +548,13 @@ class TestBreakpointsAPIIntegration:
         """
         После breakpoint можно продолжить выполнение через TaskIQ.
         """
-        from apps.flows.src.tasks.flow_tasks import process_flow_task
-
         flow_id = setup_breakpoint_flow
         session_id = f"{flow_id}:bp-continue-{unique_id}"
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-        task1 = await process_flow_task.kiq(
+        task1 = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id="test-user",
@@ -568,7 +568,8 @@ class TestBreakpointsAPIIntegration:
             f"Expected input-required, got: {result1.return_value}"
         )
         assert result1.return_value.get("breakpoint_hit") == "step2"
-        task2 = await process_flow_task.kiq(
+        task2 = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id="test-user",
@@ -614,14 +615,13 @@ class TestBreakpointsAPIIntegration:
         """
         Без breakpoints агент выполняется до конца.
         """
-        from apps.flows.src.tasks.flow_tasks import process_flow_task
-
         flow_id = setup_breakpoint_flow
         session_id = f"{flow_id}:bp-none-{unique_id}"
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-        task = await process_flow_task.kiq(
+        task = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id="test-user",

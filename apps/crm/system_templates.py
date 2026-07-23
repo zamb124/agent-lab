@@ -388,8 +388,8 @@ SYSTEM_ENTITY_TYPE_TEMPLATES: list[EntityTypeTemplate] = [
         "description": (
             "Базовая задача с владельцем, сроком и статусом. Корень для "
             "доменных подтипов задач (deal-task, ticket, bug, candidate, "
-            "assignment и т.п.). Карточки этого типа участвуют в досках "
-            "канбана пространства."
+            "assignment и т.п.). Work-семантика (state/priority/due/assignee) "
+            "живёт в парном WorkItem(kind=crm_activity); узел — граф/AI."
         ),
         "is_system": True,
         "is_event": False,
@@ -402,26 +402,15 @@ SYSTEM_ENTITY_TYPE_TEMPLATES: list[EntityTypeTemplate] = [
             "priority='high'; «Иван доделает миграцию на след. неделе» → "
             "assignees содержит Ивана, effort='m'.\n"
             "НЕ извлекай задачу из общих обсуждений без чёткого «нужно "
-            "сделать X»: рассуждения — это note, а не task."
+            "сделать X»: рассуждения — это note, а не task. "
+            "due_date/priority/assignees — top-level поля извлечения "
+            "(сид WorkItem), не attributes CRM-узла."
         ),
         "icon": "checklist",
         "color": "#FF9800",
         "weight_coefficient": 1.1,
         "required_fields": {},
         "optional_fields": {
-            "title": _string_field(
-                label="Название задачи",
-                description="Чёткая формулировка действия в инфинитиве (что сделать).",
-            ),
-            "due_date": _date_field(
-                label="Срок",
-                description="К какой дате задача должна быть выполнена.",
-            ),
-            "priority": _enum_field(
-                label="Приоритет",
-                description="Срочность задачи относительно других",
-                values_with_desc=_PRIORITY_VALUES,
-            ),
             "effort": _enum_field(
                 label="Оценка трудозатрат",
                 description="Сколько примерно времени займёт",

@@ -93,8 +93,14 @@ async def test_mail_trash_task_moves_on_imap(
 
     pushes: list[tuple[str, str, JsonObject]] = []
 
-    async def _fake_publish(user_id: str, event_type: str, payload: JsonObject) -> None:
-        pushes.append((user_id, event_type, payload))
+    async def _fake_publish(
+        user_ids: list[str],
+        event_type: str,
+        payload: JsonObject,
+        **_kwargs: object,
+    ) -> None:
+        for user_id in user_ids:
+            pushes.append((user_id, event_type, payload))
 
     monkeypatch.setattr(
         "apps.idle_worker.tasks.mail_mutation_tasks.get_container",
@@ -107,7 +113,7 @@ async def test_mail_trash_task_moves_on_imap(
         ),
     )
     monkeypatch.setattr(
-        "apps.idle_worker.tasks.mail_mutation_tasks.publish_ui_event_to_user",
+        "apps.idle_worker.tasks.mail_mutation_tasks.publish_event_to_users",
         _fake_publish,
     )
 
@@ -161,7 +167,7 @@ async def test_mail_star_task_stores_flags(
         return None
 
     monkeypatch.setattr(
-        "apps.idle_worker.tasks.mail_mutation_tasks.publish_ui_event_to_user",
+        "apps.idle_worker.tasks.mail_mutation_tasks.publish_event_to_users",
         _noop_publish,
     )
 
@@ -210,8 +216,14 @@ async def test_mail_send_task_failure_publishes_send_failed(
     monkeypatch.setattr(mail_service, "send_message", _boom)
     pushes: list[tuple[str, str, JsonObject]] = []
 
-    async def _fake_publish(user_id: str, event_type: str, payload: JsonObject) -> None:
-        pushes.append((user_id, event_type, payload))
+    async def _fake_publish(
+        user_ids: list[str],
+        event_type: str,
+        payload: JsonObject,
+        **_kwargs: object,
+    ) -> None:
+        for uid in user_ids:
+            pushes.append((uid, event_type, payload))
 
     monkeypatch.setattr(
         "apps.idle_worker.tasks.mail_mutation_tasks.get_container",
@@ -224,7 +236,7 @@ async def test_mail_send_task_failure_publishes_send_failed(
         ),
     )
     monkeypatch.setattr(
-        "apps.idle_worker.tasks.mail_mutation_tasks.publish_ui_event_to_user",
+        "apps.idle_worker.tasks.mail_mutation_tasks.publish_event_to_users",
         _fake_publish,
     )
 

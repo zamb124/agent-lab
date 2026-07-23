@@ -7,11 +7,19 @@ import json
 import pytest
 
 from core.config import get_settings
-from core.logging.attributes import LOG_WS_COMMAND, LOG_WS_COMMAND_DURATION_MS, LOG_WS_COMMAND_STATUS
+from core.logging.attributes import (
+    LOG_WS_COMMAND,
+    LOG_WS_COMMAND_DURATION_MS,
+    LOG_WS_COMMAND_STATUS,
+)
 from core.models.identity_models import User
 from core.websocket.command_router import has_ws_command_handler, register_ws_command_handler
 from core.websocket.router import _handle_command_frame
-from tests.fixtures.observability_log_capture import find_caplog_record, require_log_fields, require_numeric_field
+from tests.fixtures.observability_log_capture import (
+    find_caplog_record,
+    require_log_fields,
+    require_numeric_field,
+)
 from tests.observability.contracts import WS_COMMAND_FINISHED
 
 pytestmark = pytest.mark.timeout(30)

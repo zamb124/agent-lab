@@ -65,6 +65,7 @@ from core.a2a import (
     A2AErrorCode,
 )
 from core.context import get_context
+from core.events import publish_event_to_user
 from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_REDIS_PREFIX,
     EMBED_GUEST_USER_TURNS_TTL_SECONDS,
@@ -75,7 +76,6 @@ from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.embed_models import EmbedChatLook
 from core.models.identity_models import User
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
-from core.ui_events.dispatcher import publish_ui_event_to_user
 from core.utils.tokens import TokenData, TokenType
 
 logger = get_logger(__name__)
@@ -1126,7 +1126,7 @@ async def create_branch(
         raise HTTPException(status_code=400, detail=str(e))
 
     if context and context.user and context.user.user_id:
-        await publish_ui_event_to_user(
+        await publish_event_to_user(
             user_id=context.user.user_id,
             type="flows/branch/created",
             payload={"flow_id": flow_id, "branch_id": branch_id},
@@ -1158,7 +1158,7 @@ async def update_branch(
         raise HTTPException(status_code=400, detail=str(e))
 
     if context and context.user and context.user.user_id:
-        await publish_ui_event_to_user(
+        await publish_event_to_user(
             user_id=context.user.user_id,
             type="flows/branch/updated",
             payload={"flow_id": flow_id, "branch_id": branch_id},
@@ -1182,7 +1182,7 @@ async def delete_branch(flow_id: str, branch_id: str, container: ContainerDep) -
         raise HTTPException(status_code=404, detail=str(e))
 
     if context and context.user and context.user.user_id:
-        await publish_ui_event_to_user(
+        await publish_event_to_user(
             user_id=context.user.user_id,
             type="flows/branch/deleted",
             payload={"flow_id": flow_id, "branch_id": branch_id},

@@ -106,7 +106,7 @@ from apps.flows.src.tasks.task_names import (
     TASK_RUN_EVALUATION_GATE_POLICY,
     TASK_RUN_EVALUATION_MONITOR_CYCLE,
 )
-from apps.flows_worker.broker_core import broker as flows_worker_broker
+from apps.flows_worker.broker import broker as flows_worker_broker
 from apps.flows_worker.evaluation_tasks import (
     enqueue_pending_evaluation_runs,
     execute_evaluation_run,
@@ -1262,7 +1262,7 @@ class TestEvaluationLabAPI:
             await container.evaluation_lab_service.execute_run_from_taskiq(
                 run.run_id,
                 EvaluationTaskiqExecutionContext(
-                    task_name=TASK_EXECUTE_EVALUATION_RUN,
+                    task_name=TASK_EXECUTE_EVALUATION_RUN.name,
                     task_id="wrong-taskiq-id",
                     evaluation_run_id=run.run_id,
                 ),
@@ -2252,7 +2252,7 @@ class TestEvaluationLabAPI:
                 await container.evaluation_lab_service.execute_run_from_taskiq(
                     created.run.run_id,
                     EvaluationTaskiqExecutionContext(
-                        task_name=TASK_EXECUTE_EVALUATION_RUN,
+                        task_name=TASK_EXECUTE_EVALUATION_RUN.name,
                         task_id=job.taskiq_task_id,
                         evaluation_run_id=created.run.run_id,
                     ),
@@ -2292,7 +2292,7 @@ class TestEvaluationLabAPI:
             assert context is not None
 
             invalid_context = _taskiq_context(
-                task_name=TASK_EXECUTE_EVALUATION_RUN,
+                task_name=TASK_EXECUTE_EVALUATION_RUN.name,
                 task_id=f"invalid-taskiq-{unique_id}",
                 labels={"evaluation_run_id": f"missing-run-{unique_id}"},
             )
@@ -2306,7 +2306,7 @@ class TestEvaluationLabAPI:
                 await execute_evaluation_run.original_func(
                     f"missing-run-{unique_id}",
                     _taskiq_context(
-                        task_name=TASK_EXECUTE_EVALUATION_RUN,
+                        task_name=TASK_EXECUTE_EVALUATION_RUN.name,
                         task_id=f"missing-label-taskiq-{unique_id}",
                         labels={},
                     ),
@@ -2319,7 +2319,7 @@ class TestEvaluationLabAPI:
                 await execute_evaluation_run.original_func(
                     f"missing-run-{unique_id}",
                     _taskiq_context(
-                        task_name=TASK_EXECUTE_EVALUATION_RUN,
+                        task_name=TASK_EXECUTE_EVALUATION_RUN.name,
                         task_id=f"bad-label-taskiq-{unique_id}",
                         labels={"evaluation_run_id": ""},
                     ),
@@ -2328,7 +2328,7 @@ class TestEvaluationLabAPI:
             with pytest.raises(ValueError, match="Context is required"):
                 await enqueue_pending_evaluation_runs.original_func(
                     _taskiq_context(
-                        task_name=TASK_ENQUEUE_PENDING_EVALUATION_RUNS,
+                        task_name=TASK_ENQUEUE_PENDING_EVALUATION_RUNS.name,
                         task_id=f"enqueue-no-context-{unique_id}",
                         labels={},
                     ),
@@ -2337,7 +2337,7 @@ class TestEvaluationLabAPI:
             with pytest.raises(ValueError, match="limit must be >= 1"):
                 await enqueue_pending_evaluation_runs.original_func(
                     _taskiq_context(
-                        task_name=TASK_ENQUEUE_PENDING_EVALUATION_RUNS,
+                        task_name=TASK_ENQUEUE_PENDING_EVALUATION_RUNS.name,
                         task_id=f"enqueue-invalid-{unique_id}",
                         labels={},
                     ),
@@ -2364,7 +2364,7 @@ class TestEvaluationLabAPI:
                 created.run.run_id
             )
             task_context = _taskiq_context(
-                task_name=TASK_EXECUTE_EVALUATION_RUN,
+                task_name=TASK_EXECUTE_EVALUATION_RUN.name,
                 task_id=job.taskiq_task_id,
                 labels={"evaluation_run_id": created.run.run_id},
             )
@@ -2395,7 +2395,7 @@ class TestEvaluationLabAPI:
             )
             enqueue_result_payload = await enqueue_pending_evaluation_runs.original_func(
                 _taskiq_context(
-                    task_name=TASK_ENQUEUE_PENDING_EVALUATION_RUNS,
+                    task_name=TASK_ENQUEUE_PENDING_EVALUATION_RUNS.name,
                     task_id=f"enqueue-pending-{unique_id}",
                     labels={},
                 ),
@@ -2478,7 +2478,7 @@ class TestEvaluationLabAPI:
                     gate_policy.gate_policy_id,
                     {"trigger": "ci"},
                     _taskiq_context(
-                        task_name=TASK_RUN_EVALUATION_GATE_POLICY,
+                        task_name=TASK_RUN_EVALUATION_GATE_POLICY.name,
                         task_id=f"gate-no-context-{unique_id}",
                         labels={},
                     ),
@@ -2489,7 +2489,7 @@ class TestEvaluationLabAPI:
                 gate_policy.gate_policy_id,
                 {"trigger": "ci"},
                 _taskiq_context(
-                    task_name=TASK_RUN_EVALUATION_GATE_POLICY,
+                    task_name=TASK_RUN_EVALUATION_GATE_POLICY.name,
                     task_id=f"gate-task-{unique_id}",
                     labels={},
                 ),
@@ -2505,7 +2505,7 @@ class TestEvaluationLabAPI:
                     monitor.monitor_id,
                     {"limit": 5, "enqueue_gate_run": False},
                     _taskiq_context(
-                        task_name=TASK_RUN_EVALUATION_MONITOR_CYCLE,
+                        task_name=TASK_RUN_EVALUATION_MONITOR_CYCLE.name,
                         task_id=f"monitor-no-context-{unique_id}",
                         labels={},
                     ),
@@ -2516,7 +2516,7 @@ class TestEvaluationLabAPI:
                 monitor.monitor_id,
                 {"limit": 5, "enqueue_gate_run": False},
                 _taskiq_context(
-                    task_name=TASK_RUN_EVALUATION_MONITOR_CYCLE,
+                    task_name=TASK_RUN_EVALUATION_MONITOR_CYCLE.name,
                     task_id=f"monitor-task-{unique_id}",
                     labels={},
                 ),

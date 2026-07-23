@@ -47,7 +47,7 @@ HITL_CONVERSATION_TURN_APPENDED = "flows/hitl_conversation/turn_appended"
 class ConversationTurnAppendedEvent(StrictBaseModel):
     """Push-событие нового turn для встроенного чата карточки задачи.
 
-    Доставляется через `platform:ui_events` -> WS; UI-slice дописывает turn по
+    Доставляется через `platform:events` -> WS; UI-slice дописывает turn по
     `cursor` (монотонный), дедуп по `message_id`.
     """
 

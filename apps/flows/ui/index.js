@@ -38,6 +38,7 @@ import './components/branch-item.js';
 // CRUD modals (home / catalog / chat)
 import './modals/flows-flow-create-modal.js';
 import './modals/flows-flow-edit-modal.js';
+import './modals/flows-employee-settings-modal.js';
 import './modals/flows-branch-create-modal.js';
 import './modals/flows-sessions-modal.js';
 import './modals/flows-mcp-servers-modal.js';

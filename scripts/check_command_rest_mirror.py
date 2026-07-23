@@ -8,10 +8,11 @@ CI-проверка платформенного инварианта «REST-з�
      createCursorList) обязана иметь HTTP-эндпоинт в `apps/<svc>/api/**`,
      соответствующий `restMirror.method` + `restMirror.path`.
 
-  2. Push-события (`publish_ui_event_to_user`, `publish_ui_event_to_company`,
-     `publish_ui_event_broadcast`) НЕ должны иметь REST-эндпоинт с тем же
-     путём — REST-зеркала push-событий запрещены, подписка только через
-     `platform:ui_events` -> `/<svc>/api/ws/notifications`.
+  2. Push-события (`publish_event_to_user`, `publish_event_to_users`,
+     `publish_event_to_company`, `publish_event_broadcast`) НЕ должны иметь
+     REST-эндпоинт с тем же путём — REST-зеркала push-событий запрещены,
+     подписка только через шину `platform:events` ->
+     `/<svc>/api/ws/notifications`.
 
 Проверка строится на статическом анализе (regex по существующим скриптам:
 см. `scripts/check_ui_factories.py`). FastAPI-роуты собираются обходом
@@ -139,7 +140,7 @@ INCLUDE_ROUTER_CALL_RE = re.compile(
 
 # Публикация UI-событий (push)
 PUBLISH_UI_RE = re.compile(
-    r"\bpublish_ui_event(?:_to_user|_to_company|_broadcast|_envelope)?\s*\(\s*[\s\S]{0,800}?type\s*=\s*(?P<q>['\"])(?P<type>[^'\"]+)(?P=q)",
+    r"\bpublish_event(?:_to_user|_to_users|_to_company|_broadcast)?\s*\(\s*[\s\S]{0,800}?type\s*=\s*(?P<q>['\"])(?P<type>[^'\"]+)(?P=q)",
     re.M,
 )
 
@@ -533,12 +534,12 @@ def _scan_router_file(py: Path, mount_prefix: str, routes: set[tuple[str, str]])
             routes.add((method, normalized.rstrip("/")))
 
 
-def _collect_publish_ui_event_types(svc_dir: Path) -> set[str]:
-    """Собрать типы событий из вызовов publish_ui_event_*."""
+def _collect_publish_event_types(svc_dir: Path) -> set[str]:
+    """Собрать типы событий из вызовов publish_event_*."""
     types: set[str] = set()
     for py in svc_dir.rglob("*.py"):
         text = py.read_text(encoding="utf-8", errors="ignore")
-        if "publish_ui_event" not in text:
+        if "publish_event" not in text:
             continue
         for m in PUBLISH_UI_RE.finditer(text):
             types.add(m.group("type"))
@@ -581,7 +582,7 @@ def main() -> int:
 
         routes = _collect_fastapi_routes(svc_dir)
         routes_total += len(routes)
-        _collect_publish_ui_event_types(svc_dir)
+        _collect_publish_event_types(svc_dir)
 
         for path in sorted(ui_resources.rglob("*.js")):
             for rec in _parse_factories(path):

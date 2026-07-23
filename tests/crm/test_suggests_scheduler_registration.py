@@ -1,30 +1,45 @@
+"""Регистрация CRM scheduled-задач в едином TaskIQ-реестре."""
+
 from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
-from pathlib import Path
 from typing import cast
 
-from apps.crm.scheduled_integration_constants import (
-    SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
+import pytest
+
+from apps.crm_worker.tasks.task_names import (
+    CRM_GENERATE_NAMESPACE_SUGGESTS,
+    CRM_RECONCILE_DAILY_SUMMARY,
+    CRM_REEMBED_STALE_DOCUMENTS,
+    SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC,
 )
-from apps.crm.scheduled_task_constants import (
-    CRM_GENERATE_NAMESPACE_SUGGESTS_TASK_NAME,
-    CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
-    CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+from apps.platform_tasks.wiring import all_queues, wire_all, wire_worker
+from core.tasks import registered_queue_brokers, scheduled_task_specs
+
+pytestmark = pytest.mark.real_taskiq
+
+# Impl-модули требуют брокер очереди до import (@platform_task).
+_ = wire_worker("crm")
+
+from apps.crm_worker.tasks.daily_summary_tasks import (  # noqa: E402
+    reconcile_daily_summary_task,
 )
-from apps.crm_worker.tasks.daily_summary_tasks import reconcile_daily_summary_task
-from apps.crm_worker.tasks.reembed_tasks import crm_reembed_stale_documents_tick
-from apps.crm_worker.tasks.scheduled_integration_sync_tasks import (
+from apps.crm_worker.tasks.reembed_tasks import (  # noqa: E402
+    crm_reembed_stale_documents_tick,
+)
+from apps.crm_worker.tasks.scheduled_integration_sync_tasks import (  # noqa: E402
     scheduled_namespace_integration_unified_sync,
 )
-from apps.crm_worker.tasks.suggest_tasks import crm_generate_namespace_suggests_tick
+from apps.crm_worker.tasks.suggest_tasks import (  # noqa: E402
+    crm_generate_namespace_suggests_tick,
+)
 
 CRM_SCHEDULER_TASK_NAMES = (
-    SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
-    CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
-    CRM_GENERATE_NAMESPACE_SUGGESTS_TASK_NAME,
-    CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
+    SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC.name,
+    CRM_REEMBED_STALE_DOCUMENTS.name,
+    CRM_GENERATE_NAMESPACE_SUGGESTS.name,
+    CRM_RECONCILE_DAILY_SUMMARY.name,
 )
 
 
@@ -35,12 +50,14 @@ def _task_signature(task: object) -> inspect.Signature:
 
 
 def test_crm_scheduler_tasks_are_registered_for_scheduler() -> None:
-    import apps.scheduler.scheduler as scheduler_module
+    wire_all()
+    scheduled_names = {spec.name for spec in scheduled_task_specs() if spec.queue == "crm"}
+    brokers = registered_queue_brokers()
+    crm_broker = brokers["crm"]
 
-    assert scheduler_module.scheduler is not None
-    required_names = scheduler_module._CRM_SCHEDULER_REQUIRED_TASK_NAMES  # pyright: ignore[reportPrivateUsage]
     for task_name in CRM_SCHEDULER_TASK_NAMES:
-        assert task_name in required_names
+        assert task_name in scheduled_names
+        assert crm_broker.find_task(task_name) is not None
 
 
 def test_crm_scheduled_tasks_accept_scheduler_payload() -> None:
@@ -57,11 +74,5 @@ def test_crm_scheduled_tasks_accept_scheduler_payload() -> None:
     assert "schedule_task_id" in integration_sig.parameters
 
 
-def test_crm_worker_entrypoint_imports_scheduler_task_modules() -> None:
-    import apps.crm_worker.worker as worker_module
-
-    source = Path(worker_module.__file__).read_text()
-    assert "apps.crm_worker.tasks.scheduled_integration_sync_tasks" in source
-    assert "apps.crm_worker.tasks.reembed_tasks" in source
-    assert "apps.crm_worker.tasks.suggest_tasks" in source
-    assert "apps.crm_worker.tasks.daily_summary_tasks" in source
+def test_crm_queue_is_in_platform_wiring() -> None:
+    assert "crm" in all_queues()

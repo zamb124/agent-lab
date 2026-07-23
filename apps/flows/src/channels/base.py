@@ -102,8 +102,6 @@ from apps.flows.src.tracing.handoff_tracing import (
 from apps.flows.src.triggers.output_actions import OutputActionExecutor
 from apps.flows.src.triggers.trigger_type_contract import effective_output_actions_for_trigger
 from apps.flows.src.utils import extract_json_from_response
-from apps.flows_worker.broker_core import broker as flows_broker
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.a2a import (
     A2AApplicationError,
@@ -125,7 +123,7 @@ from core.logging.attributes import LOG_SESSION_AGENT
 from core.state import ChildWorkflowLink, ExecutionState, ExecutionTaskState
 from core.state.interrupt import HandoffInterrupt, HandoffMode, OperatorTaskInterrupt
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue
 from core.tracing import get_tracer
 from core.tracing.context import TraceContext
 from core.tracing.operation_span import traced_operation
@@ -616,9 +614,8 @@ class BaseChannel(ABC):
         )
 
         async def _kick_flow_task() -> None:
-            _ = await kiq_task_name_with_context(
+            _ = await enqueue(
                 TASK_PROCESS_FLOW,
-                flows_broker,
                 flow_id=target.flow_id,
                 session_id=target.session_id,
                 user_id=effective_user_id,
@@ -1160,9 +1157,8 @@ class BaseChannel(ABC):
         message: str,
     ) -> None:
         """Отправляет push notification через TaskIQ."""
-        _ = await kiq_task_name_with_context(
+        _ = await enqueue(
             TASK_SEND_TASK_UPDATE,
-            idle_broker,
             task_id,
             context_id,
             task_state,

@@ -8,7 +8,8 @@
  *   1. На open подгружаем заметку через `entitiesResource.get(noteId)`.
  *      Из `entity.attributes.ai_analysis_draft` достаём текущий черновик
  *      (note + entities + relationships + draft_version).
- *   2. Подписка на WS `crm/note/updated` для noteId — перезагрузка entity
+ *   2. Подписка на WS `crm/note/updated` для noteId — draft_repair phase;
+ *      snapshot note мержится в `crm/entities` extraReducer
  *      (когда воркер докинул свежий draft или применил его).
  *   3. Действия:
  *      - «Запустить анализ» — `noteAnalyzeStartOp.run({ note_id, mode: 'analyze' })`.
@@ -38,6 +39,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+import { CRM_NOTE_UPDATED } from '../events/types.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ENTITY_TYPES_NAME = 'crm/entity_types';
@@ -741,7 +743,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
 
         this._entities.get(this.noteId);
 
-        this.useEvent('crm/note/updated', (event) => {
+        this.useEvent(CRM_NOTE_UPDATED, (event) => {
             const payload = event && event.payload;
             if (!_isObject(payload)) return;
             if (payload.note_id !== this.noteId && payload.entity_id !== this.noteId) return;
@@ -749,7 +751,6 @@ export class CRMAiAnalysisModal extends PlatformModal {
             if (_isObject(dr) && (dr.phase === 'complete' || dr.phase === 'failed')) {
                 this._draftRepairPending = false;
             }
-            this._entities.get(this.noteId);
         });
 
         this.useEvent(this._draftRepairOp.op.events.SUCCEEDED, () => {

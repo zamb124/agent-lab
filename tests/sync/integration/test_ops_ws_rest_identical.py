@@ -59,6 +59,7 @@ _DEEP_INTEGRATION_OPS: set[str] = {
     "sync/messages/react_requested",
     "sync/messages/pin_requested",
     "sync/messages/list_requested",
+    "sync/messages/list_thread_requested",
     "sync/messages/mark_read_requested",
     "sync/threads/create_requested",
     "sync/threads/list_requested",

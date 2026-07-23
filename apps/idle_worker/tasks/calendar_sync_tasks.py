@@ -13,8 +13,12 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from apps.flows.config import get_settings
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import IdleWorkerContainer, get_container
+from apps.idle_worker.tasks.task_names import (
+    TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK,
+    TASK_CALENDAR_SYNC_TICK,
+)
+from core.calendar.events import CALENDAR_EVENT_CREATED
 from core.calendar.service import (
     SYNC_LINK_TOKEN_META,
     CalendarReauthRequiredError,
@@ -22,9 +26,11 @@ from core.calendar.service import (
     calendar_integration_from_credential,
     calendar_source_for_provider,
 )
+from core.events import publish_event_to_user
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.logging import get_logger
 from core.models import CalendarEventSource, CalendarIntegration, CalendarProvider
+from core.tasks import platform_task
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
@@ -101,6 +107,17 @@ async def _send_new_event_notifications(
         existing = await container.shared_storage.get(key=dedup_key, force_global=True)
         if existing is not None:
             continue
+        await publish_event_to_user(
+            user_id,
+            CALENDAR_EVENT_CREATED,
+            {
+                "event_id": event_id,
+                "provider": provider.value,
+                "company_id": company_id,
+                "start_at": "",
+            },
+            company_id=company_id,
+        )
         await notify_user(
             user_id=user_id,
             notification=Notification(
@@ -177,7 +194,7 @@ async def _sync_single_integration(
         return len(new_event_ids), sent
 
 
-@idle_broker.task(task_name="calendar_sync_tick", queue_name="idle")
+@platform_task(TASK_CALENDAR_SYNC_TICK)
 async def calendar_sync_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
@@ -316,7 +333,7 @@ async def calendar_sync_tick(
     }
 
 
-@idle_broker.task(task_name="calendar_sync_meeting_reminder_tick", queue_name="idle")
+@platform_task(TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK)
 async def calendar_sync_meeting_reminder_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,

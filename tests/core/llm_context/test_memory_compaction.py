@@ -3,12 +3,14 @@ from __future__ import annotations
 import pytest
 
 from core.llm_context import (
-    LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY,
     LLMContextBudget,
-    LLMContextMemoryEpisode,
     LLMContextProfile,
     LLMContextRetrievalPolicy,
     SimpleTokenCounter,
+)
+from core.llm_context.memory import LLMContextMemoryEpisode
+from core.llm_context.memory_compaction import (
+    LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY,
     build_llm_context_memory_episode,
     close_llm_context_memory_window,
     compact_llm_context_memory_episode,

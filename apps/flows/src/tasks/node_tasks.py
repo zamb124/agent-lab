@@ -19,15 +19,15 @@ from apps.flows.src.durable_execution import (
 )
 from apps.flows.src.runtime.nodes import create_node
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_NODE
-from apps.flows_worker.broker_core import broker
 from core.logging import get_logger
 from core.state import ExecutionState
+from core.tasks import platform_task
 from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 
 
-@broker.task(task_name=TASK_EXECUTE_NODE, queue_name="flows_worker")
+@platform_task(TASK_EXECUTE_NODE)
 async def execute_node(
     node_id: str,
     node_config: JsonObject,

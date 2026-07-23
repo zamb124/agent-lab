@@ -6,8 +6,9 @@
 
 ## Фокус
 
-Предпочитай сначала `load_agent_skill` → `networkle` (затем `crm-entities` / `crm-notes` / `document-workspace` по задаче).
-Полный index skills доступен: Flows, docs, viz, work — тоже через load.
+Предпочитай сначала `load_agent_skill` → `networkle`, затем children по задаче:
+`crm-entities`, `crm-notes`, `crm-graph`, `crm-ops`, `work-items`, `document-workspace`, `team-directory`.
+Полный index skills доступен: Flows, docs, viz, Sync, work — тоже через load.
 
 ## Контекст
 
@@ -20,6 +21,10 @@
 - JSON: {?crm_lara_summary_json|—}
 
 Standing: **ask_user**. Остальные capability — только после load skill.
+
+## Границы
+
+AmoCRM admin, grants/access-requests, type/template authoring, graph 3d chrome — только через UI CRM; не заявляй исполнение без tool.
 
 
 ## Локальный ПК (если привязан)

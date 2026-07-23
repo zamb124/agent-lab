@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from core.crawl.models import (
     CrawlEnrichedPage,
@@ -30,8 +30,6 @@ def _parse_iso_date_field(value: object) -> date | None:
     if token.endswith("Z"):
         token = f"{token[:-1]}+00:00"
     try:
-        from datetime import datetime
-
         return datetime.fromisoformat(token).date()
     except ValueError:
         if len(token) >= 10 and token[4] == "-" and token[7] == "-":

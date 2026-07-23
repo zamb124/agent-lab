@@ -1,9 +1,9 @@
 """
 Unit тесты для NotificationManager.
 
-Канон: единственный путь доставки события до сокета — `_deliver_envelope`,
-вызываемый из `_redis_loop` при получении конверта `{target, event}` из
-канала `platform:ui_events` (см. `core.ui_events.dispatcher`).
+Канон: единственный путь доставки события до сокета — `deliver_platform_event`,
+вызываемый tail-reader'ом шины `platform:events` (см. `core.events.consumer`).
+В WS-фрейм уходит событие без поля ``delivery``.
 """
 
 import asyncio
@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from core.ui_events.contract import UIEventEnvelope
+from core.events import PlatformEvent
 from core.websocket.manager import NotificationManager
 
 
@@ -29,35 +29,33 @@ class MockWebSocket:
         self.closed = True
 
 
-def _envelope(
+def _event(
     user_id: str | None,
     event_type: str,
     payload: dict | None = None,
     *,
     company_id: str | None = None,
     broadcast: bool = False,
-) -> UIEventEnvelope:
-    target: dict[str, object] = {}
+) -> PlatformEvent:
+    delivery: dict[str, object] = {}
     if user_id is not None:
-        target["user_id"] = user_id
+        delivery["user_ids"] = [user_id]
     if company_id is not None:
-        target["company_id"] = company_id
+        delivery["company_id"] = company_id
     if broadcast:
-        target["broadcast"] = True
-    return UIEventEnvelope.model_validate(
+        delivery["broadcast"] = True
+    return PlatformEvent.model_validate(
         {
-            "target": target,
-            "event": {
-                "type": event_type,
-                "payload": payload or {},
-                "meta": {"source": "system"},
-            },
+            "type": event_type,
+            "payload": payload or {},
+            "meta": {"source": "system"},
+            "delivery": delivery,
         }
     )
 
 
-def _event_json(envelope: UIEventEnvelope) -> dict:
-    return envelope.event.model_dump(mode="json")
+def _ws_frame(event: PlatformEvent) -> dict:
+    return json.loads(event.ws_frame_json())
 
 
 @pytest.mark.asyncio
@@ -78,7 +76,7 @@ async def test_single_connection():
 
 @pytest.mark.asyncio
 async def test_multiple_connections_same_user():
-    """Несколько подключений одного пользователя получают envelope."""
+    """Несколько подключений одного пользователя получают событие."""
     manager = NotificationManager()
 
     ws1, ws2, ws3 = MockWebSocket(), MockWebSocket(), MockWebSocket()
@@ -88,13 +86,43 @@ async def test_multiple_connections_same_user():
 
     assert len(manager._connections["user_123"]) == 3
 
-    envelope = _envelope("user_123", "notify/test/system_received", {"kind": "system", "title": "Hello"})
-    await manager._deliver_envelope(envelope)
+    event = _event("user_123", "notify/test/system_received", {"kind": "system", "title": "Hello"})
+    await manager.deliver_platform_event(event)
 
-    expected_event = _event_json(envelope)
-    assert ws1.sent_messages == [expected_event]
-    assert ws2.sent_messages == [expected_event]
-    assert ws3.sent_messages == [expected_event]
+    expected_frame = _ws_frame(event)
+    assert ws1.sent_messages == [expected_frame]
+    assert ws2.sent_messages == [expected_frame]
+    assert ws3.sent_messages == [expected_frame]
+
+
+@pytest.mark.asyncio
+async def test_ws_frame_excludes_delivery():
+    """WS-фрейм не содержит поле delivery (внутренняя адресация)."""
+    manager = NotificationManager()
+    ws = MockWebSocket()
+    await manager.connect(ws, "user_123")
+
+    event = _event("user_123", "notify/test/system_received", {"kind": "system"})
+    await manager.deliver_platform_event(event)
+
+    assert len(ws.sent_messages) == 1
+    assert "delivery" not in ws.sent_messages[0]
+    assert ws.sent_messages[0]["type"] == "notify/test/system_received"
+
+
+@pytest.mark.asyncio
+async def test_domain_event_without_delivery_not_forwarded():
+    """Событие с delivery=None — чисто доменное, в сокеты не уходит."""
+    manager = NotificationManager()
+    ws = MockWebSocket()
+    await manager.connect(ws, "user_123")
+
+    event = PlatformEvent.model_validate(
+        {"type": "crm/entity/created", "payload": {"entity_id": "e1"}}
+    )
+    await manager.deliver_platform_event(event)
+
+    assert ws.sent_messages == []
 
 
 @pytest.mark.asyncio
@@ -117,11 +145,11 @@ async def test_disconnect_one_connection():
 
 @pytest.mark.asyncio
 async def test_send_to_offline_user():
-    """Доставка envelope пользователю без подключений — без ошибки, без сайд-эффектов."""
+    """Доставка события пользователю без подключений — без ошибки, без сайд-эффектов."""
     manager = NotificationManager()
-    envelope = _envelope("user_offline", "notify/test/system_received", {"kind": "system"})
+    event = _event("user_offline", "notify/test/system_received", {"kind": "system"})
     # Не должно бросать.
-    await manager._deliver_envelope(envelope)
+    await manager.deliver_platform_event(event)
 
 
 @pytest.mark.asyncio
@@ -138,8 +166,8 @@ async def test_dead_connection_cleanup():
 
     ws1.send_text = failing_send
 
-    envelope = _envelope("user_123", "notify/test/system_received", {"kind": "system"})
-    await manager._deliver_envelope(envelope)
+    event = _event("user_123", "notify/test/system_received", {"kind": "system"})
+    await manager.deliver_platform_event(event)
 
     assert len(manager._connections["user_123"]) == 1
     assert ws2 in manager._connections["user_123"]
@@ -160,12 +188,12 @@ async def test_get_stats():
 
     assert stats["active_users"] == 2
     assert stats["total_connections"] == 3
-    assert stats["redis_connected"] is False
+    assert stats["tail_task_running"] is False
 
 
 @pytest.mark.asyncio
 async def test_multiple_users():
-    """Адресация по target.user_id: только сокеты этого пользователя получают envelope."""
+    """Адресация по delivery.user_ids: только сокеты этих пользователей получают событие."""
     manager = NotificationManager()
 
     ws1, ws2, ws3 = MockWebSocket(), MockWebSocket(), MockWebSocket()
@@ -173,20 +201,45 @@ async def test_multiple_users():
     await manager.connect(ws2, "user_1")
     await manager.connect(ws3, "user_2")
 
-    env_1 = _envelope("user_1", "notify/test/system_received", {"kind": "system", "title": "For user 1"})
-    env_2 = _envelope("user_2", "notify/test/system_received", {"kind": "system", "title": "For user 2"})
+    event_1 = _event("user_1", "notify/test/system_received", {"kind": "system", "title": "For user 1"})
+    event_2 = _event("user_2", "notify/test/system_received", {"kind": "system", "title": "For user 2"})
 
-    await manager._deliver_envelope(env_1)
-    await manager._deliver_envelope(env_2)
+    await manager.deliver_platform_event(event_1)
+    await manager.deliver_platform_event(event_2)
 
-    assert ws1.sent_messages == [_event_json(env_1)]
-    assert ws2.sent_messages == [_event_json(env_1)]
-    assert ws3.sent_messages == [_event_json(env_2)]
+    assert ws1.sent_messages == [_ws_frame(event_1)]
+    assert ws2.sent_messages == [_ws_frame(event_1)]
+    assert ws3.sent_messages == [_ws_frame(event_2)]
+
+
+@pytest.mark.asyncio
+async def test_multi_user_delivery_single_event():
+    """Одно событие с несколькими user_ids доставляется каждому адресату."""
+    manager = NotificationManager()
+
+    ws1, ws2, ws3 = MockWebSocket(), MockWebSocket(), MockWebSocket()
+    await manager.connect(ws1, "user_1")
+    await manager.connect(ws2, "user_2")
+    await manager.connect(ws3, "user_3")
+
+    event = PlatformEvent.model_validate(
+        {
+            "type": "sync/message/created",
+            "payload": {"message_id": "m1"},
+            "delivery": {"user_ids": ["user_1", "user_2"]},
+        }
+    )
+    await manager.deliver_platform_event(event)
+
+    expected_frame = _ws_frame(event)
+    assert ws1.sent_messages == [expected_frame]
+    assert ws2.sent_messages == [expected_frame]
+    assert ws3.sent_messages == []
 
 
 @pytest.mark.asyncio
 async def test_company_target_delivers_to_company_sockets_only():
-    """target.company_id — фрейм уходит только сокетам, привязанным к компании."""
+    """delivery.company_id — фрейм уходит только сокетам, привязанным к компании."""
     manager = NotificationManager()
 
     ws_company = MockWebSocket()
@@ -194,10 +247,10 @@ async def test_company_target_delivers_to_company_sockets_only():
     await manager.connect(ws_company, "user_in_company", company_id="c1")
     await manager.connect(ws_other, "user_other", company_id="c2")
 
-    env = _envelope(None, "crm/note/created", {"id": "n1"}, company_id="c1")
-    await manager._deliver_envelope(env)
+    event = _event(None, "crm/note/created", {"id": "n1"}, company_id="c1")
+    await manager.deliver_platform_event(event)
 
-    assert ws_company.sent_messages == [_event_json(env)]
+    assert ws_company.sent_messages == [_ws_frame(event)]
     assert ws_other.sent_messages == []
 
 

@@ -35,8 +35,6 @@ from core.mail.repositories import (
 )
 from core.mail.service import MailService
 
-pytest_plugins = ["tests.core.mail.live.personal_conftest"]
-
 _LIVE_PLACEHOLDERS = frozenset({"", "null", "changeme", "YOUR_PASSWORD", "placeholder"})
 
 

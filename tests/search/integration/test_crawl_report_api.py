@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from apps.search_worker.tasks.task_names import CRAWL_DISCOVER_DOMAIN_TASK_NAME
+from apps.search_worker.tasks.task_names import CRAWL_DISCOVER_DOMAIN
 from core.crawl.models import (
     CrawlDomainSeed,
     CrawlProfileCreateRequest,
@@ -14,6 +14,7 @@ from core.crawl.models import (
     SitemapEntry,
 )
 from core.search.index_models import SearchIndexCreateRequest
+from tests.fixtures.taskiq_capture import taskiq_task_name
 from tests.search.conftest import make_search_index_slug
 
 pytestmark = pytest.mark.timeout(60, func_only=True)
@@ -287,11 +288,12 @@ async def test_run_crawl_domain_queues_discover(
     _ = search_system_context
     enqueued: list[tuple[str, tuple[object, ...]]] = []
 
-    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
-        enqueued.append((task_name, args))
+    async def _capture(task: object, *args: object, **kwargs: object) -> None:
+        _ = kwargs
+        enqueued.append((taskiq_task_name(task), args))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _capture,
     )
 
@@ -324,7 +326,7 @@ async def test_run_crawl_domain_queues_discover(
     assert payload["status"] == "queued"
     assert payload["crawl_job_id"]
     assert len(enqueued) == 1
-    assert enqueued[0][0] == CRAWL_DISCOVER_DOMAIN_TASK_NAME
+    assert enqueued[0][0] == CRAWL_DISCOVER_DOMAIN.name
     assert enqueued[0][1][0] == domain.crawl_domain_id
 
     refreshed = await search_container.crawl_domain_repository.get(domain.crawl_domain_id)
@@ -528,10 +530,10 @@ async def test_get_crawl_url_detail_with_rag_content(
 
 
 def _suppress_tick(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _noop(task_name: str, *args: object, **kwargs: object) -> None:
-        _ = task_name, args, kwargs
+    async def _noop(task: object, *args: object, **kwargs: object) -> None:
+        _ = task, args, kwargs
 
-    monkeypatch.setattr("apps.search.api.v1.crawl._kiq_task", _noop)
+    monkeypatch.setattr("apps.search.api.v1.crawl.enqueue", _noop)
 
 
 @pytest.mark.asyncio

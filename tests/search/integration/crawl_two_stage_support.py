@@ -14,6 +14,7 @@ from core.crawl.models import (
     SitemapEntry,
 )
 from core.search.index_models import SearchIndexCreateRequest
+from tests.fixtures.taskiq_capture import taskiq_task_name
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.snippet_support import strip_snippet_highlight
 from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
@@ -198,11 +199,12 @@ def install_enqueue_recorder(
 ) -> list[tuple[object, ...]]:
     recorded: list[tuple[object, ...]] = []
 
-    async def _record(task_name: str, *args: object, **kwargs: object) -> None:
-        recorded.append((task_name, *args))
+    async def _record(task: object, *args: object, **kwargs: object) -> None:
+        _ = kwargs
+        recorded.append((taskiq_task_name(task), *args))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _record,
     )
     return recorded

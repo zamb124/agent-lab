@@ -18,7 +18,6 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_llm_payload,
     flows_open_editor,
     flows_open_triggers_modal,
-    flows_publish_editor,
     flows_set_platform_field,
     flows_trigger_editor_fill_identity,
     flows_trigger_editor_save,

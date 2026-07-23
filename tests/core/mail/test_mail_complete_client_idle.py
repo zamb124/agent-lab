@@ -29,12 +29,18 @@ async def _patch_idle_container(
     company_id: str,
 ) -> None:
     connection = await mail_service.get_connection(company_id=company_id)
+    if connection is None:
+        raise RuntimeError(f"mail connection missing for company_id={company_id}")
+
+    async def _get_connection(company_mail_connection_id: str):
+        if company_mail_connection_id != connection.company_mail_connection_id:
+            return None
+        return connection
+
     monkeypatch.setattr(
         "apps.idle_worker.tasks.mail_idle_supervisor.get_container",
         lambda: SimpleNamespace(
-            company_mail_connection_repository=SimpleNamespace(
-                get_by_company=AsyncMock(return_value=connection)
-            ),
+            company_mail_connection_repository=SimpleNamespace(get=AsyncMock(side_effect=_get_connection)),
             mail_service=mail_service,
         ),
     )

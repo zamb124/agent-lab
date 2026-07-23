@@ -2,54 +2,26 @@
 
 Тест проверяет, что hook'и (`apps.sync.realtime.presence_hooks._on_connect`/
 `_on_disconnect`) обновляют Redis-presence ключ и публикуют push-событие
-`sync/presence/changed` через `platform:ui_events`.
+`sync/presence/changed` через шину `platform:events`.
 """
 
 from __future__ import annotations
 
-import asyncio
-import json
-
 import pytest
-import redis.asyncio as redis
 
 from apps.sync.realtime.presence_hooks import _on_connect, _on_disconnect
 from apps.sync.ws_presence import is_user_sync_ws_online
 from core.config import get_settings
-from core.ui_events import UI_EVENTS_REDIS_CHANNEL
+from tests.fixtures.platform_events import platform_events_listener
 
 
-async def _wait_presence_event(
-    channel_pubsub,
-    *,
-    user_id: str | None = None,
-    company_id: str | None = None,
-    timeout: float = 10.0,
-) -> dict:
-    async def _listen() -> dict:
-        async for raw in channel_pubsub.listen():
-            if raw["type"] != "message":
-                continue
-            data = raw.get("data")
-            if data is None:
-                continue
-            envelope = json.loads(data.decode("utf-8") if isinstance(data, bytes) else data)
-            event = envelope.get("event")
-            if not isinstance(event, dict) or event.get("type") != "sync/presence/changed":
-                continue
-            payload = event.get("payload")
-            if not isinstance(payload, dict):
-                continue
-            if user_id is not None and payload.get("user_id") != user_id:
-                continue
-            target = envelope.get("target")
-            if company_id is not None:
-                if not isinstance(target, dict) or target.get("company_id") != company_id:
-                    continue
-            return envelope
-        raise RuntimeError("subscription closed")
-
-    return await asyncio.wait_for(_listen(), timeout=timeout)
+def _presence_events_for_user(events: list[dict], user_id: str) -> list[dict]:
+    matched: list[dict] = []
+    for event in events:
+        payload = event.get("payload")
+        if isinstance(payload, dict) and payload.get("user_id") == user_id:
+            matched.append(event)
+    return matched
 
 
 @pytest.mark.asyncio
@@ -59,29 +31,20 @@ async def test_on_connect_first_publishes_presence_online(
 ) -> None:
     settings = get_settings()
     user_id = f"presence_user_{unique_id}"
-    r = redis.from_url(settings.database.redis_url)
-    pubsub = r.pubsub()
-    await pubsub.subscribe(UI_EVENTS_REDIS_CHANNEL)
-    await asyncio.sleep(0.05)
-
-    listen_task = asyncio.create_task(
-        _wait_presence_event(pubsub, user_id=user_id, company_id=company_id),
-    )
-    try:
+    async with platform_events_listener() as receive:
         await _on_connect(user_id, company_id, was_first=True)
 
-        envelope = await listen_task
-        target = envelope.get("target") or {}
-        assert target.get("company_id") == company_id
-        payload = envelope["event"]["payload"]
+        events = await receive("sync/presence/changed", None, 2.0)
+        matched = _presence_events_for_user(events, user_id)
+        assert matched, "ожидалось событие sync/presence/changed для user_id"
+        event = matched[0]
+        delivery = event.get("delivery")
+        assert isinstance(delivery, dict) and delivery.get("company_id") == company_id
+        payload = event["payload"]
         assert payload["user_id"] == user_id
         assert payload["online"] is True
 
         assert await is_user_sync_ws_online(settings.database.redis_url, user_id) is True
-    finally:
-        await pubsub.unsubscribe(UI_EVENTS_REDIS_CHANNEL)
-        await pubsub.aclose()
-        await r.aclose()
 
 
 @pytest.mark.asyncio
@@ -90,28 +53,13 @@ async def test_on_connect_second_does_not_publish(
     unique_id: str,
 ) -> None:
     """При не-первом подключении hook не публикует событие."""
-    settings = get_settings()
     user_id = f"presence_user_second_{unique_id}"
-    r = redis.from_url(settings.database.redis_url)
-    pubsub = r.pubsub()
-    await pubsub.subscribe(UI_EVENTS_REDIS_CHANNEL)
-    await asyncio.sleep(0.05)
-    try:
+    async with platform_events_listener() as receive:
         await _on_connect(user_id, company_id, was_first=False)
-        await asyncio.sleep(0.5)
-
-        msg = await asyncio.wait_for(pubsub.get_message(timeout=0.5), timeout=1.0)
-        if msg and msg.get("type") == "message":
-            envelope = json.loads(
-                msg["data"].decode("utf-8") if isinstance(msg["data"], bytes) else msg["data"]
-            )
-            event = envelope.get("event") or {}
-            payload = event.get("payload") or {}
-            assert payload.get("user_id") != user_id, "не первый connect не должен публиковать"
-    finally:
-        await pubsub.unsubscribe(UI_EVENTS_REDIS_CHANNEL)
-        await pubsub.aclose()
-        await r.aclose()
+        events = await receive("sync/presence/changed", None, 1.0)
+        assert _presence_events_for_user(events, user_id) == [], (
+            "не первый connect не должен публиковать"
+        )
 
 
 @pytest.mark.asyncio
@@ -123,28 +71,18 @@ async def test_on_disconnect_last_publishes_presence_offline(
     user_id = f"presence_user_offline_{unique_id}"
     await _on_connect(user_id, company_id, was_first=True)
 
-    r = redis.from_url(settings.database.redis_url)
-    pubsub = r.pubsub()
-    await pubsub.subscribe(UI_EVENTS_REDIS_CHANNEL)
-    await asyncio.sleep(0.05)
-
-    listen_task = asyncio.create_task(
-        _wait_presence_event(pubsub, user_id=user_id, company_id=company_id),
-    )
-    try:
+    async with platform_events_listener() as receive:
         await _on_disconnect(user_id, company_id, was_last=True)
 
-        envelope = await listen_task
-        payload = envelope["event"]["payload"]
+        events = await receive("sync/presence/changed", None, 2.0)
+        matched = _presence_events_for_user(events, user_id)
+        assert matched, "ожидалось событие sync/presence/changed для user_id"
+        payload = matched[0]["payload"]
         assert payload["user_id"] == user_id
         assert payload["online"] is False
         assert payload["last_seen_at"] is not None
 
         assert await is_user_sync_ws_online(settings.database.redis_url, user_id) is False
-    finally:
-        await pubsub.unsubscribe(UI_EVENTS_REDIS_CHANNEL)
-        await pubsub.aclose()
-        await r.aclose()
 
 
 @pytest.mark.asyncio
@@ -156,14 +94,5 @@ async def test_on_disconnect_not_last_does_nothing(
     user_id = f"presence_user_not_last_{unique_id}"
     await _on_connect(user_id, company_id, was_first=True)
 
-    r = redis.from_url(settings.database.redis_url)
-    pubsub = r.pubsub()
-    await pubsub.subscribe(UI_EVENTS_REDIS_CHANNEL)
-    await asyncio.sleep(0.05)
-    try:
-        await _on_disconnect(user_id, company_id, was_last=False)
-        assert await is_user_sync_ws_online(settings.database.redis_url, user_id) is True
-    finally:
-        await pubsub.unsubscribe(UI_EVENTS_REDIS_CHANNEL)
-        await pubsub.aclose()
-        await r.aclose()
+    await _on_disconnect(user_id, company_id, was_last=False)
+    assert await is_user_sync_ws_online(settings.database.redis_url, user_id) is True

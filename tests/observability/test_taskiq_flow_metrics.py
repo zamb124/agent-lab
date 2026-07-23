@@ -8,17 +8,23 @@ import pytest
 from taskiq import TaskiqMessage, TaskiqResult
 
 from apps.flows.src.models.flow_config import FlowConfig
-from apps.flows.src.observability.flow_timing import maybe_record_flow_terminal, record_flow_task_enqueued
+from apps.flows.src.observability.flow_timing import (
+    maybe_record_flow_terminal,
+    record_flow_task_enqueued,
+)
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.clients.llm import setup_mock_responses
 from core.context import Context, set_context
 from core.logging.attributes import LOG_TASK_NAME, LOG_TASK_QUEUE_WAIT_MS
-from core.models.identity_models import User
 from core.tasks.logging_middleware import LoggingMiddleware
 from core.tasks.message_contract import set_task_message_string_label
 from core.types import JsonValue
-from tests.fixtures.observability_log_capture import find_caplog_record, require_log_fields, require_numeric_field
+from tests.fixtures.observability_log_capture import (
+    find_caplog_record,
+    require_log_fields,
+    require_numeric_field,
+)
 from tests.flows.durable_runtime_harness import workflow_state
 from tests.observability.contracts import FLOW_TERMINAL, TASK_STARTED_PICKUP
 
@@ -40,7 +46,7 @@ async def test_task_queue_wait_ms_emitted_by_logging_middleware(
     enqueued_at = time.time() - 0.25
     message = TaskiqMessage(
         task_id=f"task-pickup-{unique_id}",
-        task_name=TASK_PROCESS_FLOW,
+        task_name=TASK_PROCESS_FLOW.name,
         labels={
             "request_id": f"req-{unique_id}",
             "trace_id": f"trace-{unique_id}",
@@ -77,7 +83,7 @@ async def test_task_queue_wait_ms_emitted_by_logging_middleware(
             LOG_TASK_QUEUE_WAIT_MS: (int, float),
         },
     )
-    assert fields[LOG_TASK_NAME] == TASK_PROCESS_FLOW
+    assert fields[LOG_TASK_NAME] == TASK_PROCESS_FLOW.name
     require_numeric_field(fields, LOG_TASK_QUEUE_WAIT_MS, min_value=0.0)
 
 

@@ -11,9 +11,7 @@ from zoneinfo import ZoneInfo
 from croniter import CroniterBadCronError, croniter
 
 from apps.crm.integrations.registry import IntegrationRegistry
-from apps.crm.scheduled_integration_constants import (
-    SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
-)
+from apps.crm_worker.tasks.task_names import SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC
 from core.clients.scheduler_client import SchedulerClient
 from core.integrations.models import IntegrationProvider
 from core.integrations.oauth_service import OAuthService
@@ -172,7 +170,7 @@ class IntegrationAutoSyncService:
         if schedule_outdated:
             req = PlatformScheduleCreateRequest(
                 target_service="crm",
-                task_name=SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
+                task_name=SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC.name,
                 queue_name="crm",
                 schedule_type=PlatformScheduleType.CRON,
                 cron=cron,

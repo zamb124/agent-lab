@@ -3,8 +3,8 @@ WebSocket-инфраструктура платформы.
 
 Один сокет `/<svc>/api/ws/notifications` несёт два потока:
 
-1. push (server → client) — UIEvent-фреймы из Redis-канала `platform:ui_events`,
-   публикация через `core/ui_events/dispatcher.py`.
+1. push (server → client) — события с `delivery` из шины `platform:events`,
+   публикация через `core/events/publisher.py`.
 2. RPC request-reply (client → server → client) — фреймы
    `{ request_id, type: <...>_requested, payload }`, обрабатываются
    command-handler'ами, зарегистрированными через

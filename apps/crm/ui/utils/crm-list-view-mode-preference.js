@@ -6,12 +6,10 @@ import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 
 const KEYS = Object.freeze({
     entities: platformStorageKey('crm', 'entities.view_mode'),
-    tasks: platformStorageKey('crm', 'tasks.view_mode'),
 });
 
 const ALLOWED = Object.freeze({
     entities: new Set(['cards', 'table']),
-    tasks: new Set(['board', 'table']),
 });
 
 function _key(scope) {

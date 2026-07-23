@@ -2,7 +2,7 @@
 
 Каждая запись: **симптом → почему это костыль → корректно → детектор CI**. Если детектор не ловит — добавляй детектор первым делом, потом правь код.
 
-См. также: [`SKILL.md`](.cursor/skills/frontend-engineer/SKILL.md), [`recipes.md`](.cursor/skills/frontend-engineer/recipes.md), правила в `.cursor/rules/frontend.mdc` / `ui_events.mdc` / `ui_factories.mdc` / `ui_components.mdc`.
+См. также: [`SKILL.md`](.cursor/skills/frontend-engineer/SKILL.md), [`recipes.md`](.cursor/skills/frontend-engineer/recipes.md), правила в `.cursor/rules/frontend.mdc` / `events.mdc` / `ui_factories.mdc` / `ui_components.mdc`.
 
 ---
 
@@ -724,7 +724,7 @@ try {
 
 ```python
 # backend
-await publish_ui_event_to_user(
+await publish_event_to_user(
     user_id=...,
     type="sync/messages/send",   # совпадает с именем команды (без _requested)
     payload={"message": ...},

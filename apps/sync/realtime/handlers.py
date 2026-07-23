@@ -45,27 +45,23 @@ from apps.sync.models.messages import (
     TextPlainContent,
 )
 from apps.sync.models.threads import ThreadCreate, ThreadRead
-from apps.sync.realtime.broker import broker as sync_worker_broker
 from apps.sync.realtime.context import resolve_company_id
 from apps.sync.realtime.events import (
     RealtimeEvent,
     event_message_created,
     event_message_updated,
 )
-from apps.sync.realtime.notification_tasks import (
-    deliver_channel_message_notification,
-    deliver_sync_mention_notification,
-)
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.task_names import (
-    SYNC_FINALIZE_RECORDING_TASK_NAME,
-    SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME,
-    SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
+    DELIVER_CHANNEL_MESSAGE_NOTIFICATION,
+    DELIVER_SYNC_MENTION_NOTIFICATION,
+    SYNC_FINALIZE_RECORDING,
+    SYNC_SPEECH_TO_CHAT_POLL,
+    SYNC_TRANSCRIBE_AUDIO_MESSAGE,
 )
 from apps.sync.sender_display import sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_composite_usage
-from core.clients.service_client import ServiceClient
 from core.config import get_settings
 from core.db.repositories.user_repository import UserRepository
 from core.files.models import (
@@ -76,7 +72,7 @@ from core.files.models import (
 from core.identity.flow_employee import is_flow_employee
 from core.logging import get_logger
 from core.namespace import NamespaceService
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue
 from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
@@ -122,9 +118,8 @@ async def maybe_start_speech_to_chat_poll(
         raise ValueError(f"Канал {channel_id} не найден.")
     if not ch.speech_to_chat_enabled:
         return
-    _ = await kiq_task_name_with_context(
-        SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME,
-        sync_worker_broker,
+    _ = await enqueue(
+        SYNC_SPEECH_TO_CHAT_POLL,
         call_id=call_id,
         company_id=company_id,
         background_kind="sync_call",
@@ -251,9 +246,8 @@ async def stop_and_finalize_recording(
             started_at=recording.started_at,
             ended_at=updated_recording.ended_at,
         )
-    _ = await kiq_task_name_with_context(
-        SYNC_FINALIZE_RECORDING_TASK_NAME,
-        sync_worker_broker,
+    _ = await enqueue(
+        SYNC_FINALIZE_RECORDING,
         recording_id=updated_recording.recording_id,
         company_id=company_id,
         actor_user_id=actor_user_id,
@@ -271,32 +265,6 @@ def _notification_preview_from_message(message: MessageRead) -> str:
         c0 = sorted(message.contents, key=lambda c: c.order)[0]
         return lane_preview_from_content(c0)
     return "Новое сообщение"
-
-
-async def _dispatch_flow_employee_inbox(
-    *,
-    employee_user_id: str,
-    sender_user_id: str,
-    channel_id: str,
-    message_id: str,
-    company_id: str,
-    text: str,
-) -> None:
-    """Диспатч входящего sync-сообщения flow-сотруднику в единый inbox flows."""
-    client = ServiceClient()
-    _ = await client.post(
-        "flows",
-        "/flows/api/v1/internal/employee/inbox",
-        json={
-            "source": "sync_message",
-            "company_id": company_id,
-            "employee_user_id": employee_user_id,
-            "sender_user_id": sender_user_id,
-            "channel_id": channel_id,
-            "message_id": message_id,
-            "text": text,
-        },
-    )
 
 
 async def _enqueue_channel_message_notifications(
@@ -326,18 +294,14 @@ async def _enqueue_channel_message_notifications(
         if uid == actor_user_id:
             continue
         recipient = await user_repository.get(uid)
-        if recipient is not None and is_flow_employee(recipient) and (uid in mentioned or is_direct):
-            await _dispatch_flow_employee_inbox(
-                employee_user_id=uid,
-                sender_user_id=actor_user_id,
-                channel_id=channel_id,
-                message_id=message.message_id,
-                company_id=company_id,
-                text=preview,
-            )
+        if recipient is not None and is_flow_employee(recipient):
+            # Wake-up flow-сотрудника (DM/@mention) — consumer group `flows`
+            # шины platform:events по событию sync/message/created; обычный
+            # mention/channel toast сотруднику не шлётся.
             continue
         if uid in mentioned:
-            _ = await deliver_sync_mention_notification.kiq(
+            _ = await enqueue(
+                DELIVER_SYNC_MENTION_NOTIFICATION,
                 recipient_user_id=uid,
                 channel_id=channel_id,
                 company_id=company_id,
@@ -345,9 +309,11 @@ async def _enqueue_channel_message_notifications(
                 sender_display_name=message.sender.display_name,
                 notification_title=title,
                 body_preview=preview,
+                background_kind="sync_notify",
             )
         elif is_root_lane:
-            _ = await deliver_channel_message_notification.kiq(
+            _ = await enqueue(
+                DELIVER_CHANNEL_MESSAGE_NOTIFICATION,
                 recipient_user_id=uid,
                 channel_id=channel_id,
                 company_id=company_id,
@@ -355,6 +321,7 @@ async def _enqueue_channel_message_notifications(
                 sender_display_name=message.sender.display_name,
                 notification_title=title,
                 body_preview=preview,
+                background_kind="sync_notify",
             )
 
 
@@ -866,16 +833,18 @@ async def send_message_with_side_effects(
     recipients = await channel_recipient_user_ids(
         container.channel_repository, channel_id, company_id
     )
+    channel_entity = await container.channel_repository.get(channel_id)
+    if channel_entity is None:
+        raise WsCommandError("not_found", f"Канал {channel_id} не найден.")
     created_event = event_message_created(
-        message, company_id=company_id, recipient_user_ids=recipients
+        message,
+        company_id=company_id,
+        recipient_user_ids=recipients,
+        channel_type=channel_entity.type,
     )
     if body.local_id is not None and body.local_id != "":
         created_event.payload["local_id"] = body.local_id
     events: list[RealtimeEvent] = [created_event]
-
-    channel_entity = await container.channel_repository.get(channel_id)
-    if channel_entity is None:
-        raise WsCommandError("not_found", f"Канал {channel_id} не найден.")
     if channel_entity.transcribe_voice_messages:
         audio_idx = _find_first_audio_content_index(normalized_body.contents)
         if audio_idx is not None:
@@ -912,9 +881,8 @@ async def send_message_with_side_effects(
                             recipient_user_ids=recipients,
                         ),
                     )
-                    _ = await kiq_task_name_with_context(
-                        SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
-                        sync_worker_broker,
+                    _ = await enqueue(
+                        SYNC_TRANSCRIBE_AUDIO_MESSAGE,
                         channel_id=channel_id,
                         message_id=message.message_id,
                         company_id=company_id,

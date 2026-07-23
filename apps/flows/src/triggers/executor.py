@@ -11,10 +11,9 @@ import uuid
 from apps.flows.src.models import TriggerConfig
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows.src.triggers.input_mapper import InputMapper
-from apps.flows_worker.broker_core import broker as flows_broker
 from core.context import Context, User, get_context
 from core.logging import get_logger
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue
 from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
@@ -41,6 +40,8 @@ class TriggerExecutor:
         payload: JsonObject,
         user_id: str | None = None,
         metadata: JsonObject | None = None,
+        task_id: str | None = None,
+        context_id: str | None = None,
     ) -> JsonObject:
         """
         Запускает агента с данными из триггера.
@@ -51,6 +52,8 @@ class TriggerExecutor:
             payload: Входящие данные триггера
             user_id: ID пользователя (опционально)
             metadata: Дополнительные метаданные
+            task_id/context_id: детерминированные id (идемпотентность
+                at-least-once доставки шины); None — новые UUID
 
         Возвращает:
             Результат выполнения агента
@@ -74,9 +77,11 @@ class TriggerExecutor:
         content = content_raw
         triggers_data = require_json_object(mapped_data["triggers"], "trigger mapped data")
 
-        # Формируем IDs
-        task_id = str(uuid.uuid4())
-        context_id = str(uuid.uuid4())
+        # Формируем IDs (детерминированные — для идемпотентности шины событий)
+        if task_id is None:
+            task_id = str(uuid.uuid4())
+        if context_id is None:
+            context_id = str(uuid.uuid4())
         session_id = f"{flow_id}:{context_id}"
 
         # user_id из payload или дефолтный
@@ -113,9 +118,8 @@ class TriggerExecutor:
             **(metadata or {}),
         }
 
-        _ = await kiq_task_name_with_context(
+        _ = await enqueue(
             TASK_PROCESS_FLOW,
-            flows_broker,
             flow_id=flow_id,
             session_id=session_id,
             user_id=effective_user_id,

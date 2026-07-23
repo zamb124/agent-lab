@@ -5,6 +5,7 @@ Sync Service - FastAPI приложение для инженерного чат
 БД: sync_db (service) + shared_db
 """
 
+import importlib
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -23,6 +24,9 @@ from core.config import get_settings
 from core.logging import get_logger
 from core.websocket import WsCommandError
 
+# side-effect: register platform event catalog types
+_ = importlib.import_module("apps.sync.realtime.events")
+
 logger = get_logger(__name__)
 
 
@@ -30,7 +34,7 @@ async def on_startup(app: FastAPI, container: SyncContainer, settings: SyncSetti
     """Регистрация WS command-handler'ов и presence hook'ов в core.websocket.
 
     Сам WS-сокет /sync/api/ws/notifications поднимает `core.websocket.router`
-    через `create_service_app`. Push-события идут через `platform:ui_events`
+    через `create_service_app`. Push-события идут через `platform:events`
     (см. `architecture.mdc`, раздел «REST-зеркало команд»).
     """
     _ = app, container, settings

@@ -136,7 +136,10 @@ class ExecutionExceptionRecord(FlexibleBaseModel):
 
 
 class PendingUIEvent(StrictBaseModel):
-    """UI-событие в очереди ExecutionState до отправки runtime в A2A stream."""
+    """Pending client frame в ExecutionState до A2A stream.
+
+    Не путать с ``PlatformEvent`` шины ``platform:events``.
+    """
 
     event_id: str = Field(..., description="ID события")
     event_type: str = Field(..., description="Тип события")

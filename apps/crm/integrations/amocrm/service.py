@@ -579,22 +579,7 @@ class AmoCRMIntegrationService:
                     description=description,
                 )
                 task_eid = task_ent.entity_id
-                await self._entity_service.sync_task_work_item(
-                    task_ent,
-                    CrmTaskWorkSeed(due_date=due, board_status=board_status),
-                    user_id=sync_user_id,
-                )
-
-                created_rel = await self._ensure_relationship(
-                    namespace=namespace,
-                    company_id=company_id,
-                    source_entity_id=task_eid,
-                    target_entity_id=parent_eid,
-                    relationship_type=RELATED_TO_RELATIONSHIP_TYPE,
-                )
-                if created_rel:
-                    stats["relationships"] = stats.get("relationships", 0) + 1
-
+                assignee_user_ids: list[str] = []
                 ru = raw.get("responsible_user_id")
                 if ru is not None:
                     member_eid = await self._resolve_canonical_entity_id(
@@ -613,6 +598,35 @@ class AmoCRMIntegrationService:
                         )
                         if created_as:
                             stats["relationships"] = stats.get("relationships", 0) + 1
+                        member_ent = await self._entity_repo.get(member_eid)
+                        if member_ent is not None:
+                            raw_platform_uid = (member_ent.attributes or {}).get(
+                                "platform_user_id"
+                            )
+                            if isinstance(raw_platform_uid, str) and raw_platform_uid.strip():
+                                assignee_user_ids.append(raw_platform_uid.strip())
+
+                seed_fields: dict[str, object] = {
+                    "due_date": due,
+                    "board_status": board_status,
+                }
+                if assignee_user_ids:
+                    seed_fields["assignees"] = assignee_user_ids
+                await self._entity_service.sync_task_work_item(
+                    task_ent,
+                    CrmTaskWorkSeed.model_validate(seed_fields),
+                    user_id=sync_user_id,
+                )
+
+                created_rel = await self._ensure_relationship(
+                    namespace=namespace,
+                    company_id=company_id,
+                    source_entity_id=task_eid,
+                    target_entity_id=parent_eid,
+                    relationship_type=RELATED_TO_RELATIONSHIP_TYPE,
+                )
+                if created_rel:
+                    stats["relationships"] = stats.get("relationships", 0) + 1
 
                 stats["tasks"] = stats.get("tasks", 0) + 1
                 count += 1

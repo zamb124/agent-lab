@@ -13,14 +13,13 @@ import pytest
 
 from apps.flows.config import get_settings
 from apps.flows.src.durable_execution import WorkflowEventType
-from apps.flows.src.models.flow_config import FlowConfig
+from tests.flows.api.test_a2a import _validate_jsonrpc_response
 from tests.flows.api.test_handoff_a2a import (
     _handoff_parent_child_configs,
     _interrupt_kind_value,
     _save_flow,
     _send_message,
 )
-from tests.flows.api.test_a2a import _validate_jsonrpc_response
 from tests.flows.durable_runtime_harness import workflow_state
 
 pytestmark = [pytest.mark.timeout(120, func_only=True)]

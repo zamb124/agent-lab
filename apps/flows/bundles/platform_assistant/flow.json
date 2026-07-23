@@ -18,9 +18,14 @@
       "type": "llm_node",
       "node_id": "platform_assistant_main",
       "agent_skills": [
+        "console-platform",
         "networkle",
         "flows-platform",
         "flows-code",
+        "sync-platform",
+        "documents-platform",
+        "worktracker-platform",
+        "litserve-platform",
         "docs-knowledge",
         "platform-workspace"
       ],

@@ -21,7 +21,6 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_canvas_toolbar_action,
     flows_dataflow_problems_payload,
     flows_doc_flow_id,
-    flows_e2e_ensure_canvas_layout,
     flows_e2e_open_studio_prompt_section,
     flows_e2e_switch_editor_layout,
     flows_execution_send_message,

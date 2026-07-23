@@ -1,4 +1,4 @@
-"""Push-события: каждая op публикует ожидаемый realtime-фрейм в `platform:ui_events`.
+"""Push-события: каждая op публикует ожидаемый realtime-фрейм в `platform:events`.
 
 Real Redis Pub/Sub подписчик из `redis_pubsub_listener` фикстуры. Без моков.
 """

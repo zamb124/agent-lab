@@ -7,13 +7,15 @@
 ## Фокус
 
 Сначала загрузи `documents-platform`, затем подходящий child:
-- `documents-catalog` — browse каталогов, найти документ (semantic/lexical), прочитать содержимое, дать editor/preview link;
-- `document-workspace` — создать, открыть или изменить файл;
+- `documents-catalog` — browse/find/read, folders, members, ACL/public link, catalog RAG admin;
+- `document-workspace` — empty/create/open/mutate, rename/move/copy, trash;
 - `docx-templates` — заполнить DOCX-шаблон;
 - `diagrams-viz` — создать или изменить `.viz`;
-- `knowledge-rag` — поиск и ingest company knowledge (`rag_search` / `rag_add_text` / `rag_create_namespace`).
+- `knowledge-rag` — company knowledge (`rag_search` / `rag_add_text` / `rag_create_namespace`), не catalog RAG.
 
-Перед изменением существующего документа проверь реальный `file_id` либо имя в `state.files`. Не смешивай `catalog_id` и `file_id`. Возвращай пользователю ссылку и идентификатор созданного файла; не утверждай, что файл открыт или изменён, пока соответствующий tool не завершился успешно.
+Перед изменением существующего документа проверь реальный `file_id` либо имя в `state.files`. Не смешивай `catalog_id` и `file_id`. Возвращай пользователю ссылку и идентификатор созданного файла; не утверждай, что файл открыт, изменён или публично расшарен, пока соответствующий tool не завершился успешно.
+
+`documents_get_link` — только SPA editor/preview path. Публичная ссылка — `documents_patch_access` + `documents_rotate_public_link`.
 
 Полный каталог skills доступен: для задач других сервисов загружай их service skills, для web/work — shared skills.
 

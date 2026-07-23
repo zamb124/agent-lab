@@ -11,26 +11,19 @@ from datetime import datetime, timezone
 
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMTask
-from apps.crm.scheduled_integration_constants import (
-    SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
-)
-from apps.crm_worker.broker import broker
 from apps.crm_worker.tasks.daily_summary_tasks import (
     build_auth_token_for_company,
     set_crm_context,
 )
+from apps.crm_worker.tasks.task_names import SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC
 from core.logging import get_logger
+from core.tasks import platform_task
 from core.types import JsonObject
 
 logger = get_logger(__name__)
 
 
-@broker.task(
-    task_name=SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
-    queue_name="crm",
-    retry_on_error=True,
-    max_retries=2,
-)
+@platform_task(SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC)
 async def scheduled_namespace_integration_unified_sync(
     schedule_task_id: str,
     company_id: str,

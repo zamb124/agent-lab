@@ -1,6 +1,6 @@
 .PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc sync-example-docs
 .PHONY: test-frontend test-rag test-crawl-llm-live
-.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon build-i18n
+.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-taskiq-canon build-i18n
 .PHONY: clean-i18n-unused base
 .PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
 
@@ -121,6 +121,9 @@ check-field-canon:
 check-logging:
 	@./scripts/check_logging_canon.sh
 
+check-taskiq-canon:
+	@uv run python scripts/check_taskiq_canon.py
+
 check-no-uvicorn:
 	@./scripts/check_no_uvicorn.sh
 
@@ -138,6 +141,9 @@ check-ui-factories:
 
 check-command-rest-mirror:
 	@uv run python scripts/check_command_rest_mirror.py
+
+check-platform-events-canon:
+	@uv run python scripts/check_platform_events_canon.py
 
 check-core-frontend-canon:
 	@uv run python scripts/check_core_frontend_canon.py
@@ -182,7 +188,7 @@ check-mcp-branding-bundle:
 mcp-branding-seed:
 	@uv run python scripts/mcp_branding_seed.py
 
-check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-voice-resolver check-speakable-parity check-tts-pipeline check-rag-post-retrieval-rerank check-file-reader-canon check-corpus-manifest check-company-ai check-files-canon check-mcp-branding-bundle check-i18n check-i18n-keys check-no-uvicorn
+check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-platform-events-canon check-voice-resolver check-speakable-parity check-tts-pipeline check-rag-post-retrieval-rerank check-file-reader-canon check-corpus-manifest check-company-ai check-files-canon check-mcp-branding-bundle check-i18n check-i18n-keys check-no-uvicorn
 	@echo "check-events-canon: OK"
 
 check-i18n:
@@ -402,6 +408,7 @@ help:
 	@echo "Канон UI / i18n / логирование:"
 	@echo "============================================================================"
 	@echo "  make check-events-canon - core lib + apps + ui-factories + REST-зеркало + i18n"
+	@echo "  make check-taskiq-canon - TaskSpec / enqueue / wire_worker канон"
 	@echo "  make check-embed-esm   - автономный embed: замыкание импортов без bare lit/@platform"
 	@echo "  make check-i18n         - JSON ru/en парность"
 	@echo "  make check-i18n-keys    - Cross-check код ↔ JSON"

@@ -206,10 +206,11 @@ class WorkItemHookEvent(StrEnum):
 
 
 class WorkItemHook(WorktrackerModel):
-    """Generic-хук жизненного цикла: апп-слой дёргает `{service, path}` на событии.
+    """Binding жизненного цикла для durable-потребителей шины.
 
-    Ядро не знает семантику; `binding` — непрозрачные данные потребителя
-    (например flows-сессия для возобновления durable workflow).
+    `service`/`path` — метаданные потребителя (flows: path=`platform:events`);
+    `binding` — непрозрачные данные (например HITL resume snapshot). HTTP
+    dispatch удалён: обработка только через consumer group на `platform:events`.
     """
 
     event: WorkItemHookEvent

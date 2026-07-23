@@ -4,17 +4,20 @@ from datetime import datetime, timezone
 
 import pytest
 
+from core.config import get_settings
 from core.llm_context import (
     LLMContextBudget,
-    LLMContextMemoryEpisode,
-    LLMContextMemoryRecallRequest,
-    LLMContextMemoryRecord,
     LLMContextMemoryScope,
-    LLMContextMemorySource,
     LLMContextProfile,
     LLMContextRetrievalMode,
     LLMContextRetrievalPolicy,
     LLMContextSourceRequest,
+)
+from core.llm_context.memory import (
+    LLMContextMemoryEpisode,
+    LLMContextMemoryRecallRequest,
+    LLMContextMemoryRecord,
+    LLMContextMemorySource,
 )
 from core.rag.models import RAGSearchOptions
 from core.rag.search_options_resolver import resolve_platform_search_options
@@ -24,7 +27,10 @@ from core.types import JsonObject
 
 def _expected_search_options(**kwargs: object) -> JsonObject:
     overrides = RAGSearchOptions.model_validate(kwargs)
-    return resolve_platform_search_options(overrides=overrides).model_dump(exclude_none=True)
+    return resolve_platform_search_options(
+        settings=get_settings(),
+        overrides=overrides,
+    ).model_dump(exclude_none=True)
 
 
 class InMemoryStore:

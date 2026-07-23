@@ -7,8 +7,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from apps.flows.config import get_settings
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import get_container
+from apps.idle_worker.tasks.task_names import TASK_SPAN_BILLING_SETTLEMENT_TICK
 from core.billing.settlement_rules import SettlementRulesDocument
 from core.billing.span_billing_settlement import SpanBillingSettlement
 from core.context import Context, set_context
@@ -19,11 +19,12 @@ from core.logging.attributes import (
     LOG_OPERATION_NAME,
 )
 from core.models.identity_models import Company, User
+from core.tasks import platform_task
 
 logger = get_logger(__name__)
 
 
-@idle_broker.task(task_name="span_billing_settlement_tick", queue_name="idle")
+@platform_task(TASK_SPAN_BILLING_SETTLEMENT_TICK)
 async def span_billing_settlement_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,

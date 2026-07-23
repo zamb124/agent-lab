@@ -5,6 +5,7 @@ Worktracker Service — платформенное ядро задач WorkItem.
 БД: platform_worktracker (service) + shared_db
 """
 
+import importlib
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -18,6 +19,9 @@ from apps.worktracker.dependencies import ContainerDep
 from core.app import create_service_app
 from core.config import get_settings
 from core.logging import get_logger
+
+# side-effect: register platform event catalog types
+_ = importlib.import_module("core.worktracker.events")
 
 logger = get_logger(__name__)
 

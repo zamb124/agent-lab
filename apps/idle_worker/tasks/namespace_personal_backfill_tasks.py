@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import get_container
+from apps.idle_worker.tasks.task_names import TASK_NAMESPACE_PERSONAL_BACKFILL
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.namespace import ensure_personal_namespace_for_user
+from core.tasks import platform_task
 
 logger = get_logger(__name__)
 
 
-@idle_broker.task(task_name="namespace_personal_backfill")
+@platform_task(TASK_NAMESPACE_PERSONAL_BACKFILL)
 async def namespace_personal_backfill() -> dict[str, int]:
     """Создаёт missing personal ns для каждого member каждой компании."""
     container = get_container()

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.broker import broker as idle_broker
+from apps.idle_worker.tasks.task_names import TASK_REDIS_INVENTORY_TICK
 from core.redis_inventory.service import run_redis_inventory_tick
+from core.tasks import platform_task
 
-REDIS_INVENTORY_TASK_NAME = "redis_inventory_tick"
 
-
-@idle_broker.task(task_name=REDIS_INVENTORY_TASK_NAME, queue_name="idle")
+@platform_task(TASK_REDIS_INVENTORY_TICK)
 async def redis_inventory_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,

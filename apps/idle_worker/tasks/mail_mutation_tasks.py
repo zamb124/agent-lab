@@ -5,13 +5,14 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import IdleWorkerContainer, get_container
 from apps.idle_worker.tasks.mail_job_context import (
     enter_mail_binding_context,
     leave_mail_binding_context,
 )
+from core.events import publish_event_to_users
 from core.logging import get_logger
+from core.mail.events import MAIL_MESSAGE_UPSERTED
 from core.mail.models import (
     MailboxBinding,
     MailMessageFlagPayload,
@@ -19,8 +20,18 @@ from core.mail.models import (
     MailMessageStarPayload,
     MailSendPayload,
 )
+from core.mail.task_names import (
+    MAIL_ARCHIVE,
+    MAIL_DELETE,
+    MAIL_MARK_SEEN,
+    MAIL_MARK_UNSEEN,
+    MAIL_MOVE,
+    MAIL_SEND,
+    MAIL_STAR,
+    MAIL_TRASH,
+)
+from core.tasks import platform_task
 from core.types import JsonObject
-from core.ui_events.dispatcher import publish_ui_event_to_user
 
 logger = get_logger(__name__)
 
@@ -86,11 +97,17 @@ async def _notify_users_for_binding(
     for member in members:
         if member.user_id not in user_ids:
             user_ids.append(member.user_id)
-    for user_id in user_ids:
-        await publish_ui_event_to_user(user_id, event_type, payload)
+    if not user_ids:
+        return
+    await publish_event_to_users(
+        user_ids,
+        event_type,
+        payload,
+        company_id=company_id,
+    )
 
 
-@idle_broker.task(task_name="mail_mark_seen", queue_name="idle")
+@platform_task(MAIL_MARK_SEEN)
 async def mail_mark_seen_task(
     *,
     company_id: str,
@@ -122,7 +139,7 @@ async def mail_mark_seen_task(
     )
 
 
-@idle_broker.task(task_name="mail_mark_unseen", queue_name="idle")
+@platform_task(MAIL_MARK_UNSEEN)
 async def mail_mark_unseen_task(
     *,
     company_id: str,
@@ -154,7 +171,7 @@ async def mail_mark_unseen_task(
     )
 
 
-@idle_broker.task(task_name="mail_send", queue_name="idle")
+@platform_task(MAIL_SEND)
 async def mail_send_task(
     *,
     company_id: str,
@@ -204,7 +221,7 @@ async def mail_send_task(
     )
 
 
-@idle_broker.task(task_name="mail_move", queue_name="idle")
+@platform_task(MAIL_MOVE)
 async def mail_move_task(*, company_id: str, payload: JsonObject) -> None:
     move_payload = MailMessageMovePayload.model_validate(payload)
 
@@ -227,7 +244,7 @@ async def mail_move_task(*, company_id: str, payload: JsonObject) -> None:
     )
 
 
-@idle_broker.task(task_name="mail_trash", queue_name="idle")
+@platform_task(MAIL_TRASH)
 async def mail_trash_task(*, company_id: str, payload: JsonObject) -> None:
     flag_payload = MailMessageFlagPayload.model_validate(payload)
 
@@ -250,7 +267,7 @@ async def mail_trash_task(*, company_id: str, payload: JsonObject) -> None:
     )
 
 
-@idle_broker.task(task_name="mail_archive", queue_name="idle")
+@platform_task(MAIL_ARCHIVE)
 async def mail_archive_task(*, company_id: str, payload: JsonObject) -> None:
     flag_payload = MailMessageFlagPayload.model_validate(payload)
 
@@ -273,7 +290,7 @@ async def mail_archive_task(*, company_id: str, payload: JsonObject) -> None:
     )
 
 
-@idle_broker.task(task_name="mail_delete", queue_name="idle")
+@platform_task(MAIL_DELETE)
 async def mail_delete_task(*, company_id: str, payload: JsonObject) -> None:
     flag_payload = MailMessageFlagPayload.model_validate(payload)
 
@@ -300,7 +317,7 @@ async def mail_delete_task(*, company_id: str, payload: JsonObject) -> None:
     )
 
 
-@idle_broker.task(task_name="mail_star", queue_name="idle")
+@platform_task(MAIL_STAR)
 async def mail_star_task(*, company_id: str, payload: JsonObject) -> None:
     star_payload = MailMessageStarPayload.model_validate(payload)
 
@@ -318,7 +335,7 @@ async def mail_star_task(*, company_id: str, payload: JsonObject) -> None:
     await _notify_users_for_binding(
         mailbox_binding_id=star_payload.mailbox_binding_id,
         company_id=company_id,
-        event_type="mail/message/upserted",
+        event_type=MAIL_MESSAGE_UPSERTED,
         payload={
             "mailbox_binding_id": star_payload.mailbox_binding_id,
             "folder": star_payload.folder,

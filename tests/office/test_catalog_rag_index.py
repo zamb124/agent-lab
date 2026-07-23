@@ -23,6 +23,7 @@ from apps.office.models.api import (
 )
 from apps.office.services.callback_token import encode_callback_context_token
 from apps.office.services.catalog_rag_index_service import OFFICE_CATALOG_RAG_NAMESPACE_PREFIX
+from core.config import get_settings
 from core.rag.search_options_resolver import resolve_platform_search_options
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 from tests.office.helpers import upload_office_file_bytes
@@ -247,7 +248,9 @@ async def test_enable_creates_namespace_and_sets_flag(
     rag_namespace_id = payload["rag_namespace_id"]
 
     status_payload = await _rag_index_status(office_client, catalog_id, auth_headers_system)
-    expected_platform_defaults = resolve_platform_search_options().model_dump(mode="json")
+    expected_platform_defaults = resolve_platform_search_options(
+        settings=get_settings(),
+    ).model_dump(mode="json")
     assert status_payload == {
         "enabled": True,
         "rag_namespace_id": rag_namespace_id,
@@ -1171,7 +1174,7 @@ async def test_signature_sidecar_skipped_from_catalog_rag_index(
     auth_headers_system,
     unique_id,
 ):
-    """CryptoPro .sig sidecar не ставится в rag.index_document_s3; totals.failed=0."""
+    """CryptoPro .sig sidecar не ставится в rag_index_document_s3; totals.failed=0."""
     _ = rag_service, rag_worker
     catalog_id = await _create_catalog(
         office_client,

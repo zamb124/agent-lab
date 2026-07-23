@@ -4,25 +4,42 @@
 Все HTTP/in-process/межсервисные вызовы поиска обязаны проходить через
 ``resolve_platform_search_options``, чтобы не было semantic-only там, где канон —
 гибрид semantic+lexical с русской FTS и едиными rrf/rerank дефолтами.
+
+Не импортирует ``core.config``: иначе цикл
+``config.base → llm_context → memory → search_options_resolver → config.base``.
+Settings передаётся явно (Protocol поверх ``.rag.document_indexing``).
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 from core.rag.models import RAGSearchOptions
 from core.rag.rag_http_namespace_search import merge_search_request_options
-from core.rag_indexing_schema import IndexProfileSearchDefaults, SearchChannelsDefaults
-
-if TYPE_CHECKING:
-    from core.config.base import BaseSettings
+from core.rag_indexing_schema import (
+    IndexProfileConfig,
+    IndexProfileSearchDefaults,
+    SearchChannelsDefaults,
+)
 
 _PLATFORM_DEFAULT_CHANNELS = SearchChannelsDefaults(semantic=True, lexical=True)
 
 
+class _RagWithDocumentIndexing(Protocol):
+    @property
+    def document_indexing(self) -> IndexProfileConfig: ...
+
+
+class PlatformSearchSettings(Protocol):
+    """Минимальный контракт settings для резолва platform search defaults."""
+
+    @property
+    def rag(self) -> _RagWithDocumentIndexing: ...
+
+
 def resolve_platform_search_options(
     *,
-    settings: BaseSettings | None = None,
+    settings: PlatformSearchSettings,
     profile_sd: IndexProfileSearchDefaults | None = None,
     overrides: RAGSearchOptions | None = None,
     per_channel_top_k: int | None = None,
@@ -34,16 +51,9 @@ def resolve_platform_search_options(
     ``settings.rag.document_indexing.search_defaults`` → platform defaults
     (hybrid channels).
     """
-    if settings is None:
-        from core.config.base import get_settings
-
-        active_settings = get_settings()
-    else:
-        active_settings = settings
-
     effective_sd = profile_sd
     if effective_sd is None:
-        effective_sd = active_settings.rag.document_indexing.search_defaults
+        effective_sd = settings.rag.document_indexing.search_defaults
 
     channels = _PLATFORM_DEFAULT_CHANNELS
     if effective_sd is not None and effective_sd.channels is not None:
@@ -72,4 +82,4 @@ def resolve_platform_search_options(
     return merge_search_request_options(platform_base, overrides) or platform_base
 
 
-__all__ = ["resolve_platform_search_options"]
+__all__ = ["PlatformSearchSettings", "resolve_platform_search_options"]

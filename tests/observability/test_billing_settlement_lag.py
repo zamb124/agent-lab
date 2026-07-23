@@ -13,7 +13,6 @@ from core.models.billing_models import UsageType
 from core.models.identity_models import Company
 from core.tracing.models import TraceSpanWrite
 from tests.fixtures.observability_log_capture import (
-    find_caplog_record,
     require_log_fields,
     require_numeric_field,
     wait_for_caplog_event,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -385,3 +385,340 @@ async def documents_update_cells(
         mutation_path="mutations/update-cells",
         mutation_payload={"cells": cells, "sheet": sheet},
     )
+
+
+class DocumentsCreateEmptyArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    title: str = Field(..., min_length=1, max_length=500, description="Title of the new blank document.")
+    document_type: Literal["word", "cell", "slide"] = Field(
+        "word",
+        description="Blank Office kind: word (.docx), cell (.xlsx/.csv), slide (.pptx).",
+    )
+    catalog_id: str = Field(
+        ...,
+        min_length=1,
+        description="Target catalog_id. Required when the namespace has catalogs.",
+    )
+    spreadsheet_format: Literal["xlsx", "csv"] | None = Field(
+        None,
+        description="Only for document_type=cell. Default xlsx.",
+    )
+
+
+class DocumentsRenameArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    file_id: str = Field(..., min_length=1, description="file_id of the Documents binding.")
+    title: str = Field(..., min_length=1, max_length=500, description="New document title.")
+
+
+class DocumentsMoveArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    file_id: str = Field(..., min_length=1, description="file_id to move.")
+    catalog_id: str = Field(..., min_length=1, description="Destination catalog_id.")
+
+
+class DocumentsCopyArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    file_id: str = Field(..., min_length=1, description="Source file_id.")
+    catalog_id: str = Field(..., min_length=1, description="Destination catalog_id.")
+    title: str | None = Field(
+        None,
+        min_length=1,
+        max_length=500,
+        description="Optional title for the copy. Default: «{title} (copy)».",
+    )
+
+
+class DocumentsListDeletedArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+
+class DocumentsFileIdArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    file_id: str = Field(..., min_length=1, description="file_id of the Documents binding.")
+
+
+def _ns_headers() -> dict[str, str]:
+    return {NAMESPACE_HEADER: _context_namespace()}
+
+
+def _document_item_brief(raw: JsonObject) -> JsonObject:
+    return {
+        "file_id": raw.get("file_id"),
+        "catalog_id": raw.get("catalog_id"),
+        "title": raw.get("title"),
+        "file_category": raw.get("file_category"),
+        "onlyoffice_document_type": raw.get("onlyoffice_document_type"),
+        "updated_at": raw.get("updated_at"),
+        "file_size": raw.get("file_size"),
+    }
+
+
+@tool(
+    name="documents_create_empty",
+    description=(
+        "Creates a blank Office document in a catalog (word/cell/slide). "
+        "Prefer this over create_file when the user wants an empty OOXML in Documents. "
+        "Requires catalog_id. Returns file_id, catalog_id, editor_url."
+    ),
+    tags=["documents", "files", "office"],
+    parameters_model=DocumentsCreateEmptyArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_create_empty(
+    title: str,
+    catalog_id: str,
+    document_type: Literal["word", "cell", "slide"] = "word",
+    spreadsheet_format: Literal["xlsx", "csv"] | None = None,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsCreateEmptyArgs(
+        title=title,
+        catalog_id=catalog_id,
+        document_type=document_type,
+        spreadsheet_format=spreadsheet_format,
+    )
+    body: JsonObject = {
+        "title": args.title,
+        "document_type": args.document_type,
+        "catalog_id": args.catalog_id,
+    }
+    if args.spreadsheet_format is not None:
+        body["spreadsheet_format"] = args.spreadsheet_format
+    try:
+        raw = await ServiceClient().post(
+            "office",
+            "/documents/api/v1/documents/empty",
+            json=body,
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.create_empty")
+    return {
+        "success": True,
+        "file_id": result.get("file_id"),
+        "catalog_id": result.get("catalog_id"),
+        "title": result.get("title"),
+        "file_category": result.get("file_category"),
+        "onlyoffice_document_type": result.get("onlyoffice_document_type"),
+        "editor_url": result.get("editor_url"),
+    }
+
+
+@tool(
+    name="documents_rename",
+    description=(
+        "Renames a Documents binding title by file_id. "
+        "Does not rewrite file bytes. Returns file_id and title."
+    ),
+    tags=["documents", "files", "office"],
+    parameters_model=DocumentsRenameArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_rename(
+    file_id: str,
+    title: str,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsRenameArgs(file_id=file_id, title=title)
+    try:
+        raw = await ServiceClient().patch(
+            "office",
+            f"/documents/api/v1/documents/{args.file_id}",
+            json={"title": args.title},
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.rename")
+    return {
+        "success": True,
+        "file_id": result.get("file_id"),
+        "title": result.get("title"),
+    }
+
+
+@tool(
+    name="documents_move",
+    description=(
+        "Moves a Documents binding into another catalog_id. "
+        "Requires access to source and destination catalogs. Returns document brief."
+    ),
+    tags=["documents", "files", "office"],
+    parameters_model=DocumentsMoveArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_move(
+    file_id: str,
+    catalog_id: str,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsMoveArgs(file_id=file_id, catalog_id=catalog_id)
+    try:
+        raw = await ServiceClient().post(
+            "office",
+            f"/documents/api/v1/documents/{args.file_id}/move",
+            json={"catalog_id": args.catalog_id},
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.move")
+    return {"success": True, **_document_item_brief(result)}
+
+
+@tool(
+    name="documents_copy",
+    description=(
+        "Copies a Documents file into catalog_id (new file_id). "
+        "Optional title. Returns file_id, catalog_id, editor_url."
+    ),
+    tags=["documents", "files", "office"],
+    parameters_model=DocumentsCopyArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_copy(
+    file_id: str,
+    catalog_id: str,
+    title: str | None = None,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    args = DocumentsCopyArgs(file_id=file_id, catalog_id=catalog_id, title=title)
+    body: JsonObject = {"catalog_id": args.catalog_id}
+    if args.title is not None:
+        body["title"] = args.title
+    try:
+        raw = await ServiceClient().post(
+            "office",
+            f"/documents/api/v1/documents/{args.file_id}/copy",
+            json=body,
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.copy")
+    return {
+        "success": True,
+        "file_id": result.get("file_id"),
+        "catalog_id": result.get("catalog_id"),
+        "title": result.get("title"),
+        "editor_url": result.get("editor_url"),
+        "source_file_id": args.file_id,
+    }
+
+
+@tool(
+    name="documents_delete",
+    description=(
+        "Soft-deletes a Documents binding (moves to trash). "
+        "Use documents_restore or documents_permanent_delete next. Returns file_id."
+    ),
+    tags=["documents", "files", "office"],
+    parameters_model=DocumentsFileIdArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_delete(file_id: str, *, state: ExecutionState) -> JsonObject:
+    _ = state
+    args = DocumentsFileIdArgs(file_id=file_id)
+    try:
+        _ = await ServiceClient().delete(
+            "office",
+            f"/documents/api/v1/documents/{args.file_id}",
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    return {"success": True, "file_id": args.file_id, "deleted": True}
+
+
+@tool(
+    name="documents_list_deleted",
+    description=(
+        "Lists soft-deleted Documents bindings in the active namespace (trash). "
+        "Returns items[] with file_id, title, catalog_id."
+    ),
+    tags=["documents", "files", "office"],
+    parameters_model=DocumentsListDeletedArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_list_deleted(*, state: ExecutionState) -> JsonObject:
+    _ = state
+    try:
+        raw = await ServiceClient().get(
+            "office",
+            "/documents/api/v1/documents/deleted",
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    body = require_json_object(raw, "documents.list_deleted")
+    items_raw = body.get("items")
+    items: list[JsonObject] = []
+    if isinstance(items_raw, list):
+        for item in items_raw:
+            if isinstance(item, dict):
+                items.append(_document_item_brief(require_json_object(item, "deleted.item")))
+    return {"success": True, "count": len(items), "items": items}
+
+
+@tool(
+    name="documents_restore",
+    description=(
+        "Restores a soft-deleted Documents binding from trash. "
+        "Returns document brief."
+    ),
+    tags=["documents", "files", "office"],
+    parameters_model=DocumentsFileIdArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_restore(file_id: str, *, state: ExecutionState) -> JsonObject:
+    _ = state
+    args = DocumentsFileIdArgs(file_id=file_id)
+    try:
+        raw = await ServiceClient().post(
+            "office",
+            f"/documents/api/v1/documents/{args.file_id}/restore",
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    result = require_json_object(raw, "documents.restore")
+    return {"success": True, **_document_item_brief(result)}
+
+
+@tool(
+    name="documents_permanent_delete",
+    description=(
+        "Permanently deletes a Documents binding that is already in trash. "
+        "Not for active documents — soft-delete first. Returns file_id."
+    ),
+    tags=["documents", "files", "office"],
+    parameters_model=DocumentsFileIdArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+)
+async def documents_permanent_delete(file_id: str, *, state: ExecutionState) -> JsonObject:
+    _ = state
+    args = DocumentsFileIdArgs(file_id=file_id)
+    try:
+        _ = await ServiceClient().delete(
+            "office",
+            f"/documents/api/v1/documents/{args.file_id}/permanent",
+            headers=_ns_headers(),
+        )
+    except ServiceClientError as exc:
+        return {"success": False, "error": str(exc)}
+    return {"success": True, "file_id": args.file_id, "permanently_deleted": True}

@@ -247,6 +247,26 @@
         "open": "Открыть задачу",
         "not_found": "Задача не найдена"
     },
+    "work_item": {
+        "update_success": "Задача обновлена",
+        "update_error": "Не удалось обновить задачу",
+        "assign_success": "Исполнитель назначен",
+        "assign_error": "Не удалось назначить исполнителя",
+        "detail_title": "Задача",
+        "open_full": "Открыть полностью",
+        "open_entity": "Открыть в графе",
+        "close_panel": "Закрыть",
+        "empty_description": "Добавить описание…",
+        "description_label": "Описание",
+        "due_label": "Срок",
+        "priority_label": "Приоритет",
+        "state_label": "Статус",
+        "assignee_label": "Исполнитель",
+        "section_properties": "Свойства",
+        "section_attachments": "Вложения",
+        "board_empty": "Нет задач в колонке",
+        "row_unassigned": "Без исполнителя"
+    },
     "user_info_modal": {
         "header": "Профиль",
         "roles_label": "Роли",

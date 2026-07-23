@@ -27,6 +27,8 @@
  *   - extraInitial: { ... } — мерджится в initial slice.
  *   - extraReducer(state, event, events) — вызывается ПОСЛЕ базового reducer'а;
  *     возвращает новое состояние или то же ссылочно (no-op).
+ *   - extraEffect(event, ctx, events) — до базового effect; return true = handled
+ *     (не выполнять REQUESTED transport). Для push → REQUESTED reload/patch.
  *   - extraEvents: { KEY: 'verb' } — дополнительные события scope namespace.
  *   - actions: { methodName: 'verb' } — дополнительные именованные действия,
  *     которые OpController обязан выставить как методы (`ctl.methodName()`).
@@ -139,6 +141,7 @@ export function createAsyncOp(options) {
         ? options.extraInitial
         : null;
     const extraReducer = typeof options.extraReducer === 'function' ? options.extraReducer : null;
+    const extraEffect = typeof options.extraEffect === 'function' ? options.extraEffect : null;
     const extraEventsConfig = options.extraEvents && typeof options.extraEvents === 'object'
         ? options.extraEvents
         : null;
@@ -251,7 +254,13 @@ export function createAsyncOp(options) {
         onFailure,
     };
 
-    function effect(event, ctx) {
+    async function effect(event, ctx) {
+        if (extraEffect) {
+            const handled = await extraEffect(event, ctx, events);
+            if (handled === true) {
+                return;
+            }
+        }
         return _runEffect(event, ctx, opCtx);
     }
 

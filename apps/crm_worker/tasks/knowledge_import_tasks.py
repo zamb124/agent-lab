@@ -14,16 +14,16 @@ import core.tracing.attributes as trace_attributes
 from apps.crm.container import get_crm_container
 from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.models.api import NoteProcessingConfig
-from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
+from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.services.file_text_reader import load_text_from_stored_file_id
 from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     get_pending_import_text,
 )
-from apps.crm_worker.broker import broker
-from apps.crm_worker.task_names import CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME
 from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
+from apps.crm_worker.tasks.task_names import CRM_RUN_KNOWLEDGE_IMPORT
 from core.logging import get_logger
+from core.tasks import platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
 from core.utils.knowledge_text_split import split_knowledge_text
@@ -112,7 +112,7 @@ async def notify_task_user(
 
 
 # Без broker retry: многоэтапный импорт и WS; broker retry без идемпотентности по чанкам даёт дубли сущностей/UI.
-@broker.task(task_name=CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME, queue_name="crm")
+@platform_task(CRM_RUN_KNOWLEDGE_IMPORT)
 async def run_knowledge_import_task(
     task_id: str,
     company_id: str,

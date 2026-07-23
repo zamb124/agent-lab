@@ -1,11 +1,10 @@
 """
 WorkItemService — чистая стейт-машина и валидация гибкого ядра задач.
 
-Сервис нейтрален: репозиторий + правила переходов + публикация realtime-событий
-в `platform:ui_events` + диспатч хуков жизненного цикла через инъектированный
-`WorkItemHookDispatcher` (без прямого импорта apps). Назначение задачи — first-class
-и сменяемое (`reassign`) для любого `kind`; HITL отличается только `blocking=True`
-и хуком `completed`.
+Сервис нейтрален: репозиторий + правила переходов + публикация событий на
+шину `platform:events`. Назначение задачи — first-class и сменяемое
+(`reassign`) для любого `kind`; HITL отличается `blocking=True` и binding
+в `hooks` (resume читает consumer group `flows` по `worktracker/work_item/completed`).
 """
 
 from __future__ import annotations
@@ -15,13 +14,9 @@ from datetime import datetime, timezone
 
 from pydantic import Field
 
-from core.clients.service_client import ServiceClient
-from core.files.file_attachments import file_ref_ids
 from core.files.file_ref import FileRef
 from core.identity.flow_employee import is_flow_employee_user_id
-from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_logger
-from core.types import JsonObject, require_json_object
 from core.variables.models import VariableMap, normalize_variables_map
 from core.websocket.publisher import Notification, NotificationType, notify_user
 from core.worktracker.events import (
@@ -32,13 +27,10 @@ from core.worktracker.events import (
     WORK_ITEM_UPDATED,
     WorkItemEventType,
     WorkItemRealtimeEvent,
+    publish_work_item_assigned,
     publish_work_item_events,
 )
-from core.worktracker.hook_dispatcher import (
-    NoopHookDispatcher,
-    WorkItemHookDispatcher,
-    hook_dispatch_internal_user_id,
-)
+from core.worktracker.hook_dispatcher import hook_dispatch_internal_user_id
 from core.worktracker.models import (
     TERMINAL_WORK_ITEM_STATES,
     Board,
@@ -53,7 +45,6 @@ from core.worktracker.models import (
     WorkItemComment,
     WorkItemCommentRole,
     WorkItemHook,
-    WorkItemHookEvent,
     WorkItemInteractionSpec,
     WorkItemKind,
     WorkItemLink,
@@ -91,14 +82,8 @@ class WorkItemMineSummary(WorktrackerModel):
 class WorkItemService:
     """Бизнес-логика гибкого ядра задач."""
 
-    def __init__(
-        self,
-        repository: WorktrackerRepository,
-        *,
-        hook_dispatcher: WorkItemHookDispatcher | None = None,
-    ) -> None:
+    def __init__(self, repository: WorktrackerRepository) -> None:
         self._repo: WorktrackerRepository = repository
-        self._hooks: WorkItemHookDispatcher = hook_dispatcher or NoopHookDispatcher()
 
     # === Чтение ===
 
@@ -278,7 +263,7 @@ class WorkItemService:
         *,
         company_id: str,
         title: str,
-        created_by: UserActor,
+        created_by: WorkActor,
         description: str = "",
         kind: WorkItemKind = WorkItemKind.GENERIC,
         namespace: str | None = None,
@@ -293,10 +278,13 @@ class WorkItemService:
         variables: VariableMap | None = None,
         attachments: list[FileRef] | None = None,
     ) -> WorkItem:
-        """Ручное создание задачи из UI: назначение создателю и доска generic по умолчанию."""
+        """Создание задачи с доской generic: UI (UserActor → self-assign) или system."""
         resolved_assignment = assignment
         if resolved_assignment is None:
-            resolved_assignment = UsersAssignment(user_ids=[created_by.user_id])
+            if isinstance(created_by, UserActor):
+                resolved_assignment = UsersAssignment(user_ids=[created_by.user_id])
+            else:
+                resolved_assignment = UnassignedAssignment()
         resolved_board_id = board_id
         if resolved_board_id is None:
             board = await self.ensure_generic_board(company_id=company_id, namespace=namespace)
@@ -356,6 +344,8 @@ class WorkItemService:
         item.updated_at = _utcnow()
         saved = await self._repo.save_work_item(item)
         await self._publish(saved, WORK_ITEM_UPDATED)
+        if title is not None or description is not None:
+            await self._notify_assignees(saved, NotificationType.WORK_ITEM_UPDATED)
         return saved
 
     async def reassign(
@@ -456,23 +446,6 @@ class WorkItemService:
         item.updated_at = _utcnow()
         saved = await self._repo.save_work_item(item)
         await self._publish(saved, WORK_ITEM_COMPLETED)
-        await self._dispatch_hooks(
-            saved,
-            WorkItemHookEvent.COMPLETED,
-            {
-                "state": saved.state.value,
-                "resolution_text": saved.resolution.text if saved.resolution else "",
-                "resolution_files": [
-                    require_json_object(file_ref.model_dump(mode="json"), "FileRef")
-                    for file_ref in saved.resolution.files
-                ]
-                if saved.resolution
-                else [],
-                "resolution_file_ids": file_ref_ids(saved.resolution.files)
-                if saved.resolution
-                else [],
-            },
-        )
         logger.info(
             "worktracker.work_item.completed",
             work_item_id=saved.work_item_id,
@@ -534,10 +507,12 @@ class WorkItemService:
                 )
             ]
         )
-        await self._dispatch_hooks(
+        author_user_id = author.user_id if isinstance(author, UserActor) else None
+        await self._notify_assignees(
             item,
-            WorkItemHookEvent.COMMENT,
-            {"comment": saved.model_dump(mode="json")},
+            NotificationType.WORK_ITEM_COMMENT,
+            message=text,
+            skip_user_ids={author_user_id} if author_user_id is not None else None,
         )
         return saved
 
@@ -771,27 +746,10 @@ class WorkItemService:
 
     async def _after_assignment_change(self, item: WorkItem) -> None:
         await self._notify_assignees(item, NotificationType.WORK_ITEM_ASSIGNED)
-        await self._dispatch_employee_assignments(item)
-        await self._dispatch_hooks(
+        await publish_work_item_assigned(
             item,
-            WorkItemHookEvent.ASSIGNED,
-            {"assignment": item.assignment.model_dump(mode="json")},
+            assigned_by_user_id=hook_dispatch_internal_user_id(item),
         )
-
-    async def _dispatch_hooks(
-        self, item: WorkItem, event: WorkItemHookEvent, payload_extra: JsonObject
-    ) -> None:
-        hooks = item.hooks_for(event)
-        if not hooks:
-            return
-        base: JsonObject = {
-            "event": event.value,
-            "work_item_id": item.work_item_id,
-            "company_id": item.company_id,
-        }
-        for hook in hooks:
-            payload: JsonObject = {**base, **payload_extra, "binding": hook.binding}
-            await self._hooks.dispatch(item, hook, payload)
 
     async def _publish(self, item: WorkItem, event_type: WorkItemEventType) -> None:
         company_broadcast_types: frozenset[WorkItemEventType] = frozenset(
@@ -825,57 +783,30 @@ class WorkItemService:
         return None
 
     @staticmethod
-    async def _notify_assignees(item: WorkItem, notification_type: NotificationType) -> None:
+    async def _notify_assignees(
+        item: WorkItem,
+        notification_type: NotificationType,
+        *,
+        message: str | None = None,
+        skip_user_ids: set[str] | None = None,
+    ) -> None:
         if not isinstance(item.assignment, UsersAssignment):
             return
         for user_id in item.assignment.user_ids:
             if is_flow_employee_user_id(user_id):
+                continue
+            if skip_user_ids is not None and user_id in skip_user_ids:
                 continue
             await notify_user(
                 user_id,
                 Notification(
                     type=notification_type,
                     title=item.title,
-                    message=item.description,
+                    message=message if message is not None else item.description,
                     service="worktracker",
                     action_url=f"/worktracker/tasks/{item.work_item_id}",
                     data={"work_item_id": item.work_item_id},
                 ),
             )
-
-    async def _dispatch_employee_assignments(self, item: WorkItem) -> None:
-        """Назначение задачи flow-сотруднику диспатчится в его inbox во flows."""
-        if not isinstance(item.assignment, UsersAssignment):
-            return
-        employee_user_ids = [
-            user_id
-            for user_id in item.assignment.user_ids
-            if is_flow_employee_user_id(user_id)
-        ]
-        if not employee_user_ids:
-            return
-        sender_user_id = hook_dispatch_internal_user_id(item)
-        service_client = ServiceClient()
-        text = item.title if not item.description else f"{item.title}\n\n{item.description}"
-        for employee_user_id in employee_user_ids:
-            payload: JsonObject = {
-                "source": "work_item_assigned",
-                "company_id": item.company_id,
-                "employee_user_id": employee_user_id,
-                "sender_user_id": sender_user_id,
-                "work_item_id": item.work_item_id,
-                "text": text,
-            }
-            headers = build_internal_context_headers(
-                company_id=item.company_id,
-                user_id=sender_user_id,
-            )
-            _ = await service_client.post(
-                "flows",
-                "/flows/api/v1/internal/employee/inbox",
-                json=payload,
-                headers=headers,
-            )
-
 
 __all__ = ["WorkItemService", "WorkItemCompletion", "WorkItemMineSummary"]

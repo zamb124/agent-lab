@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 
+from core.config import get_settings
 from core.llm_context import LLMContextBlock, LLMContextSourceRequest
 from core.llm_context.retrieval_rag_bridge import rag_search_options_override_from_retrieval
 from core.rag.models import RAGMetadataFilter, RAGSearchOptions, RAGSearchResult
@@ -54,7 +55,10 @@ class RAGLLMContextSource:
 
 def _search_options_from_policy(request: LLMContextSourceRequest) -> RAGSearchOptions:
     policy_override = rag_search_options_override_from_retrieval(request.policy.retrieval)
-    return resolve_platform_search_options(overrides=policy_override)
+    return resolve_platform_search_options(
+        settings=get_settings(),
+        overrides=policy_override,
+    )
 
 
 def _coerce_results(response: JsonObject) -> list[RAGSearchResult]:

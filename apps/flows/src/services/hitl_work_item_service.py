@@ -21,13 +21,13 @@ from apps.flows.src.observability.hitl_timing import (
 )
 from apps.flows.src.services.hitl_conversation_service import HitlConversationService
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
-from apps.flows_worker.broker_core import broker as flows_broker
 from core.clients.redis_client import RedisClient
-from core.context import get_context
+from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
+from core.models.context_models import Context
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue
 from core.types import JsonObject, require_json_object
 from core.variables.models import normalize_variables_map
 from core.worktracker.models import (
@@ -45,7 +45,7 @@ from core.worktracker.service import WorkItemService
 
 logger = get_logger(__name__)
 
-WORK_ITEM_COMPLETED_HOOK_PATH = "/flows/api/v1/internal/work-items/completed"
+WORK_ITEM_COMPLETED_BINDING_PATH = "platform:events"
 HANDOFF_PREVIEW_MAX_LEN = 200
 
 _HANDOFF_MODE_TO_INTERACTION: dict[HandoffMode, WorkItemInteractionMode] = {
@@ -133,7 +133,7 @@ class HitlWorkItemService:
                 WorkItemHook(
                     event=WorkItemHookEvent.COMPLETED,
                     service="flows",
-                    path=WORK_ITEM_COMPLETED_HOOK_PATH,
+                    path=WORK_ITEM_COMPLETED_BINDING_PATH,
                     binding=binding,
                 ),
             ],
@@ -168,11 +168,14 @@ class HitlWorkItemService:
         work_item_id: str,
         binding: JsonObject,
         resolution: WorkItemResolution,
+        company_id: str | None = None,
     ) -> None:
         """Возобновляет durable workflow по завершённой operator-задаче.
 
         Диалог takeover уже в ExecutionState.messages; resume передаёт только
         закрывающий ответ оператора (`resolution.text`).
+
+        Вызывается consumer group `flows` по событию `worktracker/work_item/completed`.
         """
         session_id = self._require_str(binding, "session_id")
         flow_id = self._require_str(binding, "flow_id")
@@ -202,69 +205,78 @@ class HitlWorkItemService:
             flow_id=flow_id,
         )
 
-        ctx = get_context()
-        if ctx is None or ctx.active_company is None:
-            raise ValueError("resume_from_completion: нужен Context с active_company")
-        company_id = ctx.active_company.company_id
+        previous_context = get_context()
+        resume_context = Context.from_dict(context_data)
+        set_context(resume_context)
+        try:
+            resolved_company_id = company_id
+            if resolved_company_id is None:
+                if resume_context.active_company is None:
+                    raise ValueError("resume_from_completion: company_id отсутствует")
+                resolved_company_id = resume_context.active_company.company_id
 
-        # Closing reply → durable messages + Redis stream до resume (live resubscribe).
-        content = resolution.text
-        resolution_file_ids: list[str] = []
-        for file_ref in resolution.files:
-            fid = file_ref.file_id
-            if fid is not None and fid.strip():
-                resolution_file_ids.append(fid.strip())
-        if content.strip() or resolution_file_ids:
-            item = await self._work_items.get(company_id, work_item_id)
-            operator_user_id = ""
-            assignment = item.assignment
-            if isinstance(assignment, QueueAssignment):
-                claimed = assignment.claimed_by_user_id
-                if isinstance(claimed, str) and claimed.strip():
-                    operator_user_id = claimed.strip()
-            if operator_user_id == "":
-                operator_user_id = end_user_id
-            _ = await self._conversation.append_closing_operator_reply(
-                company_id=company_id,
-                work_item_id=work_item_id,
-                operator_user_id=operator_user_id,
-                text=content,
-                idempotency_key=f"complete:{work_item_id}",
-                file_ids=resolution_file_ids,
+            # Closing reply → durable messages + Redis stream до resume (live resubscribe).
+            content = resolution.text
+            resolution_file_ids: list[str] = []
+            for file_ref in resolution.files:
+                fid = file_ref.file_id
+                if fid is not None and fid.strip():
+                    resolution_file_ids.append(fid.strip())
+            if content.strip() or resolution_file_ids:
+                item = await self._work_items.get(resolved_company_id, work_item_id)
+                operator_user_id = ""
+                assignment = item.assignment
+                if isinstance(assignment, QueueAssignment):
+                    claimed = assignment.claimed_by_user_id
+                    if isinstance(claimed, str) and claimed.strip():
+                        operator_user_id = claimed.strip()
+                if operator_user_id == "":
+                    operator_user_id = end_user_id
+                _ = await self._conversation.append_closing_operator_reply(
+                    company_id=resolved_company_id,
+                    work_item_id=work_item_id,
+                    operator_user_id=operator_user_id,
+                    text=content,
+                    idempotency_key=f"complete:{work_item_id}",
+                    file_ids=resolution_file_ids,
+                )
+
+            context_id = binding.get("context_id")
+            cid = (
+                context_id
+                if isinstance(context_id, str) and context_id
+                else session_id.split(":", 1)[-1]
             )
 
-        context_id = binding.get("context_id")
-        cid = (
-            context_id
-            if isinstance(context_id, str) and context_id
-            else session_id.split(":", 1)[-1]
-        )
-
-        resume_task = await kiq_task_name_with_context(
-            TASK_PROCESS_FLOW,
-            flows_broker,
-            flow_id=flow_id,
-            session_id=session_id,
-            user_id=end_user_id,
-            content=content,
-            branch_id=branch_id,
-            channel=channel,
-            task_id=tid,
-            context_id=cid,
-            metadata={},
-            is_resume=True,
-            files=[],
-            context_data=context_data,
-            trace_context=None,
-            background_kind="work_item_handoff",
-        )
-        resume_result = await asyncio.wait_for(
-            resume_task.wait_result(),
-            timeout=get_flows_settings().default_flow_timeout_seconds + 5,
-        )
-        if resume_result.is_err:
-            raise RuntimeError(f"WorkItem handoff resume failed: {resume_result.error}")
-        logger.info("hitl.work_item.resume_completed", session_id=session_id, flow_id=flow_id)
+            resume_task = await enqueue(
+                TASK_PROCESS_FLOW,
+                flow_id=flow_id,
+                session_id=session_id,
+                user_id=end_user_id,
+                content=content,
+                branch_id=branch_id,
+                channel=channel,
+                task_id=tid,
+                context_id=cid,
+                metadata={},
+                is_resume=True,
+                files=[],
+                context_data=context_data,
+                trace_context=None,
+                background_kind="work_item_handoff",
+            )
+            resume_result = await asyncio.wait_for(
+                resume_task.wait_result(),
+                timeout=get_flows_settings().default_flow_timeout_seconds + 5,
+            )
+            if resume_result.is_err:
+                raise RuntimeError(f"WorkItem handoff resume failed: {resume_result.error}")
+            logger.info("hitl.work_item.resume_completed", session_id=session_id, flow_id=flow_id)
+        finally:
+            if previous_context is None:
+                clear_context()
+            else:
+                set_context(previous_context)
 
     @staticmethod
     def _require_str(binding: JsonObject, key: str) -> str:

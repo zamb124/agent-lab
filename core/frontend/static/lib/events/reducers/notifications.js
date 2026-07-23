@@ -1,6 +1,6 @@
 /**
- * Слайс notifications — inbox-уведомления, приходящие с сервера через
- * WS-канал ui_events. Любое событие с типом, начинающимся с `notify/`,
+ * Слайс notifications — inbox-уведомления с шины `platform:events`
+ * (WS tail). Любое событие с типом, начинающимся с `notify/`,
  * добавляется в inbox.
  *
  * state.notifications:

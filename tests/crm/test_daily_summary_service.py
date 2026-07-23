@@ -90,15 +90,15 @@ async def test_enqueue_daily_summary_rebuild_deduplicates(monkeypatch):
     )
     service._daily_summary_cache_service.set_revalidating = AsyncMock(side_effect=[True, False])
 
-    kiq_mock = AsyncMock()
-    monkeypatch.setattr(entity_service_module, "kiq_task_name_with_context", kiq_mock)
+    enqueue_mock = AsyncMock()
+    monkeypatch.setattr(entity_service_module, "enqueue", enqueue_mock)
 
     first = await service.enqueue_daily_summary_rebuild(date_str="2026-03-28", namespace=None)
     second = await service.enqueue_daily_summary_rebuild(date_str="2026-03-28", namespace=None)
 
     assert first is True
     assert second is False
-    assert kiq_mock.await_count == 1
+    assert enqueue_mock.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -654,6 +654,7 @@ def test_extract_data_from_a2a_response_res_as_dict_not_string():
 async def test_update_entity_note_date_triggers_both_dates(monkeypatch):
     _set_test_context()
     monkeypatch.setattr(entity_service_module, "broadcast_crm_note_event", AsyncMock())
+    monkeypatch.setattr(entity_service_module, "publish_crm_entity_event", AsyncMock())
     service = _build_service()
     existing = SimpleNamespace(
         entity_id="e-1",
@@ -695,6 +696,7 @@ async def test_update_entity_note_date_triggers_both_dates(monkeypatch):
 async def test_delete_entity_note_triggers_rebuild(monkeypatch):
     _set_test_context()
     monkeypatch.setattr(entity_service_module, "broadcast_crm_note_event", AsyncMock())
+    monkeypatch.setattr(entity_service_module, "publish_crm_entity_event", AsyncMock())
     service = _build_service()
     entity = SimpleNamespace(
         entity_id="e-1",

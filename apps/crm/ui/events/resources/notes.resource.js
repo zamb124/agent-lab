@@ -35,6 +35,42 @@ function _buildNoteDateFilter(filters) {
     return { $and: leaves };
 }
 
+/**
+ * @param {object} note
+ * @param {object} filters
+ * @returns {boolean}
+ */
+function _noteMatchesListFilters(note, filters) {
+    if (!filters || typeof filters !== 'object') {
+        return true;
+    }
+    if (typeof filters.namespace === 'string' && filters.namespace.length > 0) {
+        if (note.namespace !== filters.namespace) {
+            return false;
+        }
+    }
+    if (typeof filters.entity_subtype === 'string' && filters.entity_subtype.length > 0) {
+        if (note.entity_subtype !== filters.entity_subtype) {
+            return false;
+        }
+    }
+    if (typeof filters.q === 'string' && filters.q.length > 0) {
+        return true;
+    }
+    const noteDate = typeof note.note_date === 'string' ? note.note_date : null;
+    if (typeof filters.date_from === 'string' && filters.date_from.length > 0) {
+        if (noteDate === null || noteDate < filters.date_from) {
+            return false;
+        }
+    }
+    if (typeof filters.date_to === 'string' && filters.date_to.length > 0) {
+        if (noteDate === null || noteDate > filters.date_to) {
+            return false;
+        }
+    }
+    return true;
+}
+
 export const notesListResource = createCursorList({
     name: 'crm/notes_list',
     baseUrl: '/crm/api/v1/entities/query',
@@ -60,6 +96,51 @@ export const notesListResource = createCursorList({
         return body;
     },
     errorToastKey: 'crm:toast.notes_list.failed',
+    extraReducer: (state, event) => {
+        if (event.type !== 'crm/note/updated') {
+            return state;
+        }
+        const payload = event.payload;
+        if (!payload || typeof payload !== 'object') {
+            return state;
+        }
+        const mf = payload.markdown_format;
+        if (mf && (mf.phase === 'partial' || mf.phase === 'started')) {
+            return state;
+        }
+        const noteId = payload.note_id;
+        if (typeof noteId !== 'string' || noteId.length === 0) {
+            return state;
+        }
+        const filters = state.filters && typeof state.filters === 'object' ? state.filters : {};
+        const items = Array.isArray(state.items) ? state.items : [];
+
+        if (payload.action === 'deleted') {
+            const nextItems = items.filter((item) => item && item.entity_id !== noteId);
+            if (nextItems.length === items.length) {
+                return state;
+            }
+            return { ...state, items: nextItems };
+        }
+
+        const note = payload.note;
+        if (!note || typeof note !== 'object' || typeof note.entity_id !== 'string') {
+            return state;
+        }
+        if (!_noteMatchesListFilters(note, filters)) {
+            const nextItems = items.filter((item) => item && item.entity_id !== noteId);
+            if (nextItems.length === items.length) {
+                return state;
+            }
+            return { ...state, items: nextItems };
+        }
+        const idx = items.findIndex((item) => item && item.entity_id === noteId);
+        if (idx === -1) {
+            return { ...state, items: [note, ...items] };
+        }
+        const nextItems = items.map((item, i) => (i === idx ? note : item));
+        return { ...state, items: nextItems };
+    },
 });
 
 export const noteLatestRangeOp = createAsyncOp({

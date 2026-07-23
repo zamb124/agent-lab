@@ -14,7 +14,6 @@ from tests.ui.e2e.office_e2e_helpers import (
     office_e2e_search_documents,
     office_e2e_select_catalog,
     office_e2e_set_view_mode,
-    office_e2e_toolbar,
 )
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder

@@ -40,6 +40,7 @@ pytest_plugins = [
     "tests.agent.fixtures.e2e",
     "tests.profiling.plugin",
     "tests.core.files.conftest",
+    "tests.core.mail.live.personal_conftest",
 ]
 
 os.environ["TESTING"] = "true"
@@ -103,6 +104,10 @@ from core.logging.setup import setup_logging  # noqa: E402
 
 setup_logging("pytest", get_settings().logging)
 
+from apps.platform_tasks.wiring import wire_brokers  # noqa: E402
+
+wire_brokers()
+
 import apps.flows_worker.broker as platform_broker_module  # noqa: E402
 from apps.flows.main import app as fastapi_app  # noqa: E402
 from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
@@ -113,7 +118,8 @@ from tests.fixtures.ai_provider_defaults import make_test_company  # noqa: E402
 
 if id(process_flow_task.broker) != id(platform_broker_module.broker):
     raise RuntimeError(
-        "process_flow_task привязан к другому broker, чем apps.flows_worker.broker: TaskIQ worker не сможет выполнять kiq из HTTP."
+        "process_flow_task привязан к другому broker, чем apps.flows_worker.broker: "
+        "TaskIQ worker не сможет выполнять enqueue из HTTP."
     )
 
 
@@ -764,10 +770,8 @@ def sync_tools(request: pytest.FixtureRequest):
         @pytest.mark.real_taskiq
 
     Патчит:
-    - execute_tool.kiq - выполняет tools напрямую
-    - process_flow_task.kiq - выполняет agent tasks напрямую
-    - send_task_update.kiq - выполняет push notifications напрямую
-    - send_webhook.kiq - выполняет webhooks напрямую
+    - ``core.tasks.enqueue`` (и локальные импорты ``enqueue`` в producer-модулях) —
+      выполняет задачи синхронно по ``TaskSpec``
 
     Redis Pub/Sub не подменяется: стриминг идёт через реальный Redis из контейнера.
     """
@@ -787,9 +791,11 @@ def sync_tools(request: pytest.FixtureRequest):
     import apps.crm_worker.tasks.knowledge_import_tasks as crm_knowledge_import_tasks
     import apps.crm_worker.tasks.namespace_integration_tasks as crm_namespace_integration_tasks
     import apps.crm_worker.tasks.note_markdown_tasks as crm_note_markdown_tasks
-    import apps.flows.src.api.v1.internal_work_items as flows_internal_work_items_module
+    import apps.flows.src.api.v1.company as flows_company_module
+    import apps.flows.src.api.v1.tasks as flows_tasks_api_module
     import apps.flows.src.channels.a2a as flows_a2a_channel_module
     import apps.flows.src.channels.base as flows_base_channel_module
+    import apps.flows.src.services.employee_inbox_service as flows_employee_inbox_module
     import apps.flows.src.services.handoff_orchestrator_service as flows_handoff_orchestrator_module
     import apps.flows.src.services.hitl_work_item_service as flows_hitl_work_item_module
     import apps.flows.src.triggers.executor as flows_trigger_executor_module
@@ -798,17 +804,19 @@ def sync_tools(request: pytest.FixtureRequest):
     import apps.rag.api.documents as rag_documents_module
     import apps.rag_worker.tasks.indexing_tasks as rag_indexing_tasks
     import apps.sync.realtime.handlers as sync_handlers_module
+    import apps.sync.realtime.notification_tasks as sync_notification_tasks
     import apps.sync.realtime.operations as sync_operations_module
     import apps.sync.realtime.tasks as sync_realtime_tasks
+    import core.mail.enqueue as mail_enqueue_module
     import core.tasks.kicker as task_kicker_module
-    from apps.crm_worker.task_names import (
-        CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN_TASK_NAME,
-        CRM_PROCESS_NOTE_TASK_NAME,
-        CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
-        CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
-        CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME,
-        CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME,
-        CRM_RUN_NAMESPACE_INTEGRATION_JOB_TASK_NAME,
+    from apps.crm_worker.tasks.task_names import (
+        CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN,
+        CRM_PROCESS_NOTE,
+        CRM_REBUILD_DAILY_SUMMARY,
+        CRM_REBUILD_PERIOD_SUMMARY,
+        CRM_REPAIR_NOTE_ANALYSIS_DRAFT,
+        CRM_RUN_KNOWLEDGE_IMPORT,
+        CRM_RUN_NAMESPACE_INTEGRATION_JOB,
     )
     from apps.flows.src.tasks import (
         company_init_tasks,
@@ -837,13 +845,34 @@ def sync_tools(request: pytest.FixtureRequest):
         TASK_SEND_TASK_INPUT_REQUIRED,
         TASK_SEND_TASK_UPDATE,
     )
-    from apps.sync.realtime.task_names import (
-        SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME,
-        SYNC_FINALIZE_RECORDING_TASK_NAME,
-        SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME,
-        SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
-        SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME,
+    from apps.rag_worker.tasks.task_names import (
+        RAG_INDEX_DOCUMENT_S3,
+        RAG_INDEX_OFFICE_CATALOG,
     )
+    from apps.sync.realtime.task_names import (
+        DELIVER_CHANNEL_MESSAGE_NOTIFICATION,
+        DELIVER_SYNC_MENTION_NOTIFICATION,
+        SYNC_AGGREGATE_CALL_TRANSCRIPT,
+        SYNC_FINALIZE_RECORDING,
+        SYNC_SPEECH_TO_CHAT_POLL,
+        SYNC_TRANSCRIBE_AUDIO_MESSAGE,
+        SYNC_TRANSCRIBE_VIDEO_MESSAGE,
+    )
+    from core.mail.task_names import (
+        MAIL_ARCHIVE,
+        MAIL_DELETE,
+        MAIL_IDLE_SUPERVISOR,
+        MAIL_MARK_SEEN,
+        MAIL_MARK_UNSEEN,
+        MAIL_MOVE,
+        MAIL_RAG_INDEX,
+        MAIL_SEND,
+        MAIL_STAR,
+        MAIL_SYNC_BINDING,
+        MAIL_SYNC_TICK,
+        MAIL_TRASH,
+    )
+    from core.tasks.registry import TaskSpec, get_task_spec
 
     class SyncTaskResult:
         """Имитация результата TaskIQ task."""
@@ -901,8 +930,8 @@ def sync_tools(request: pytest.FixtureRequest):
 
     crm_background_task_names = frozenset(
         {
-            CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
-            CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
+            CRM_REBUILD_DAILY_SUMMARY,
+            CRM_REBUILD_PERIOD_SUMMARY,
         }
     )
 
@@ -934,6 +963,10 @@ def sync_tools(request: pytest.FixtureRequest):
         except Exception:
             return SyncTaskResult({"success": False})
 
+    async def _mail_task_ack(*args, **kwargs):
+        _ = (args, kwargs)
+        return None
+
     task_name_handlers = {
         TASK_PROCESS_FLOW: sync_agent_kiq,
         TASK_EXECUTE_TOOL: sync_tool_kiq,
@@ -950,26 +983,48 @@ def sync_tools(request: pytest.FixtureRequest):
         TASK_PUSH_CONFIG_GET: push_notification_tasks.get_config,
         TASK_PUSH_CONFIG_LIST: push_notification_tasks.list_configs,
         TASK_PUSH_CONFIG_DELETE: push_notification_tasks.delete_config,
-        CRM_PROCESS_NOTE_TASK_NAME: crm_analysis_tasks.process_note_task,
-        CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME: crm_draft_repair_tasks.repair_note_analysis_draft_task,
-        CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN_TASK_NAME: crm_note_markdown_tasks.format_note_description_markdown_task,
-        CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME: crm_knowledge_import_tasks.run_knowledge_import_task,
-        CRM_RUN_NAMESPACE_INTEGRATION_JOB_TASK_NAME: crm_namespace_integration_tasks.run_namespace_integration_job,
-        CRM_REBUILD_DAILY_SUMMARY_TASK_NAME: crm_daily_summary_tasks.rebuild_daily_summary_task,
-        CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME: crm_daily_summary_tasks.rebuild_period_summary_task,
-        SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME: sync_realtime_tasks.sync_transcribe_audio_message_task,
-        SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME: sync_realtime_tasks.sync_transcribe_video_message_task,
-        SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME: sync_realtime_tasks.sync_aggregate_call_transcript_task,
-        SYNC_FINALIZE_RECORDING_TASK_NAME: sync_realtime_tasks.sync_finalize_recording_task,
-        SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME: sync_realtime_tasks.sync_speech_to_chat_poll_task,
-        rag_indexing_tasks.RAG_INDEX_DOCUMENT_S3_TASK_NAME: rag_indexing_tasks.index_rag_document_s3_task,
-        rag_indexing_tasks.RAG_INDEX_OFFICE_CATALOG_TASK_NAME: rag_indexing_tasks.index_office_catalog_task,
+        CRM_PROCESS_NOTE: crm_analysis_tasks.process_note_task,
+        CRM_REPAIR_NOTE_ANALYSIS_DRAFT: crm_draft_repair_tasks.repair_note_analysis_draft_task,
+        CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN: crm_note_markdown_tasks.format_note_description_markdown_task,
+        CRM_RUN_KNOWLEDGE_IMPORT: crm_knowledge_import_tasks.run_knowledge_import_task,
+        CRM_RUN_NAMESPACE_INTEGRATION_JOB: crm_namespace_integration_tasks.run_namespace_integration_job,
+        CRM_REBUILD_DAILY_SUMMARY: crm_daily_summary_tasks.rebuild_daily_summary_task,
+        CRM_REBUILD_PERIOD_SUMMARY: crm_daily_summary_tasks.rebuild_period_summary_task,
+        SYNC_TRANSCRIBE_AUDIO_MESSAGE: sync_realtime_tasks.sync_transcribe_audio_message_task,
+        SYNC_TRANSCRIBE_VIDEO_MESSAGE: sync_realtime_tasks.sync_transcribe_video_message_task,
+        SYNC_AGGREGATE_CALL_TRANSCRIPT: sync_realtime_tasks.sync_aggregate_call_transcript_task,
+        SYNC_FINALIZE_RECORDING: sync_realtime_tasks.sync_finalize_recording_task,
+        SYNC_SPEECH_TO_CHAT_POLL: sync_realtime_tasks.sync_speech_to_chat_poll_task,
+        DELIVER_CHANNEL_MESSAGE_NOTIFICATION: (
+            sync_notification_tasks.deliver_channel_message_notification
+        ),
+        DELIVER_SYNC_MENTION_NOTIFICATION: (
+            sync_notification_tasks.deliver_sync_mention_notification
+        ),
+        RAG_INDEX_DOCUMENT_S3: rag_indexing_tasks.index_rag_document_s3_task,
+        RAG_INDEX_OFFICE_CATALOG: rag_indexing_tasks.index_office_catalog_task,
+        # Mail worker tasks требуют IdleWorkerContainer + IMAP port теста.
+        # Offline-тесты бьют MailService напрямую; worker path — в
+        # test_mail_complete_client_taskiq с patched get_container.
+        # Здесь только ack, чтобы enqueue не падал на «неизвестный task».
+        MAIL_SYNC_TICK: _mail_task_ack,
+        MAIL_SYNC_BINDING: _mail_task_ack,
+        MAIL_MARK_SEEN: _mail_task_ack,
+        MAIL_MARK_UNSEEN: _mail_task_ack,
+        MAIL_SEND: _mail_task_ack,
+        MAIL_MOVE: _mail_task_ack,
+        MAIL_TRASH: _mail_task_ack,
+        MAIL_ARCHIVE: _mail_task_ack,
+        MAIL_DELETE: _mail_task_ack,
+        MAIL_STAR: _mail_task_ack,
+        MAIL_RAG_INDEX: _mail_task_ack,
+        MAIL_IDLE_SUPERVISOR: _mail_task_ack,
     }
 
-    async def sync_task_name_kiq(
-        task_name,
-        broker,
+    async def sync_enqueue(
+        task,
         *args,
+        priority=None,
         override_request_id=None,
         override_trace_id=None,
         service_name=None,
@@ -978,16 +1033,23 @@ def sync_tools(request: pytest.FixtureRequest):
         **kwargs,
     ):
         _ = (
-            broker,
+            priority,
             override_request_id,
             override_trace_id,
             service_name,
             background_kind,
             extra_labels,
         )
-        handler = task_name_handlers.get(task_name)
+        spec = get_task_spec(task) if not isinstance(task, TaskSpec) else task
+        handler = task_name_handlers.get(spec)
         if handler is None:
-            raise AssertionError(f"Неизвестный TaskIQ task-name: {task_name!r}")
+            # Lookup by name for string-keyed callers
+            handler = next(
+                (h for s, h in task_name_handlers.items() if s.name == spec.name),
+                None,
+            )
+        if handler is None:
+            raise AssertionError(f"Неизвестный TaskIQ task: {spec.name!r}")
         if handler is sync_agent_kiq:
             return await sync_agent_kiq(**kwargs)
         if handler is sync_tool_kiq:
@@ -996,36 +1058,36 @@ def sync_tools(request: pytest.FixtureRequest):
             return await sync_send_task_update_kiq(*args, **kwargs)
         if handler is sync_send_webhook_kiq:
             return await sync_send_webhook_kiq(*args, **kwargs)
-        if task_name in crm_background_task_names:
-            task = asyncio.create_task(
+        if spec in crm_background_task_names:
+            bg_task = asyncio.create_task(
                 handler(*args, **kwargs),
-                name=task_name,
+                name=spec.name,
             )
-            task.add_done_callback(_log_background_task_failure)
+            bg_task.add_done_callback(_log_background_task_failure)
             return SyncTaskResult(result=None)
         return await _sync_call(handler, *args, **kwargs)
 
-    monkeypatch.setattr(tool_tasks.execute_tool, "kiq", sync_tool_kiq)
-    monkeypatch.setattr(flow_tasks.process_flow_task, "kiq", sync_agent_kiq)
-    monkeypatch.setattr(push_notification_tasks.send_task_update, "kiq", sync_send_task_update_kiq)
-    monkeypatch.setattr(push_notification_tasks.send_webhook, "kiq", sync_send_webhook_kiq)
     for module in (
         task_kicker_module,
+        mail_enqueue_module,
         flows_base_channel_module,
         flows_handoff_orchestrator_module,
         flows_a2a_channel_module,
         flows_hitl_work_item_module,
-        flows_internal_work_items_module,
+        flows_employee_inbox_module,
         flows_trigger_executor_module,
+        flows_tasks_api_module,
+        flows_company_module,
         crm_task_service_module,
         crm_entity_service_module,
         sync_operations_module,
         sync_handlers_module,
+        sync_realtime_tasks,
         rag_documents_module,
         office_catalog_rag_index_module,
         rag_indexing_tasks,
     ):
-        monkeypatch.setattr(module, "kiq_task_name_with_context", sync_task_name_kiq)
+        monkeypatch.setattr(module, "enqueue", sync_enqueue)
     yield None
 
 

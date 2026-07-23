@@ -408,6 +408,7 @@ async def test_lara_sync_branch_load_then_send_message(
     _ = mock_llm_with_queue(
         [
             {"type": "tool_call", "tool": "load_agent_skill", "args": {"agent_skill_id": "sync-platform"}},
+            {"type": "tool_call", "tool": "load_agent_skill", "args": {"agent_skill_id": "sync-messaging"}},
             {
                 "type": "tool_call",
                 "tool": "sync_send_message",

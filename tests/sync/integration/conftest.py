@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -15,7 +14,6 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-import redis.asyncio as redis_async
 
 from apps.sync.container import SyncContainer, get_sync_container
 from core.config import get_settings, set_settings
@@ -23,6 +21,7 @@ from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from tests.fixtures.platform_events import platform_events_listener
 
 
 @pytest.fixture()
@@ -86,68 +85,22 @@ PubSubReceive = Callable[[str, float], Awaitable[list[dict[str, Any]]]]
 
 @pytest_asyncio.fixture()
 async def redis_pubsub_listener() -> AsyncIterator[PubSubReceive]:
-    """Подписка на канал `platform:ui_events` в реальном Redis.
+    """Чтение шины `platform:events` в реальном Redis.
 
     Возвращает `receive(filter_type, timeout)` — собирает все события указанного
-    типа за `timeout` секунд (после старта подписки). Используется так:
+    типа за `timeout` секунд (после старта чтения). Используется так:
 
         async def test_op_X_publishes_push(redis_pubsub_listener, op_context, ...):
             await op_X(...)
             events = await redis_pubsub_listener("sync/space/created", timeout=2.0)
             assert events[0]["payload"]["message_id"] == "..."
     """
-    settings = get_settings()
-    if not settings.database.redis_url:
-        raise RuntimeError("database.redis_url не задан для redis_pubsub_listener.")
+    async with platform_events_listener() as receive:
 
-    client = redis_async.from_url(settings.database.redis_url)
-    pubsub = client.pubsub()
-    await pubsub.subscribe("platform:ui_events")
-    # пропускаем подтверждение subscribe
-    await pubsub.get_message(ignore_subscribe_messages=True, timeout=0.5)
+        async def _receive(filter_type: str, timeout: float = 2.0) -> list[dict[str, Any]]:
+            return await receive(filter_type, None, timeout)
 
-    async def _receive(filter_type: str, timeout: float = 2.0) -> list[dict[str, Any]]:
-        """Собирает события указанного `type` из канала `platform:ui_events`.
-
-        Формат конверта (см. `core.ui_events.dispatcher._envelope`):
-            {"target": {...}, "event": {"id": ..., "type": ..., "payload": ...}}
-
-        Возвращает уплощённый список событий с ключами `type` и `payload`,
-        чтобы тесты могли обращаться к `e["payload"]` напрямую.
-        """
-        deadline = asyncio.get_event_loop().time() + timeout
-        collected: list[dict[str, Any]] = []
-        while asyncio.get_event_loop().time() < deadline:
-            remaining = deadline - asyncio.get_event_loop().time()
-            if remaining <= 0:
-                break
-            msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=min(remaining, 0.5))
-            if msg is None:
-                continue
-            data = msg.get("data")
-            if isinstance(data, (bytes, bytearray)):
-                data = data.decode("utf-8")
-            if not isinstance(data, str):
-                continue
-            try:
-                parsed = json.loads(data)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(parsed, dict):
-                continue
-            event = parsed.get("event")
-            if not isinstance(event, dict):
-                continue
-            if event.get("type") == filter_type:
-                collected.append(event)
-        return collected
-
-    try:
         yield _receive
-    finally:
-        await pubsub.unsubscribe("platform:ui_events")
-        await pubsub.aclose()
-        await client.aclose()
 
 
 __all__ = [

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from apps.crm.config import get_crm_settings
-from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
+from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.task_service import ActiveTaskExistsError
 from core.context import get_context
 from core.logging import get_logger
@@ -56,6 +56,7 @@ async def enqueue_note_markdown_format_task(
         note_id=note_id,
         note_date_iso=note_date_iso,
         action="updated",
+        note=entity,
         company_repository=company_repository,
         access_grant_repository=access_grant_repository,
         skip_notification_center=True,

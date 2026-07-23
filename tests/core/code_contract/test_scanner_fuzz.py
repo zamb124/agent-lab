@@ -1,9 +1,10 @@
 """Property-based fuzz tests for code contract scanner."""
 
-import core.code_contract.scanner as scanner_module
-from core.code_contract import scan_code_contract
 from hypothesis import given, settings
 from hypothesis import strategies as st
+
+import core.code_contract.scanner as scanner_module
+from core.code_contract import scan_code_contract
 
 _LANGUAGES = st.sampled_from(
     ["python", "py", "javascript", "typescript", "js", "ts", "go", "golang", "csharp", "cs", "unknown"]

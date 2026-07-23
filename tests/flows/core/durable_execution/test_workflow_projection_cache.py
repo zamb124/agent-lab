@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from apps.flows.src.durable_execution.manager import (
-    DurableWorkflowRuntime,
     _WORKFLOW_PROJECTION_CACHE_TTL_SECONDS,
+    DurableWorkflowRuntime,
 )
 from apps.flows.src.durable_execution.models import WorkflowStatus
 from core.state import ExecutionState

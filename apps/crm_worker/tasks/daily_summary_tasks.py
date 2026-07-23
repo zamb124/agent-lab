@@ -15,22 +15,23 @@ import core.tracing.attributes as trace_attributes
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMEntity, CRMTask
 from apps.crm.db.repositories.task_repository import CRM_TASK_TERMINAL_STATUSES
-from apps.crm.scheduled_task_constants import CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME
-from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
+from apps.crm.services.crm_summary_broadcast import broadcast_crm_daily_summary_updated
+from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
     resolve_user_ids_for_namespace_broadcast,
 )
 from apps.crm.services.task_service import ALL_NAMESPACES_TASK_KEY
-from apps.crm_worker.broker import broker
-from apps.crm_worker.task_names import (
-    CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
-    CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
+from apps.crm_worker.tasks.task_names import (
+    CRM_REBUILD_DAILY_SUMMARY,
+    CRM_REBUILD_PERIOD_SUMMARY,
+    CRM_RECONCILE_DAILY_SUMMARY,
 )
 from core.context import Context, set_context
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import User
+from core.tasks import platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
 from core.utils.tokens import TokenType, get_token_service
@@ -119,6 +120,14 @@ async def _notify_daily_summary_updated(
     *,
     container: "CRMContainer",
 ) -> None:
+    await broadcast_crm_daily_summary_updated(
+        company_id=company_id,
+        namespace=namespace,
+        date_str=date_str,
+        state=summary_state,
+        company_repository=container.company_repository,
+        access_grant_repository=container.access_grant_repository,
+    )
     normalized_namespace = normalize_namespace_for_broadcast(namespace)
     recipient_user_ids = await resolve_user_ids_for_namespace_broadcast(
         company_id=company_id,
@@ -128,7 +137,7 @@ async def _notify_daily_summary_updated(
     )
 
     notification_data: JsonObject = {
-        "event": "crm.daily_summary.updated",
+        "event": "crm/daily_summary/updated",
         "company_id": company_id,
         "namespace": normalized_namespace,
         "date": date_str,
@@ -175,7 +184,7 @@ async def _snapshot_crm_task_if_present(
     )
 
 
-@broker.task(task_name=CRM_REBUILD_DAILY_SUMMARY_TASK_NAME, queue_name="crm")
+@platform_task(CRM_REBUILD_DAILY_SUMMARY)
 async def rebuild_daily_summary_task(
     company_id: str,
     date_str: str,
@@ -283,7 +292,7 @@ async def rebuild_daily_summary_task(
     return state
 
 
-@broker.task(task_name=CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME, queue_name="crm")
+@platform_task(CRM_REBUILD_PERIOD_SUMMARY)
 async def rebuild_period_summary_task(
     company_id: str,
     date_from: str,
@@ -397,7 +406,7 @@ async def rebuild_period_summary_task(
     return state
 
 
-@broker.task(task_name=CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME, queue_name="crm")
+@platform_task(CRM_RECONCILE_DAILY_SUMMARY)
 async def reconcile_daily_summary_task(
     days_back: int = 1,
     schedule_task_id: str | None = None,

@@ -7,8 +7,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.tasks.company_init_tasks import init_company_resources
+from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
 from core.logging import get_logger
+from core.tasks import enqueue
 
 logger = get_logger(__name__)
 
@@ -39,10 +40,12 @@ async def schedule_company_init(request: InitCompanyRequest) -> InitCompanyRespo
     logger.info(f"Запрос инициализации компании: {request.company_id}")
 
     try:
-        task = await init_company_resources.kiq(
+        task = await enqueue(
+            TASK_INIT_COMPANY_RESOURCES,
             company_id=request.company_id,
             company_name=request.company_name,
             subdomain=request.subdomain,
+            background_kind="company_init",
         )
 
         logger.info(f"Задача инициализации запущена: task_id={task.task_id}")

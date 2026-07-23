@@ -6,8 +6,8 @@ import pytest
 
 from tests.office.access_helpers import (
     create_private_catalog,
-    enable_document_link,
     enable_catalog_link,
+    enable_document_link,
     extract_public_token,
     upload_txt_document,
 )

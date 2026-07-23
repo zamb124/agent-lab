@@ -12,7 +12,6 @@ from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_SCHEDULED
 from apps.flows.src.tools.base import ToolArguments
-from apps.flows_worker.broker_core import broker
 from core.context import set_context
 from core.context.job_context import build_job_context
 from core.identity.flow_employee import (
@@ -24,6 +23,7 @@ from core.logging import get_logger
 from core.scheduler import get_schedule_source
 from core.scheduler.models import ContentType, PlatformScheduleType, ScheduledTaskStatus
 from core.state import ExecutionState
+from core.tasks import platform_task
 from core.types import JsonObject, require_json_object, require_json_value
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
@@ -45,7 +45,7 @@ async def _resolve_escalation_targets(container: FlowContainer, user_id: str) ->
     return curators if curators else [user_id]
 
 
-@broker.task(task_name=TASK_EXECUTE_SCHEDULED, queue_name="flows_worker")
+@platform_task(TASK_EXECUTE_SCHEDULED)
 async def execute_scheduled_task(
     schedule_task_id: str,
     flow_id: str,

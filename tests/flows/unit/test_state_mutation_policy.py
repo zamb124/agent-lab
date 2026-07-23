@@ -13,8 +13,8 @@ from apps.flows.src.runtime.nodes import BaseNode, NodeInputs, NodeRunResult
 from core.errors import FrozenStateFieldError
 from core.state import ExecutionState
 from core.state.mutation_policy import (
-    FROZEN_STATE_FIELDS,
     FIELDS_COPY_FROM_RUNTIME_NODE_STATE,
+    FROZEN_STATE_FIELDS,
     USER_TOOL_PARALLEL_STATE_MERGE_FIELDS,
     assert_frozen_fields_unchanged,
     should_skip_field_on_runtime_node_state_merge,

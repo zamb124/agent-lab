@@ -18,10 +18,10 @@ import uuid
 
 import pytest
 
-from apps.flows.src.tasks.flow_tasks import process_flow_task
-from apps.flows.src.tasks.tool_tasks import execute_tool
+from apps.flows.src.tasks.task_names import TASK_EXECUTE_TOOL, TASK_PROCESS_FLOW
 from core.clients.llm import LLMToolCall
 from core.state import ExecutionState, InterruptData
+from core.tasks import enqueue
 from tests.fixtures.taskiq_timeouts import TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS
 
 pytestmark = pytest.mark.real_taskiq
@@ -62,7 +62,7 @@ class TestTaskIQToolExecution:
     async def test_tool_executes_via_taskiq_kiq(
         self, app, container, calculator_tool_config, mock_context
     ):
-        """Tool выполняется через TaskIQ .kiq() + wait_result()."""
+        """Tool выполняется через TaskIQ enqueue + wait_result()."""
         import asyncio
 
         from taskiq.exceptions import TaskiqResultTimeoutError
@@ -74,7 +74,8 @@ class TestTaskIQToolExecution:
             "user_id": "test-user",
             "session_id": "test:test-context",
         }
-        task = await execute_tool.kiq(
+        task = await enqueue(
+            TASK_EXECUTE_TOOL,
             calculator_tool_config,
             {"a": 10, "b": 5, "op": "add"},
             state_dict,
@@ -107,7 +108,8 @@ class TestTaskIQToolExecution:
         }
         tasks = []
         for i in range(5):
-            task = await execute_tool.kiq(
+            task = await enqueue(
+            TASK_EXECUTE_TOOL,
                 calculator_tool_config,
                 {"a": i, "b": i * 2, "op": "mul"},
                 state_dict,
@@ -146,7 +148,8 @@ class TestTaskIQToolExecution:
             "session_id": "test:test-context",
             "prefix": "STATE",
         }
-        task = await execute_tool.kiq(
+        task = await enqueue(
+            TASK_EXECUTE_TOOL,
             tool_config, {"value": "test"}, state_dict, context_data=mock_context.to_dict()
         )
         result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
@@ -251,7 +254,7 @@ class TestTaskIQFlowExecution:
     async def test_flow_executes_via_taskiq_kiq(
         self, app, container, setup_simple_flow, unique_id, mock_context
     ):
-        """Agent выполняется через TaskIQ .kiq() + wait_result()."""
+        """Agent выполняется через TaskIQ enqueue + wait_result()."""
         import asyncio
 
         await asyncio.sleep(0.15)
@@ -260,7 +263,8 @@ class TestTaskIQFlowExecution:
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-        task = await process_flow_task.kiq(
+        task = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id="test-user",
@@ -317,7 +321,8 @@ class TestTaskIQInterruptResume:
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-        task = await process_flow_task.kiq(
+        task = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id="test-user",
@@ -343,7 +348,8 @@ class TestTaskIQInterruptResume:
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-        task1 = await process_flow_task.kiq(
+        task1 = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id="test-user",
@@ -356,7 +362,8 @@ class TestTaskIQInterruptResume:
             print(f"Error: {result1.error}")
         assert not result1.is_err, f"Task1 failed: {result1.error}"
         assert result1.return_value["task_state"] == "input-required"
-        task2 = await process_flow_task.kiq(
+        task2 = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id="test-user",

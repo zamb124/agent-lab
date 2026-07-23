@@ -2,8 +2,8 @@
 Публикация уведомлений пользователям.
 
 Чисто event-driven: каждый сервис формирует доменное событие через
-`publish_ui_event_to_user(user_id, type, payload, ...)` (см.
-`core/ui_events/dispatcher.py`). Этот модуль предоставляет тонкий
+`publish_event_to_user(user_id, type, payload, ...)` (см.
+`core/events/publisher.py`). Этот модуль предоставляет тонкий
 адаптер `notify_user(...)`, который дополнительно умеет доставить
 push-уведомление при offline-пользователе.
 
@@ -20,11 +20,10 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from core.events import assert_platform_event_type, publish_event_to_user
 from core.logging import get_logger
 from core.push.delivery import deliver_offline_push
 from core.types import JsonArray, JsonObject, parse_json_object
-from core.ui_events.contract import UIEvent, UIEventMeta, UIEventTarget, assert_ui_event_type
-from core.ui_events.dispatcher import publish_ui_event
 from core.websocket.manager import notification_manager
 
 logger = get_logger(__name__)
@@ -46,6 +45,7 @@ class NotificationType(StrEnum):
     OFFICE_DOCUMENT_SAVED = "office_document_saved"
     WORK_ITEM_ASSIGNED = "work_item_assigned"
     WORK_ITEM_UPDATED = "work_item_updated"
+    WORK_ITEM_COMMENT = "work_item_comment"
 
 
 class NotificationAction(BaseModel):
@@ -59,7 +59,7 @@ class NotificationAction(BaseModel):
 
 
 class Notification(BaseModel):
-    """Уведомление для пользователя — превращается в UIEvent + опционально push."""
+    """Уведомление для пользователя — `PlatformEvent(notify/…)` + опционально Web Push."""
 
     type: NotificationType
     title: str
@@ -80,15 +80,16 @@ class Notification(BaseModel):
 
 def _event_type_for(notification: Notification) -> str:
     candidate = f"notify/{notification.service}/{notification.type.value}_received"
-    return assert_ui_event_type(candidate)
+    return assert_platform_event_type(candidate)
 
 
 async def notify_user(user_id: str, notification: Notification) -> None:
     """
     Доставить уведомление пользователю.
 
-    1. Публикуется как UIEvent в платформенный канал `platform:ui_events`
-       — фронт получает его через WebSocket и обрабатывает в EventBus.
+    1. Публикуется как событие шины `platform:events` с UI-доставкой
+       пользователю — фронт получает его через WebSocket и обрабатывает
+       в EventBus.
     2. Если пользователь offline — отправляется Web Push / APNs через
        `deliver_offline_push`.
     """
@@ -114,8 +115,7 @@ async def notify_user(user_id: str, notification: Notification) -> None:
         "service": notification.service,
         "kind": notification.type.value,
     }
-    event = UIEvent(type=event_type, payload=payload, meta=UIEventMeta(source="system"))
-    await publish_ui_event(event, UIEventTarget(user_id=user_id))
+    await publish_event_to_user(user_id, event_type, payload)
     logger.info(
         "Notification published: user=%s service=%s kind=%s",
         user_id,

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from apps.browser.contracts.crawl_fetch_types import BrowserCrawlFetchRequest
+from core.clients.browser.crawl_fetch_types import BrowserCrawlFetchRequest
 from core.clients.browser_fetch_client import BrowserFetchClient
 
 pytestmark = pytest.mark.unit

@@ -30,7 +30,8 @@ import {
 import { resourcesBundleResource, resourceUpdateOp } from '../events/resources/resources-bundle.resource.js';
 import { mcpServersResource, mcpServersListOp, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp, mcpServerResetCatalogDefaultsOp, mcpBrandingLoadOp, mcpBrandingSlugSuggestOp, mcpBrandingUpsertOp, mcpBrandingRemoveOp, mcpCatalogStoreLoadOp, mcpCatalogInstallOp, mcpCatalogUninstallOp } from '../events/resources/mcp.resource.js';
 import { triggersListOp, triggerGetOp, triggerCreateOp, triggerUpdateOp,
-         triggerRemoveOp, triggerVerifyOp, triggerReregisterOp, triggerTestOp } from '../events/resources/triggers.resource.js';
+         triggerRemoveOp, triggerVerifyOp, triggerReregisterOp, triggerTestOp,
+         platformEventsCatalogOp } from '../events/resources/triggers.resource.js';
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
 import { secretsVariablesResolveOp } from '@platform/lib/events/resources/secrets-variables-resolve.resource.js';
 import { secretsVariableVersionsLoadOp } from '@platform/lib/events/resources/secrets-variable-versions.resource.js';
@@ -223,6 +224,7 @@ export class FlowsApp extends PlatformApp {
         triggerVerifyOp,
         triggerReregisterOp,
         triggerTestOp,
+        platformEventsCatalogOp,
         secretsVariablesResource,
         secretsVariablesResolveOp,
         secretsVariableVersionsLoadOp,
@@ -382,33 +384,6 @@ export class FlowsApp extends PlatformApp {
         super();
         this._editor = this.useOp('flows/editor');
         this._flows = this.useResource('flows/flows');
-        this.useEvent('flows/flow/updated', (event) => {
-            const id = event?.payload?.flow_id;
-            if (typeof id === 'string' && id.length > 0) {
-                this._flows.get(id);
-            }
-        });
-        this.useEvent('flows/flow/deleted', () => {
-            this._flows.load();
-        });
-        this.useEvent('flows/branch/created', (event) => {
-            const id = event?.payload?.flow_id;
-            if (typeof id === 'string' && id.length > 0) {
-                this._flows.get(id);
-            }
-        });
-        this.useEvent('flows/branch/updated', (event) => {
-            const id = event?.payload?.flow_id;
-            if (typeof id === 'string' && id.length > 0) {
-                this._flows.get(id);
-            }
-        });
-        this.useEvent('flows/branch/deleted', (event) => {
-            const id = event?.payload?.flow_id;
-            if (typeof id === 'string' && id.length > 0) {
-                this._flows.get(id);
-            }
-        });
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this._flowsMql = null;

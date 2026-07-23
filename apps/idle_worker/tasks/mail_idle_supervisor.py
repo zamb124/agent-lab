@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 
 from apps.flows.config import get_settings
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import get_container
 from core.logging import get_logger
 from core.mail.enqueue import enqueue_mail_sync_binding
 from core.mail.models import MailboxBinding, MailboxBindingKind, MailIdleWakeKind
 from core.mail.repositories import INBOX_FOLDER
+from core.mail.task_names import MAIL_IDLE_SUPERVISOR
+from core.tasks import platform_task
 
 logger = get_logger(__name__)
 
@@ -68,7 +69,7 @@ async def _idle_one_binding(
     return woke
 
 
-@idle_broker.task(task_name="mail_idle_supervisor", queue_name="idle")
+@platform_task(MAIL_IDLE_SUPERVISOR)
 async def mail_idle_supervisor_task(
     schedule_task_id: str | None = None,
     company_id: str | None = None,

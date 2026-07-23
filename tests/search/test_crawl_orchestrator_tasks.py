@@ -11,17 +11,18 @@ from apps.search.config import get_search_settings
 from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
 from core.crawl.models import CrawlProfile, CrawlProfileWithIndex
 from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from tests.fixtures.taskiq_capture import taskiq_task_name
 
 
 @pytest.mark.asyncio
 async def test_enqueue_domain_fetch_respects_http_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
     enqueued: list[tuple[object, ...]] = []
 
-    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
-        enqueued.append((task_name, *args))
+    async def _capture(task: object, *args: object, **kwargs: object) -> None:
+        enqueued.append((taskiq_task_name(task), *args))
 
     monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        "apps.search.services.crawl.orchestrator_service.enqueue",
         _capture,
     )
 

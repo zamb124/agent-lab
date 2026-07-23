@@ -138,9 +138,10 @@ describe('flows-editor-header flow settings entry', () => {
         expect(flyout).to.not.equal(null);
 
         const menuButtons = flyout.querySelectorAll('platform-button[block]');
-        expect(menuButtons.length).to.be.greaterThan(0);
+        expect(menuButtons.length).to.be.greaterThan(1);
 
-        const settingsBtn = menuButtons[0];
+        const employeeBtn = menuButtons[0];
+        const settingsBtn = menuButtons[1];
         expect(settingsBtn.shadowRoot.querySelector('button.ghost')).to.not.equal(null);
 
         let opened = null;
@@ -148,7 +149,18 @@ describe('flows-editor-header flow settings entry', () => {
             opened = { kind, props };
         };
 
-        settingsBtn.click();
+        employeeBtn.click();
+        await elementUpdated(el);
+        expect(opened).to.deep.equal({ kind: 'flows.employee_settings', props: { flowId: 'flow-demo' } });
+        expect(el._overflowOpen).to.equal(false);
+
+        el._overflowOpen = true;
+        await elementUpdated(el);
+        const flyoutAgain = document.body.querySelector('.flows-editor-header-menu-portal');
+        expect(flyoutAgain).to.not.equal(null);
+        const settingsBtnAgain = flyoutAgain.querySelectorAll('platform-button[block]')[1];
+        opened = null;
+        settingsBtnAgain.click();
         await elementUpdated(el);
 
         expect(opened).to.deep.equal({ kind: 'flows.flow_edit', props: { flowId: 'flow-demo' } });

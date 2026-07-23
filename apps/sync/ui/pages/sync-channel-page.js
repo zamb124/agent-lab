@@ -20,6 +20,7 @@ import '../components/sync-message-list.js';
 import '../components/sync-message-composer.js';
 import '../components/sync-message-context-menu.js';
 import '../components/sync-thread-drawer.js';
+import { SYNC_MESSAGE_CREATED } from '../events/types.js';
 
 export class SyncChannelPage extends PlatformPage {
     static properties = {
@@ -60,7 +61,7 @@ export class SyncChannelPage extends PlatformPage {
         this._authSel = this.select((s) => s.auth && s.auth.user);
         this._lastLoadedChannel = '';
         this._loadSeq = 0;
-        this.useEvent('sync/message/created', (event) => this._onMessageCreated(event));
+        this.useEvent(SYNC_MESSAGE_CREATED, (event) => this._onMessageCreated(event));
     }
 
     connectedCallback() {

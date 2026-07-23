@@ -1,16 +1,9 @@
-"""
-WorktrackerContainer — DI контейнер сервиса ядра задач.
-
-Наследует BaseContainer (user/company/namespace репозитории из shared БД) и
-добавляет доступ к БД platform_worktracker, репозиторий, WorkItemService и
-диспетчер хука завершения.
-"""
+"""WorktrackerContainer — DI контейнер сервиса ядра задач."""
 
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
 from core.worktracker.db import WorktrackerDatabase
-from core.worktracker.hook_dispatcher import ServiceClientHookDispatcher
 from core.worktracker.repository import WorktrackerRepository
 from core.worktracker.service import WorkItemService
 
@@ -33,15 +26,8 @@ class WorktrackerContainer(BaseContainer):
         return WorktrackerRepository(db=self.worktracker_db)
 
     @lazy
-    def hook_dispatcher(self) -> ServiceClientHookDispatcher:
-        return ServiceClientHookDispatcher(service_client=self.service_client)
-
-    @lazy
     def work_item_service(self) -> WorkItemService:
-        return WorkItemService(
-            repository=self.worktracker_repository,
-            hook_dispatcher=self.hook_dispatcher,
-        )
+        return WorkItemService(repository=self.worktracker_repository)
 
 
 def _create_worktracker_container() -> WorktrackerContainer:

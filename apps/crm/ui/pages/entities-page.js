@@ -22,8 +22,8 @@
  * Живые обновления:
  *   - подписка на `CoreEvents.UI_NAMESPACE_CHANGED` — перезагрузка ленты и
  *     счётчиков.
- *   - подписка на `crm/entity/updated` (бэкенд публикует
- *     `publish_ui_event_to_user`) — рефреш текущей выдачи.
+ *   - cursor list / resource factories; domain `crm/entity/*` — durable bus
+ *     (delivery=None), не UI push: список обновляется после локальных мутаций.
  */
 
 import { html, css, nothing } from 'lit';
@@ -1342,21 +1342,20 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 this._reloadList();
             }
         });
-        this.useEvent('crm/entity/updated', () => this._reloadList());
 
         this.useEvent('crm/entity_bulk_delete/succeeded', () => {
             this._selectedIds = new Set();
-            this._reloadList();
+            this.requestUpdate();
         });
         this.useEvent('crm/entity_bulk_update/succeeded', () => {
             this._selectedIds = new Set();
             this._showBulkStatusMenu = false;
-            this._reloadList();
+            this.requestUpdate();
         });
         this.useEvent('crm/entity_merge/succeeded', () => {
             this._selectedIds = new Set();
             this._entitiesMergeFirstId = '';
-            this._reloadList();
+            this.requestUpdate();
         });
 
         this._lastNamespace = this._currentNamespace();
@@ -2249,7 +2248,6 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                                 && entity.work_item_id.length > 0
                                 ? html`<platform-work-item-badge
                                     work-item-id=${entity.work_item_id}
-                                    .item=${entity}
                                     variant="chip"
                                     size="sm"
                                     interactive

@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import get_container
+from apps.idle_worker.tasks.task_names import (
+    TASK_FILE_RETENTION_BACKFILL_TICK,
+    TASK_FILE_RETENTION_PURGE_TICK,
+)
 from core.config import get_settings
 from core.files.backfill import FileRetentionBackfillService
 from core.logging import get_logger
+from core.tasks import platform_task
 
 logger = get_logger(__name__)
 
 
-@idle_broker.task(task_name="file_retention_purge_tick", queue_name="idle")
+@platform_task(TASK_FILE_RETENTION_PURGE_TICK)
 async def file_retention_purge_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
@@ -35,7 +39,7 @@ async def file_retention_purge_tick(
     }
 
 
-@idle_broker.task(task_name="file_retention_backfill_tick", queue_name="idle")
+@platform_task(TASK_FILE_RETENTION_BACKFILL_TICK)
 async def file_retention_backfill_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,

@@ -49,7 +49,6 @@ from apps.flows.src.streaming import Emitter
 from apps.flows.src.streaming.base import StreamEvent
 from apps.flows.src.streaming.subscriber import EventSubscriber
 from apps.flows.src.utils import extract_json_from_response
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.a2a import (
     get_part_text,
@@ -65,7 +64,7 @@ from core.files.file_ref import FileRef, file_id_from_download_url
 from core.files.registry import default_retention_for_source
 from core.logging import get_logger
 from core.state import ExecutionState
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue
 from core.tasks.push_notifications import (
     delete_push_config,
     get_push_config,
@@ -616,9 +615,8 @@ class A2AChannel(BaseChannel):
         task = await self._cancel_task_in_state(params.id)
 
         if task:
-            _ = await kiq_task_name_with_context(
+            _ = await enqueue(
                 TASK_SEND_TASK_UPDATE,
-                idle_broker,
                 task.id,
                 task.context_id,
                 "canceled",

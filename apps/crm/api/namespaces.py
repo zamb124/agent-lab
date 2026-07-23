@@ -23,8 +23,8 @@ from apps.crm.models.api import (
     NamespaceTemplateUpdateRequest,
     NamespaceUpdateRequest,
 )
-from apps.crm.scheduled_task_constants import CRM_GENERATE_NAMESPACE_SUGGESTS_TASK_NAME
 from apps.crm.system_templates import REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS
+from apps.crm_worker.tasks.task_names import CRM_GENERATE_NAMESPACE_SUGGESTS
 from core.context import get_context
 from core.logging import get_logger
 from core.models.identity_models import Namespace, NamespaceCRMSettings, NamespaceKind
@@ -520,7 +520,7 @@ async def update_namespace(
             if new_settings.suggests.enabled:
                 req = PlatformScheduleCreateRequest(
                     target_service="crm",
-                    task_name=CRM_GENERATE_NAMESPACE_SUGGESTS_TASK_NAME,
+                    task_name=CRM_GENERATE_NAMESPACE_SUGGESTS.name,
                     queue_name="crm",
                     schedule_type=PlatformScheduleType.CRON,
                     cron=new_settings.suggests.cron,

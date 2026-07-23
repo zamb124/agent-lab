@@ -45,6 +45,42 @@ export const entitiesResource = createResourceCollection({
         remove: 'crm:toast.entity.removed',
         remove_error: 'crm:toast.entity.remove_failed',
     },
+    extraReducer: (state, event) => {
+        if (event.type !== 'crm/note/updated') {
+            return state;
+        }
+        const payload = event.payload;
+        if (!payload || typeof payload !== 'object') {
+            return state;
+        }
+        const noteId = payload.note_id;
+        if (typeof noteId !== 'string' || noteId.length === 0) {
+            return state;
+        }
+        if (payload.action === 'deleted') {
+            if (!state.byId || !(noteId in state.byId)) {
+                return state;
+            }
+            const byId = { ...state.byId };
+            delete byId[noteId];
+            const items = Array.isArray(state.items)
+                ? state.items.filter((item) => item && item.entity_id !== noteId)
+                : state.items;
+            return { ...state, byId, items };
+        }
+        const note = payload.note;
+        if (!note || typeof note !== 'object' || typeof note.entity_id !== 'string') {
+            return state;
+        }
+        if (!state.byId || !(noteId in state.byId)) {
+            return state;
+        }
+        const byId = { ...state.byId, [noteId]: note };
+        const items = Array.isArray(state.items)
+            ? state.items.map((item) => (item && item.entity_id === noteId ? note : item))
+            : state.items;
+        return { ...state, byId, items };
+    },
 });
 
 export const entityCardOp = createAsyncOp({
@@ -136,6 +172,82 @@ export const entitiesListResource = createCursorList({
         403: 'forbidden',
     },
     errorToastKey: 'crm:toast.entities_list.failed',
+    extraReducer: (state, event) => {
+        if (event.type === 'crm/entity_bulk_delete/succeeded') {
+            const result = event.payload && event.payload.result ? event.payload.result : null;
+            const deleted = result && Array.isArray(result.deleted) ? result.deleted : null;
+            if (!deleted || deleted.length === 0) {
+                return state;
+            }
+            const removed = new Set(deleted);
+            const items = Array.isArray(state.items)
+                ? state.items.filter((item) => item && !removed.has(item.entity_id))
+                : state.items;
+            return { ...state, items };
+        }
+        if (event.type === 'crm/entity_bulk_update/succeeded') {
+            const result = event.payload && event.payload.result ? event.payload.result : null;
+            const updated = result && Array.isArray(result.updated) ? result.updated : null;
+            if (!updated || updated.length === 0) {
+                return state;
+            }
+            const byId = new Map();
+            for (const entity of updated) {
+                if (entity && typeof entity.entity_id === 'string') {
+                    byId.set(entity.entity_id, entity);
+                }
+            }
+            if (byId.size === 0 || !Array.isArray(state.items)) {
+                return state;
+            }
+            const items = state.items.map((item) => {
+                if (!item || typeof item.entity_id !== 'string') {
+                    return item;
+                }
+                const next = byId.get(item.entity_id);
+                return next || item;
+            });
+            return { ...state, items };
+        }
+        if (event.type === 'crm/entity_merge/succeeded') {
+            const result = event.payload && event.payload.result ? event.payload.result : null;
+            if (!result || typeof result !== 'object') {
+                return state;
+            }
+            const survivor = result.entity;
+            const mergedFrom = result.merged_from_entity_id;
+            if (!survivor || typeof survivor.entity_id !== 'string') {
+                return state;
+            }
+            if (typeof mergedFrom !== 'string' || mergedFrom.length === 0) {
+                return state;
+            }
+            if (!Array.isArray(state.items)) {
+                return state;
+            }
+            const items = [];
+            let survivorSeen = false;
+            for (const item of state.items) {
+                if (!item || typeof item.entity_id !== 'string') {
+                    continue;
+                }
+                if (item.entity_id === mergedFrom) {
+                    continue;
+                }
+                if (item.entity_id === survivor.entity_id) {
+                    items.push(survivor);
+                    survivorSeen = true;
+                    continue;
+                }
+                items.push(item);
+            }
+            if (!survivorSeen) {
+                items.unshift(survivor);
+            }
+            return { ...state, items };
+        }
+        return state;
+    },
 });
 
 export const entityMergeOp = createAsyncOp({

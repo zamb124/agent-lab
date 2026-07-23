@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import importlib
 from pathlib import Path
 
 from core.config.loader import load_merged_config
@@ -25,6 +26,10 @@ from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
 from apps.agent import llm_proxy as agent_llm_proxy  # noqa: E402
 from apps.agent.platform_mcp import router as agent_platform_mcp_router  # noqa: E402
+from apps.agent.tunnel_bus import (  # noqa: E402
+    configure_tunnel_bus_storage,
+    start_tunnel_bus_listener,
+)
 from apps.flows.config import FlowSettings, get_settings  # noqa: E402
 from apps.flows.src.api import (  # noqa: E402
     a2a_router,
@@ -55,7 +60,7 @@ from apps.flows.src.services.mcp_sync import (  # noqa: E402
 from apps.flows.src.services.platform_assistant_skills import (  # noqa: E402
     seed_platform_assistant_skills,
 )
-from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
+from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW  # noqa: E402
 from apps.flows.src.triggers.dev_polling import start_dev_polling, stop_dev_polling  # noqa: E402
 from core.api.integrations import set_flow_resume_handler  # noqa: E402
 from core.app import create_service_app  # noqa: E402
@@ -65,12 +70,18 @@ from core.clients.llm.mock import (  # noqa: E402
 )
 from core.config.testing import is_testing  # noqa: E402
 from core.context import clear_context, set_context  # noqa: E402
+from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef  # noqa: E402
+from core.files.registry import default_retention_for_source  # noqa: E402
 from core.files.writer import FileWriter  # noqa: E402
 from core.logging import get_logger  # noqa: E402
 from core.models.context_models import Context  # noqa: E402
 from core.models.i18n_models import Language  # noqa: E402
 from core.models.identity_models import Company, User  # noqa: E402
 from core.office.ai_settings import ONLYOFFICE_AI_BROWSER_CORS_ORIGINS  # noqa: E402
+from core.tasks import enqueue  # noqa: E402
+
+# side-effect: register platform event catalog types
+_ = importlib.import_module("apps.flows.src.events")
 
 logger = get_logger(__name__)
 
@@ -101,7 +112,8 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
         context_data: JsonObject,
         trace_context: JsonObject | None,
     ) -> None:
-        _ = await process_flow_task.kiq(
+        _ = await enqueue(
+            TASK_PROCESS_FLOW,
             flow_id=flow_id,
             session_id=session_id,
             user_id=user_id,
@@ -115,12 +127,10 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
             files=files,
             context_data=context_data,
             trace_context=trace_context,
+            background_kind="flow_resume",
         )
 
     set_flow_resume_handler(_flow_resume_via_taskiq)
-
-    from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
-    from core.files.registry import default_retention_for_source
 
     FileWriter.configure_process_upload(
         files_service=container.files_service,
@@ -149,8 +159,6 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
             else:
                 logger.error("Failed to connect to Redis on startup")
                 raise
-
-    from apps.agent.tunnel_bus import configure_tunnel_bus_storage, start_tunnel_bus_listener
 
     configure_tunnel_bus_storage(container.storage)
     await start_tunnel_bus_listener(container.redis_client)
@@ -375,7 +383,7 @@ async def old_flows_ui_redirect():
 @app.get("/flows", response_class=HTMLResponse)
 @app.get("/flows/", response_class=HTMLResponse)
 async def ui_spa_flows_root():
-    """SPA: корень приложения (маршрут list с path '')."""
+    """SPA: корень приложения (маршрут list с path '")."""
     return HTMLResponse(content=_INDEX_HTML)
 
 

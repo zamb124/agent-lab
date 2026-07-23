@@ -3,8 +3,8 @@
 Все компоненты — реальные (PostgreSQL, Redis, TaskIQ worker, sync_service).
 Никаких моков и monkeypatch. Принцип проверки:
 
-  - Подписываемся на `platform:ui_events` через `redis_pubsub_listener`
-    (контракт `core.ui_events.dispatcher`).
+  - Подписываемся на `platform:events` через `redis_pubsub_listener`
+    (контракт `core.events.dispatcher`).
   - Триггерим `op_messages_send` через REST.
   - Ждём (или НЕ ждём) платформенный push-фрейм:
     * `sync/message/created` — domain push, всегда (для участников канала).
@@ -64,7 +64,7 @@ async def test_notify_user_skipped_when_recipient_has_sync_ws_presence(
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
-    ui_events_listener: PubSubReceive,
+    platform_events_listener: PubSubReceive,
 ) -> None:
     """User2 онлайн в sync WS → `notify/sync/sync_new_message_received` НЕ публикуется."""
     user2_id = _user_id_from_token(sync_auth_token_user2)
@@ -89,7 +89,7 @@ async def test_notify_user_skipped_when_recipient_has_sync_ws_presence(
                 channel_id=channel_id,
                 text=f"presence-skip {unique_id}",
             )
-        notify_events = await ui_events_listener(
+        notify_events = await platform_events_listener(
             "notify/sync/sync_new_message_received",
             user2_id,
             timeout=4.0,
@@ -111,7 +111,7 @@ async def test_notify_user_delivered_when_recipient_offline(
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
-    ui_events_listener: PubSubReceive,
+    platform_events_listener: PubSubReceive,
 ) -> None:
     """User2 офлайн (нет WS) → ждём `notify/sync/sync_new_message_received` через TaskIQ."""
     user2_id = _user_id_from_token(sync_auth_token_user2)
@@ -134,7 +134,7 @@ async def test_notify_user_delivered_when_recipient_offline(
             text=f"offline-deliver {unique_id} {uuid.uuid4().hex[:6]}",
         )
 
-    notify_events = await ui_events_listener(
+    notify_events = await platform_events_listener(
         "notify/sync/sync_new_message_received",
         user2_id,
         timeout=10.0,
@@ -159,7 +159,7 @@ async def test_notify_user_skipped_when_channel_muted(
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
-    ui_events_listener: PubSubReceive,
+    platform_events_listener: PubSubReceive,
 ) -> None:
     """Mute канала у user2 → notify-push не приходит даже при offline-presence."""
     user2_id = _user_id_from_token(sync_auth_token_user2)
@@ -191,7 +191,7 @@ async def test_notify_user_skipped_when_channel_muted(
             text=f"muted {unique_id}",
         )
 
-    notify_events = await ui_events_listener(
+    notify_events = await platform_events_listener(
         "notify/sync/sync_new_message_received",
         user2_id,
         timeout=4.0,
@@ -212,7 +212,7 @@ async def test_mention_notification_delivered_even_with_sync_ws_presence(
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
-    ui_events_listener: PubSubReceive,
+    platform_events_listener: PubSubReceive,
 ) -> None:
     """Mention уведомления НЕ пропускаются по sync presence (см. sync.mdc)."""
     user2_id = _user_id_from_token(sync_auth_token_user2)
@@ -239,7 +239,7 @@ async def test_mention_notification_delivered_even_with_sync_ws_presence(
                 mentioned_user_ids=[user2_id],
             )
 
-        notify_events = await ui_events_listener(
+        notify_events = await platform_events_listener(
             "notify/sync/mention_received",
             user2_id,
             timeout=10.0,

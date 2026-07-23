@@ -1,11 +1,49 @@
 ---
-description: "TaskIQ: брокеры воркеров, FIFO per session, retry middleware, scheduler control-plane, контракт задач"
+description: "TaskIQ: @platform_task + enqueue, autodiscover, worker bootstrap, scheduler"
 alwaysApply: false
-globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
+globs: ["**/tasks/**", "**/broker.py", "**/worker.py", "**/platform_tasks/**"]
 ---
 # TaskIQ
 
 Единая система очередей платформы поверх Redis Streams.
+
+## Единый паттерн (единственный)
+
+Объявление:
+
+```python
+from core.tasks import declare_task, platform_task
+
+MY_TASK = declare_task("my_task", queue="rag", scheduled=False, retry=True)
+
+@platform_task(MY_TASK)
+async def my_task(document_id: str) -> None:
+    ...
+```
+
+Постановка в очередь (HTTP, WS, другой worker, scheduler API — откуда угодно):
+
+```python
+from core.tasks import enqueue
+
+await enqueue(MY_TASK, document_id=doc_id)
+# или await enqueue("my_task", document_id=doc_id)  # если declaration-модуль уже импортирован
+```
+
+| Запрещено | Вместо этого |
+|---|---|
+| `@broker.task` | `@platform_task(SPEC)` |
+| `task.kiq(...)` | `enqueue(SPEC, ...)` |
+| `broker.find_task(name).kiq(...)` | `enqueue(SPEC, ...)` |
+| локальный `create_broker(...)` в call-site | thin `apps/<svc>_worker/broker.py` + `enqueue` |
+| ручные списки регистрации задач | `apps/platform_tasks/wiring.py` + autodiscover |
+| `*_TASK_NAME = declare_task(...)` | Spec = `TASK_*` / `CRM_*` / `CRAWL_*` (без `_NAME`); str = `SPEC.name` |
+| `task_name=SPEC` / `message.task_name == SPEC` | `task_name=SPEC.name` / `== SPEC.name` |
+| ручной `TaskSpec(name=..., queue=...)` вне `declare_task` | только `declare_task` → реестр; `get_task_spec` сверяет identity |
+
+Исключения (только они): `core/tasks/**` (внутри `enqueue`), evaluation `with_task_id` (`apps/flows/src/api/v1/evaluation.py`, `apps/flows_worker/evaluation_tasks.py`), scheduler dispatch (`apps/scheduler/dispatch.py`), `core/scheduler/service.py` (run-now).
+
+CI: `scripts/check_taskiq_canon.py` (все Spec на брокере, Spec≠str, schedule literals ⊆ registry), `scripts/check_logging_canon.sh` (п.11) — FAIL на дрейф.
 
 ## Два URL Redis
 
@@ -14,84 +52,89 @@ globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
 | Стримы TaskIQ + result backend + scheduler prefix `platform_schedules` | `settings.tasks.broker_url` | `TASKS__BROKER_URL` |
 | Session lock (FIFO per session), sync presence и прочий доменный Redis | `settings.database.redis_url` | `DATABASE__REDIS_URL` |
 
-Подробности изоляции БД/Redis — `database.mdc` / `configuration.mdc`.
+Подробности — `database.mdc` / `configuration.mdc`.
 
-## Брокеры воркеров
+## Очереди и брокеры
 
-Один брокер на воркер, имя очереди = имя воркера. **Никаких самодельных брокеров.**
+Один брокер на очередь. Фабрика — `core/tasks/broker.py::create_broker` (регистрирует `queue → broker` в `core/tasks/registry.py`). Thin-модули только создают брокер:
 
-| Сервис | Брокер | Очередь |
-|---|---|---|
-| flows_worker | `apps/flows_worker/broker.py` | `flows_worker` |
-| idle_worker | `apps/idle_worker/broker.py` | `idle` |
-| rag_worker | `apps/rag_worker/broker.py` | `rag` |
-| sync_worker | `apps/sync/realtime/broker.py` | `sync` |
-| crm_worker | `apps/crm_worker/broker.py` | `crm` |
+| Очередь | Брокер-модуль |
+|---|---|
+| `flows_worker` | `apps/flows_worker/broker.py` |
+| `idle` | `apps/idle_worker/broker.py` |
+| `rag` | `apps/rag_worker/broker.py` |
+| `sync` | `apps/sync/realtime/broker.py` |
+| `crm` | `apps/crm_worker/broker.py` |
+| `search` | `apps/search_worker/broker.py` |
 
-Фабрика — `core/tasks/broker.py::create_broker`: `RedisStreamBroker` + `RedisAsyncResultBackend` (TTL 3600 с) + middleware:
+Middleware на каждом брокере (порядок важен):
 
-1. **LoggingMiddleware** — логирование, контракт меток; в `on_error` учитывает `_taskiq_retry_count` и `_retries` (контракт SimpleRetry).
+1. **LoggingMiddleware** — log labels; в `on_error` учитывает retry-метки.
 2. **SessionLockMiddleware** — FIFO per `session_id` через `database.redis_url`.
-3. **SimpleRetryMiddleware** — повторы по `retry_on_error` / `max_retries` задачи; `default_retry_count` из `TasksConfig` (`tasks.default_retry_count`, ENV `TASKS__DEFAULT_RETRY_COUNT`), когда у задачи нет своего лимита через метки TaskIQ.
+3. **SimpleRetryMiddleware** — повторы при `TaskSpec.retry=True` / `max_retries`.
 
-Порядок регистрации важен: в receiver при ошибке `on_error` идёт по **обратному** порядку — сначала SimpleRetry (решение о повторной `kiq`), затем SessionLock (снятие lock), затем Logging.
+`enqueue` сам пишет labels (`request_id`, `trace_id`, `service_name`, `queue_name`, опционально `priority`).
 
-При старте `flows_worker` в `_initialize_worker_state` вызывается `set_billing_service(container.billing_service)` (как у `crm_worker`): без этого `invoke_llm` и задачи с `get_billing_service()` падают в процессе воркера.
+Имена задач — только `snake_case`, глобально уникальны (`declare_task` → raise при конфликте).
 
-## Scheduler control-plane (platform scheduler)
+## Wiring и autodiscover
 
-- Платформенный API расписаний — `apps/scheduler` (`/scheduler/api/v1/schedules*`). Метаданные хранятся в shared БД (`scheduler_tasks`) с обязательным `company_id`. Company isolation обязательна для всех операций (create/list/pause/resume/cancel/run-now).
-- Кросс-сервисный доступ только через `core/clients/scheduler_client.py`, не через прямой `httpx`.
-- Recurring задачи в сервисах — через scheduler API, а не локальные `while True` циклы в `main.py`.
+`apps/platform_tasks/wiring.py` — единственная топология:
 
-### Регистрация задач для scheduler
+- `wire_worker(queue)` — брокер очереди + import impl-модулей этой очереди (worker).
+- `wire_brokers()` — только брокеры (HTTP scheduler API для kick).
+- `wire_all()` — брокеры + все impl (scheduler-процесс).
 
-`apps/scheduler/scheduler.py`: **сначала** side-effect импорты модулей с `@broker.task`, затем **`require_tasks_registered_for_scheduler`** (`core/scheduler/scheduler.py`), затем **`create_scheduler`**. Если задача не зарегистрирована на нужном брокере (забыт импорт или неверное имя) — процесс **падает при старте** с `RuntimeError` и списком отсутствующих `task_name`.
+Declaration (`task_names.py`) лёгкий и импортируется producer'ами без runtime задач. Impl (`*_tasks.py`) биндится через `@platform_task` после регистрации брокера.
 
-Новая задача, попадающая в Redis-расписание: импорт модуля в `apps/scheduler/scheduler.py` + имя в одном из `_FLOWS_SCHEDULER_REQUIRED_TASK_NAMES` / `_IDLE_SCHEDULER_REQUIRED_TASK_NAMES` / `_CRM_SCHEDULER_REQUIRED_TASK_NAMES`. Пользовательский код не регистрируется как TaskIQ eval-task; исполнение идёт через `code-runner-*`.
+## Worker bootstrap
 
-**Воркер обязан импортировать тот же модуль**, иначе при выполнении будет «task is not found». Пример: `crm_reembed_stale_documents_tick` — модуль `apps.crm_worker.tasks.reembed_tasks` в `apps/crm_worker/worker.py`; `crm_reconcile_daily_summary` — модуль `apps.crm_worker.tasks.daily_summary_tasks` в `apps/crm_worker/worker.py` и `apps/scheduler/scheduler.py`.
+`core/tasks/worker_bootstrap.py::build_worker` — общий lifecycle (logging, tracing, billing/redis/notifications/file_processors по флагам, redis connect с backoff).
 
-`QueueAwareTaskiqScheduler` (`core/scheduler/scheduler.py`): при срабатывании записи вызывает `AsyncKicker` на **брокере целевой очереди** (по `labels['queue_name']`). Иначе `RedisStreamBroker.kick` падает в fallback на stream `flows_worker`, и `flows_worker` получает сообщения с именами idle-задач без handler (warning «task is not found»).
+Каждый `apps/<svc>_worker/worker.py` (~десятки строк): `wire_worker` + доменный `on_startup` + `build_worker(...)`.
 
-`SchedulerService` (`core/scheduler/service.py`) для `AsyncKicker` получает брокер через `broker_for_queue(queue_name)`, заданный в `apps/scheduler/container.py` (`scheduler_broker_for_queue`): очередь → модуль брокера. Иначе постановка задач только на `idle` некорректна.
+Запуск воркера: `taskiq worker apps.<svc>_worker.worker:worker_app`.
+
+Локально все процессы (HTTP + workers + scheduler): **`make app`** / `scripts/run.py`. Не `make taskiq*`.
+
+Production — Helm `deploy/helm/agent-lab/values.yaml::workers.<name>.{replicas,command}`.
+
+## Scheduler control-plane
+
+- API расписаний — `apps/scheduler` (`/scheduler/api/v1/schedules*`), метаданные в shared БД (`scheduler_tasks`) с `company_id`.
+- Кросс-сервисный доступ — только `core/clients/scheduler_client.py`.
+- Точка входа процесса: `apps/scheduler/scheduler.py` → `wire_all()` → `require_scheduled_tasks_registered()` → `apps.scheduler.dispatch.create_scheduler(settings.tasks.broker_url)`.
+- Redis schedules (`platform_schedules`) и TaskIQ streams — один URL: `settings.tasks.broker_url` (не `database.redis_url`).
+- Канон создания scheduler — только `apps/scheduler/dispatch.py::create_scheduler` (не `core.tasks.broker`).
+- Dispatch — `apps/scheduler/dispatch.py::QueueAwareTaskiqScheduler`: kick на брокере целевой очереди (`labels['queue_name']` / `TaskSpec.queue`).
+- Required scheduled-имена = все `TaskSpec.scheduled=True` из реестра (ручные whitelists удалены). `scheduled=True` — только ticks и реально schedulable задачи fire-and-forget (push/send/tool/llm/process_flow) — без флага.
+- Recurring в сервисах — через scheduler API, не локальный `while True`.
+- Declaration CRM: `apps/crm_worker/tasks/task_names.py`.
+
+`SchedulerService.run_now` (`core/scheduler/service.py`) кикает через `AsyncKicker` на брокере очереди (`broker_for_queue` из `apps/scheduler/container.py` → registry).
+
+## Priority (хук)
+
+`enqueue(..., priority=TaskPriority.HIGH)` пишет label `priority`. Сейчас **не** меняет очередь/топологию. Bands — отдельный будущий план.
 
 ## FIFO per Session
 
-`SessionLockMiddleware`: задачи одной `session_id` выполняются последовательно.
+`SessionLockMiddleware`: задачи одной `session_id` последовательно. Lock в **`database.redis_url`**, TTL 300 с, wait до 60 с. Алгоритм — `core/tasks/session_lock.py`.
 
-Алгоритм (подробно — `core/tasks/session_lock.py`): если у сообщения есть `session_id` в kwargs или второй позиционный строковый аргумент — `SETNX session_lock:{session_id}` (TTL **300** с). Если lock занят — **блокирующее ожидание** на воркере с backoff **50–2000** ms до **60** с; при таймауте — ошибка в логе (`session_lock.wait_timeout`). После выполнения или при ошибке — `DEL` lock.
+## Retry
 
-Redis для lock — **`database.redis_url`**, не `tasks.broker_url`.
-
-## Ретраи ошибок выполнения
-
-Параметры декоратора **`retry_on_error`** / **`max_retries`** (и смежные метки TaskIQ) выполняют повтор **только при наличии `SimpleRetryMiddleware`** на брокере. Платформа подключает его в `create_broker`. Без middleware повторов не будет (контракт проверяется в `tests/core/test_taskiq_retry_middleware.py` на `InMemoryBroker`).
-
-Задачи с многоэтапным UI/WS без явной идемпотентности по шагам могут **намеренно** не использовать broker retry — помечены комментарием в коде (`process_note_task`, namespace integration, knowledge import, sync notification tasks).
-
-```python
-from apps.flows_worker.broker import broker
-
-@broker.task(retry_on_error=True, max_retries=3)
-async def my_task(param1: str, param2: int) -> str:
-    return await process(param1, param2)
-
-task = await my_task.kiq(param1="value", param2=42)
-result = await task.wait_result(timeout=30)
-if result.is_err:
-    raise result.error
-return result.return_value
-```
-
-Для расписаний → `kicker().schedule_by_time/cron/interval`.
+`TaskSpec.retry=False` по умолчанию. `retry=True` только там, где нужен SimpleRetry на flaky IO. Задачи с многоэтапным UI/WS без идемпотентности по шагам — без broker retry.
 
 ## Контракт `process_flow_task`
 
-`apps/flows/src/tasks/flow_tasks.py::process_flow_task` — главная задача выполнения flow. В проде `context_data` обязателен (Context из middleware).
+`apps/flows/src/tasks/flow_tasks.py` — главная задача выполнения flow. В проде `context_data` обязателен.
 
 ```python
-await process_flow_task.kiq(
+from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
+from core.tasks import enqueue
+
+await enqueue(
+    TASK_PROCESS_FLOW,
     flow_id="example_react",
     session_id="example_react:ctx-456",
     user_id="user-789",
@@ -106,65 +149,34 @@ await process_flow_task.kiq(
 )
 ```
 
-Внутри: `get_channel(channel, flow_id)` → `PreparedTaskParams` → `channel.process_task(params)` → `Emitter` публикует события, `FlowFactory` загружает `Flow`, `flow.run(state)` исполняется, `emit_complete` / `emit_interrupt` / `emit_error`, `DurableWorkflowRuntime` пишет append-only events и обновляет hot projection.
+Запланированные flow-срабатывания — через `execute_scheduled_task` (`TASK_EXECUTE_SCHEDULED`), не прямой schedule `process_flow_task`.
 
-## Планирование (flows)
-
-Расписание создаёт `ScheduleService` (`apps/flows/src/services/schedule_service.py`) через `execute_scheduled_task.kicker().schedule_by_*`. Запланированные срабатывания выполняет задача `execute_scheduled_task` (`apps/flows/src/tasks/scheduled_tasks.py`, очередь `flows_worker`) — **не** прямой вызов `process_flow_task.schedule_by_time`.
-
-Тулы для `llm_node` (`apps/flows/tools/scheduling.py`): `schedule_cron_task`, `schedule_interval_task`, `schedule_one_time_task`, `list_scheduled_tasks`, `cancel_scheduled_task`. Внутри — `ScheduleService` контейнера flows. Требование: `state.session_id` в формате `flow_id:context_id`, иначе `ValueError`. Тулы дописывают список `scheduled_tasks` в state.
-
-## Company init (idle → flows_worker)
+## Company init
 
 | Сценарий | Idle-задача | Доменный executor |
 |---|---|---|
-| Новая компания | `company_init_new_company` (`apps/idle_worker/tasks/company_init_tasks.py`) | `POST /flows/api/v1/internal/company/init` → `init_company_resources` |
-| System bootstrap | `company_init_system` — enqueue из `idle_worker_startup` (skip в `is_testing()`) | тот же internal API → `init_company_resources` |
+| Новая компания | `company_init_new_company` | internal API → `init_company_resources` (`TASK_INIT_COMPANY_RESOURCES`) |
+| System bootstrap | `company_init_system` (enqueue из idle startup; skip в `is_testing()`) | тот же |
 
-HTTP-процесс flows **не** ставит и не выполняет тяжёлый company/MCP init в lifespan. Testing fixtures — синхронно в `apps/flows/main.py` при `is_testing()`.
+## Calendar / mail sync
 
-## Календарный автосинк (idle worker через scheduler)
-
-Задача `calendar_sync_tick` (`apps/idle_worker/tasks/calendar_sync_tasks.py`). Регистрация cron в `apps/scheduler/main.py` на старте через `SchedulerService`: `company_id="system"`, cron `*/1 * * * *`, idempotency (есть `pending` — дубль не создаётся; есть `paused` — задача резюмируется). Модуль `calendar_sync_tasks` обязан быть импортирован в `apps/idle_worker/worker.py` и в `apps/scheduler/scheduler.py`. Параметры в `settings.calendar_sync`: `lookback_days`, `lookahead_months`, `batch_size`, `max_integrations_per_tick`, `max_parallel_integrations`, `notification_dedup_ttl_seconds`. Нотификации новых событий — `core.websocket.publisher.notify_user`, дедупликация по `calendar:notify:{company_id}:{user_id}:{provider}:{event_id}` в `shared_storage`.
-
-## Почтовый автосинк (idle worker через scheduler)
-
-Задача `mail_sync_tick` (`apps/idle_worker/tasks/mail_sync_tasks.py`). Тот же bootstrap cron в `apps/scheduler/main.py` (`company_id="system"`). Модуль обязан быть импортирован в `apps/idle_worker/worker.py` и `apps/scheduler/scheduler.py`. Параметры — `settings.mail_sync`. Курсоры в `mailbox_sync_cursors` (не тела писем). Notify — `MAIL_NEW_MESSAGE`, dedup `mail:notify:{company_id}:{user_id}:{mailbox_binding_id}:{uid}`. Детали → **`mail.mdc`**.
-
-## Запуск воркеров
-
-Локально: `make taskiq` (обычный режим), `make taskiq-reload` (hot reload), `make taskiq-scheduler` (scheduler process). Дев/тест compose: `flows_worker`/`idle_worker`/... зависит от `redis` (healthy). Production — `kubectl get/logs/rollout` deployment в namespace `platform`; реплики и команды воркеров — `deploy/helm/agent-lab/values.yaml::workers.<name>.{replicas,command}`.
-
-Масштабирование: `docker-compose up --scale flows_worker=4`. Каждый воркер получает свою задачу через `XREADGROUP` (Redis consumer groups), FIFO per session гарантирует `SessionLockMiddleware`.
+`calendar_sync_tick`, `mail_sync_tick` — idle, cron bootstrap в `apps/scheduler/main.py` (`company_id="system"`). Параметры — `settings.calendar_sync` / `settings.mail_sync`. Детали mail → **`mail.mdc`**.
 
 ## Stream retention
 
-Память db1 в основном — Redis Streams. Защита в два слоя:
+1. **`maxlen`** в `RedisStreamBroker` (`TasksConfig.stream_maxlen_by_queue`): search 50k; idle/crm/rag 20k; flows_worker 10k; sync без trim.
+2. Мониторинг XLEN — Grafana Redis (`redis_inventory_tick`).
+3. GC `platform_schedules:*` — `platform_schedules_gc_tick`.
+4. Result backend TTL 3600 с.
 
-1. **`maxlen` в `RedisStreamBroker`** (`core/tasks/broker.py::create_broker`) — approximate trim при каждом `XADD`. Дефолты в `TasksConfig.stream_maxlen_by_queue`:
+## Критичные правила
 
-| Очередь | maxlen |
-|---|---|
-| `search` | 50_000 |
-| `idle`, `crm`, `rag` | 20_000 |
-| `flows_worker` | 10_000 |
-| `sync` | без trim (нет в map) |
-
-2. **Мониторинг XLEN** — Grafana dashboard **Redis** (`redis.inventory.stream_length` из `redis_inventory_tick`).
-
-`platform_schedules:*` (lists) — без per-key TTL. GC: idle-задача `platform_schedules_gc_tick` (cron `0 4 * * *`, scheduler bootstrap) сверяет `platform_schedules:data:{schedule_id}` с `scheduler_tasks.schedule_id` в Postgres.
-
-Result backend TTL: `result_ex_time=3600` (1 ч) в `create_broker`.
-
-Observability: Grafana **Redis** + [`deploy/scripts/README.md`](deploy/scripts/README.md).
-
-## КРИТИЧНЫЕ ПРАВИЛА
-
-1. Брокер — **только** из модуля воркера (`apps.<name>_worker.broker` / `apps.sync.realtime.broker`). Свой `RedisStreamBroker` запрещён.
-2. `InMemoryBroker` в проде запрещён (допустим только узкий контракт-тест на retry middleware).
-3. Создание задачи — **только** `.kiq()`.
-4. Тесты инициализируют брокер через session-фикстуру (`broker.startup()` / `broker.shutdown()`).
-5. `retry_on_error=True` для задач с flaky IO имеет смысл **после** регистрации `SimpleRetryMiddleware` на брокере (делает `create_broker`).
-6. Задачи с одним `session_id` выполняются строго последовательно.
-7. Запланированные flow-срабатывания идут через `execute_scheduled_task`, не через `process_flow_task.schedule_by_time`.
-8. Recurring/cron в сервисах — через scheduler API, не локальный цикл.
+1. Объявление — только `@platform_task(SPEC)`; имя — snake_case.
+2. Постановка в очередь — только `enqueue(...)`.
+3. Брокер очереди — только thin-модуль воркера / `create_broker` в `core/tasks`.
+4. Регистрация — только wiring/autodiscover; ручные списки модулей запрещены.
+5. `InMemoryBroker` в проде запрещён (допустим узкий контракт-тест retry middleware).
+6. Задачи одной `session_id` — строго последовательно.
+7. Scheduled flow — через `execute_scheduled_task`.
+8. Recurring — через scheduler API.
+9. После добавления задачи: `declare_task` + `@platform_task` в пакете очереди; для cron — `scheduled=True` и bootstrap в `apps/scheduler/main.py` при необходимости.

@@ -99,7 +99,6 @@ async def test_read_image_vision_heic_from_corpus(
     mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
-    from tests.core.files.corpus.manifest import CORPUS
 
     entry = next(entry for entry in CORPUS if entry.relative_path == "img/DA-1p.heic")
     require_heic_entry_supported(entry.relative_path)

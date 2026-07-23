@@ -3,6 +3,6 @@
 """
 
 # Не импортируем здесь worker app — это вызывает циклический импорт.
-# Producers/tasks импортируют примитивы broker из apps.flows_worker.broker_core.
+# Producers ставят задачи через core.tasks.enqueue; broker — из apps.flows_worker.broker.
 
 __all__ = []

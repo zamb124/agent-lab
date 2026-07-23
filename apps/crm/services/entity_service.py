@@ -51,8 +51,14 @@ from apps.crm.models.api import (
     EntityMergeRequest,
 )
 from apps.crm.services.attachment_service import AttachmentService
-from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
-from apps.crm.services.crm_summary_ws_broadcast import (
+from apps.crm.services.crm_entity_events import (
+    CRM_ENTITY_CREATED,
+    CRM_ENTITY_DELETED,
+    CRM_ENTITY_UPDATED,
+    publish_crm_entity_event,
+)
+from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
+from apps.crm.services.crm_summary_broadcast import (
     broadcast_crm_daily_summary_updated,
     broadcast_crm_period_summary_updated,
 )
@@ -69,10 +75,9 @@ from apps.crm.services.note_attachment_description import (
 )
 from apps.crm.services.saga import EntityDeletionSaga, SagaCompensationError, SagaStep
 from apps.crm.services.user_person_service import UserPersonService
-from apps.crm_worker.broker import broker as crm_worker_broker
-from apps.crm_worker.task_names import (
-    CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
-    CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
+from apps.crm_worker.tasks.task_names import (
+    CRM_REBUILD_DAILY_SUMMARY,
+    CRM_REBUILD_PERIOD_SUMMARY,
 )
 from core.a2a import iter_json_parts, part_json_has_data, part_json_has_text
 from core.clients.a2a_client import A2AClient, A2ATaskResponse
@@ -88,7 +93,7 @@ from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import NamespaceCRMSettings
 from core.namespace import NamespaceService
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 logger = get_logger(__name__)
@@ -1084,11 +1089,19 @@ class EntityService:
         return notes, source_version
 
     async def sync_task_work_item(
-        self, entity: CRMEntity, seed: CrmTaskWorkSeed, *, user_id: str
+        self,
+        entity: CRMEntity,
+        seed: CrmTaskWorkSeed,
+        *,
+        user_id: str,
+        entity_subtype: str | None = None,
     ) -> None:
         """Создать/синхронизировать парный WorkItem(crm_activity) для CRM-задачи."""
         if self._crm_work_item_service is None:
             raise ValueError("crm_work_item_service обязателен для задач")
+        resolved_subtype = (
+            entity_subtype if entity_subtype is not None else entity.entity_subtype
+        )
         _ = await self._crm_work_item_service.sync_for_task(
             company_id=entity.company_id,
             entity_id=entity.entity_id,
@@ -1097,6 +1110,7 @@ class EntityService:
             description=entity.description or "",
             seed=seed,
             created_by=UserActor(user_id=user_id),
+            entity_subtype=resolved_subtype,
         )
 
     async def _delete_task_work_item(self, entity: CRMEntity) -> None:
@@ -1214,17 +1228,22 @@ class EntityService:
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
 
         if entity.entity_type == "task":
+            create_seed_fields: dict[str, object] = {}
+            if isinstance(work_priority, str):
+                create_seed_fields["priority"] = work_priority
+            if isinstance(work_due_date, date):
+                create_seed_fields["due_date"] = work_due_date
+            if isinstance(work_assignees, list):
+                create_seed_fields["assignees"] = [
+                    str(a) for a in cast(list[object], work_assignees)
+                ]
+            if work_board_status is not None:
+                create_seed_fields["board_status"] = work_board_status
             await self.sync_task_work_item(
                 entity,
-                CrmTaskWorkSeed(
-                    priority=work_priority if isinstance(work_priority, str) else None,
-                    due_date=work_due_date if isinstance(work_due_date, date) else None,
-                    assignees=[str(a) for a in cast(list[object], work_assignees)]
-                    if isinstance(work_assignees, list)
-                    else [],
-                    board_status=work_board_status,
-                ),
+                CrmTaskWorkSeed.model_validate(create_seed_fields),
                 user_id=user_id,
+                entity_subtype=entity.entity_subtype,
             )
 
         if attachment_text_merged:
@@ -1274,9 +1293,12 @@ class EntityService:
                 note_id=entity.entity_id,
                 note_date_iso=note_date_iso,
                 action="created",
+                note=entity,
                 company_repository=self._company_repo,
                 access_grant_repository=self._access_grant_repo,
             )
+
+        await publish_crm_entity_event(CRM_ENTITY_CREATED, entity)
 
         return entity
 
@@ -1576,11 +1598,21 @@ class EntityService:
 
         # Для задачи канбан-статус живёт в WorkItem, а не в attributes CRM-узла.
         task_board_status: str | None = None
+        task_board_status_in_seed = False
         if next_entity_type == "task":
             task_attrs = dict(entity.attributes or {})
-            raw_task_status = task_attrs.pop("status", None)
-            if isinstance(raw_task_status, str) and raw_task_status.strip():
-                task_board_status = raw_task_status.strip()
+            if "status" in update_attributes:
+                task_board_status_in_seed = True
+                raw_task_status = task_attrs.pop("status", None)
+                if isinstance(raw_task_status, str) and raw_task_status.strip():
+                    task_board_status = raw_task_status.strip()
+                else:
+                    task_board_status = None
+            elif "status" in task_attrs:
+                # status на CRM-узле task не канон (живёт в WorkItem); при update attributes
+                # снимаем ключ с узла, в WorkItem не пишем.
+                if "attributes" in updates:
+                    _ = task_attrs.pop("status", None)
             entity.attributes = task_attrs
 
         if is_note and "attachment_ids" in updates:
@@ -1611,20 +1643,31 @@ class EntityService:
         logger.info(f"Updated entity: {entity_id}")
 
         if entity.entity_type == "task":
-            update_priority = updates.get("priority")
-            update_due = updates.get("due_date")
-            update_assignees = updates.get("assignees")
+            update_seed_fields: dict[str, object] = {}
+            if "priority" in updates:
+                update_priority = updates.get("priority")
+                update_seed_fields["priority"] = (
+                    update_priority if isinstance(update_priority, str) else None
+                )
+            if "due_date" in updates:
+                update_due = updates.get("due_date")
+                update_seed_fields["due_date"] = (
+                    update_due if isinstance(update_due, date) else None
+                )
+            if "assignees" in updates:
+                update_assignees = updates.get("assignees")
+                update_seed_fields["assignees"] = (
+                    [str(a) for a in cast(list[object], update_assignees)]
+                    if isinstance(update_assignees, list)
+                    else []
+                )
+            if task_board_status_in_seed:
+                update_seed_fields["board_status"] = task_board_status
             await self.sync_task_work_item(
                 entity,
-                CrmTaskWorkSeed(
-                    priority=update_priority if isinstance(update_priority, str) else None,
-                    due_date=update_due if isinstance(update_due, date) else None,
-                    assignees=[str(a) for a in cast(list[object], update_assignees)]
-                    if isinstance(update_assignees, list)
-                    else [],
-                    board_status=task_board_status,
-                ),
+                CrmTaskWorkSeed.model_validate(update_seed_fields),
                 user_id=entity.user_id,
+                entity_subtype=entity.entity_subtype,
             )
 
         if is_note:
@@ -1660,6 +1703,7 @@ class EntityService:
                 note_id=entity.entity_id,
                 note_date_iso=note_date_iso,
                 action="updated",
+                note=entity,
                 company_repository=self._company_repo,
                 access_grant_repository=self._access_grant_repo,
             )
@@ -1704,6 +1748,8 @@ class EntityService:
                     entity.description or ""
                 )
                 await self._sync_note_mention_links(entity.entity_id, mention_ids, ns)
+
+        await publish_crm_entity_event(CRM_ENTITY_UPDATED, entity)
 
         return entity
 
@@ -2063,6 +2109,8 @@ class EntityService:
                 company_repository=self._company_repo,
                 access_grant_repository=self._access_grant_repo,
             )
+
+        await publish_crm_entity_event(CRM_ENTITY_DELETED, entity)
 
         return True
 
@@ -4991,9 +5039,8 @@ class EntityService:
             _ = await self._task_repository.create(task_row)
             task_id = task_row.task_id
 
-        _ = await kiq_task_name_with_context(
-            CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
-            crm_worker_broker,
+        _ = await enqueue(
+            CRM_REBUILD_DAILY_SUMMARY,
             company_id=company_id,
             date_str=date_str,
             namespace=normalized_namespace,
@@ -5402,9 +5449,8 @@ class EntityService:
             _ = await self._task_repository.create(task_row)
             task_id = task_row.task_id
 
-        _ = await kiq_task_name_with_context(
-            CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
-            crm_worker_broker,
+        _ = await enqueue(
+            CRM_REBUILD_PERIOD_SUMMARY,
             company_id=company_id,
             date_from=date_from,
             date_to=date_to,

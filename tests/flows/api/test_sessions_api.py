@@ -39,8 +39,8 @@ def create_test_state(
 
     from a2a.types import Message, Part
     from a2a.types.a2a_pb2 import (
-        ROLE_USER,
         ROLE_AGENT,
+        ROLE_USER,
     )
 
     messages = []

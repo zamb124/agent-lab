@@ -19,6 +19,7 @@ from apps.agent.desktop.build_contract import (
 from apps.agent.local_releases import (
     build_local_release_status,
     build_local_release_unavailable_status,
+    detect_host_platform,
     local_release_artifact_route,
     resolve_local_release_artifact_path,
     use_local_release_artifact,
@@ -575,8 +576,6 @@ async def fetch_latest_release_status() -> AgentReleaseStatusResponse:
     owner = settings.releases.github_owner
     repo = settings.releases.github_repo
     if use_local_release_artifact():
-        from apps.agent.local_releases import detect_host_platform
-
         platform_name = detect_host_platform()
         try:
             return build_local_release_status(platform_name)

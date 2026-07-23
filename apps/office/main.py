@@ -2,6 +2,7 @@
 Документы OnlyOffice — BFF и Lit UI (процесс office, публичный путь /documents).
 """
 
+import importlib
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -16,7 +17,12 @@ from core.app import create_service_app
 from core.app.health_payload import build_health_payload
 from core.logging import get_logger
 
+# side-effect: register platform event catalog types
+_ = importlib.import_module("apps.office.events")
+
 logger = get_logger(__name__)
+
+
 def _api_routers():
     return [bff_router]
 

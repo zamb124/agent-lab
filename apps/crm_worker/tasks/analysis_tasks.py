@@ -15,13 +15,13 @@ import core.tracing.attributes as trace_attributes
 from apps.crm.container import get_crm_container
 from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.models.api import NoteProcessingConfig
-from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
+from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresError
 from apps.crm.taskiq_analyze_errors import format_validation_for_taskiq
-from apps.crm_worker.broker import broker
-from apps.crm_worker.task_names import CRM_PROCESS_NOTE_TASK_NAME
 from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
+from apps.crm_worker.tasks.task_names import CRM_PROCESS_NOTE
 from core.logging import get_logger
+from core.tasks import platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, require_json_object
 from core.websocket.publisher import Notification, NotificationType, notify_user
@@ -67,7 +67,7 @@ async def _notify_analyze_stage(
 
 
 # Без broker retry: этапы анализа и WS; повтор без отдельной идемпотентности по task_id даёт дубли UI.
-@broker.task(task_name=CRM_PROCESS_NOTE_TASK_NAME, queue_name="crm")
+@platform_task(CRM_PROCESS_NOTE)
 async def process_note_task(
     task_id: str,
     note_id: str,

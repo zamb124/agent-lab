@@ -6,9 +6,9 @@ TaskIQ worker. Никаких моков и monkeypatch. Push-фреймы ва�
 
   - WS-клиент(ы) — для проверки доставки конкретному получателю в реальном
     времени.
-  - `ui_events_listener` — для проверки `target.user_id` в конверте
-    `platform:ui_events` (например, `signal` адресован одному target,
-    остальным НЕ должен прийти).
+  - `platform_events_listener` (`platform_events_listener`) — фильтр по
+    `delivery.user_ids` на шине `platform:events` (например, `signal`
+    адресован одному получателю, остальным НЕ должен прийти).
 
 LiveKit для invite-цепочки реально создаёт SFU-комнату (`mode == 'sfu'`,
 `P2P_MAX = 0` в `apps/sync/realtime/call_handlers.py`); тест не запускает
@@ -303,7 +303,7 @@ async def test_call_signal_forwards_to_target_user_only(
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
-    ui_events_listener,
+    platform_events_listener,
 ) -> None:
     user2_id = _user_id_from_token(sync_auth_token_user2)
     user3_id = f"sync_user3_sig_{unique_id}"

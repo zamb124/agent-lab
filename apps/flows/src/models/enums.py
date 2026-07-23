@@ -120,11 +120,11 @@ class TriggerType(str, Enum):
     Pull-based: cron, email - polling по расписанию
     """
 
-    TELEGRAM = "telegram"   # Telegram Bot webhook
-    CRON = "cron"           # Cron расписание (TaskIQ scheduler)
-    WEBHOOK = "webhook"     # Внешний HTTP webhook
-    EMAIL = "email"         # Email polling или webhook
-    REDIS = "redis"         # Redis Pub/Sub событие
+    TELEGRAM = "telegram"                 # Telegram Bot webhook
+    CRON = "cron"                         # Cron расписание (TaskIQ scheduler)
+    WEBHOOK = "webhook"                   # Внешний HTTP webhook
+    EMAIL = "email"                       # Email polling или webhook
+    PLATFORM_EVENT = "platform_event"     # Событие платформы (шина platform:events)
 
 
 class TriggerStatus(str, Enum):

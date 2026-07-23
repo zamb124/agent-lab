@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 
 from apps.flows.src.container import get_container
-from apps.flows.tools.lara_crm import crm_create_note
+from apps.flows.tools.crm_tools import crm_create_note
 from core.state import ExecutionState
 from core.state.execution_state_records import ToolResult
 

@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
+from core.events.contract import PLATFORM_EVENTS_STREAM
 from core.redis_inventory.logging_events import (
     log_redis_inventory_db_summary,
     log_redis_inventory_prefix_stats,
@@ -123,6 +124,14 @@ async def _inventory_db(
                     stream_maxlen=stream_maxlen_for_queue(stream_name),
                 )
             )
+        platform_events_xlen = await redis_client.xlen(PLATFORM_EVENTS_STREAM)
+        collected_streams.append(
+            RedisStreamLength(
+                stream_name=PLATFORM_EVENTS_STREAM,
+                stream_xlen=platform_events_xlen,
+                stream_maxlen=get_settings().events.stream_maxlen,
+            )
+        )
         stream_lengths = tuple(collected_streams)
 
     platform_schedule_keys = await redis_client.scan_keys("platform_schedules*")

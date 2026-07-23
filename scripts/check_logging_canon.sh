@@ -167,15 +167,38 @@ if rg -nq 'clear_log_context\s*\(' \
         apps core >&2 || true
 fi
 
-# 11. Прямой вызов task.kiq() без log labels: только через core.tasks.kicker.kiq_with_context
-#     или task.kicker().with_labels(request_id=..., trace_id=..., service_name=...).kiq(...).
-#     На переходный период жёсткого блока нет — pre_send автоматически подставляет
-#     request_id/trace_id/service_name из лог-контекста (см. core/tasks/logging_middleware.py).
-#     Здесь мониторим количество прямых вызовов.
-KIQ_COUNT=$(rg -c '\.kiq\s*\(' apps core --type py 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
-if [ "$KIQ_COUNT" -gt 0 ]; then
-    echo "check_logging_canon: info — прямые .kiq(...) вызовов: $KIQ_COUNT (auto-инжектится request_id из лог-контекста; явно использовать core.tasks.kicker.kiq_with_context для документирования)" >&2
+# 11. Прямой .kiq( / find_task( / AsyncKicker( / create_broker( вне whitelist —
+#     единый enqueue-канон. Полная проверка реестра — scripts/check_taskiq_canon.py.
+#     Здесь FAIL на очевидные call-site нарушения в apps/core.
+KIQ_ALLOW='core/tasks/kicker.py|core/tasks/logging_middleware.py|apps/scheduler/dispatch.py|core/scheduler/service.py|apps/flows/src/api/v1/evaluation.py|apps/flows_worker/evaluation_tasks.py'
+CREATE_BROKER_ALLOW='core/tasks/broker.py|apps/flows_worker/broker.py|apps/idle_worker/broker.py|apps/rag_worker/broker.py|apps/crm_worker/broker.py|apps/search_worker/broker.py|apps/sync/realtime/broker.py'
+ASYNC_KICKER_ALLOW='core/tasks/kicker.py|apps/scheduler/dispatch.py|core/scheduler/service.py|apps/flows/src/api/v1/evaluation.py|apps/flows_worker/evaluation_tasks.py'
+
+if rg -n '\.kiq\s*\(' --type py apps core | rg -v -E "$KIQ_ALLOW" >/tmp/taskiq_kiq_hits.txt 2>/dev/null; then
+    if [ -s /tmp/taskiq_kiq_hits.txt ]; then
+        fail "прямой .kiq(...) запрещён — используйте core.tasks.enqueue"
+        cat /tmp/taskiq_kiq_hits.txt >&2 || true
+    fi
 fi
+if rg -n '\.find_task\s*\(' --type py apps core | rg -v 'apps/scheduler/dispatch.py' >/tmp/taskiq_find_hits.txt 2>/dev/null; then
+    if [ -s /tmp/taskiq_find_hits.txt ]; then
+        fail "find_task(...) запрещён вне apps/scheduler/dispatch.py"
+        cat /tmp/taskiq_find_hits.txt >&2 || true
+    fi
+fi
+if rg -n '\bAsyncKicker\s*\(' --type py apps core | rg -v -E "$ASYNC_KICKER_ALLOW" >/tmp/taskiq_kicker_hits.txt 2>/dev/null; then
+    if [ -s /tmp/taskiq_kicker_hits.txt ]; then
+        fail "AsyncKicker(...) запрещён — используйте core.tasks.enqueue"
+        cat /tmp/taskiq_kicker_hits.txt >&2 || true
+    fi
+fi
+if rg -n '\bcreate_broker\s*\(' --type py apps core | rg -v -E "$CREATE_BROKER_ALLOW" >/tmp/taskiq_broker_hits.txt 2>/dev/null; then
+    if [ -s /tmp/taskiq_broker_hits.txt ]; then
+        fail "create_broker(...) только в core/tasks/broker.py и thin broker-модулях"
+        cat /tmp/taskiq_broker_hits.txt >&2 || true
+    fi
+fi
+rm -f /tmp/taskiq_kiq_hits.txt /tmp/taskiq_find_hits.txt /tmp/taskiq_kicker_hits.txt /tmp/taskiq_broker_hits.txt
 
 if [ "$ERR" -ne 0 ]; then
     echo "check_logging_canon: FAIL" >&2

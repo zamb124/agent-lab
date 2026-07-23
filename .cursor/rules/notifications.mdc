@@ -1,16 +1,16 @@
 ---
-description: "Нотификации: notify_user → Redis platform:ui_events → WS → toast/badge"
+description: "Нотификации: notify_user → шина platform:events → WS → toast/badge"
 alwaysApply: false
 ---
 # Нотификации
 
 ## Поток
 
-`Service/Worker/Task → notify_user(...) → Redis platform:ui_events → WS /<svc>/api/ws/notifications → <platform-notification-manager> → toast + badge`
+`Service/Worker/Task → notify_user(...) → шина platform:events → WS /<svc>/api/ws/notifications → <platform-notification-manager> → toast + badge`
 
-`notify_user` оборачивает уведомление в `UIEvent` (`type: notify/<service>/<kind>_received`) и публикует через `publish_ui_event` (`core/ui_events/dispatcher.py`) в `platform:ui_events`. WS-менеджер (`core/websocket/manager.py`) форвардит сериализованный `UIEvent` (`{id, type, payload, meta}`) в сокет адресата.
+`notify_user` оборачивает уведомление в `PlatformEvent` (`type: notify/<service>/<kind>_received`) и публикует через `publish_event` (`core/events/publisher.py`) в `platform:events`. WS-менеджер (`core/websocket/manager.py`) форвардит сериализованный `PlatformEvent` (`{id, type, payload, meta}` без `delivery`) в сокет адресата.
 
-**Задачи WorkItem (ядро):** назначение исполнителю → `NotificationType.WORK_ITEM_ASSIGNED`, обновление → `WORK_ITEM_UPDATED`; `action_url` ведёт в worktracker. Реалтайм доски — push `worktracker/work_item/created|updated|moved|completed` через `platform:ui_events`; канбан-страница обновляет slice по этим событиям (по образцу прежнего `flows_operator_tasks_updated`). Детали → **`worktracker.mdc`**.
+**Задачи WorkItem (ядро):** назначение исполнителю → `NotificationType.WORK_ITEM_ASSIGNED`, обновление → `WORK_ITEM_UPDATED`; `action_url` ведёт в worktracker. Реалтайм доски — push `worktracker/work_item/created|updated|moved|completed` через `platform:events`; канбан-страница обновляет slice по этим событиям (по образцу прежнего `flows_operator_tasks_updated`). Детали → **`worktracker.mdc`**.
 
 ## Backend: как отправлять
 

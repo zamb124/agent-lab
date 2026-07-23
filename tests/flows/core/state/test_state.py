@@ -8,8 +8,6 @@ import pytest
 from a2a.types import Message, Part
 from a2a.types.a2a_pb2 import ROLE_USER, Role
 
-from core.a2a import get_part_text, part_has_text
-
 from apps.flows.src.container import get_container
 from apps.flows.src.durable_execution import (
     NodeFailedPayload,
@@ -21,6 +19,7 @@ from apps.flows.src.durable_execution import (
     create_initial_state,
 )
 from apps.flows.src.durable_execution.manager import DurableWorkflowRuntime
+from core.a2a import get_part_text, part_has_text
 from core.state import ExecutionState
 
 

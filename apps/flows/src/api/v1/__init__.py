@@ -12,14 +12,13 @@ from .evaluation import router as evaluation_router
 from .flows import router as flows_router
 from .hitl_conversation import router as hitl_conversation_router
 from .internal_company import router as internal_company_router
-from .internal_employee_inbox import router as internal_employee_inbox_router
-from .internal_work_items import router as internal_work_items_router
 from .lara_actions import router as lara_actions_router
 from .llm_context import router as llm_context_router
 from .mcp import router as mcp_router
 from .metadata import router as metadata_router
 from .nodes import router as nodes_router
 from .observability_logs import router as observability_logs_router
+from .platform_events import router as platform_events_router
 from .prompts import router as prompts_router
 from .resources import router as resources_router
 from .sessions import router as sessions_router
@@ -49,6 +48,7 @@ api_v1_router.include_router(tool_runtime_router, prefix="/tool-runtime")
 api_v1_router.include_router(tasks_router, prefix="/tasks")
 api_v1_router.include_router(traces_router, prefix="/traces")
 api_v1_router.include_router(observability_logs_router, prefix="/observability/logs")
+api_v1_router.include_router(platform_events_router, prefix="/platform-events")
 api_v1_router.include_router(triggers_router)
 api_v1_router.include_router(prompts_router, prefix="/prompts")
 api_v1_router.include_router(code_router, prefix="/code")
@@ -57,7 +57,5 @@ api_v1_router.include_router(mcp_router, prefix="/mcp")
 api_v1_router.include_router(resources_router, prefix="/resources")
 api_v1_router.include_router(hitl_conversation_router)
 api_v1_router.include_router(work_queues_router)
-api_v1_router.include_router(internal_work_items_router, prefix="/internal")
-api_v1_router.include_router(internal_employee_inbox_router, prefix="/internal")
 api_v1_router.include_router(internal_company_router, prefix="/internal")
 api_v1_router.include_router(browser_preview_router, prefix="/browser-preview")

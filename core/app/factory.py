@@ -51,6 +51,7 @@ from core.config import set_settings
 from core.config.loader import get_project_root, load_merged_config
 from core.config.testing import is_testing
 from core.container.base import BaseContainer
+from core.events import store_registered_platform_events
 from core.files.api import build_files_router
 from core.files.processors import initialize_default_processors
 from core.frontend.documentation_mount import mount_documentation_static
@@ -212,9 +213,12 @@ def create_service_app(
 
         if include_platform_lifecycle:
 
-            # Redis pub/sub listener для WebSocket уведомлений
+            # Tail-чтение шины platform:events для WebSocket UI-доставки
             await notification_manager.start_redis_listener(settings.database.redis_url)
             logger.info("Notification manager запущен")
+
+            # Публикация зарегистрированных типов событий процесса в общий каталог
+            await store_registered_platform_events()
 
             # Инициализация глобального BillingService
             set_billing_service(container.billing_service)
@@ -291,7 +295,7 @@ def create_service_app(
             await on_shutdown(app, container)
 
         # В одном процессе pytest поднимается несколько приложений (flows, office, rag, sync);
-        # stop_redis_listener обнуляет глобальный клиент и ломает notify_user в чужих тестах.
+        # stop_redis_listener останавливает общий tail-listener и ломает доставку в чужих тестах.
         if include_platform_lifecycle and not is_testing():
             await notification_manager.stop_redis_listener()
 

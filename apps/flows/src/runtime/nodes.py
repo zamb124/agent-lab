@@ -312,7 +312,7 @@ def _config_resource_refs(config: JsonObject, field_name: str = "resources") -> 
 
 
 class NodeRunMethod:
-    """Callable-обёртка для node.run() с поддержкой .kiq()"""
+    """Callable-обёртка для node.run(); TaskIQ kick на границе task/API через enqueue."""
 
     def __init__(self, node: BaseNode):
         self._node: BaseNode = node
@@ -324,7 +324,9 @@ class NodeRunMethod:
     async def kiq(self, state: ExecutionState) -> ExecutionState:
         """Диспетчеризация TaskIQ живёт на границе task/API, не внутри runtime-нод."""
         _ = state
-        raise RuntimeError("node.run.kiq() is not part of runtime; use execute_node task at the boundary")
+        raise RuntimeError(
+            "node.run TaskIQ kick is not part of runtime; use execute_node task at the boundary"
+        )
 
 
 class NodeRunDescriptor:
@@ -359,7 +361,7 @@ class BaseNode(ABC):
     Базовый класс для нод. Node = функция ExecutionState -> ExecutionState.
 
     Template Method паттерн:
-    - run(state) или run.kiq(state) - единая точка входа для всех нод
+    - run(state) — единая точка входа; TaskIQ kick только через enqueue на границе
     - _resolve_inputs() - единообразный резолвинг input_mapping
     - get_filtered_messages() - фильтрация messages
     - _run_impl() - конкретная логика каждой ноды
@@ -636,7 +638,7 @@ class BaseNode(ABC):
         node_id = metadata.get("node_id")
         return node_id if isinstance(node_id, str) else None
 
-    # Descriptor для унифицированного вызова: node.run(state) или node.run.kiq(state)
+    # Descriptor для унифицированного вызова: node.run(state)
     run: ClassVar[NodeRunDescriptor] = NodeRunDescriptor()
 
     async def execute(self, state: ExecutionState) -> ExecutionState:

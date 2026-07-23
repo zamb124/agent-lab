@@ -7,11 +7,11 @@ import pytest
 from apps.flows.src.container import FlowContainer
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context
-from core.llm_context import (
-    LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY,
+from core.llm_context.memory import (
     LLMContextMemoryEpisode,
     LLMContextMemoryRecallRequest,
 )
+from core.llm_context.memory_compaction import LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY
 from core.models.identity_models import Namespace, NamespaceKind
 from core.rag.llm_context_memory_store import (
     RAGLLMContextMemoryStore,

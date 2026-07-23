@@ -17,17 +17,16 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 import pytest
+from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
-Message,
+    Message,
     Part,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
 )
 from a2a.types.a2a_pb2 import (
-ROLE_USER,
+    ROLE_USER,
 )
-
-from a2a.helpers.proto_helpers import get_message_text
 
 from core.ai.llm_config import LLMCallConfig
 from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER

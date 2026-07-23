@@ -35,6 +35,7 @@ from apps.flows.src.models import TriggerType
 from apps.flows.src.registry.nodes import NodeRegistry, create_default_node_registry
 from apps.flows.src.runners.remote import RemoteCodeRunner
 from apps.flows.src.services.agent_skill_service import AgentSkillService
+from apps.flows.src.services.employee_inbox_service import EmployeeInboxService
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.services.handoff_context_service import (
@@ -47,6 +48,7 @@ from apps.flows.src.services.lara_action_engine import LaraActionEngine
 from apps.flows.src.services.lara_facade import LaraFacade
 from apps.flows.src.services.llm_models_service import LLMModelsService
 from apps.flows.src.services.mcp_branding_service import MCPServerBrandingService
+from apps.flows.src.services.platform_event_consumer import PlatformEventConsumerService
 from apps.flows.src.services.resource_loader import ResourceLoader
 from apps.flows.src.services.schedule_service import ScheduleService
 from apps.flows.src.services.tool_tag_group_service import ToolTagGroupService
@@ -54,6 +56,7 @@ from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from apps.flows.src.tools.registry import ToolRegistry
 from apps.flows.src.triggers.handlers.email import EmailTriggerHandler
+from apps.flows.src.triggers.handlers.platform_event import PlatformEventTriggerHandler
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 from apps.flows.src.triggers.registry import TriggerRegistry
 from core.capabilities import CAPABILITY_LANGUAGE_SET
@@ -69,7 +72,6 @@ from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
 from core.logging import get_logger
 from core.scheduler import SchedulerTaskRepository
 from core.worktracker.db import WorktrackerDatabase
-from core.worktracker.hook_dispatcher import ServiceClientHookDispatcher
 from core.worktracker.repository import WorktrackerRepository
 from core.worktracker.service import WorkItemService
 
@@ -199,9 +201,17 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def work_item_service(self) -> WorkItemService:
-        return WorkItemService(
-            repository=self.worktracker_repository,
-            hook_dispatcher=ServiceClientHookDispatcher(service_client=self.service_client),
+        return WorkItemService(repository=self.worktracker_repository)
+
+    @lazy
+    def employee_inbox_service(self) -> EmployeeInboxService:
+        return EmployeeInboxService(self._runtime_contract())
+
+    @lazy
+    def platform_event_consumer_service(self) -> PlatformEventConsumerService:
+        return PlatformEventConsumerService(
+            container=self._runtime_contract(),
+            employee_inbox_service=self.employee_inbox_service,
         )
 
     @lazy
@@ -361,6 +371,7 @@ class FlowContainer(BaseContainer):
         # Регистрируем handlers
         registry.register_handler(TriggerType.TELEGRAM, TelegramTriggerHandler)
         registry.register_handler(TriggerType.EMAIL, EmailTriggerHandler)
+        registry.register_handler(TriggerType.PLATFORM_EVENT, PlatformEventTriggerHandler)
 
         return registry
 

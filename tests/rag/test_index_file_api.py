@@ -4,18 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import io
 
 import pytest
 
 from apps.rag.container import get_rag_container
-from tests.rag.helpers import upload_rag_document_bytes
 from core.files.create_spec import FileSourceKind
 from core.files.default_storage import get_default_storage
 from core.files.models import FileRecord
 from core.files.registry import default_retention_for_source
 from core.files.s3_client import S3ClientFactory
 from core.files.storage import retention_fields_from_spec
+from tests.rag.helpers import upload_rag_document_bytes
 
 pytestmark = [pytest.mark.real_taskiq, pytest.mark.timeout(120)]
 

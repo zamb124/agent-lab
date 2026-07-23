@@ -4,9 +4,8 @@
 
 import pytest
 
-from tests.flows._a2a_v1 import A2A_HEADERS
-
 from apps.flows.src.utils import extract_json_from_response
+from tests.flows._a2a_v1 import A2A_HEADERS
 
 
 class TestExtractJsonFromResponse:

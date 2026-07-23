@@ -13,18 +13,18 @@ from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_TOOL
 from apps.flows.src.tools.base import ToolArguments
 from apps.flows.src.tools.registry import ToolMaterializeInput
-from apps.flows_worker.broker_core import broker
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.state import ExecutionState
 from core.state.interrupt import interrupt_to_response_dict
+from core.tasks import platform_task
 from core.types import JsonObject, require_json_array, require_json_object
 
 logger = get_logger(__name__)
 
 
-@broker.task(task_name=TASK_EXECUTE_TOOL, queue_name="flows_worker")
+@platform_task(TASK_EXECUTE_TOOL)
 async def execute_tool(
     tool_config: ToolMaterializeInput,
     args: ToolArguments,

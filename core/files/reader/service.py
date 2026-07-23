@@ -61,6 +61,7 @@ from core.files.reader.models import (
     ReadPage,
     merge_file_ref_read_options,
 )
+from core.files.reader.vision import prepare_visual_payload
 from core.files.s3_client import S3ClientFactory
 from core.files.types import FileCategory, extensions_for
 from core.http import get_httpx_client
@@ -619,8 +620,6 @@ async def run_vision_on_image_bytes(
     trace_name: str = "core.files.reader.vision",
 ) -> str:
     """Запускает vision LLM на переданных байтах изображения, возвращает извлечённый текст."""
-    from core.files.reader.vision import prepare_visual_payload
-
     payload, payload_mime = prepare_visual_payload(
         raw, file_name=file_name, mime=mime, compression=compression
     )

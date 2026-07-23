@@ -1549,6 +1549,26 @@ class TasksConfig(BaseModel):
     )
 
 
+class EventsConfig(BaseModel):
+    """Единая шина событий платформы (Redis Stream `platform:events`)."""
+
+    stream_maxlen: int = Field(
+        default=100_000,
+        ge=1_000,
+        description="XADD maxlen стрима platform:events (approximate trim).",
+    )
+    consumer_block_ms: int = Field(
+        default=5_000,
+        ge=100,
+        description="BLOCK для XREAD/XREADGROUP потребителей шины.",
+    )
+    autoclaim_idle_ms: int = Field(
+        default=120_000,
+        ge=1_000,
+        description="Порог idle для XAUTOCLAIM pending-записей мёртвых consumers.",
+    )
+
+
 class CalendarSyncConfig(BaseModel):
     """Конфигурация фоновой синхронизации календаря."""
 
@@ -2058,7 +2078,8 @@ class MCPCatalogConfig(BaseModel):
         description=(
             "Auto-provision catalog entries into company Installed. "
             "disabled = opt-in Store only (platform Browser/Search via ensure_default). "
-            "approved_only / all_verified = legacy auto-tier."
+            "approved_only = auto-tier for platform_approved entries; "
+            "all_verified = auto-tier for all verified catalog entries."
         ),
     )
     registry_base_url: str = Field(default="https://registry.modelcontextprotocol.io")

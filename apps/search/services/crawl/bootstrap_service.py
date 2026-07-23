@@ -11,19 +11,12 @@ from apps.search.db.crawl_repositories import (
     CrawlProfileRepository,
     CrawlUrlRepository,
 )
-from apps.search_worker.broker import broker as search_worker_broker
 from apps.search_worker.tasks.task_names import (
-    CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
-    CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
+    CRAWL_IMPORT_SEED_DOMAINS,
+    CRAWL_ORCHESTRATOR_TICK,
 )
 from core.crawl.models import CrawlBootstrapResult
-
-
-async def _kiq_task(task_name: str, *args: object, **kwargs: object) -> None:
-    task = search_worker_broker.find_task(task_name)
-    if task is None:
-        raise RuntimeError(f"task is not registered: {task_name}")
-    _ = await task.kiq(*args, **kwargs)
+from core.tasks import enqueue
 
 
 class CrawlBootstrapService:
@@ -51,7 +44,7 @@ class CrawlBootstrapService:
             domain_count = await self._crawl_domain_repository.count_for_profile(crawl_profile_id)
             pending_urls = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
             if pending_urls > 0:
-                await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
+                _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
             return CrawlBootstrapResult(
                 crawl_profile_id=crawl_profile_id,
                 action="bootstrap_disabled",
@@ -66,15 +59,15 @@ class CrawlBootstrapService:
         if domain_count > 0:
             pending_urls = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
             if pending_urls > 0:
-                await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
+                _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
             return CrawlBootstrapResult(
                 crawl_profile_id=crawl_profile_id,
                 action="skipped_seed",
                 domain_count=domain_count,
             )
 
-        await _kiq_task(
-            CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
+        _ = await enqueue(
+            CRAWL_IMPORT_SEED_DOMAINS,
             crawl_profile_id,
             "tranco",
             self._crawl_config.tranco_seed_limit,

@@ -26,10 +26,10 @@ from apps.flows.src.runtime.a2a_messages import build_operator_message, build_us
 from apps.flows.src.streaming.emitter import Emitter
 from core.a2a import mapping_from_struct
 from core.clients.redis_client import RedisClient
+from core.events import publish_event_to_company
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_array, require_json_object
-from core.ui_events.dispatcher import publish_ui_event_to_company
 from core.worktracker.models import (
     WorkItemConversationRef,
     WorkItemInteractionMode,
@@ -455,7 +455,7 @@ class HitlConversationService:
             session_id=session_id,
             turn=turn,
         )
-        await publish_ui_event_to_company(
+        await publish_event_to_company(
             company_id=company_id,
             type=HITL_CONVERSATION_TURN_APPENDED,
             payload=require_json_object(event.model_dump(mode="json")),

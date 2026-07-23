@@ -85,6 +85,10 @@ import {
     taskRetryOp,
 } from '../events/resources/tasks.resource.js';
 import {
+    activityTaskCreateOp,
+    activityTaskCreateForm,
+} from '../events/resources/activity-tasks.resource.js';
+import {
     suggestsListOp,
     suggestResolveOp,
     suggestDismissOp,
@@ -121,6 +125,7 @@ import '../components/sheets/crm-workspace-picker-sheet.js';
 import '../pages/settings-hub-page.js';
 import '../pages/daily-notes-page.js';
 import '../pages/entities-page.js';
+import '../pages/tasks-page.js';
 import '../pages/graph-page.js';
 import '../pages/suggests-page.js';
 import '../pages/templates-page.js';
@@ -144,6 +149,7 @@ import '../modals/entity-delete-modal.js';
 import '../modals/knowledge-import-modal.js';
 import '../modals/entity-type-create-mode-modal.js';
 import '../modals/entity-type-preset-picker-modal.js';
+import '../modals/activity-task-create-modal.js';
 
 import { graphUiSlice } from '../events/resources/graph-ui.resource.js';
 import { graphViewSlice } from '../events/resources/graph-view.resource.js';
@@ -170,6 +176,8 @@ const CRM_ROUTES = [
     { key: 'entities',            path: 'entities',         titleKey: 'routes.entities' },
     { key: 'entity_new',          path: 'entities/new',     parent: 'entities', titleKey: 'routes.entity_new' },
     { key: 'entity',              path: 'entities/:itemId', parent: 'entities', titleKey: 'routes.entity' },
+    { key: 'tasks',               path: 'tasks',            titleKey: 'routes.tasks' },
+    { key: 'task',                path: 'tasks/:workItemId', parent: 'tasks', titleKey: 'routes.task' },
     { key: 'graph',               path: 'graph',            titleKey: 'routes.graph' },
     { key: 'suggests',            path: 'suggests',         titleKey: 'routes.suggests' },
     { key: 'access_requests',     path: 'access-requests',  titleKey: 'routes.access_requests' },
@@ -187,8 +195,8 @@ const CRM_ROUTES = [
  */
 const CRM_BOTTOM_NAV_ITEMS = [
     { key: 'notes',    routeKey: 'notes',    icon: 'note',         labelKey: 'bottom_nav.notes' },
+    { key: 'tasks',    routeKey: 'tasks',    icon: 'checklist',    labelKey: 'bottom_nav.tasks' },
     { key: 'graph',    routeKey: 'graph',    icon: 'share',        labelKey: 'bottom_nav.graph' },
-    { key: 'entities', routeKey: 'entities', icon: 'box',          labelKey: 'bottom_nav.entities' },
     { key: 'profile',  sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
 ];
 
@@ -293,6 +301,8 @@ export class CRMApp extends PlatformApp {
         relationshipsListResource,
         relationshipShortestPathOp,
         tasksResource,
+        activityTaskCreateOp,
+        activityTaskCreateForm,
         taskGetOp,
         taskCreatedEntitiesOp,
         taskKnowledgeImportStartOp,
@@ -464,6 +474,8 @@ export class CRMApp extends PlatformApp {
             case 'entities':            content = html`<crm-entities-page></crm-entities-page>`; break;
             case 'entity_new':         content = html`<crm-entity-create-page></crm-entity-create-page>`; break;
             case 'entity':              content = html`<crm-entity-detail-page .itemId=${params.itemId}></crm-entity-detail-page>`; break;
+            case 'tasks':               content = html`<crm-tasks-page></crm-tasks-page>`; break;
+            case 'task':                content = html`<crm-tasks-page></crm-tasks-page>`; break;
             case 'graph':               content = html`<crm-graph-page></crm-graph-page>`; break;
             case 'suggests':            content = html`<crm-suggests-page></crm-suggests-page>`; break;
             case 'access_requests':     content = html`<crm-access-requests-page></crm-access-requests-page>`; break;
@@ -478,7 +490,7 @@ export class CRMApp extends PlatformApp {
         const mobileIslandFullBleed = this._crmMobile;
         const graphIslandFullBleed = routeKey === 'graph';
         const islandPadding = mobileIslandFullBleed || graphIslandFullBleed ? 'none' : 'md';
-        const islandContentNoScroll = graphIslandFullBleed || routeKey === 'entities' || routeKey === 'entity';
+        const islandContentNoScroll = graphIslandFullBleed || routeKey === 'entities' || routeKey === 'entity' || routeKey === 'tasks' || routeKey === 'task';
         return html`
             <div class="sidebar"><crm-sidebar></crm-sidebar></div>
             <div class="main">

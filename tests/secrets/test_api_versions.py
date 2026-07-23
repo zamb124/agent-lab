@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from core.variables.models import VariableValueKind, VariableValuePayload, VariableValueSpec
 from core.secrets.models import VariableWriteRequest
+from core.variables.models import VariableValueKind, VariableValuePayload, VariableValueSpec
 from tests.secrets.conftest import API_PREFIX
 
 

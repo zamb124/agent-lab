@@ -37,12 +37,11 @@ from apps.flows.src.tracing.handoff_tracing import (
     handoff_span_attributes,
     trace_context_to_kiq_payload,
 )
-from apps.flows_worker.broker_core import broker as flows_broker
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.state.interrupt import HandoffInterrupt, InterruptKind
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue
 from core.tracing.context import TraceContext
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
@@ -283,9 +282,8 @@ class HandoffOrchestratorService:
             )
             child_trace_payload = trace_context_to_kiq_payload(child_trace)
 
-        _ = await kiq_task_name_with_context(
+        _ = await enqueue(
             TASK_PROCESS_FLOW,
-            flows_broker,
             flow_id=body.target_flow_id,
             session_id=child_session_id,
             user_id=parent_state.user_id,
@@ -477,9 +475,8 @@ class HandoffOrchestratorService:
             )
             parent_trace_payload = trace_context_to_kiq_payload(parent_trace)
 
-        _ = await kiq_task_name_with_context(
+        _ = await enqueue(
             TASK_PROCESS_FLOW,
-            flows_broker,
             flow_id=parent_flow_id,
             session_id=parent_session_id,
             user_id=parent_state.user_id,

@@ -6,7 +6,11 @@ import pytest
 
 import core.tracing.attributes as trace_attr
 from core.tracing.operation_span import traced_operation
-from tests.fixtures.observability_log_capture import find_caplog_record, require_log_fields, require_numeric_field
+from tests.fixtures.observability_log_capture import (
+    find_caplog_record,
+    require_log_fields,
+    require_numeric_field,
+)
 from tests.observability.contracts import RAG_SEARCH_FINISHED
 
 pytestmark = pytest.mark.timeout(30)

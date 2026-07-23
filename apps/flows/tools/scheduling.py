@@ -127,7 +127,7 @@ async def schedule_cron_task(
         description=description,
     )
 
-    state.scheduled_tasks.append(task.model_dump())
+    state.scheduled_tasks.append(task.model_dump(mode="json"))
 
     return f"Периодическая задача создана (schedule_task_id: {task.schedule_task_id}). Расписание: {cron}"
 
@@ -174,7 +174,7 @@ async def schedule_interval_task(
         description=description,
     )
 
-    state.scheduled_tasks.append(task.model_dump())
+    state.scheduled_tasks.append(task.model_dump(mode="json"))
 
     return (
         "Периодическая задача создана "
@@ -225,7 +225,7 @@ async def schedule_one_time_task(
         description=description,
     )
 
-    state.scheduled_tasks.append(task.model_dump())
+    state.scheduled_tasks.append(task.model_dump(mode="json"))
 
     return f"Одноразовая задача создана (schedule_task_id: {task.schedule_task_id}). Запуск: {run_at}"
 

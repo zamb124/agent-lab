@@ -42,7 +42,7 @@ from apps.crm.models.api import (
     PeriodSummaryRequest,
     SearchMentionsRequest,
 )
-from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
+from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_work_item_service import CrmWorkItemService
 from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
 from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
@@ -627,6 +627,7 @@ async def queue_note_analysis_draft_repair(
         note_id=note_id,
         note_date_iso=note_date_iso,
         action="updated",
+        note=note,
         company_repository=container.company_repository,
         access_grant_repository=container.access_grant_repository,
         skip_notification_center=True,
@@ -832,7 +833,7 @@ async def get_period_summary(
                 },
                 service="crm",
                 data={
-                    "event": "crm.period_summary.range_clamped",
+                    "event": "crm/period_summary/range_clamped",
                     "requested_date_from": summary["requested_date_from"],
                     "requested_date_to": summary["requested_date_to"],
                     "effective_date_from": summary["date_from"],

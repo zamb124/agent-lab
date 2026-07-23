@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from core.config.base import get_settings
 from core.config.models import RAGConfig
 from core.rag.models import RAGSearchOptions
@@ -33,52 +31,40 @@ def _settings_with_search_defaults(
     )
 
 
-@pytest.fixture
-def patch_get_settings(monkeypatch: pytest.MonkeyPatch):
-    def _patch(settings: _SettingsStub) -> None:
-        monkeypatch.setattr("core.config.base.get_settings", lambda: settings)
-
-    return _patch
-
-
-def test_resolver_falls_back_to_hybrid_channels_when_defaults_absent(
-    patch_get_settings,
-) -> None:
-    patch_get_settings(_settings_with_search_defaults(None))
-    resolved = resolve_platform_search_options()
+def test_resolver_falls_back_to_hybrid_channels_when_defaults_absent() -> None:
+    resolved = resolve_platform_search_options(
+        settings=_settings_with_search_defaults(None),
+    )
     assert resolved.channels is not None
     assert resolved.channels.semantic is True
     assert resolved.channels.lexical is True
 
 
-def test_resolver_reads_document_indexing_search_defaults(patch_get_settings) -> None:
-    patch_get_settings(
-        _settings_with_search_defaults(
+def test_resolver_reads_document_indexing_search_defaults() -> None:
+    resolved = resolve_platform_search_options(
+        settings=_settings_with_search_defaults(
             IndexProfileSearchDefaults(
                 channels=SearchChannelsDefaults(semantic=True, lexical=True),
                 rrf_k=42,
                 per_channel_top_k=99,
                 reranker=RerankerSearchDefaults(enabled=True, max_candidates=17),
             )
-        )
+        ),
     )
-    resolved = resolve_platform_search_options()
     assert resolved.rrf_k == 42
     assert resolved.per_channel_top_k == 99
     assert resolved.rerank is True
     assert resolved.rerank_max_candidates == 17
 
 
-def test_resolver_call_override_wins_over_platform_defaults(patch_get_settings) -> None:
-    patch_get_settings(
-        _settings_with_search_defaults(
+def test_resolver_call_override_wins_over_platform_defaults() -> None:
+    resolved = resolve_platform_search_options(
+        settings=_settings_with_search_defaults(
             IndexProfileSearchDefaults(
                 channels=SearchChannelsDefaults(semantic=True, lexical=True),
                 rrf_k=60,
             )
-        )
-    )
-    resolved = resolve_platform_search_options(
+        ),
         overrides=RAGSearchOptions(
             channels=SearchChannelsDefaults(semantic=True, lexical=False),
             rrf_k=11,
@@ -89,15 +75,13 @@ def test_resolver_call_override_wins_over_platform_defaults(patch_get_settings) 
     assert resolved.rrf_k == 11
 
 
-def test_resolver_per_channel_top_k_argument_overrides_profile_default(
-    patch_get_settings,
-) -> None:
-    patch_get_settings(
-        _settings_with_search_defaults(
+def test_resolver_per_channel_top_k_argument_overrides_profile_default() -> None:
+    resolved = resolve_platform_search_options(
+        settings=_settings_with_search_defaults(
             IndexProfileSearchDefaults(per_channel_top_k=120)
-        )
+        ),
+        per_channel_top_k=55,
     )
-    resolved = resolve_platform_search_options(per_channel_top_k=55)
     assert resolved.per_channel_top_k == 55
 
 

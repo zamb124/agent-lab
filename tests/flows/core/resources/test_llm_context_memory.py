@@ -23,11 +23,13 @@ from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from core.a2a import get_part_text
 from core.llm_context import (
     LLMContextBudget,
+    LLMContextProfile,
+    LLMContextRetrievalPolicy,
+)
+from core.llm_context.memory import (
     LLMContextMemoryEpisode,
     LLMContextMemoryRecallRequest,
     LLMContextMemoryRecord,
-    LLMContextProfile,
-    LLMContextRetrievalPolicy,
 )
 from core.state import ExecutionState
 from core.types import JsonObject

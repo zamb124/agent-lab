@@ -12,8 +12,8 @@ import httpx
 import trafilatura
 from bs4 import BeautifulSoup
 
-from apps.browser.contracts.crawl_fetch_types import BrowserCrawlFetchResponse
 from apps.search.db.crawl_repositories import canonicalize_url
+from core.clients.browser.crawl_fetch_types import BrowserCrawlFetchResponse
 from core.clients.browser_fetch_client import BrowserFetchClient
 from core.crawl.errors import CrawlExtractTooShortError, CrawlNoExtractableContentError
 from core.crawl.logging_events import log_crawl_fetch_completed, log_crawl_fetch_failed

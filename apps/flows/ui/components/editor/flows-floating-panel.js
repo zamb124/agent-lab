@@ -356,10 +356,6 @@ export class FlowsFloatingPanel extends PlatformElement {
         this._boundPanelPointerUp = (e) => this._onPanelPointerUp(e);
         this._boundPanelViewportResize = () => this._clampFloatingPanelToViewport();
         this._boundGeometryTransitionEnd = (e) => this._onGeometryTransitionEnd(e);
-        this.useEvent('flows/lara/node_updated', () => {
-            this._laraGlow = true;
-            window.setTimeout(() => { this._laraGlow = false; }, 3200);
-        });
     }
 
     connectedCallback() {

@@ -7,18 +7,18 @@ from datetime import UTC, datetime, timedelta
 from apps.search.config import get_search_settings
 from apps.search.container import get_search_container
 from apps.search.services.system_context import build_search_system_context
-from apps.search_worker.broker import broker
 from apps.search_worker.tasks.task_names import (
-    CRAWL_DISCOVER_DOMAIN_TASK_NAME,
-    CRAWL_ENRICH_URL_TASK_NAME,
-    CRAWL_FETCH_URL_TASK_NAME,
-    CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
-    CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
-    CRAWL_RECLAIM_STALE_FETCHING_TASK_NAME,
+    CRAWL_DISCOVER_DOMAIN,
+    CRAWL_ENRICH_URL,
+    CRAWL_FETCH_URL,
+    CRAWL_IMPORT_SEED_DOMAINS,
+    CRAWL_ORCHESTRATOR_TICK,
+    CRAWL_RECLAIM_STALE_FETCHING,
 )
 from core.context import clear_context, set_context
 from core.crawl.logging_events import log_crawl_reclaim_completed
 from core.crawl.models import CrawlOrchestratorTickResult, CrawlSeedSource, SeedImportRequest
+from core.tasks import enqueue, platform_task
 from core.types import JsonObject, require_json_object
 
 
@@ -34,12 +34,7 @@ async def _enter_worker_context(*, trace_id: str) -> None:
     )
 
 
-@broker.task(
-    task_name=CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
-    queue_name="search",
-    retry_on_error=True,
-    max_retries=1,
-)
+@platform_task(CRAWL_ORCHESTRATOR_TICK)
 async def crawl_orchestrator_tick(
     crawl_profile_id: str,
     schedule_task_id: str | None = None,
@@ -59,12 +54,7 @@ async def crawl_orchestrator_tick(
         clear_context()
 
 
-@broker.task(
-    task_name=CRAWL_DISCOVER_DOMAIN_TASK_NAME,
-    queue_name="search",
-    retry_on_error=True,
-    max_retries=2,
-)
+@platform_task(CRAWL_DISCOVER_DOMAIN)
 async def crawl_discover_domain(
     crawl_domain_id: str,
     crawl_job_id: str,
@@ -84,12 +74,7 @@ async def crawl_discover_domain(
         clear_context()
 
 
-@broker.task(
-    task_name=CRAWL_FETCH_URL_TASK_NAME,
-    queue_name="search",
-    retry_on_error=True,
-    max_retries=3,
-)
+@platform_task(CRAWL_FETCH_URL)
 async def crawl_fetch_url(
     crawl_domain_id: str,
     crawl_job_id: str,
@@ -111,12 +96,7 @@ async def crawl_fetch_url(
         clear_context()
 
 
-@broker.task(
-    task_name=CRAWL_ENRICH_URL_TASK_NAME,
-    queue_name="search",
-    retry_on_error=True,
-    max_retries=2,
-)
+@platform_task(CRAWL_ENRICH_URL)
 async def crawl_enrich_url(
     crawl_url_id: str,
     crawl_job_id: str,
@@ -136,12 +116,7 @@ async def crawl_enrich_url(
         clear_context()
 
 
-@broker.task(
-    task_name=CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
-    queue_name="search",
-    retry_on_error=True,
-    max_retries=2,
-)
+@platform_task(CRAWL_IMPORT_SEED_DOMAINS)
 async def crawl_import_seed_domains(
     crawl_profile_id: str,
     seed_source: CrawlSeedSource,
@@ -159,21 +134,13 @@ async def crawl_import_seed_domains(
             )
         )
         if result.imported > 0:
-            tick_task = broker.find_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME)
-            if tick_task is None:
-                raise RuntimeError(f"task is not registered: {CRAWL_ORCHESTRATOR_TICK_TASK_NAME}")
-            _ = await tick_task.kiq(crawl_profile_id)
+            _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
         return require_json_object(result.model_dump(mode="json"), "seed import result")
     finally:
         clear_context()
 
 
-@broker.task(
-    task_name=CRAWL_RECLAIM_STALE_FETCHING_TASK_NAME,
-    queue_name="search",
-    retry_on_error=True,
-    max_retries=1,
-)
+@platform_task(CRAWL_RECLAIM_STALE_FETCHING)
 async def crawl_reclaim_stale_fetching(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
@@ -223,10 +190,7 @@ async def crawl_reclaim_stale_fetching(
             pending_urls=pending_urls,
         )
         if pending_urls > 0:
-            tick_task = broker.find_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME)
-            if tick_task is None:
-                raise RuntimeError(f"task is not registered: {CRAWL_ORCHESTRATOR_TICK_TASK_NAME}")
-            _ = await tick_task.kiq(crawl_profile_id)
+            _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
         return {
             "stale_jobs_finished": stale_jobs,
             "reclaimed_fetching": reclaimed_fetching,

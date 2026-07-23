@@ -9,7 +9,7 @@ import pytest
 
 from core.ai.free_pool import platform_free_records_from_model_records
 from core.ai.models import AIModelRecord
-from core.ai.providers import AICapability, PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER
+from core.ai.providers import PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER, AICapability
 from core.clients.llm.client import LLMClient
 from core.clients.llm.runtime import create_llm_transport_client as create_transport_llm_client
 from core.config import get_settings

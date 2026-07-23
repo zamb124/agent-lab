@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import get_container
 from apps.idle_worker.tasks.llm_models_tasks import build_scheduler_auth_context
+from apps.idle_worker.tasks.task_names import TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK
 from core.context import clear_context, set_context
 from core.logging import get_logger
+from core.tasks import platform_task
 from core.types import JsonObject
 
 logger = get_logger(__name__)
 
-TOOL_TAG_GROUPS_DESCRIBE_TASK_NAME = "tool_tag_groups_describe_tick"
 
-
-@idle_broker.task(task_name=TOOL_TAG_GROUPS_DESCRIBE_TASK_NAME, queue_name="idle")
+@platform_task(TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK)
 async def tool_tag_groups_describe_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,

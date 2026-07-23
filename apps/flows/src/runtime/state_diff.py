@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_object
 
 STATE_DIFF_SKIP_KEYS: frozenset[str] = frozenset({
@@ -270,8 +271,6 @@ def build_canvas_result_preview(
 
 def execution_state_to_diff_json(state: object) -> JsonObject:
     """Сериализует ExecutionState в JSON для diff без flow_config."""
-    from core.state import ExecutionState
-
     if not isinstance(state, ExecutionState):
         raise TypeError("execution_state_to_diff_json: state must be ExecutionState")
     raw = state.model_dump(mode="json", exclude_none=False)

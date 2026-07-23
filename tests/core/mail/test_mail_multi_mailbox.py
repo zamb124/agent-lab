@@ -100,14 +100,25 @@ async def test_mail_api_bindings_me_and_admin_list(
     auth_headers_system,
     unique_id: str,
 ) -> None:
+    """API list bindings: company connection для system (partial unique на scope=company).
+
+    Upsert по PK не конфликтует с uq_company_mail_connections_company_scope:
+    если company-scope уже есть — обновляем существующую запись, иначе создаём.
+    """
     shared_url = get_settings().database.shared_url
     if shared_url is None:
         raise RuntimeError("DATABASE__SHARED_URL обязателен")
     repo = CompanyMailConnectionRepository(db_url=shared_url)
     now = datetime.now(timezone.utc)
+    existing = await repo.get_by_company("system")
+    connection_id = (
+        existing.company_mail_connection_id
+        if existing is not None
+        else f"mailconn_api_me_{unique_id}"
+    )
     _ = await repo.upsert(
         CompanyMailConnection(
-            company_mail_connection_id=f"mailconn_api_me_{unique_id}",
+            company_mail_connection_id=connection_id,
             company_id="system",
             mail_domain="linnex.io",
             provider=MailProvider.ISPMANAGER,
@@ -123,7 +134,7 @@ async def test_mail_api_bindings_me_and_admin_list(
                 authinfo_user="admin",
                 authinfo_password_encrypted=encrypt_secret(f"pass-{unique_id}"),
             ),
-            created_at=now,
+            created_at=existing.created_at if existing is not None else now,
             updated_at=now,
         )
     )

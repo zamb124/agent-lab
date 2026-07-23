@@ -23,12 +23,11 @@ from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichme
 from apps.search.services.crawl.politeness_service import CrawlPolitenessService
 from apps.search.services.crawl.seed_loader import import_tranco_domains
 from apps.search.services.crawl.sitemap_parser import discover_sitemap_urls
-from apps.search_worker.broker import broker as search_worker_broker
 from apps.search_worker.tasks.task_names import (
-    CRAWL_DISCOVER_DOMAIN_TASK_NAME,
-    CRAWL_ENRICH_URL_TASK_NAME,
-    CRAWL_FETCH_URL_TASK_NAME,
-    CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
+    CRAWL_DISCOVER_DOMAIN,
+    CRAWL_ENRICH_URL,
+    CRAWL_FETCH_URL,
+    CRAWL_ORCHESTRATOR_TICK,
 )
 from core.clients.rag_client import RagClient
 from core.context import Context, clear_context, set_context
@@ -64,13 +63,7 @@ from core.crawl.models import (
 from core.crawl.report_projection import enrichment_snapshot_from_enriched_page
 from core.crawl.url_filter import build_url_filter
 from core.search.index_models import SearchIndexDefinition
-
-
-async def _enqueue_task(task_name: str, *args: object, **kwargs: object) -> None:
-    task = search_worker_broker.find_task(task_name)
-    if task is None:
-        raise RuntimeError(f"task is not registered: {task_name}")
-    _ = await task.kiq(*args, **kwargs)
+from core.tasks import enqueue
 
 
 def _gone_http_status(exc: BaseException) -> int | None:
@@ -190,7 +183,7 @@ class CrawlOrchestratorService:
                 pending_urls=pending_urls,
             )
             if pending_urls > 0:
-                await _enqueue_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
+                _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
             return {
                 "crawl_job_id": job.crawl_job_id,
                 "crawl_profile_id": crawl_profile_id,
@@ -344,7 +337,7 @@ class CrawlOrchestratorService:
             await self._crawl_domain_repository.mark_crawled(crawl_domain_id, datetime.now(UTC))
             profile_pending = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
             if profile_pending > 0:
-                await _enqueue_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
+                _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
             return
         await self._enqueue_domain_fetch(
             crawl_domain_id=crawl_domain_id,
@@ -454,8 +447,8 @@ class CrawlOrchestratorService:
                 document_id=document_id,
             )
             if profile.llm_enrichment_enabled:
-                await _enqueue_task(
-                    CRAWL_ENRICH_URL_TASK_NAME,
+                _ = await enqueue(
+                    CRAWL_ENRICH_URL,
                     crawl_url.crawl_url_id,
                     crawl_job_id,
                     crawl_profile_id,
@@ -684,8 +677,8 @@ class CrawlOrchestratorService:
             limit=limit,
         )
         for crawl_url_id in crawl_url_ids:
-            await _enqueue_task(
-                CRAWL_ENRICH_URL_TASK_NAME,
+            _ = await enqueue(
+                CRAWL_ENRICH_URL,
                 crawl_url_id,
                 crawl_job_id,
                 crawl_profile_id,
@@ -710,8 +703,8 @@ class CrawlOrchestratorService:
         batch = min(url_budget, profile.max_urls_per_batch, pending)
         parallel = min(batch, profile.http_concurrency)
         for _ in range(parallel):
-            await _enqueue_task(
-                CRAWL_FETCH_URL_TASK_NAME,
+            _ = await enqueue(
+                CRAWL_FETCH_URL,
                 crawl_domain_id,
                 crawl_job_id,
                 crawl_profile_id,
@@ -805,8 +798,8 @@ class CrawlOrchestratorService:
             return True
 
         if self._needs_discovery(domain, profile.sitemap_stale_after_seconds, now):
-            await _enqueue_task(
-                CRAWL_DISCOVER_DOMAIN_TASK_NAME,
+            _ = await enqueue(
+                CRAWL_DISCOVER_DOMAIN,
                 domain.crawl_domain_id,
                 crawl_job_id,
                 crawl_profile_id,
@@ -873,8 +866,8 @@ class CrawlOrchestratorService:
 
         action: Literal["discover", "fetch"]
         if self._needs_discovery(domain, profile_bundle.profile.sitemap_stale_after_seconds, now):
-            await _enqueue_task(
-                CRAWL_DISCOVER_DOMAIN_TASK_NAME,
+            _ = await enqueue(
+                CRAWL_DISCOVER_DOMAIN,
                 crawl_domain_id,
                 job.crawl_job_id,
                 crawl_profile_id,
@@ -891,8 +884,8 @@ class CrawlOrchestratorService:
                 )
                 action = "fetch"
             else:
-                await _enqueue_task(
-                    CRAWL_DISCOVER_DOMAIN_TASK_NAME,
+                _ = await enqueue(
+                    CRAWL_DISCOVER_DOMAIN,
                     crawl_domain_id,
                     job.crawl_job_id,
                     crawl_profile_id,

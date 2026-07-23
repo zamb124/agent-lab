@@ -287,9 +287,9 @@ registerBottomSheetKind(CrmWorkspacePickerSheet.bottomSheetKind, 'crm-workspace-
 - открытие `platform.user_info` без `userId`-prop'а.
 - прямой переход «Профиль/Настройки» из `platform-user` меню на `/<svc>/settings` — пункты меню обязаны открывать `platform.user_info`.
 
-## `<platform-work-item-badge>` и `<platform-work-item-preview>`
+## `<platform-work-item-*>` (badge / preview / row / board / detail)
 
-Cross-service WorkItem (CRM task, Flows HITL, notifications, worktracker) — **только** эти core-компоненты. Локальные `*-task-badge`/`*-work-item-row` в `apps/` запрещены.
+Cross-service WorkItem (CRM Tasks workspace, Flows HITL badge, notifications, worktracker list host) — **только** эти core-компоненты. Локальные `*-task-badge` / `*-work-item-row` / task kanban cards в `apps/` запрещены (worktracker HITL full editor — исключение для operator UX).
 
 ```html
 <platform-work-item-badge
@@ -300,13 +300,21 @@ Cross-service WorkItem (CRM task, Flows HITL, notifications, worktracker) — **
   ?interactive=${true}
   ?show-preview=${true}
 ></platform-work-item-badge>
+
+<platform-work-item-row .item=${workItem} ?selected=${false}></platform-work-item-row>
+<platform-work-item-board .items=${workItems} selected-work-item-id=""></platform-work-item-board>
+<platform-work-item-detail layout="panel|page" work-item-id="wi_..." .item=${workItemOptional}></platform-work-item-detail>
 ```
 
-Данные: prop `.item` (zero HTTP) или lazy GET через фабрику `platform/work_item_get`. Счётчик задач текущего пользователя — `platform/work_item_counts` (`state.platformWorkItemCounts`), badge на `<platform-user-chip show-work-count>`.
+Канбан `<platform-work-item-board>`: колонки по `WorkItem.state` (`open` / `in_progress` / `blocked` / `done`); HTML5 DnD карточки → `platform/work_item_move` с `{ work_item_id, state }`; событие `work-item-changed` после успешного drop. Не путать с worktracker board DnD по `board_column_id`.
+
+`<platform-work-item-detail>` — тот же visual/UX, что worktracker quick view (`work-item-detail-panel`): title + markdown description + attachments + dense inspector (state/priority/due/assignee). Мутации через `platform/work_item_*` (без HITL activity/claim). «Открыть полностью» → canonical `/worktracker/tasks/{id}`.
+
+Данные badge/detail: prop `.item` (zero HTTP, только shape WorkItem) или lazy GET через `platform/work_item_get`. **Запрещено** передавать CRM entity как `.item` badge. List/update/move/assign — `platform/work_items`, `platform/work_item_move`, `platform/work_item_assign`. Счётчик — `platform/work_item_counts` (`state.platformWorkItemCounts`), badge на `<platform-user-chip show-work-count>`.
 
 Deep link: `core/frontend/static/lib/utils/work-item-deeplink.js::buildWorkItemUrl(work_item_id, { from? })` → `/worktracker/tasks/{work_item_id}`.
 
-i18n namespace: `platform` (`work_item_badge.*`, `work_item_preview.*`). Semantic tokens в `tokens.css`:
+i18n namespace: `platform` (`work_item_badge.*`, `work_item_preview.*`, `work_item.*`). Semantic tokens в `tokens.css`:
 - **Статус (главный сигнал):** `--work-item-state-{open|in_progress|blocked|done|cancelled|failed}` + `-subtle` для pill; левая полоска row/card и `state-dot` — только по `WorkItem.state`. Alias `--work-item-state-active` → `in_progress`.
 - **Приоритет (вторичный):** `--work-item-priority-*`; индикатор в meta только для `high`/`urgent`, не на left bar.
 

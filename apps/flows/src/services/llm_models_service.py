@@ -4,6 +4,10 @@ import asyncio
 from datetime import datetime, timezone
 
 from apps.flows.config import get_settings
+from apps.idle_worker.tasks.task_names import (
+    TASK_REFRESH_PLATFORM_FREE_MODELS,
+    TASK_SYNC_LLM_MODELS,
+)
 from core.ai.adapters import AIProviderAdapterError, create_model_catalog_adapter_registry
 from core.ai.free_pool import read_humanitec_llms_model_options
 from core.ai.model_catalog_repository import AIModelCatalogRepository
@@ -31,11 +35,9 @@ from core.types import JsonObject
 
 logger = get_logger(__name__)
 
-_LLM_SYNC_TASK_NAME = "sync_llm_models_task"
 _LLM_SYNC_TARGET_SERVICE = "flows"
-_LLM_SYNC_QUEUE_NAME = "idle"
+_LLM_SYNC_QUEUE_NAME = TASK_SYNC_LLM_MODELS.queue
 _LLM_SYNC_PAYLOAD_MARKER = "llm_models_background_sync"
-_PLATFORM_FREE_MODELS_TASK_NAME = "refresh_platform_free_models_task"
 _PLATFORM_FREE_MODELS_PAYLOAD_MARKER = "platform_free_models_background_sync"
 
 
@@ -254,7 +256,7 @@ class LLMModelsService:
     def _is_compatible_background_schedule(task: PlatformScheduledTask, interval: int) -> bool:
         if task.target_service != _LLM_SYNC_TARGET_SERVICE:
             return False
-        if task.task_name != _LLM_SYNC_TASK_NAME:
+        if task.task_name != TASK_SYNC_LLM_MODELS.name:
             return False
         if task.schedule_type != PlatformScheduleType.INTERVAL:
             return False
@@ -266,7 +268,7 @@ class LLMModelsService:
     def _is_compatible_platform_free_schedule(task: PlatformScheduledTask, interval: int) -> bool:
         if task.target_service != _LLM_SYNC_TARGET_SERVICE:
             return False
-        if task.task_name != _PLATFORM_FREE_MODELS_TASK_NAME:
+        if task.task_name != TASK_REFRESH_PLATFORM_FREE_MODELS.name:
             return False
         if task.schedule_type != PlatformScheduleType.INTERVAL:
             return False
@@ -278,7 +280,7 @@ class LLMModelsService:
         schedules = await self._scheduler_client.list_schedules(
             PlatformScheduleFilter(
                 target_service=_LLM_SYNC_TARGET_SERVICE,
-                task_name=_LLM_SYNC_TASK_NAME,
+                task_name=TASK_SYNC_LLM_MODELS.name,
                 limit=500,
                 offset=0,
             )
@@ -290,7 +292,7 @@ class LLMModelsService:
         schedules = await self._scheduler_client.list_schedules(
             PlatformScheduleFilter(
                 target_service=_LLM_SYNC_TARGET_SERVICE,
-                task_name=_PLATFORM_FREE_MODELS_TASK_NAME,
+                task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
                 limit=500,
                 offset=0,
             )
@@ -339,7 +341,7 @@ class LLMModelsService:
             return
         request = PlatformScheduleCreateRequest(
             target_service=_LLM_SYNC_TARGET_SERVICE,
-            task_name=_LLM_SYNC_TASK_NAME,
+            task_name=TASK_SYNC_LLM_MODELS.name,
             queue_name=_LLM_SYNC_QUEUE_NAME,
             schedule_type=PlatformScheduleType.INTERVAL,
             interval_seconds=interval,
@@ -378,7 +380,7 @@ class LLMModelsService:
             return
         request = PlatformScheduleCreateRequest(
             target_service=_LLM_SYNC_TARGET_SERVICE,
-            task_name=_PLATFORM_FREE_MODELS_TASK_NAME,
+            task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
             queue_name=_LLM_SYNC_QUEUE_NAME,
             schedule_type=PlatformScheduleType.INTERVAL,
             interval_seconds=interval,

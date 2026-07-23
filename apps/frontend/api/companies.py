@@ -9,7 +9,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from apps.frontend.dependencies import ContainerDep, require_frontend_user
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import TASK_INIT_NEW_COMPANY
 from core.api.companies import CompanyMembershipResponse, build_my_companies_response
 from core.config import get_settings
@@ -18,7 +17,7 @@ from core.logging import get_logger
 from core.models.identity_models import Company, User
 from core.namespace import ensure_personal_namespace_for_user
 from core.pagination import ListResponse
-from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks import enqueue
 from core.utils.domain import build_url, get_cookie_domain
 from core.utils.subdomain import validate_slug
 from core.utils.tokens import TokenService, get_token_service
@@ -187,9 +186,8 @@ async def create_company(
         company=company,
     )
 
-    init_task = await kiq_task_name_with_context(
+    init_task = await enqueue(
         TASK_INIT_NEW_COMPANY,
-        idle_broker,
         company_id=company_id,
         company_name=name,
         subdomain=slug,

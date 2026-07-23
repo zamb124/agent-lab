@@ -7,6 +7,7 @@ Main router для CRM API.
 from fastapi import APIRouter
 
 from apps.crm.api.access_requests import router as access_requests_router
+from apps.crm.api.activity_tasks import router as activity_tasks_router
 from apps.crm.api.attachments import router as attachments_router
 from apps.crm.api.entities import router as entities_router
 from apps.crm.api.entity_grants import router as entity_grants_router
@@ -24,6 +25,7 @@ from apps.crm.api.tasks import router as tasks_router
 router = APIRouter()
 
 router.include_router(entities_router)
+router.include_router(activity_tasks_router)
 router.include_router(entity_types_router)
 router.include_router(relationships_router)
 router.include_router(attachments_router)

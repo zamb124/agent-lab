@@ -1,17 +1,8 @@
-"""
-Tasks для RAG Worker.
+"""RAG worker tasks package.
+
+Импортируй ``task_names`` (declarations) или конкретный ``*_tasks`` module.
+Пакетный init не регистрирует ``@platform_task`` — иначе HTTP-producer
+(``from apps.rag_worker.tasks.task_names import ...``) падает без брокера.
 """
 
-from apps.rag_worker.tasks.indexing_tasks import (
-    delete_document_task,
-    index_office_catalog_task,
-    index_rag_document_s3_task,
-)
-from apps.rag_worker.tasks.maintenance_tasks import cleanup_namespace_task
-
-__all__ = [
-    "index_rag_document_s3_task",
-    "index_office_catalog_task",
-    "delete_document_task",
-    "cleanup_namespace_task",
-]
+__all__: list[str] = []

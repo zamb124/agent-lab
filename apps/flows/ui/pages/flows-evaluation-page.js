@@ -445,9 +445,6 @@ export class FlowsEvaluationPage extends PlatformPage {
         this._gatePoliciesList = this.useOp('flows/evaluation_gate_policies_list');
         this._monitorsList = this.useOp('flows/evaluation_monitors_list');
         this._pairwiseCreate = this.useOp('flows/evaluation_pairwise_judgment_create');
-        this.useEvent('flows/evaluation/event', (event) => {
-            void this._onEvaluationEvent(event);
-        });
     }
 
     connectedCallback() {
@@ -531,22 +528,6 @@ export class FlowsEvaluationPage extends PlatformPage {
             this._runEvents.run({ run_id: runId }),
             this._annotationsList.run({ run_id: runId }),
         ]);
-    }
-
-    async _onEvaluationEvent(event) {
-        const payload = event && typeof event.payload === 'object' ? event.payload : null;
-        const runId = stringValue(payload, 'run_id');
-        const selectedRunId = this._ui.value.selectedRunId;
-        const selectedSuiteId = this._ui.value.selectedSuiteId;
-        if (runId.length > 0 && runId === selectedRunId) {
-            await this._loadRun(runId);
-        }
-        if (selectedSuiteId.length > 0) {
-            await Promise.all([
-                this._runsList.run({ suite_id: selectedSuiteId, limit: 30 }),
-                this._matrixGet.run({ suite_id: selectedSuiteId, branch_id: this._branchId(), limit: 16 }),
-            ]);
-        }
     }
 
     _suites() {

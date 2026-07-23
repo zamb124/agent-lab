@@ -8,11 +8,14 @@ import pytest
 
 from core.config.models import TasksConfig
 from core.tasks import broker as broker_module
+from core.tasks import registry as registry_module
+from core.tasks.registry import queue_broker, register_queue_broker
 
 
 @pytest.mark.asyncio
 async def test_create_broker_passes_maxlen_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
+    previous_broker = queue_broker("search")
 
     class _FakeBroker:
         def __init__(
@@ -48,9 +51,16 @@ async def test_create_broker_passes_maxlen_from_config(monkeypatch: pytest.Monke
     monkeypatch.setattr(broker_module, "build_logging_middleware", lambda **_: MagicMock())
     monkeypatch.setattr(broker_module, "session_lock_middleware", MagicMock())
 
-    created = broker_module.create_broker(queue_name="search", service_name="search_worker")
+    try:
+        created = broker_module.create_broker(queue_name="search", service_name="search_worker")
 
-    assert isinstance(created, _FakeBroker)
-    assert captured["queue_name"] == "search"
-    assert captured["maxlen"] == 50_000
-    assert captured["approximate"] is True
+        assert isinstance(created, _FakeBroker)
+        assert captured["queue_name"] == "search"
+        assert captured["maxlen"] == 50_000
+        assert captured["approximate"] is True
+    finally:
+        # create_broker регистрирует брокер глобально — не оставляем Fake в registry.
+        if previous_broker is not None:
+            register_queue_broker("search", previous_broker)
+        else:
+            _ = registry_module._QUEUE_BROKERS.pop("search", None)

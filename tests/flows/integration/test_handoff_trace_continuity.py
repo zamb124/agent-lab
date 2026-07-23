@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.models.flow_config import FlowConfig
+from tests.flows.api.test_a2a import _validate_jsonrpc_response
 from tests.flows.api.test_handoff_a2a import (
     _handoff_parent_child_configs,
     _save_flow,
     _send_message,
 )
-from tests.flows.api.test_a2a import _validate_jsonrpc_response
 
 pytestmark = [pytest.mark.timeout(120, func_only=True)]
 
@@ -56,7 +55,8 @@ class TestHandoffTraceContinuity:
     async def test_flownode_handoff_uses_handoff_session_scheme(
         self, container, unique_id
     ):
-        from tests.flows.integration.test_handoff_e2e import _run, _save_flow as save_flow
+        from tests.flows.integration.test_handoff_e2e import _run
+        from tests.flows.integration.test_handoff_e2e import _save_flow as save_flow
 
         parent_fid = f"ht-tr-{unique_id}"
         child_fid = f"ht-tr-child-{unique_id}"

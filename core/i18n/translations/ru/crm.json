@@ -31,6 +31,8 @@
         "entities": "Сущности",
         "entity": "Сущность",
         "entity_new": "Новая сущность",
+        "tasks": "Задачи",
+        "task": "Задача",
         "graph": "Граф",
         "suggests": "AI-предложения",
         "access_requests": "Запросы доступа",
@@ -43,9 +45,24 @@
     },
     "bottom_nav": {
         "notes": "Заметки",
+        "tasks": "Задачи",
         "graph": "Граф",
         "entities": "Сущности",
         "profile": "Профиль"
+    },
+    "tasks_page": {
+        "title": "Задачи",
+        "create": "Создать задачу",
+        "create_title": "Новая задача",
+        "empty": "Пока нет задач в этом пространстве. Создайте первую.",
+        "field_title": "Название",
+        "field_description": "Описание",
+        "field_priority": "Приоритет",
+        "field_due": "Срок",
+        "priority_low": "Низкий",
+        "priority_normal": "Обычный",
+        "priority_high": "Высокий",
+        "priority_urgent": "Срочный"
     },
     "workspace_picker": {
         "title": "Пространство",
@@ -1165,6 +1182,8 @@
             "update_failed": "Не удалось обновить сущность",
             "updated": "Сущность обновлён"
         },
+        "activity_task_created": "Задача создана",
+        "activity_task_create_failed": "Не удалось создать задачу",
         "entity_type": {
             "created": "Тип сущности создан",
             "public_fields_update_failed": "Public fields update failed",

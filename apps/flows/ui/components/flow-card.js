@@ -35,7 +35,7 @@ export class FlowCard extends PlatformElement {
                 background: transparent;
                 border: 1px solid transparent;
                 transition: var(--motion-transition-interactive);
-                overflow: hidden;
+                overflow: visible;
             }
 
             .flow-card:hover {
@@ -58,11 +58,12 @@ export class FlowCard extends PlatformElement {
                 display: flex;
                 align-items: flex-start;
                 gap: var(--space-3);
-                padding: var(--space-3) var(--space-4);
-                padding-right: calc(var(--space-2) + 24px);
+                padding: var(--space-3) var(--space-3);
+                padding-right: calc(var(--space-2) + 22px);
                 cursor: pointer;
                 position: relative;
                 transition: padding-right var(--duration-fast) var(--easing-default);
+                min-width: 0;
             }
 
             .flow-card.expanded .flow-header {
@@ -76,8 +77,8 @@ export class FlowCard extends PlatformElement {
             }
 
             .flow-avatar {
-                width: 42px;
-                height: 42px;
+                width: 40px;
+                height: 40px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -86,6 +87,7 @@ export class FlowCard extends PlatformElement {
                 font-size: var(--text-sm);
                 color: var(--flows-avatar-text);
                 flex-shrink: 0;
+                position: relative;
                 transition: var(--motion-transition-interactive);
             }
 
@@ -94,9 +96,28 @@ export class FlowCard extends PlatformElement {
                 box-shadow: var(--flows-avatar-hover-shadow);
             }
 
+            .employee-avatar-badge {
+                position: absolute;
+                right: 0;
+                bottom: 0;
+                width: var(--flows-employee-badge-size);
+                height: var(--flows-employee-badge-size);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-full);
+                background: var(--glass-solid-strong);
+                border: 1.5px solid var(--flows-employee-badge-ring);
+                box-shadow: var(--flows-employee-badge-glow);
+                color: var(--accent);
+                pointer-events: none;
+                transform: translate(25%, 25%);
+            }
+
             .flow-info {
                 flex: 1;
                 min-width: 0;
+                overflow: hidden;
             }
 
             .flow-name {
@@ -119,6 +140,9 @@ export class FlowCard extends PlatformElement {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 margin-top: 2px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
 
             .flow-meta {
@@ -126,6 +150,7 @@ export class FlowCard extends PlatformElement {
                 align-items: center;
                 gap: var(--space-2);
                 margin-top: 2px;
+                min-width: 0;
             }
 
             .bundle-update-indicator {
@@ -224,6 +249,7 @@ export class FlowCard extends PlatformElement {
                 justify-content: center;
                 width: 100%;
                 min-width: 0;
+                overflow: visible;
             }
 
             :host([collapsed]) .flow-info,
@@ -242,6 +268,7 @@ export class FlowCard extends PlatformElement {
                 padding: 0;
                 padding-right: 0;
                 box-sizing: border-box;
+                overflow: visible;
             }
 
             :host([collapsed]) .flow-avatar {
@@ -256,6 +283,7 @@ export class FlowCard extends PlatformElement {
                 width: 44px;
                 max-width: 44px;
                 margin-inline: auto;
+                overflow: visible;
             }
 
             :host([collapsed]) .flow-card:hover .flow-header,
@@ -346,6 +374,11 @@ export class FlowCard extends PlatformElement {
         const editTitle = this.t('flow_card.edit_title');
         const deleteTitle = this.t('flow_card.delete_title');
         const addBranchTitle = this.t('flow_card.add_branch_title');
+        const employeeEnabled =
+            this.flow.employee &&
+            typeof this.flow.employee === 'object' &&
+            this.flow.employee.enabled === true;
+        const employeeBadgeTitle = this.t('flow_card.employee_badge_title');
 
         return html`
             <div class=${cardClass} data-flow-id=${this.flow.flow_id}>
@@ -353,8 +386,14 @@ export class FlowCard extends PlatformElement {
                     <div
                         class="flow-avatar"
                         style="background: ${this._getCoverGradient()}"
+                        ?data-employee=${employeeEnabled}
                     >
                         ${this._getInitials()}
+                        ${employeeEnabled
+                            ? html`<span class="employee-avatar-badge" title=${employeeBadgeTitle}>
+                                  <platform-icon name="ai" size="10"></platform-icon>
+                              </span>`
+                            : ''}
                     </div>
                     <div class="flow-info">
                         <div class="flow-name">${typeof this.flow.name === 'string' && this.flow.name.length > 0 ? this.flow.name : this.flow.flow_id}</div>

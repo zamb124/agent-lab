@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.browser.contracts.crawl_fetch_types import (
+from core.clients.browser.crawl_fetch_types import (
     BrowserCrawlFetchRequest,
     BrowserCrawlFetchResponse,
 )

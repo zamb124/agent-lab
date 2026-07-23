@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Protocol
 from typing import cast as type_cast
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
+from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.file_text_reader import load_text_from_bytes
 from apps.crm.services.note_attachment_description import (
     merge_attachment_extracted_into_description,
@@ -191,6 +191,7 @@ class AttachmentService:
                 note_id=merged.entity_id,
                 note_date_iso=note_date_iso,
                 action="updated",
+                note=merged,
                 company_repository=self._company_repo,
                 access_grant_repository=self._access_grant_repo,
             )
@@ -250,6 +251,7 @@ class AttachmentService:
                 note_id=entity.entity_id,
                 note_date_iso=note_date_iso,
                 action="updated",
+                note=entity,
                 company_repository=self._company_repo,
                 access_grant_repository=self._access_grant_repo,
             )

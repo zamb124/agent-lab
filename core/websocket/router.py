@@ -4,8 +4,8 @@ WebSocket-роутер: единый endpoint `/ws/notifications`.
 После аутентификации сокет регистрируется в `NotificationManager`. По одному
 сокету идут два потока:
 
-1. **Push** (server -> client): менеджер форвардит UIEvent-фреймы из
-   Redis-канала `platform:ui_events`.
+1. **Push** (server -> client): менеджер форвардит события с `delivery`
+   из шины `platform:events`.
 2. **RPC request-reply** (client -> server -> client): клиент шлёт
    `{ request_id, type, payload }`, сервер ищет handler в
    `core.websocket.command_router` и отвечает обратным фреймом

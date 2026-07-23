@@ -20,9 +20,12 @@ from apps.flows.src.tasks.task_names import (
     TASK_RUN_EVALUATION_GATE_POLICY,
     TASK_RUN_EVALUATION_MONITOR_CYCLE,
 )
-from apps.flows_worker.broker_core import broker
 from core.context import Context, set_context
-from core.tasks.kicker import kicker_for_task_name_with_log_labels
+from core.tasks import (
+    kicker_for_task_name_with_log_labels,
+    platform_task,
+    resolve_broker_for_task,
+)
 from core.tracing.context import set_current_trace_context
 from core.types import JsonObject, require_json_object
 
@@ -42,8 +45,8 @@ async def _enqueue_created_evaluation_run(
     _ = await container.evaluation_lab_service.mark_run_job_enqueued(run_id)
     try:
         kicker = kicker_for_task_name_with_log_labels(
-            TASK_EXECUTE_EVALUATION_RUN,
-            broker,
+            TASK_EXECUTE_EVALUATION_RUN.name,
+            resolve_broker_for_task(TASK_EXECUTE_EVALUATION_RUN),
             background_kind="evaluation",
             extra_labels={"evaluation_run_id": run_id},
         )
@@ -64,7 +67,7 @@ async def _enqueue_created_evaluation_run(
         raise
 
 
-@broker.task(task_name=TASK_EXECUTE_EVALUATION_RUN, queue_name="flows_worker")
+@platform_task(TASK_EXECUTE_EVALUATION_RUN)
 async def execute_evaluation_run(
     run_id: str,
     taskiq_context: Annotated[TaskiqContext, TaskiqDepends()],
@@ -99,7 +102,7 @@ async def execute_evaluation_run(
     )
 
 
-@broker.task(task_name=TASK_ENQUEUE_PENDING_EVALUATION_RUNS, queue_name="flows_worker")
+@platform_task(TASK_ENQUEUE_PENDING_EVALUATION_RUNS)
 async def enqueue_pending_evaluation_runs(
     taskiq_context: Annotated[TaskiqContext, TaskiqDepends()],
     context_data: JsonObject | None = None,
@@ -120,8 +123,8 @@ async def enqueue_pending_evaluation_runs(
         _ = await container.evaluation_lab_service.mark_run_job_enqueued(job.run_id)
         try:
             kicker = kicker_for_task_name_with_log_labels(
-                TASK_EXECUTE_EVALUATION_RUN,
-                broker,
+                TASK_EXECUTE_EVALUATION_RUN.name,
+                resolve_broker_for_task(TASK_EXECUTE_EVALUATION_RUN),
                 background_kind="evaluation",
                 extra_labels={"evaluation_run_id": job.run_id},
             )
@@ -151,7 +154,7 @@ async def enqueue_pending_evaluation_runs(
     )
 
 
-@broker.task(task_name=TASK_RUN_EVALUATION_GATE_POLICY, queue_name="flows_worker")
+@platform_task(TASK_RUN_EVALUATION_GATE_POLICY)
 async def run_evaluation_gate_policy(
     gate_policy_id: str,
     request: JsonObject,
@@ -184,7 +187,7 @@ async def run_evaluation_gate_policy(
     )
 
 
-@broker.task(task_name=TASK_RUN_EVALUATION_MONITOR_CYCLE, queue_name="flows_worker")
+@platform_task(TASK_RUN_EVALUATION_MONITOR_CYCLE)
 async def run_evaluation_monitor_cycle(
     monitor_id: str,
     request: JsonObject,

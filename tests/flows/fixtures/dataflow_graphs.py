@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import TypeAdapter
+
 from apps.flows.src.models import Edge, FlowVariableConfig, GraphNodeConfig, TriggerConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.services.flow_dataflow_inspector import inspect_flow_dataflow
-from pydantic import TypeAdapter
 
 _GRAPH_NODES_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(dict[str, GraphNodeConfig])
 

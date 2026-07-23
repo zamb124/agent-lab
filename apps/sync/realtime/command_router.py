@@ -55,6 +55,7 @@ from apps.sync.realtime.operations import (
     MessagesEditPayload,
     MessagesForwardPayload,
     MessagesListPayload,
+    MessagesListThreadPayload,
     MessagesMarkReadPayload,
     MessagesPinPayload,
     MessagesReactPayload,
@@ -102,6 +103,7 @@ from apps.sync.realtime.operations import (
     op_messages_edit,
     op_messages_forward,
     op_messages_list,
+    op_messages_list_thread,
     op_messages_mark_read,
     op_messages_pin,
     op_messages_react,
@@ -187,6 +189,11 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation] = {
         canonical_type="sync/messages/list_requested",
         payload_model=MessagesListPayload,
         fn=op_messages_list,
+    ),
+    "sync/messages/list_thread_requested": Operation(
+        canonical_type="sync/messages/list_thread_requested",
+        payload_model=MessagesListThreadPayload,
+        fn=op_messages_list_thread,
     ),
     "sync/messages/send_requested": Operation(
         canonical_type="sync/messages/send_requested",

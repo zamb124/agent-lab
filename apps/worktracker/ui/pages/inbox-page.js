@@ -74,8 +74,12 @@ export class WorktrackerInboxPage extends PlatformPage {
         this.useEvent(WorktrackerUiEvents.DETAIL_CLOSE, () => {
             this._selectedWorkItemId = '';
         });
-        this.useEvent(this._workItems.resource.events.CREATED, () => {
-            this._reload();
+        this.useEvent(this._workItems.resource.events.CREATED, (event) => {
+            const item = event.payload && event.payload.item;
+            if (!item || typeof item.work_item_id !== 'string') {
+                throw new Error('WorktrackerInboxPage: CREATED payload.item.work_item_id required');
+            }
+            this._mergeCreatedItem(item);
         });
     }
 
@@ -129,6 +133,41 @@ export class WorktrackerInboxPage extends PlatformPage {
             throw new Error('WorktrackerInboxPage: mine summary.work_queue_ids required');
         }
         return ids.filter((id) => typeof id === 'string' && id.length > 0);
+    }
+
+    _mergeCreatedItem(item) {
+        const user = this._userSel.value;
+        if (!user || typeof user.user_id !== 'string' || user.user_id.length === 0) {
+            return;
+        }
+        const assignment = item.assignment && typeof item.assignment === 'object' ? item.assignment : null;
+        if (!assignment || typeof assignment.assignee_kind !== 'string') {
+            return;
+        }
+        if (assignment.assignee_kind === 'users') {
+            const userIds = Array.isArray(assignment.user_ids) ? assignment.user_ids : [];
+            if (userIds.includes(user.user_id)) {
+                if (!this._assignedItems.some((row) => row && row.work_item_id === item.work_item_id)) {
+                    this._assignedItems = [item, ...this._assignedItems];
+                }
+            }
+            return;
+        }
+        if (assignment.assignee_kind === 'queue') {
+            const queueId = typeof assignment.work_queue_id === 'string' ? assignment.work_queue_id : null;
+            const claimedBy = typeof assignment.claimed_by_user_id === 'string'
+                ? assignment.claimed_by_user_id
+                : null;
+            if (
+                queueId !== null
+                && this._memberQueueIds.includes(queueId)
+                && claimedBy === null
+            ) {
+                if (!this._queueItems.some((row) => row && row.work_item_id === item.work_item_id)) {
+                    this._queueItems = [item, ...this._queueItems];
+                }
+            }
+        }
     }
 
     async _reload() {

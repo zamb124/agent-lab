@@ -19,17 +19,18 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import get_container
+from apps.idle_worker.tasks.task_names import (
+    TASK_INIT_NEW_COMPANY,
+    TASK_INIT_SYSTEM_COMPANY,
+)
 from core.clients.service_client import ServiceClientError
 from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_logger
+from core.tasks import platform_task
 from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
-
-TASK_INIT_NEW_COMPANY = "company_init_new_company"
-TASK_INIT_SYSTEM_COMPANY = "company_init_system"
 
 _DEFAULT_NAMESPACE_FOR_NEW_COMPANY = "default"
 _SYSTEM_COMPANY_ID = "system"
@@ -71,12 +72,7 @@ async def _set_company_initialization_status(
     _ = await container.company_repository.set(company)
 
 
-@idle_broker.task(
-    task_name=TASK_INIT_NEW_COMPANY,
-    queue_name="idle",
-    retry_on_error=True,
-    max_retries=3,
-)
+@platform_task(TASK_INIT_NEW_COMPANY)
 async def initialize_new_company_task(
     company_id: str,
     company_name: str,
@@ -169,12 +165,7 @@ async def initialize_new_company_task(
     }
 
 
-@idle_broker.task(
-    task_name=TASK_INIT_SYSTEM_COMPANY,
-    queue_name="idle",
-    retry_on_error=True,
-    max_retries=3,
-)
+@platform_task(TASK_INIT_SYSTEM_COMPANY)
 async def initialize_system_company_task() -> JsonObject:
     """
     Bootstrap компании system: tools/flows/MCP через flows_worker.

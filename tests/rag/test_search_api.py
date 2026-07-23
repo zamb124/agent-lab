@@ -8,6 +8,7 @@
 
 import pytest
 
+from core.config import get_settings
 from core.rag.search_options_resolver import resolve_platform_search_options
 from tests.rag.helpers import upload_rag_document_bytes, wait_rag_document_status
 
@@ -511,7 +512,7 @@ async def test_get_search_defaults_matches_resolver(
     )
     assert response.status_code == 200
     payload = response.json()
-    expected = resolve_platform_search_options()
+    expected = resolve_platform_search_options(settings=get_settings())
     assert payload["rrf_k"] == expected.rrf_k
     assert payload["per_channel_top_k"] == expected.per_channel_top_k
     assert payload["rerank"] == expected.rerank

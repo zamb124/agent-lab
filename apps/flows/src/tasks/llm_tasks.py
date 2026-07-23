@@ -8,7 +8,6 @@ from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
 
 import core.tracing.attributes as trace_attributes
 from apps.flows.src.tasks.task_names import TASK_INVOKE_LLM
-from apps.flows_worker.broker_core import broker
 from core.a2a import (
     coerce_usage_token_count,
     get_part_text,
@@ -25,13 +24,14 @@ from core.llm_context import LLMContextBlock
 from core.logging import get_logger
 from core.models.billing_models import UsageType
 from core.models.context_models import Context
+from core.tasks import platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
 
 
-@broker.task(task_name=TASK_INVOKE_LLM, queue_name="flows_worker")
+@platform_task(TASK_INVOKE_LLM)
 async def invoke_llm(
     messages: list[JsonObject],
     tools: list[JsonObject] | None = None,

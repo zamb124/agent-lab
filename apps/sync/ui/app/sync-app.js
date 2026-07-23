@@ -4,7 +4,7 @@
  * Все доменные операции описаны фабриками в `apps/sync/ui/events/resources/*.resource.js`.
  * Транспорт операций — `transport: 'ws'` (single-socket request-reply через
  * `/sync/api/ws/notifications`), REST — байт-в-байт зеркало для CLI / SDK /
- * гостевых сценариев. Push-события приходят через `platform:ui_events` и
+ * гостевых сценариев. Push-события приходят через `platform:events` и
  * автоматически диспатчатся в bus core ws-effect'ом.
  *
  * Маршруты задаются через `createRouterEffect`; рендер страниц — switch по
@@ -58,6 +58,7 @@ import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-ho
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { TEAM_EVENTS } from '@platform/lib/events/reducers/team.js';
 import { buildSyncAssistantContext } from '../_helpers/platform-assistant-context.js';
+import { SYNC_CALL_INCOMING, SYNC_CALL_ENDED } from '../events/types.js';
 
 const SYNC_ROUTES = [
     { key: 'shell',             path: '',                titleKey: 'routes.shell' },
@@ -106,8 +107,8 @@ export class SyncApp extends PlatformApp {
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this._teamSel = this.select((s) => s.team);
-        this.useEvent('sync/call/incoming', (event) => this._onIncomingCall(event));
-        this.useEvent('sync/call/ended', (event) => this._onCallEnded(event));
+        this.useEvent(SYNC_CALL_INCOMING, (event) => this._onIncomingCall(event));
+        this.useEvent(SYNC_CALL_ENDED, (event) => this._onCallEnded(event));
         this.useEvent(CoreEvents.WS_CONNECTED, () => this._onWsConnected());
         this.useEvent(CoreEvents.AUTH_COMPANY_SWITCHED, () => this._onCompanySwitched());
     }

@@ -19,6 +19,7 @@ from starlette.routing import Route
 
 from apps.agent.api import router as agent_router
 from apps.agent.tunnel import router as agent_tunnel_router
+from apps.agent.tunnel_bus import configure_tunnel_bus_storage, start_tunnel_bus_listener
 from apps.frontend.api.agent import router as agent_settings_router
 from apps.frontend.api.ai_providers import router as ai_providers_router
 from apps.frontend.api.api_keys import router as api_keys_router
@@ -287,8 +288,6 @@ async def on_startup(app: FastAPI, container: FrontendContainer, settings: Front
     _ = settings
     await container.redis_client.connect()
     logger.info("frontend.redis.connected")
-
-    from apps.agent.tunnel_bus import configure_tunnel_bus_storage, start_tunnel_bus_listener
 
     configure_tunnel_bus_storage(container.shared_storage)
     await start_tunnel_bus_listener(container.redis_client)

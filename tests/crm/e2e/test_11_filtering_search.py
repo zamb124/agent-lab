@@ -1,6 +1,5 @@
 """Тесты DSL-фильтрации и поиска через POST /entities/query."""
 
-import asyncio
 from datetime import date
 from typing import cast
 

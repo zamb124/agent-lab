@@ -1,0 +1,13 @@
+component: platform-work-item-board
+doc_slug: platform-work-item-board
+tier: T0
+title_ru: Work Item board
+title_en: Work Item board
+import: "@platform/lib/components/platform-work-item-board.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

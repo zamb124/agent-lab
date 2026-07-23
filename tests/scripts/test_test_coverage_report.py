@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from scripts.test_coverage_report import (
+    _TOP_UNCOVERED_FILES,
     _format_missing_lines,
     _parse_lcov,
     _parse_python_summary,
@@ -119,36 +120,45 @@ def test_report_generates_html_and_terminal(tmp_path: Path, monkeypatch) -> None
     assert len(summary["python_files_low"]) == 2
 
     terminal = _render_terminal(summary)
-    assert "Test coverage (full)" in terminal
+    assert "=== Test coverage ===" in terminal
     assert "Python (apps+core):" in terminal
     assert "JS (core/frontend unit):" in terminal
-    assert "Python files ≤90%" in terminal
+    assert "Top 2 uncovered Python files" in terminal
     assert "apps/flows/main.py" in terminal
     assert "41-43, 50" in terminal
+    assert "Python packages" not in terminal
 
     html_text = _render_html(summary, run_dir=run_dir)
     assert "Test coverage report" in html_text
-    assert "Python packages ≤90%" in html_text
+    assert "Top 2 uncovered Python files" in html_text
+    assert "apps/flows/main.py" in html_text
 
 
-def test_parse_python_summary_filters_above_threshold() -> None:
+def test_parse_python_summary_returns_top_uncovered_files() -> None:
     summary_path = Path("/tmp/test_python_coverage_summary.json")
+    files: dict[str, object] = {
+        "apps/flows/a.py": {
+            "summary": {"covered_lines": 1, "num_statements": 5},
+            "missing_lines": [2, 3, 4, 5],
+        },
+        "apps/crm/b.py": {
+            "summary": {"covered_lines": 4, "num_statements": 5},
+            "missing_lines": [5],
+        },
+        "apps/frontend/c.py": {
+            "summary": {"covered_lines": 91, "num_statements": 100},
+            "missing_lines": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+        },
+    }
+    for index in range(_TOP_UNCOVERED_FILES + 5):
+        covered = 50 + index
+        files[f"apps/extra/file_{index:02d}.py"] = {
+            "summary": {"covered_lines": covered, "num_statements": 100},
+            "missing_lines": list(range(1, 100 - covered + 1)),
+        }
     payload = {
         "totals": {"covered_lines": 96, "num_statements": 110},
-        "files": {
-            "apps/flows/a.py": {
-                "summary": {"covered_lines": 1, "num_statements": 5},
-                "missing_lines": [2, 3, 4, 5],
-            },
-            "apps/crm/b.py": {
-                "summary": {"covered_lines": 4, "num_statements": 5},
-                "missing_lines": [5],
-            },
-            "apps/frontend/c.py": {
-                "summary": {"covered_lines": 91, "num_statements": 100},
-                "missing_lines": [1, 2, 3, 4, 5, 6, 7, 8, 9],
-            },
-        },
+        "files": files,
     }
     summary_path.write_text(json.dumps(payload), encoding="utf-8")
     try:
@@ -159,13 +169,18 @@ def test_parse_python_summary_filters_above_threshold() -> None:
     assert totals["lines_pct"] == 87.27
     assert low_packages[0]["package"] == "apps.flows"
     assert low_packages[0]["lines_pct"] == 20.0
-    package_names = {row["package"] for row in low_packages}
-    assert "apps.frontend" not in package_names
-    file_paths = {row["path"] for row in low_files}
-    assert "apps/flows/a.py" in file_paths
-    assert "apps/crm/b.py" in file_paths
+    assert len(low_files) == _TOP_UNCOVERED_FILES
+    assert low_files[0]["path"] == "apps/flows/a.py"
+    assert low_files[0]["lines_pct"] == 20.0
+    file_paths = [row["path"] for row in low_files]
+    assert file_paths[0] == "apps/flows/a.py"
     assert "apps/frontend/c.py" not in file_paths
+    assert all(
+        low_files[index]["lines_pct"] <= low_files[index + 1]["lines_pct"]
+        for index in range(len(low_files) - 1)
+    )
 
     table = _render_python_files_table(low_files)
+    assert f"Top {_TOP_UNCOVERED_FILES} uncovered Python files" in table
+    assert "apps/flows/a.py" in table
     assert "apps/frontend/c.py" not in table
-    assert "91.00%" not in table

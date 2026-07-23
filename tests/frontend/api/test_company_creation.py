@@ -85,24 +85,16 @@ async def test_company_creation_with_agents_initialization(
 
     print(f"✅ Subdomain mapping: {company_slug} → {company_id}")
 
-    import apps.flows_worker.broker as flows_broker_mod
-    from apps.flows.src.tasks.company_init_tasks import init_company_resources
+    from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
+    from core.tasks import enqueue
 
-    task_broker = getattr(init_company_resources, "broker", None)
-    mod_broker = flows_broker_mod.broker
-    if task_broker is not mod_broker:
-        raise AssertionError(
-            "init_company_resources должен быть привязан к apps.flows_worker.broker; "
-            f"task_broker_id={id(task_broker) if task_broker is not None else None} "
-            f"mod_broker_id={id(mod_broker)} task_type={type(init_company_resources)}"
-        )
-
-    # Шаг 4: инициализация через тот же broker, что слушает flows TaskIQ worker (ожидание по wait_result).
-    # Frontend при создании компании дергает flows через ServiceClient (отдельный HTTP); здесь проверяем цепочку kiq.
-    init_task = await init_company_resources.kiq(
+    # Шаг 4: инициализация через единый enqueue (ожидание по wait_result).
+    init_task = await enqueue(
+        TASK_INIT_COMPANY_RESOURCES,
         company_id=company_id,
         company_name=company_name,
         subdomain=company_slug,
+        background_kind="company_init",
     )
     init_wr = await init_task.wait_result(timeout=120)
     assert not init_wr.is_err, init_wr.error
@@ -416,7 +408,7 @@ async def test_company_agents_api_with_context(
     Тест что agents API корректно возвращает агенты с контекстом компании.
 
     Timeout 420s: создаём ДВЕ компании (каждая делает синхронные межсервисные
-    HTTP к flows/sync) + два `init_company_resources.kiq().wait_result(120)`
+    HTTP к flows/sync) + два `enqueue(TASK_INIT_COMPANY_RESOURCES).wait_result(120)`
     последовательно + 30s polling /flows/api/v1/flows/. На холодном старте
     общее время может достигать ~5–6 минут.
 
@@ -454,26 +446,19 @@ async def test_company_agents_api_with_context(
 
     print(f"✅ Созданы компании: {company1_id}, {company2_id}")
 
-    import apps.flows_worker.broker as flows_broker_mod
-    from apps.flows.src.tasks.company_init_tasks import init_company_resources
-
-    task_broker = getattr(init_company_resources, "broker", None)
-    mod_broker = flows_broker_mod.broker
-    if task_broker is not mod_broker:
-        raise AssertionError(
-            "init_company_resources должен быть привязан к apps.flows_worker.broker; "
-            f"task_broker_id={id(task_broker) if task_broker is not None else None} "
-            f"mod_broker_id={id(mod_broker)} task_type={type(init_company_resources)}"
-        )
+    from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
+    from core.tasks import enqueue
 
     for cid, cname, cslug in (
         (company1_id, company1_name, company1_slug),
         (company2_id, company2_name, company2_slug),
     ):
-        init_task = await init_company_resources.kiq(
+        init_task = await enqueue(
+            TASK_INIT_COMPANY_RESOURCES,
             company_id=cid,
             company_name=cname,
             subdomain=cslug,
+            background_kind="company_init",
         )
         init_wr = await init_task.wait_result(timeout=120)
         assert not init_wr.is_err, init_wr.error

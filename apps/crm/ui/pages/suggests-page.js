@@ -454,12 +454,15 @@ export class CRMSuggestsPage extends CRMNamespacePage {
     connectedCallback() {
         super.connectedCallback();
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._loadSuggests());
-        this.useEvent(CoreEvents.WS_CONNECTED, () => this._loadSuggests());
         this.useEvent(this._suggestsList.op.events.SUCCEEDED, (event) => {
             this._prefetchTargetsFromPage(event.payload.result);
         });
-        this.useEvent(this._resolveOp.op.events.SUCCEEDED, () => this._loadSuggests());
-        this.useEvent(this._dismissOp.op.events.SUCCEEDED, () => this._loadSuggests());
+        this.useEvent(this._resolveOp.op.events.SUCCEEDED, () => {
+            this.requestUpdate();
+        });
+        this.useEvent(this._dismissOp.op.events.SUCCEEDED, () => {
+            this.requestUpdate();
+        });
         this._loadSuggests();
     }
 

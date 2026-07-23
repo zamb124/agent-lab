@@ -9,7 +9,8 @@ from typing import cast
 import pytest
 from httpx import AsyncClient, Response
 
-from apps.crm_worker.tasks.suggest_tasks import crm_generate_namespace_suggests_tick
+from apps.crm_worker.tasks.task_names import CRM_GENERATE_NAMESPACE_SUGGESTS
+from core.tasks import enqueue
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 from tests.fixtures.crm_test_setup import wait_for_crm_semantic_search_hit
 
@@ -63,9 +64,11 @@ async def _create_entity(
 
 
 async def _run_suggest_tick(namespace: str) -> dict[str, object]:
-    task = await crm_generate_namespace_suggests_tick.kiq(
+    task = await enqueue(
+        CRM_GENERATE_NAMESPACE_SUGGESTS,
         company_id="system",
         namespace=namespace,
+        background_kind="crm_suggest",
     )
     result = await task.wait_result(timeout=90)
     assert not result.is_err, f"Task failed: {result.error}"

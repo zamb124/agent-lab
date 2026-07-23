@@ -4,7 +4,7 @@
 
   client -> server:  { request_id, type: 'sync/<entity>/<verb>_requested', payload }
   server -> client:  { request_id, type: 'sync/<entity>/<verb>_succeeded'|'..._failed', payload }
-                     либо push без request_id: { type, payload, meta? } из platform:ui_events.
+                     либо push без request_id: { type, payload, meta? } из platform:events.
 """
 
 from __future__ import annotations

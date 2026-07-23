@@ -73,12 +73,17 @@ alwaysApply: false
 - Standing tools на base и во всех branches: только `ask_user`. Domain/shared tools появляются только после `load_agent_skill`.
 - Standing UI context — только IDs/скаляры (не `*_payload_json`). Flows: тела нод через `flows_get_node` / `flows_list_nodes` / лёгкий `flows_read_context` после load skill.
 - Company knowledge — child `knowledge-rag` под `documents-platform` (и `docs-knowledge`); отдельного Tier-1 `rag-platform` и Lara branch `rag` нет. Decommission сервиса `apps/rag` → Documents — отдельный эпик (backend/API/helm); tool ids `rag_*` остаются до миграции API.
-- Catalog browse/search/read/link — child `documents-catalog` под `documents-platform` (те же platform builtins, что и на любом Flows `llm_node`).
+- Catalog browse/search/read/link + folder/members/ACL/public link + catalog RAG admin — child `documents-catalog` под `documents-platform` (те же platform builtins, что и на любом Flows `llm_node`).
+- `document-workspace` — create/open/mutate + empty/rename/move/copy/trash; `depends_on: docx-templates`.
+- Documents methodology — `documents-platform/references/documents-employee-methodology.md`.
 - Methodology бывших Lara prompts — в skill bodies + `references/*-lara-methodology.md`.
 - Skill Library CTA → `flow_chat` / `lara`. `platform_assistant` — deprecated alias с теми же roots.
 - Seed: `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` / `ensure-seed`.
 - Service skill может содержать только существующие operational `tool_refs`; если tool контракта нет, body ведёт по UI и запрещает заявлять об исполнении.
-- Shared tree под `platform-workspace`: `document-workspace` → `docx-templates`, `diagrams-viz`, `web-research`, `work-tracking`, `agent-planning`, `google-sheets` (`sheets_*`, OAuth `service=sheets`). `web-research` включает batch browser search + page snapshot; `work-tracking` включает one-time + cron + interval scheduler; `agent-planning` — `agent_plan_write` / `agent_plan_get` (→ **`agent_plan.mdc`**).
+- Shared tree под `platform-workspace`: `document-workspace` → `docx-templates`, `diagrams-viz`, `web-research`, `work-tracking`, `team-directory`, `agent-planning`, `google-sheets` (`sheets_*`, OAuth `service=sheets`). `web-research` включает batch browser search + page snapshot; `work-tracking` включает list_mine/create/complete + one-time/cron/interval scheduler; `team-directory` — `team_list_members` / `team_resolve_user`; `agent-planning` — `agent_plan_write` / `agent_plan_get` (→ **`agent_plan.mdc`**).
+- `worktracker-platform` children: `work-tracking`, `work-items` (get/update/assign/move/claim/cancel/comments), `work-queues`, `work-boards`, `team-directory`. Methodology — `references/worktracker-employee-methodology.md`.
+- `sync-platform` children: `sync-messaging` (list/send/edit/delete/react/mark message read), `sync-channels` (list/create/update/members/mark read/mute), `sync-threads` (list/get/create + list thread messages), `team-directory`. Methodology — `references/sync-employee-methodology.md`. Calls/Git/presence — UI-only boundary.
+- `networkle` children: `crm-entities` (entity CRUD/merge/types/summaries/activity-tasks), `crm-notes` (list + create/analyze/apply/discard), `crm-graph` (relationships list/delete/types/related/path), `crm-ops` (suggests + knowledge-import status), `work-items`, `document-workspace`, `team-directory`. Methodology — `references/networkle-lara-crm-methodology.md`. AmoCRM/grants/type-admin/graph chrome — UI-only boundary.
 - Service children переиспользуют shared leaves через `depends_on` либо направляют к отдельному Tier-1 root; копировать один tool pack между service skills запрещено.
 
 

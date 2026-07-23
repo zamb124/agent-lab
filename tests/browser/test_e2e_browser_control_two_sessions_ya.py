@@ -24,7 +24,6 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 
-
 def _enabled() -> bool:
     if os.environ.get("BROWSER_E2E", "").strip() == "1":
         return True

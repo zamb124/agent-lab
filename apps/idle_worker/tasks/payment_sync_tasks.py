@@ -5,17 +5,18 @@
 from __future__ import annotations
 
 from apps.flows.config import get_settings
-from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import get_container
+from apps.idle_worker.tasks.task_names import TASK_PAYMENT_SYNC_TICK
 from core.clients.payment.factory import PaymentProviderFactory
 from core.logging import get_logger
 from core.payments.service import PaymentService
 from core.payments.sync_service import PaymentSyncService
+from core.tasks import platform_task
 
 logger = get_logger(__name__)
 
 
-@idle_broker.task(task_name="payment_sync_tick", queue_name="idle")
+@platform_task(TASK_PAYMENT_SYNC_TICK)
 async def payment_sync_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,

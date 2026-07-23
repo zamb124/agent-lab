@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-
 from urllib.parse import quote
 
 from playwright.async_api import Page, expect

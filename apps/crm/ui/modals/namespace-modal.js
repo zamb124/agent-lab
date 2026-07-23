@@ -107,8 +107,8 @@ export class CRMNamespaceModal extends PlatformFormModal {
 
             .template-grid {
                 display: grid;
-                gap: var(--space-2);
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: var(--space-3);
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             }
             .template-card {
                 border: 1px solid var(--crm-stroke);
@@ -497,7 +497,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
 
     constructor() {
         super();
-        this.size = 'md';
+        this.size = 'xl';
         this.headerSavePrimary = true;
         this.mode = '';
         this.name = '';

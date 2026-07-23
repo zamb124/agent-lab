@@ -99,6 +99,7 @@
     "no_id": "Не указан ID задачи.",
     "not_found": "Задача не найдена.",
     "unassigned": "Не назначена",
+    "assignee_flow_badge": "AI-сотрудник",
     "label_state": "Статус",
     "label_priority": "Приоритет",
     "label_assignee": "Исполнитель",

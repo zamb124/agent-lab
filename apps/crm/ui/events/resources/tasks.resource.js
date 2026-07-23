@@ -45,6 +45,23 @@ function _mergeTaskIntoCollectionState(state, task, idField) {
     };
 }
 
+/**
+ * HTTP TaskResponse → тот же merge, что и WS `crm/task/updated`.
+ * @param {object} ctx
+ * @param {object} result
+ * @param {object} event
+ */
+function _dispatchLocalTaskUpdated(ctx, result, event) {
+    if (!result || typeof result !== 'object' || typeof result.task_id !== 'string') {
+        throw new Error('crm task mutation success: TaskResponse with task_id required');
+    }
+    ctx.dispatch(
+        CRM_TASK_UPDATED,
+        { task: result },
+        { causation_id: event.id, source: 'local' },
+    );
+}
+
 export const taskGetOp = createAsyncOp({
     name: 'crm/task_get',
     silent: true,
@@ -179,6 +196,7 @@ export const taskReviewCompleteOp = createAsyncOp({
             url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}/review-complete`,
         });
     },
+    onSuccess: _dispatchLocalTaskUpdated,
 });
 
 export const taskCancelOp = createAsyncOp({
@@ -195,6 +213,7 @@ export const taskCancelOp = createAsyncOp({
             url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}/cancel`,
         });
     },
+    onSuccess: _dispatchLocalTaskUpdated,
 });
 
 export const taskRollbackOp = createAsyncOp({
@@ -211,6 +230,7 @@ export const taskRollbackOp = createAsyncOp({
             url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}/rollback`,
         });
     },
+    onSuccess: _dispatchLocalTaskUpdated,
 });
 
 export const taskRetryOp = createAsyncOp({
@@ -227,4 +247,5 @@ export const taskRetryOp = createAsyncOp({
             url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}/retry`,
         });
     },
+    onSuccess: _dispatchLocalTaskUpdated,
 });

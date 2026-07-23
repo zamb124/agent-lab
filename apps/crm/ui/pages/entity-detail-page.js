@@ -888,7 +888,6 @@ export class CRMEntityDetailPage extends PlatformPage {
                                 && entity.work_item_id.length > 0
                                 ? html`<platform-work-item-badge
                                     work-item-id=${entity.work_item_id}
-                                    .item=${entity}
                                     variant="chip"
                                     size="sm"
                                     interactive

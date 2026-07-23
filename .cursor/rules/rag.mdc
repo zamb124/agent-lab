@@ -88,10 +88,13 @@ globs:
 1. `POST /rag/api/v1/namespaces/{id}/documents` (multipart `file` + `data.metadata`).
 2. Файл → S3/MinIO (`{namespace_id}/{document_id}/{filename}` в bucket из конфига).
 3. `DocumentProcessingStatus.create(status="pending")`.
-4. TaskIQ `process_document_task.kiq(namespace_id, document_id, document_name, s3_key, s3_bucket, metadata)`.
+4. TaskIQ `enqueue(RAG_INDEX_DOCUMENT_S3, namespace_id=..., document_id=..., document_name=..., s3_key=..., s3_bucket=..., metadata=...)`.
 5. Worker: `FileReader.read` → чанкинг → embeddings → `vector_documents` → `status="completed"` (или `"failed"` с `error_message`).
 
-Поллинг статуса: `GET /rag/api/v1/documents/{document_id}/status` (фабрика UI `rag/document_status` сама перезапускает себя до терминального статуса).
+Статус индексации: push `rag/document/status_updated` → UI
+`rag/document_status` (`extraReducer`) и список `rag/documents`
+(`extraReducer` / `extraEffect`). Снимок — `GET /rag/api/v1/documents/{document_id}/status`.
+HTTP poll статуса удалён.
 
 ## Inter-service
 
@@ -99,7 +102,7 @@ globs:
 
 ### Index-file (внешний владелец байтов)
 
-Peer-сервис (Office и т.п.), у которого `FileRecord` уже в shared S3, индексирует через **`POST /rag/api/v1/namespaces/{namespace_id}/documents/index-file`** (`RagClient.index_file`). Worker — тот же `rag.index_document_s3`; новый S3-объект не создаётся. В metadata обязательны `document_id=file_id`, `company_id`, `uploaded_by_user_id`, `ttl_seconds` (Office — `0`).
+Peer-сервис (Office и т.п.), у которого `FileRecord` уже в shared S3, индексирует через **`POST /rag/api/v1/namespaces/{namespace_id}/documents/index-file`** (`RagClient.index_file`). Worker — тот же `rag_index_document_s3`; новый S3-объект не создаётся. В metadata обязательны `document_id=file_id`, `company_id`, `uploaded_by_user_id`, `ttl_seconds` (Office — `0`).
 
 **Office catalog semantic search — слои overrides:** `office_document_catalogs.rag_index_search_options` (JSONB, partial `RAGSearchOptions`) задаёт per-catalog defaults в модалке RAG indexing; при `search_catalog` merge: **request > catalog > platform** (`merge_search_request_options` + `resolve_platform_search_options`). UI: `platform-rag-retrieval-panel` в `catalog-rag-modal`; explorer читает `rag_index_search_options` из list catalogs и передаёт в `office/catalog_rag_search`. **Platform defaults для UI placeholders:** `GET /rag/api/v1/search-defaults` (`resolve_platform_search_options`) и поле `platform_defaults` в `GET …/catalogs/{id}/rag-index/status`; панель показывает числа в `.placeholder` и resolved enum inherit labels (паттерн как `llm-context-editor`).
 
@@ -121,11 +124,15 @@ Peer-сервис (Office и т.п.), у которого `FileRecord` уже в
 | `rag/document_upload` | `createAsyncOp` (multipart) | `POST /rag/api/v1/namespaces/:namespace_id/documents` |
 | `rag/document_remove` | `createAsyncOp` | `DELETE /rag/api/v1/namespaces/:namespace_id/documents/:document_id` |
 | `rag/document_ingest_text` | `createAsyncOp` | `POST /rag/api/v1/namespaces/:namespace_id/ingest-text` |
-| `rag/document_status` | `createAsyncOp` (self-rescheduling poll) | `GET /rag/api/v1/documents/:document_id/status` |
+| `rag/document_status` | `createAsyncOp` + push `rag/document/status_updated` (`extraReducer`) | `GET /rag/api/v1/documents/:document_id/status` (снимок); poll удалён |
 | `rag/search` | `createAsyncOp` | `POST /rag/api/v1/namespaces/:namespace_id/search` |
 | `rag/search_defaults` | `createAsyncOp` | `GET /rag/api/v1/search-defaults` |
 
-`rag/document_upload.onSuccess` стартует `rag/document_status.REQUESTED`; `rag/document_status` ребут через `setTimeout` пока статус `pending`/`processing`. На `completed`/`failed` — `UI_TOAST_SHOW`. `namespace-page` через `useEvent('rag/document_status/succeeded')` перезагружает список документов.
+`rag/document_upload.onSuccess` стартует `rag/document_status.REQUESTED` (снимок).
+Дальше статус приходит push'ем `rag/document/status_updated` в `extraReducer`.
+На `completed`/`failed` — `UI_TOAST_SHOW`. `namespace-page` через
+`useEvent('rag/document_status/succeeded')` перезагружает список документов.
+Office explorer слушает тот же push в `office/documents` (`rag_index_status`).
 
 ### Маршруты (`createRouterEffect({ baseUrl: '/rag', routes })`)
 

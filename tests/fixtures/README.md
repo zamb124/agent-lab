@@ -110,7 +110,7 @@ Redis Stream группы `taskiq`):
 async def test_with_worker(rag_worker):
     from apps.rag_worker.tasks.indexing_tasks import index_document_profile_task
 
-    task = await index_document_profile_task.kiq(...)
+    task = await enqueue(RAG_INDEX_DOCUMENT_S3, ...)
     result = await task.wait_result(timeout=10)
     assert result["status"] == "completed"
 ```
