@@ -2,7 +2,8 @@
 
 `GET /flows/api/v1/platform-events/catalog` — полный каталог типов событий
 шины `platform:events` (регистрации всех сервисов из Redis, см.
-`core/events/catalog.py`): тип, описание, JSON Schema payload. Используется
+`core/events/catalog.py`): тип, описание, JSON Schema payload и
+`filter_fields` (leaf-пути для autocomplete фильтров). Используется
 пикером события в редакторе триггера `platform_event`.
 """
 

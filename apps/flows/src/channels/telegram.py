@@ -8,8 +8,8 @@ from typing import Unpack, override
 
 import httpx
 
+from apps.flows.src.channels.telegram_api_base import get_telegram_api_base
 from apps.flows.src.models.enums import ChannelType
-from core.config import get_settings
 from core.http.client import HttpRequestKwargs, ProxyStrategy, request_with_strategy
 from core.logging import get_logger
 from core.state import ExecutionState
@@ -54,21 +54,6 @@ def _parse_mode_for_plain_send(config: JsonObject) -> str | None:
     if isinstance(raw, str) and raw.strip() == "":
         return None
     return str(raw)
-
-
-def get_telegram_api_base(config: JsonObject | None = None) -> str:
-    """
-    Возвращает базовый URL для Telegram API.
-
-    Приоритет:
-    1. config["api_base"] - для тестов
-    2. TELEGRAM_API_BASE env - для тестов
-    3. https://api.telegram.org - production
-    """
-    raw_api_base = config.get("api_base") if config is not None else None
-    if isinstance(raw_api_base, str) and raw_api_base:
-        return raw_api_base
-    return get_settings().telegram.api_base
 
 
 class TelegramChannelHandler(BaseChannelHandler):
@@ -454,4 +439,4 @@ class TelegramChannelHandler(BaseChannelHandler):
         return bot_token
 
 
-__all__ = ["TelegramChannelHandler"]
+__all__ = ["TelegramChannelHandler", "get_telegram_api_base"]

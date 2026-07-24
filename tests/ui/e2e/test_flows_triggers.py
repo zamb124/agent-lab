@@ -19,7 +19,13 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_open_editor,
     flows_open_triggers_modal,
     flows_set_platform_field,
+    flows_trigger_editor_click_mapping_example,
+    flows_trigger_editor_configure_platform_event,
+    flows_trigger_editor_configure_webhook,
+    flows_trigger_editor_expect_ready_curl,
+    flows_trigger_editor_expect_sample_panel,
     flows_trigger_editor_fill_identity,
+    flows_trigger_editor_platform_event_change_type_clears_filters,
     flows_trigger_editor_save,
     flows_trigger_editor_select_type,
     flows_triggers_click_create,
@@ -434,6 +440,44 @@ async def test_flows_webhook_trigger(
         ),
     )
 
+    secret_token = f"whsec_{unique_id[:8]}"
+    await flows_trigger_editor_configure_webhook(
+        page,
+        secret_token=secret_token,
+        secret_header="Authorization",
+        allowed_ips=["127.0.0.1"],
+    )
+    await flows_trigger_editor_expect_ready_curl(page)
+    await scenario.step(
+        "Настройте секрет, заголовок и IP",
+        page,
+        screenshot_name="webhook-security-filled",
+        label_en="Configure secret, header and IPs",
+        details=(
+            "Задайте секрет и заголовок, в котором внешняя система его передаст. "
+            "Разрешённые IP — тегами, не строкой через запятую. Ниже — готовый curl."
+        ),
+        details_en=(
+            "Set the secret and the header the external system will use. "
+            "Allowed IPs are tags, not a comma-separated string. Ready curl is below."
+        ),
+    )
+
+    await flows_trigger_editor_click_mapping_example(page, index=0)
+    await flows_trigger_editor_expect_sample_panel(page)
+    await scenario.step(
+        "Добавьте маппинг одним кликом по примеру",
+        page,
+        screenshot_name="webhook-mapping-example",
+        label_en="Add mapping by clicking an example",
+        details=(
+            "На вкладке Mapping нажмите пример — строка content → body.text появится сразу."
+        ),
+        details_en=(
+            "On the Mapping tab click an example — a content → body.text row is added at once."
+        ),
+    )
+
     await flows_trigger_editor_save(page)
     trigger_row = page.locator("flows-triggers-modal").get_by_text(
         re.compile(r"События склада|webhook|Warehouse", re.I)
@@ -441,9 +485,14 @@ async def test_flows_webhook_trigger(
     await expect(trigger_row).to_be_visible(timeout=30_000)
     persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
     triggers = persisted.get("triggers") or {}
-    assert trigger_id in triggers or any(
-        isinstance(v, dict) and v.get("type") == "webhook" for v in triggers.values()
-    ), f"webhook trigger missing: {triggers!r}"
+    saved_trigger = triggers.get(trigger_id)
+    assert isinstance(saved_trigger, dict), f"webhook trigger missing: {triggers!r}"
+    assert saved_trigger.get("type") == "webhook"
+    saved_config = saved_trigger.get("config") or {}
+    assert saved_config.get("secret_header") == "Authorization"
+    assert saved_config.get("allowed_ips") == ["127.0.0.1"]
+    output_mapping = saved_trigger.get("output_mapping") or {}
+    assert output_mapping.get("content") == "body.text"
     await scenario.step(
         "Сохраните и найдите webhook в списке",
         page,
@@ -458,5 +507,227 @@ async def test_flows_webhook_trigger(
             "**Result demonstration.** The Warehouse events webhook appears in the "
             "triggers list — an external system can call the agent over HTTP.\n\n"
             "**Summary.** You can create a webhook trigger for external store events."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="flows",
+    tag="triggers",
+    doc_slug="platform-event-filters",
+    title="Запускаем агента по событию платформы с фильтром",
+    description=(
+        "**Для чего:** агент реагирует только на нужные события шины "
+        "(например создание CRM task).\n\n"
+        "**Какие проблемы решает:** без фильтра flow сработает на каждое событие "
+        "типа — фильтр по payload сужает подписку.\n\n"
+        "**Результат:** триггер platform_event с условием entity_type=task сохранён."
+    ),
+    title_en="Run the agent on a platform event with a filter",
+    description_en=(
+        "**What for:** the agent reacts only to matching bus events "
+        "(for example CRM task created).\n\n"
+        "**Problems it solves:** without a filter the flow would fire on every event "
+        "of that type — a payload filter narrows the subscription.\n\n"
+        "**Result:** a platform_event trigger with entity_type=task is saved."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(240)
+async def test_flows_platform_event_filters(
+    scenario: ScenarioRecorder,
+    flows_ui: AppUI,
+    ui_page_system: Page,
+    auth_token_system: str,
+    unique_id: str,
+    secrets_service,
+    taskiq_worker,
+    flows_service,
+) -> None:
+    _ = secrets_service, taskiq_worker, flows_service
+    flow_id = flows_doc_flow_id("pe_trig", unique_id)
+    await flows_api_create_flow(
+        flows_ui.origin,
+        auth_token_system,
+        flows_llm_payload(
+            flow_id,
+            name=GREEN_GARDEN_AGENT_NAME,
+            prompt="Кратко подтверди событие CRM.",
+        ),
+    )
+
+    page = ui_page_system
+    await flows_open_editor(page, flows_ui, flow_id)
+    await flows_open_triggers_modal(page)
+    await scenario.step(
+        "Откройте список триггеров",
+        page,
+        screenshot_name="platform-event-triggers-modal",
+        label_en="Open the triggers list",
+        details="В меню редактора выберите «Триггеры» и создайте новый триггер.",
+        details_en="In the editor menu choose Triggers and create a new trigger.",
+    )
+
+    await flows_triggers_click_create(page)
+    await flows_trigger_editor_select_type(page, "platform_event")
+    await scenario.step(
+        "Выберите тип «Событие платформы»",
+        page,
+        screenshot_name="platform-event-type-selected",
+        label_en="Choose Platform event type",
+        details="Тип подписывает flow на шину platform:events.",
+        details_en="This type subscribes the flow to the platform:events bus.",
+    )
+
+    trigger_id = f"pe_{unique_id[:8]}"
+    await flows_trigger_editor_fill_identity(
+        page,
+        trigger_id=trigger_id,
+        name="CRM task created",
+    )
+    await flows_trigger_editor_configure_platform_event(
+        page,
+        event_type="crm/entity/created",
+        filters=[{"path": "entity_type", "op": "eq", "value": "task"}],
+    )
+    await scenario.step(
+        "Выберите событие и условие entity_type = task",
+        page,
+        screenshot_name="platform-event-filters-filled",
+        label_en="Pick event and entity_type = task filter",
+        details=(
+            "Тип события берётся из каталога. Условие path/op/value — только из "
+            "filter_fields каталога (autocomplete)."
+        ),
+        details_en=(
+            "Event type comes from the catalog. Path/op/value are only from catalog "
+            "filter_fields (autocomplete)."
+        ),
+    )
+
+    await flows_trigger_editor_platform_event_change_type_clears_filters(
+        page,
+        next_event_type="worktracker/work_item/comment_created",
+    )
+    await flows_trigger_editor_configure_platform_event(
+        page,
+        event_type="worktracker/work_item/comment_created",
+        filters=[{"path": "comment.role", "op": "eq", "value": "operator"}],
+    )
+    await flows_trigger_editor_expect_sample_panel(page)
+    await scenario.step(
+        "Смените тип события — фильтры сбросятся; задайте comment.role = operator",
+        page,
+        screenshot_name="platform-event-enum-filter",
+        label_en="Change event type clears filters; set comment.role = operator",
+        details="Enum-значение роли берётся из catalog filter_fields.",
+        details_en="The role enum value comes from catalog filter_fields.",
+    )
+
+    await flows_trigger_editor_save(page)
+    trigger_row = page.locator("flows-triggers-modal").get_by_text(
+        re.compile(r"CRM task created|platform_event|comment", re.I)
+    ).first
+    await expect(trigger_row).to_be_visible(timeout=30_000)
+
+    persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
+    triggers = persisted.get("triggers") or {}
+    saved_trigger = triggers.get(trigger_id)
+    assert isinstance(saved_trigger, dict), f"platform_event trigger missing: {triggers!r}"
+    assert saved_trigger.get("type") == "platform_event"
+    saved_config = saved_trigger.get("config") or {}
+    assert saved_config.get("event_type") == "worktracker/work_item/comment_created"
+    filters = saved_config.get("filters") or []
+    assert isinstance(filters, list) and len(filters) == 1
+    assert filters[0].get("path") == "comment.role"
+    assert filters[0].get("op") == "eq"
+    assert filters[0].get("value") == "operator"
+
+    await scenario.step(
+        "Сохраните и проверьте триггер в списке",
+        page,
+        screenshot_name="platform-event-saved-in-list",
+        label_en="Save and verify the trigger in the list",
+        details=(
+            "**Демонстрация результата.** Триггер с фильтром comment.role=operator "
+            "сохранён — агент среагирует только на комментарии оператора.\n\n"
+            "**Итог.** Вы умеете подписывать flow на событие платформы с фильтром."
+        ),
+        details_en=(
+            "**Result demonstration.** The trigger with comment.role=operator is "
+            "saved — the agent reacts only to operator comments.\n\n"
+            "**Summary.** You can subscribe a flow to a platform event with a filter."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="flows",
+    tag="triggers",
+    doc_slug="email-trigger-sample",
+    title="Смотрим sample payload почтового триггера",
+    description=(
+        "**Для чего:** понять форму входящего письма для mapping.\n\n"
+        "**Результат:** на вкладке Mapping виден sample JSON и how-to для /test."
+    ),
+    title_en="Inspect email trigger sample payload",
+    description_en=(
+        "**What for:** understand inbound mail shape for mapping.\n\n"
+        "**Result:** Mapping tab shows sample JSON and how-to for /test."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(240)
+async def test_flows_email_trigger_sample_panel(
+    scenario: ScenarioRecorder,
+    flows_ui: AppUI,
+    ui_page_system: Page,
+    auth_token_system: str,
+    unique_id: str,
+    secrets_service,
+    taskiq_worker,
+) -> None:
+    _ = secrets_service, taskiq_worker, auth_token_system
+    flow_id = flows_doc_flow_id("email_trig", unique_id)
+    await flows_api_create_flow(
+        flows_ui.origin,
+        auth_token_system,
+        flows_llm_payload(
+            flow_id,
+            name=GREEN_GARDEN_AGENT_NAME,
+            prompt="Кратко опиши входящее письмо.",
+        ),
+    )
+
+    page = ui_page_system
+    await flows_open_editor(page, flows_ui, flow_id)
+    await flows_open_triggers_modal(page)
+    await flows_triggers_click_create(page)
+    await flows_trigger_editor_select_type(page, "email")
+    await scenario.step(
+        "Выберите тип «Почта»",
+        page,
+        screenshot_name="email-type-selected",
+        label_en="Choose Email type",
+        details="Тип подписывает flow на входящие письма platform mail.",
+        details_en="This type subscribes the flow to inbound platform mail.",
+    )
+    await flows_trigger_editor_expect_sample_panel(page)
+    await scenario.step(
+        "Откройте Mapping и посмотрите sample payload",
+        page,
+        screenshot_name="email-sample-panel",
+        label_en="Open Mapping and inspect the sample payload",
+        details=(
+            "**Демонстрация результата.** Виден пример JSON письма и подсказка, "
+            "как проверить mapping через /test после сохранения.\n\n"
+            "**Итог.** Вы знаете форму payload почтового триггера."
+        ),
+        details_en=(
+            "**Result demonstration.** The sample mail JSON and /test how-to are "
+            "visible on Mapping.\n\n"
+            "**Summary.** You know the email trigger payload shape."
         ),
     )

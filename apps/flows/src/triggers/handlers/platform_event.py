@@ -29,13 +29,36 @@ from apps.flows.src.triggers.handlers.base import (
     TriggerValidationError,
 )
 from core.context import Context, User, clear_context, get_context, set_context
-from core.events import PlatformEvent
+from core.events import (
+    PlatformEvent,
+    catalog_entry_for_event_type,
+    load_platform_event_catalog_entry,
+    validate_event_filters_against_fields,
+)
 from core.logging import get_logger
 from core.types import JsonObject, JsonValue
 
 logger = get_logger(__name__)
 
 _TRIGGER_RUN_NAMESPACE = uuid.UUID("b2f5f0f6-9f0e-4c1c-9a54-6c1f6d5b8a01")
+
+
+async def validate_platform_event_trigger_config(
+    config: PlatformEventTriggerConfig,
+) -> None:
+    """Fail-closed: filters только по filter_fields каталога события."""
+    entry = await load_platform_event_catalog_entry(config.event_type)
+    if entry is None:
+        entry = catalog_entry_for_event_type(config.event_type)
+    if entry is None:
+        raise ValueError(
+            f"platform event {config.event_type!r} is not in catalog; "
+            + "register_platform_event + store_registered_platform_events required"
+        )
+    validate_event_filters_against_fields(
+        [(item.path, item.op, item.value) for item in config.filters],
+        entry.filter_fields,
+    )
 
 
 def platform_event_trigger_index_key(event_type: str) -> str:
@@ -115,6 +138,7 @@ class PlatformEventTriggerHandler(BaseTriggerHandler):
 
         try:
             config = PlatformEventTriggerConfig.model_validate(trigger.config)
+            await validate_platform_event_trigger_config(config)
         except Exception as exc:
             raise TriggerRegistrationError(
                 trigger_type="platform_event",

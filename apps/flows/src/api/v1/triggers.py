@@ -8,18 +8,29 @@ import secrets
 from typing import Annotated, ClassVar
 
 from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import ConfigDict, Field, ValidationError
 
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models import TelegramUpdate, TriggerConfig, TriggerStatus, TriggerType
+from apps.flows.src.models import (
+    PlatformEventTriggerConfig,
+    TelegramUpdate,
+    TriggerConfig,
+    TriggerStatus,
+    TriggerType,
+)
 from apps.flows.src.models.channel_config import (
     OutputAction,
     default_output_actions_for_trigger,
 )
 from apps.flows.src.triggers import TriggerValidationError
 from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
+from apps.flows.src.triggers.handlers.platform_event import (
+    validate_platform_event_trigger_config,
+)
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
+from apps.flows.src.triggers.handlers.webhook import WebhookTriggerHandler
 from apps.flows.src.triggers.input_mapper import InputMapper
 from apps.flows.src.triggers.registry import (
     TriggerReregisterDisabledError,
@@ -30,14 +41,21 @@ from apps.flows.src.triggers.trigger_type_contract import (
     effective_output_actions_for_trigger,
 )
 from apps.flows.src.triggers.verify_draft import verify_trigger_draft as run_verify
-from apps.flows.src.triggers.webhook_inbound import check_webhook_rate_limit, client_ip_allowed
+from apps.flows.src.triggers.webhook_inbound import (
+    DEFAULT_WEBHOOK_SECRET_HEADER,
+    build_webhook_trigger_payload,
+    check_webhook_rate_limit,
+    client_ip_allowed,
+    parse_webhook_json_body,
+    webhook_secret_from_request,
+)
 from core.context import get_context, set_context
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
-from core.types import JsonObject, parse_json_object
+from core.types import JsonObject
 from core.variables.resolver import VariableResolutionError
 
 logger = get_logger(__name__)
@@ -64,12 +82,22 @@ def _public_trigger_config(config: JsonObject) -> JsonObject:
     return out
 
 
-def _webhook_secret_from_request(request: Request) -> str | None:
-    for header in ("X-Trigger-Secret", "X-Webhook-Secret"):
-        v = request.headers.get(header)
-        if v:
-            return v
-    return request.query_params.get("secret")
+def _webhook_secret_header_from_config(config: JsonObject) -> str:
+    raw = config.get("secret_header")
+    if raw is None or str(raw).strip() == "":
+        return DEFAULT_WEBHOOK_SECRET_HEADER
+    return str(raw).strip()
+
+
+async def _validate_platform_event_config_or_400(config: JsonObject) -> None:
+    """Fail-closed: filters только по filter_fields каталога → 400."""
+    try:
+        validated = PlatformEventTriggerConfig.model_validate(config)
+        await validate_platform_event_trigger_config(validated)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 async def _resolve_company_from_flow_storage_identifier(
@@ -337,6 +365,9 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
             detail=f"Trigger already exists: {request.trigger_id}"
         )
 
+    if request.type == TriggerType.PLATFORM_EVENT:
+        await _validate_platform_event_config_or_400(request.config)
+
     post_enabled = request.post_flow_output_enabled
     if post_enabled is None:
         post_enabled = default_post_flow_output_enabled(request.type)
@@ -439,6 +470,9 @@ async def update_trigger(
 
     cur = flow_config.triggers[trigger_id]
     flow_config.triggers[trigger_id] = TriggerConfig.model_validate(cur.model_dump())
+
+    if flow_config.triggers[trigger_id].type == TriggerType.PLATFORM_EVENT:
+        await _validate_platform_event_config_or_400(flow_config.triggers[trigger_id].config)
 
     # Синхронизируем триггеры
     flow_config = await container.trigger_registry.sync_triggers(
@@ -679,11 +713,43 @@ async def generic_webhook(
     trigger_id: str,
     request: Request,
     container: ContainerDep,
-) -> JsonObject:
+) -> JSONResponse:
     """
     Generic webhook endpoint для внешних сервисов.
+
+    Payload envelope: {body, headers, query}. Запуск через TriggerExecutor.
     """
-    flow_config = await container.flow_repository.get(flow_id)
+    ctx = get_context()
+    if ctx and ctx.active_company:
+        flow_config = await container.flow_repository.get(flow_id)
+    else:
+        unscoped = await container.flow_repository.get_latest_by_flow_id_unscoped(flow_id)
+        if not unscoped:
+            flow_config = None
+        else:
+            flow_config, company_identifier = unscoped
+            company = await _resolve_company_from_flow_storage_identifier(
+                container,
+                company_identifier,
+            )
+            inbound_user = User(
+                user_id="webhook_inbound",
+                name="Webhook Inbound",
+                groups=["guest"],
+            )
+            set_context(
+                Context(
+                    user=inbound_user,
+                    host=ctx.host if ctx else "",
+                    session_id=ctx.session_id if ctx and ctx.session_id else "webhook_inbound",
+                    channel="triggers/webhook",
+                    language=ctx.language if ctx else Language.RU,
+                    active_company=company,
+                    user_companies=[company],
+                    trace_id=ctx.trace_id if ctx else None,
+                    metadata={**(ctx.metadata if ctx else {}), "inbound": "webhook"},
+                )
+            )
 
     if not flow_config:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -706,6 +772,7 @@ async def generic_webhook(
     if not client_ip_allowed(client_host, trigger.config.get("allowed_ips")):
         raise HTTPException(status_code=403, detail="Client IP not allowed")
 
+    secret_header = _webhook_secret_header_from_config(trigger.config)
     raw_secret = trigger.config.get("secret_token")
     if raw_secret is not None and str(raw_secret).strip() != "":
         try:
@@ -717,32 +784,60 @@ async def generic_webhook(
             )
         except VariableResolutionError as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
-        received = _webhook_secret_from_request(request)
+        received = webhook_secret_from_request(request, secret_header)
         if not received:
             raise HTTPException(status_code=403, detail="Secret required")
         if not secrets.compare_digest(expected, received):
             raise HTTPException(status_code=403, detail="Invalid secret")
 
     try:
-        payload = parse_json_object(await request.body(), "Webhook payload")
+        body = await parse_webhook_json_body(request)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid JSON body: {e}") from e
 
-    keys = list(payload.keys())
-    n = len(keys)
-    if n > 24:
-        keys = keys[:24] + ["..."]
+    payload = build_webhook_trigger_payload(request, body)
+    body_obj = payload.get("body")
+    body_keys: list[str] = []
+    if isinstance(body_obj, dict):
+        body_keys = list(body_obj.keys())
+        if len(body_keys) > 24:
+            body_keys = body_keys[:24] + ["..."]
     logger.info(
-        "Webhook received: flow_id=%s, trigger=%s, key_count=%s, top_keys=%s",
+        "Webhook received: flow_id=%s, trigger=%s, body_key_count=%s, top_keys=%s",
         flow_id,
         trigger_id,
-        n,
-        keys,
+        len(body_keys),
+        body_keys,
     )
 
-    raise HTTPException(
-        status_code=501,
-        detail="Webhook trigger execution is not implemented",
+    webhook_handler = WebhookTriggerHandler(
+        base_url="",
+        container=as_flow_runtime_container(container),
+    )
+    try:
+        result = await webhook_handler.handle(flow_id, trigger_id, payload)
+    except Exception as e:
+        logger.error(f"Webhook trigger error: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    task_id = result.get("task_id")
+    if not isinstance(task_id, str) or not task_id.strip():
+        raise HTTPException(status_code=500, detail="Webhook trigger did not return task_id")
+    context_id = result.get("context_id")
+    if not isinstance(context_id, str) or not context_id.strip():
+        raise HTTPException(status_code=500, detail="Webhook trigger did not return context_id")
+    session_id = result.get("session_id")
+    if not isinstance(session_id, str) or not session_id.strip():
+        raise HTTPException(status_code=500, detail="Webhook trigger did not return session_id")
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "status": "accepted",
+            "task_id": task_id,
+            "context_id": context_id,
+            "session_id": session_id,
+        },
     )
 
 

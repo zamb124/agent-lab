@@ -87,6 +87,14 @@ Redis-клиент шины — `events_redis_client()` (`core/events/redis_clie
   `core/app/factory.py` и `core/tasks/worker_bootstrap.py`); полный каталог
   платформы — `load_platform_event_catalog` (endpoint
   `GET /flows/api/v1/platform-events/catalog` для UI триггеров).
+- Запись каталога: `event_type`, `description`, `payload_schema`,
+  **`filter_fields`** (leaf dot-path + `value_kind` + `ops` + `enum_values`) —
+  SSOT для autocomplete фильтров триггера `platform_event`. Derive —
+  `core/events/payload_filter_fields.derive_filter_fields` из JSON Schema
+  Pydantic; UI **не** парсит schema. Новый event в коде → после store в
+  Redis UI/валидация подхватывают сами.
+- Save/register `platform_event`: filters только по `filter_fields`
+  (неизвестный path / запрещённый op → ошибка).
 - Событие, на которое можно подписаться триггером, обязано быть в каталоге.
 
 ### Что НЕ на шине (whitelist транспортов / poll / commands)
@@ -320,11 +328,17 @@ export const notesListResource = createCursorList({
 коллекция обновляется только reducer/effect фабрики.
 ## Backend → flows (триггеры)
 
+## Backend → flows (триггеры)
+
 Любой flow подписывается на любое событие платформы триггером
-`platform_event` (`event_type` из каталога + `filters` по payload) — канон
-и runtime в `flows.mdc`. Wake-up flow-сотрудника (worktracker assigned,
-sync DM/@mention) — системный маршрут той же consumer group `flows`
-(`flow_employee.mdc`).
+`platform_event` (`event_type` + `filters` из `filter_fields` каталога) —
+канон и runtime в `flows.mdc`. Leaf-поля: string/int/number/bool/enum,
+nested objects, discriminated unions (`oneOf` + discriminator),
+array скаляров (`contains`). Не фильтруются: array объектов, free-form
+`additionalProperties`, envelope (`actor_user_id` вне payload), depth > 6.
+Save/create trigger с неизвестным path/op → HTTP 400. Wake-up
+flow-сотрудника (worktracker assigned, sync DM/@mention) — системный
+маршрут той же consumer group `flows` (`flow_employee.mdc`).
 
 ## DevTools
 

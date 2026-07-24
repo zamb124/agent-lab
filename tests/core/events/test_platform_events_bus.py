@@ -7,19 +7,23 @@ import asyncio
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from apps.crm.services import crm_entity_events as _crm_entity_events
 from core.config import get_settings
 from core.events import (
+    PLATFORM_EVENT_CATALOG_KEY,
     EventDelivery,
     PlatformEvent,
+    PlatformEventCatalogEntry,
     PlatformEventGroupConsumer,
     is_registered_platform_event,
     load_platform_event_catalog,
+    load_platform_event_catalog_entry,
     publish_domain_event,
     publish_event_to_users,
     register_platform_event,
     store_registered_platform_events,
 )
-from apps.crm.services import crm_entity_events as _crm_entity_events
+from core.events.redis_client import events_redis_client
 from core.worktracker import events as _worktracker_events
 from tests.fixtures.platform_events import platform_events_listener
 
@@ -148,3 +152,33 @@ async def test_catalog_register_store_and_load(unique_id: str) -> None:
     entry = next((item for item in catalog if item.event_type == event_type), None)
     assert entry is not None
     assert "probe_id" in entry.payload_schema.get("properties", {})
+    assert any(field.path == "probe_id" for field in entry.filter_fields)
+
+
+@pytest.mark.asyncio
+async def test_load_platform_event_catalog_entry_heals_and_none(unique_id: str) -> None:
+    event_type = f"test/entry_{unique_id.replace('-', '_').lower()}/created"
+
+    class EntryPayload(BaseModel):
+        entry_id: str
+
+    schema = EntryPayload.model_json_schema()
+    stale = PlatformEventCatalogEntry(
+        event_type=event_type,
+        description="stale entry",
+        payload_schema=schema,
+        filter_fields=[],
+    )
+    redis = events_redis_client()
+    _ = await redis.hset(
+        PLATFORM_EVENT_CATALOG_KEY, mapping={event_type: stale.model_dump_json()}
+    )
+
+    healed = await load_platform_event_catalog_entry(event_type)
+    assert healed is not None
+    assert any(field.path == "entry_id" for field in healed.filter_fields)
+
+    missing = await load_platform_event_catalog_entry(
+        f"test/missing_{unique_id.replace('-', '_').lower()}/gone"
+    )
+    assert missing is None

@@ -108,15 +108,23 @@ class InputMapper:
                     return None
             else:
                 if isinstance(current, dict):
-                    current = current.get(part)
+                    if part in current:
+                        current = current.get(part)
+                    else:
+                        matched_key = next(
+                            (key for key in current if str(key).casefold() == part.casefold()),
+                            None,
+                        )
+                        current = current.get(matched_key) if matched_key is not None else None
                 else:
                     return None
 
         return current
 
     def _parse_path(self, path: str) -> list[PathPart]:
+        """Dot-path с поддержкой дефисов в ключах (headers.X-Event)."""
         parts: list[PathPart] = []
-        pattern = re.compile(r"(\w+)|\[(\d+)\]")
+        pattern = re.compile(r"([^.\[]+)|\[(\d+)\]")
 
         for match in pattern.finditer(path):
             if match.group(1):

@@ -12,6 +12,11 @@ from __future__ import annotations
 
 import pytest
 
+from tests.flows.integration.notification_server import (  # noqa: F401
+    NotificationServer,
+    notification_server,
+)
+
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """pytestmark в conftest не наследуется модулями — маркируем integration явно."""

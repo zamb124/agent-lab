@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from croniter import croniter
 from croniter.croniter import CroniterBadCronError
 
-from apps.flows.config import get_settings
-from apps.flows.src.models import EmailTriggerConfig, TriggerType
+from apps.flows.src.channels.telegram_api_base import get_telegram_api_base
+from apps.flows.src.models import EmailTriggerConfig, TriggerType, WebhookTriggerConfig
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.mail.exceptions import MailConnectionNotFoundError
@@ -49,7 +49,7 @@ async def verify_telegram_config(config: JsonObject) -> VerifyResult:
     if not token_s:
         return False, {}, "bot_token_required", "Укажите токен бота (bot_token)."
 
-    base = get_settings().telegram.api_base
+    base = get_telegram_api_base(config)
     url = f"{base.rstrip('/')}/bot{token_s}/getMe"
     try:
         async with get_httpx_client(timeout=20.0) as client:
@@ -125,9 +125,17 @@ def verify_cron_config(config: JsonObject) -> VerifyResult:
 def verify_webhook_config(
     config: JsonObject, flow_id: str, trigger_id: str | None
 ) -> VerifyResult:
-    secret = config.get("secret_token")
+    try:
+        webhook_config = WebhookTriggerConfig.model_validate(config)
+    except Exception as exc:
+        return False, {}, "webhook_config_invalid", str(exc)
+
     meta: JsonObject = {
-        "has_secret": bool(secret and str(secret).strip()),
+        "has_secret": bool(
+            webhook_config.secret_token and str(webhook_config.secret_token).strip()
+        ),
+        "secret_header": webhook_config.secret_header,
+        "allowed_ips": list(webhook_config.allowed_ips),
         "flow_id": flow_id,
     }
     tid = str(trigger_id).strip() if trigger_id else ""

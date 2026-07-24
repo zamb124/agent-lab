@@ -58,6 +58,7 @@ from apps.flows.src.tools.registry import ToolRegistry
 from apps.flows.src.triggers.handlers.email import EmailTriggerHandler
 from apps.flows.src.triggers.handlers.platform_event import PlatformEventTriggerHandler
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
+from apps.flows.src.triggers.handlers.webhook import WebhookTriggerHandler
 from apps.flows.src.triggers.registry import TriggerRegistry
 from core.capabilities import CAPABILITY_LANGUAGE_SET
 from core.clients.a2a_client import A2AClient
@@ -372,6 +373,7 @@ class FlowContainer(BaseContainer):
         registry.register_handler(TriggerType.TELEGRAM, TelegramTriggerHandler)
         registry.register_handler(TriggerType.EMAIL, EmailTriggerHandler)
         registry.register_handler(TriggerType.PLATFORM_EVENT, PlatformEventTriggerHandler)
+        registry.register_handler(TriggerType.WEBHOOK, WebhookTriggerHandler)
 
         return registry
 

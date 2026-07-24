@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import BaseModel, Field
 
+from apps.crm.services import crm_entity_events as _crm_entity_events
 from apps.flows.src.models import EventFilter, PlatformEventTriggerConfig
 from apps.flows.src.triggers.handlers.platform_event import (
     platform_event_matches_filters,
     platform_event_trigger_index_key,
     platform_event_trigger_index_member,
     platform_event_trigger_run_id,
+    validate_platform_event_trigger_config,
 )
+from core.events import register_platform_event
+from core.worktracker import events as _worktracker_events
+
+_ = (_crm_entity_events, _worktracker_events)
+
 
 
 def _config(filters: list[EventFilter]) -> PlatformEventTriggerConfig:
@@ -61,6 +69,85 @@ def test_contains_on_string_and_list() -> None:
 def test_event_type_validated() -> None:
     with pytest.raises(ValueError):
         _ = PlatformEventTriggerConfig(event_type="not-an-event", filters=[])
+
+
+@pytest.mark.asyncio
+async def test_validate_trigger_config_rejects_unknown_path() -> None:
+    config = PlatformEventTriggerConfig(
+        event_type="crm/entity/created",
+        filters=[EventFilter(path="not_a_real_field", op="eq", value="x")],
+    )
+    with pytest.raises(ValueError, match="unknown filter path"):
+        await validate_platform_event_trigger_config(config)
+
+
+@pytest.mark.asyncio
+async def test_validate_trigger_config_accepts_catalog_path() -> None:
+    config = PlatformEventTriggerConfig(
+        event_type="worktracker/work_item/comment_created",
+        filters=[EventFilter(path="comment.role", op="eq", value="operator")],
+    )
+    await validate_platform_event_trigger_config(config)
+
+
+@pytest.mark.asyncio
+async def test_validate_trigger_config_rejects_wrong_boolean_integer_number(
+    unique_id: str,
+) -> None:
+    event_type = f"test/typed_{unique_id.replace('-', '_').lower()}/changed"
+
+    class TypedPayload(BaseModel):
+        flag: bool = False
+        score: int = 0
+        ratio: float = 0.0
+
+    register_platform_event(event_type, TypedPayload, description="Typed probe.")
+
+    with pytest.raises(ValueError, match="expects boolean"):
+        await validate_platform_event_trigger_config(
+            PlatformEventTriggerConfig(
+                event_type=event_type,
+                filters=[EventFilter(path="flag", op="eq", value="true")],
+            )
+        )
+    with pytest.raises(ValueError, match="expects integer"):
+        await validate_platform_event_trigger_config(
+            PlatformEventTriggerConfig(
+                event_type=event_type,
+                filters=[EventFilter(path="score", op="eq", value=True)],
+            )
+        )
+    with pytest.raises(ValueError, match="expects number"):
+        await validate_platform_event_trigger_config(
+            PlatformEventTriggerConfig(
+                event_type=event_type,
+                filters=[EventFilter(path="ratio", op="eq", value="1.5")],
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_validate_trigger_config_rejects_when_no_filterable_fields(
+    unique_id: str,
+) -> None:
+    event_type = f"test/empty_{unique_id.replace('-', '_').lower()}/created"
+
+    class NestedOnly(BaseModel):
+        role: str
+
+    class EmptyLeavesPayload(BaseModel):
+        files: list[NestedOnly] = Field(default_factory=list)
+
+    register_platform_event(
+        event_type, EmptyLeavesPayload, description="No filterable leaves."
+    )
+    with pytest.raises(ValueError, match="no filterable fields"):
+        await validate_platform_event_trigger_config(
+            PlatformEventTriggerConfig(
+                event_type=event_type,
+                filters=[EventFilter(path="files", op="eq", value="x")],
+            )
+        )
 
 
 def test_run_id_deterministic_for_idempotency() -> None:

@@ -18,6 +18,7 @@
 from core.events.catalog import (
     PLATFORM_EVENT_CATALOG_KEY,
     load_platform_event_catalog,
+    load_platform_event_catalog_entry,
     store_registered_platform_events,
 )
 from core.events.consumer import (
@@ -34,6 +35,12 @@ from core.events.contract import (
     PlatformEventMeta,
     assert_platform_event_type,
 )
+from core.events.payload_filter_fields import (
+    PlatformEventFilterField,
+    derive_filter_fields,
+    filter_field_by_path,
+    validate_event_filters_against_fields,
+)
 from core.events.publisher import (
     close_publisher_client,
     publish_domain_event,
@@ -47,6 +54,7 @@ from core.events.redis_client import events_redis_client
 from core.events.registry import (
     PlatformEventCatalogEntry,
     assert_publishable_platform_event_type,
+    catalog_entry_for_event_type,
     is_dynamic_notify_event_type,
     is_registered_platform_event,
     platform_event_catalog,
@@ -63,17 +71,22 @@ __all__ = [
     "EventDelivery",
     "PlatformEvent",
     "PlatformEventCatalogEntry",
+    "PlatformEventFilterField",
     "PlatformEventGroupConsumer",
     "PlatformEventHandler",
     "PlatformEventMeta",
     "PlatformEventTailReader",
     "assert_platform_event_type",
     "assert_publishable_platform_event_type",
+    "catalog_entry_for_event_type",
     "close_publisher_client",
+    "derive_filter_fields",
     "events_redis_client",
+    "filter_field_by_path",
     "is_dynamic_notify_event_type",
     "is_registered_platform_event",
     "load_platform_event_catalog",
+    "load_platform_event_catalog_entry",
     "platform_event_catalog",
     "platform_event_payload_model",
     "publish_domain_event",
@@ -85,4 +98,5 @@ __all__ = [
     "register_platform_event",
     "registered_platform_event_types",
     "store_registered_platform_events",
+    "validate_event_filters_against_fields",
 ]

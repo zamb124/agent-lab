@@ -8,6 +8,7 @@ EmailTriggerHandler — platform mail (MailboxBinding) → TriggerExecutor.
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime, timezone
 from typing import override
 
@@ -38,6 +39,24 @@ from core.mail.models import InboundMailMessage, MailboxBinding, MailConnectionS
 from core.types import JsonObject
 
 logger = get_logger(__name__)
+
+_EMAIL_TRIGGER_RUN_NAMESPACE = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+
+
+def email_trigger_run_id(
+    *,
+    mailbox_binding_id: str,
+    flow_id: str,
+    trigger_id: str,
+    mail_uid: str,
+) -> str:
+    """Детерминированный id run'а для дедупа повторного dispatch того же UID."""
+    return str(
+        uuid.uuid5(
+            _EMAIL_TRIGGER_RUN_NAMESPACE,
+            f"{mailbox_binding_id}:{flow_id}:{trigger_id}:{mail_uid}",
+        )
+    )
 
 
 class EmailTriggerHandler(BaseTriggerHandler):
@@ -317,6 +336,12 @@ async def dispatch_email_triggers_for_messages(
                     binding=binding,
                     message=message,
                 )
+                run_id = email_trigger_run_id(
+                    mailbox_binding_id=binding.mailbox_binding_id,
+                    flow_id=flow_id,
+                    trigger_id=trigger_id,
+                    mail_uid=message.uid,
+                )
                 executor = TriggerExecutor()
                 _ = await executor.execute(
                     flow_id=flow_id,
@@ -327,6 +352,8 @@ async def dispatch_email_triggers_for_messages(
                         "mailbox_binding_id": binding.mailbox_binding_id,
                         "mail_uid": message.uid,
                     },
+                    task_id=run_id,
+                    context_id=run_id,
                 )
                 _ = await container.shared_storage.set(
                     key=dedup_key,
@@ -349,4 +376,5 @@ async def dispatch_email_triggers_for_messages(
 __all__ = [
     "EmailTriggerHandler",
     "dispatch_email_triggers_for_messages",
+    "email_trigger_run_id",
 ]

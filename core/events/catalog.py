@@ -55,10 +55,21 @@ async def load_platform_event_catalog() -> list[PlatformEventCatalogEntry]:
     hgetall = cast(_RedisHGetAllCommand, client.hgetall)
     raw_entries = await hgetall(PLATFORM_EVENT_CATALOG_KEY)
     entries = [
-        PlatformEventCatalogEntry.model_validate_json(raw_entry)
+        PlatformEventCatalogEntry.model_validate_json(raw_entry).with_ensured_filter_fields()
         for _event_type, raw_entry in sorted(raw_entries.items())
     ]
     return entries
+
+
+async def load_platform_event_catalog_entry(
+    event_type: str,
+) -> PlatformEventCatalogEntry | None:
+    """Одна запись каталога по типу; нет в Redis — None (после auto-heal filter_fields)."""
+    catalog = await load_platform_event_catalog()
+    for entry in catalog:
+        if entry.event_type == event_type:
+            return entry
+    return None
 
 
 __all__ = [
@@ -67,6 +78,7 @@ __all__ = [
     "is_dynamic_notify_event_type",
     "is_registered_platform_event",
     "load_platform_event_catalog",
+    "load_platform_event_catalog_entry",
     "platform_event_catalog",
     "platform_event_payload_model",
     "register_platform_event",

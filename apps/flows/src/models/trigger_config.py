@@ -225,6 +225,9 @@ class CronTriggerConfig(StrictBaseModel):
     )
 
 
+_WEBHOOK_SECRET_HEADER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+
 class WebhookTriggerConfig(StrictBaseModel):
     """Конфигурация HTTP Webhook триггера."""
 
@@ -232,14 +235,27 @@ class WebhookTriggerConfig(StrictBaseModel):
         default=None,
         description="Секретный токен для верификации"
     )
+    secret_header: str = Field(
+        default="X-Trigger-Secret",
+        description="Имя HTTP-заголовка, из которого читается secret_token",
+    )
     allowed_ips: list[str] = Field(
         default_factory=list,
         description="Whitelist IP адресов (пусто = все)"
     )
-    response_mode: str = Field(
-        default="async",
-        description="sync = ждать ответа, async = сразу 202"
-    )
+
+    @field_validator("secret_header")
+    @classmethod
+    def _validate_secret_header(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("secret_header is required")
+        if not _WEBHOOK_SECRET_HEADER_RE.match(stripped):
+            raise ValueError(
+                "secret_header must match [A-Za-z0-9][A-Za-z0-9_-]* "
+                + "(no spaces, colons, or other punctuation)"
+            )
+        return stripped
 
 
 class EmailTriggerConfig(StrictBaseModel):

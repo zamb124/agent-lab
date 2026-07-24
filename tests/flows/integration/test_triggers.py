@@ -9,17 +9,10 @@
 5. Telegram webhook обработка
 
 ВАЖНО: Используется реальный Redis и PostgreSQL.
-Только LLM и Telegram API мокаются.
+Только LLM мокается (MockLLM). Telegram/webhook HTTP — через NotificationServer.
 """
 
-import asyncio
-import socket
-
 import pytest
-import pytest_asyncio
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from granian.server.embed import Server as GranianEmbedServer
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig, TriggerConfig, TriggerStatus, TriggerType
@@ -191,7 +184,33 @@ class TestTriggerRegistry:
         )
         result = await registry.sync_triggers(flow_id, old_config, new_config)
         assert "webhook_1" in result.triggers
-        assert result.triggers["webhook_1"].status == TriggerStatus.ERROR
+        assert result.triggers["webhook_1"].status == TriggerStatus.ACTIVE
+        assert result.triggers["webhook_1"].webhook_url is not None
+        assert "/triggers/webhook/" in result.triggers["webhook_1"].webhook_url
+
+    @pytest.mark.asyncio
+    async def test_sync_triggers_cron_without_handler_is_error(self, app, container, unique_id):
+        """cron без handler в registry → status=error (пока runtime не реализован)."""
+        registry = container.trigger_registry
+        flow_id = f"cron_sync_{unique_id}"
+        trigger = TriggerConfig(
+            trigger_id="daily",
+            name="Daily",
+            type=TriggerType.CRON,
+            enabled=True,
+            config={"cron": "0 9 * * *", "timezone": "UTC"},
+            post_flow_output_enabled=False,
+        )
+        new_config = FlowConfig(
+            flow_id=flow_id,
+            name="Cron Agent",
+            entry="main",
+            nodes={"main": {"type": "llm_node", "prompt": "Test"}},
+            triggers={"daily": trigger},
+        )
+        result = await registry.sync_triggers(flow_id, None, new_config)
+        assert result.triggers["daily"].status == TriggerStatus.ERROR
+        assert result.triggers["daily"].last_error is not None
 
     @pytest.mark.asyncio
     async def test_sync_triggers_unregisters_removed(self, app, container, unique_id):
@@ -298,8 +317,12 @@ class TestTriggersAPI:
                 "name": "New Trigger",
                 "type": "webhook",
                 "enabled": True,
-                "config": {"headers": {"X-Custom": "value"}},
-                "input_mapping": {"content": "@trigger:body.text"},
+                "config": {
+                    "secret_token": "tok",
+                    "secret_header": "X-Trigger-Secret",
+                    "allowed_ips": [],
+                },
+                "output_mapping": {"content": "body.text"},
             },
         )
         assert response.status_code == 200
@@ -447,12 +470,12 @@ class TestTriggersAPI:
 
     @pytest.mark.asyncio
     async def test_verify_telegram_substitutes_api_redacted_placeholder_from_stored_trigger(
-        self, app, client, container, unique_id
+        self, app, client, container, unique_id, notification_server
     ):
-        """POST verify: если UI прислал (redacted) из list/get, подставляем bot_token из БД."""
-        from unittest.mock import AsyncMock, patch
-
+        """POST verify: (redacted) → bot_token из БД/@var → реальный getMe через api_base."""
+        (server, base_url) = notification_server
         flow_id = f"api_test_{unique_id}"
+        resolved_token = "123456:RESOLVED_TOKEN_X"
         trigger = TriggerConfig(
             trigger_id="tg_one",
             name="TG",
@@ -464,56 +487,48 @@ class TestTriggersAPI:
             name="Test Agent",
             entry="main",
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
-            variables={"bot_tok": "123456:RESOLVED_TOKEN_X"},
+            variables={"bot_tok": resolved_token},
             triggers={"tg_one": trigger},
         )
         await container.flow_repository.set(agent)
-        with patch(
-            "apps.flows.src.triggers.verify_draft.verify_telegram_config", new_callable=AsyncMock
-        ) as m:
-            m.return_value = (True, {"api": "getMe", "http_status": 200}, None, None)
-            response = await client.post(
-                f"/flows/api/v1/flows/{flow_id}/triggers/verify",
-                json={
-                    "type": "telegram",
-                    "config": {"bot_token": "(redacted)"},
-                    "trigger_id": "tg_one",
-                    "branch_id": "default",
+        response = await client.post(
+            f"/flows/api/v1/flows/{flow_id}/triggers/verify",
+            json={
+                "type": "telegram",
+                "config": {
+                    "bot_token": "(redacted)",
+                    "api_base": f"{base_url}/telegram",
                 },
-            )
+                "trigger_id": "tg_one",
+                "branch_id": "default",
+            },
+        )
         assert response.status_code == 200
         body = response.json()
         assert body["ok"] is True
-        m.assert_awaited_once()
-        call_cfg = m.await_args[0][0]
-        assert call_cfg.get("bot_token") == "123456:RESOLVED_TOKEN_X"
+        assert body["metadata"]["api"] == "getMe"
+        get_me = server.get_requests("telegram_get_me")
+        assert len(get_me) == 1
+        assert resolved_token in get_me[0]["token"]
         await container.flow_repository.delete(flow_id)
 
     @pytest.mark.asyncio
-    async def test_reregister_telegram_ok_with_mocked_httpx(
-        self, app, client, container, unique_id
+    async def test_reregister_telegram_ok_with_api_base(
+        self, app, client, container, unique_id, notification_server
     ):
-        from contextlib import asynccontextmanager
-        from unittest.mock import AsyncMock, MagicMock, patch
-
-        @asynccontextmanager
-        async def _mock_httpx():
-            c = MagicMock()
-            r = MagicMock()
-            r.status_code = 200
-            r.content = b'{"ok": true, "result": true}'
-            r.text = '{"ok": true, "result": true}'
-            r.json = MagicMock(return_value={"ok": True, "result": True})
-            c.post = AsyncMock(return_value=r)
-            yield c
-
+        """reregister → setWebhook на локальный api_base (NotificationServer), без mock."""
+        (server, base_url) = notification_server
         flow_id = f"api_test_{unique_id}"
+        bot_token = "123456:TEST_REREG_TOKEN"
         trigger = TriggerConfig(
             trigger_id="tg_reg",
             name="TG",
             type=TriggerType.TELEGRAM,
             enabled=True,
-            config={"bot_token": "123456:TEST_REREG_TOKEN"},
+            config={
+                "bot_token": bot_token,
+                "api_base": f"{base_url}/telegram",
+            },
         )
         agent = FlowConfig(
             flow_id=flow_id,
@@ -523,17 +538,18 @@ class TestTriggersAPI:
             triggers={"tg_reg": trigger},
         )
         await container.flow_repository.set(agent)
-        with patch(
-            "apps.flows.src.triggers.handlers.telegram.get_httpx_client",
-            lambda *a, **k: _mock_httpx(),
-        ):
-            response = await client.post(
-                f"/flows/api/v1/flows/{flow_id}/triggers/tg_reg/reregister"
-            )
+        response = await client.post(
+            f"/flows/api/v1/flows/{flow_id}/triggers/tg_reg/reregister"
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["trigger_id"] == "tg_reg"
         assert data["status"] == "active"
+        set_hooks = server.get_requests("telegram_set_webhook")
+        assert len(set_hooks) == 1
+        assert bot_token in set_hooks[0]["token"]
+        assert isinstance(set_hooks[0]["data"].get("url"), str)
+        assert set_hooks[0]["data"]["url"].strip() != ""
         await container.flow_repository.delete(flow_id)
 
     @pytest.mark.asyncio
@@ -578,41 +594,6 @@ class TestTriggersAPI:
         await container.flow_repository.set(agent)
         response = await client.post(f"/flows/api/v1/flows/{flow_id}/triggers/tg_off/reregister")
         assert response.status_code == 400
-        await container.flow_repository.delete(flow_id)
-
-    @pytest.mark.asyncio
-    async def test_generic_webhook_requires_secret_header(self, app, client, container, unique_id):
-        """Generic webhook: при secret_token в конфиге — заголовок; затем 501 до реализации."""
-        flow_id = f"api_test_{unique_id}"
-        trigger = TriggerConfig(
-            trigger_id="gh",
-            name="G",
-            type=TriggerType.WEBHOOK,
-            enabled=True,
-            config={"secret_token": "my-shared-secret"},
-        )
-        agent = FlowConfig(
-            flow_id=flow_id,
-            name="Test Agent",
-            entry="main",
-            nodes={"main": {"type": "llm_node", "prompt": "Test"}},
-            triggers={"gh": trigger},
-        )
-        await container.flow_repository.set(agent)
-        r1 = await client.post(f"/flows/api/v1/triggers/webhook/{flow_id}/gh", json={"a": 1})
-        assert r1.status_code == 403
-        r2 = await client.post(
-            f"/flows/api/v1/triggers/webhook/{flow_id}/gh",
-            json={"a": 1},
-            headers={"X-Trigger-Secret": "wrong"},
-        )
-        assert r2.status_code == 403
-        r3 = await client.post(
-            f"/flows/api/v1/triggers/webhook/{flow_id}/gh",
-            json={"a": 1},
-            headers={"X-Trigger-Secret": "my-shared-secret"},
-        )
-        assert r3.status_code == 501
         await container.flow_repository.delete(flow_id)
 
 
@@ -1596,131 +1577,6 @@ class TestTriggerWithOutputActionsE2E:
         assert loaded_action.channel == ChannelType.TELEGRAM
         assert loaded_action.action == "send_message"
         await container.flow_repository.delete(flow_id)
-
-
-class NotificationServer:
-    """
-    Реальный HTTP сервер для приёма уведомлений.
-
-    Без моков - принимает реальные HTTP запросы.
-    """
-
-    def __init__(self, host: str = "127.0.0.1", port: int = 0):
-        self.host = host
-        self.port = port
-        self.received_requests: list = []
-        self._app = FastAPI()
-        self._app.add_api_route("/notify", self._handle_notify, methods=["POST"])
-        self._app.add_api_route(
-            "/telegram/{token}/sendMessage", self._handle_telegram_send_message, methods=["POST"]
-        )
-        self._app.add_api_route(
-            "/telegram/{token}/sendPhoto", self._handle_telegram_send_photo, methods=["POST"]
-        )
-        self._app.add_api_route(
-            "/telegram/{token}/sendDocument", self._handle_telegram_send_document, methods=["POST"]
-        )
-        self._app.add_api_route(
-            "/telegram/{token}/sendMessageDraft",
-            self._handle_telegram_send_message_draft,
-            methods=["POST"],
-        )
-        self._server: GranianEmbedServer | None = None
-        self._server_task: asyncio.Task | None = None
-
-    async def _handle_notify(self, request: Request) -> JSONResponse:
-        """Обработчик уведомлений для webhook."""
-        data = await request.json()
-        headers = dict(request.headers)
-        self.received_requests.append({"type": "notify", "data": data, "headers": headers})
-        return JSONResponse({"status": "ok"})
-
-    async def _handle_telegram_send_message(self, token: str, request: Request) -> JSONResponse:
-        """Обработчик Telegram sendMessage."""
-        data = await request.json()
-        self.received_requests.append(
-            {"type": "telegram_send_message", "token": token, "data": data}
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "result": {
-                    "message_id": 12345,
-                    "chat": {"id": data.get("chat_id")},
-                    "text": data.get("text"),
-                },
-            }
-        )
-
-    async def _handle_telegram_send_photo(self, token: str, request: Request) -> JSONResponse:
-        """Обработчик Telegram sendPhoto."""
-        data = await request.json()
-        self.received_requests.append({"type": "telegram_send_photo", "token": token, "data": data})
-        return JSONResponse({"ok": True, "result": {"message_id": 12346}})
-
-    async def _handle_telegram_send_document(self, token: str, request: Request) -> JSONResponse:
-        """Обработчик Telegram sendDocument."""
-        data = await request.json()
-        self.received_requests.append(
-            {"type": "telegram_send_document", "token": token, "data": data}
-        )
-        return JSONResponse({"ok": True, "result": {"message_id": 12347}})
-
-    async def _handle_telegram_send_message_draft(
-        self, token: str, request: Request
-    ) -> JSONResponse:
-        """Обработчик Telegram sendMessageDraft."""
-        data = await request.json()
-        self.received_requests.append(
-            {"type": "telegram_send_message_draft", "token": token, "data": data}
-        )
-        return JSONResponse({"ok": True, "result": True})
-
-    async def start(self) -> str:
-        """Запускает granian embed-сервер и возвращает base URL."""
-        if self.port == 0:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind((self.host, 0))
-                self.port = s.getsockname()[1]
-        self._server = GranianEmbedServer(
-            self._app, interface="asgi", address=self.host, port=self.port
-        )
-        self._server_task = asyncio.create_task(self._server.serve())
-        for _ in range(100):
-            try:
-                reader, writer = await asyncio.open_connection(self.host, self.port)
-                writer.close()
-                await writer.wait_closed()
-                break
-            except OSError:
-                await asyncio.sleep(0.05)
-        else:
-            raise RuntimeError(f"granian embed server не поднялся на {self.host}:{self.port}")
-        return f"http://{self.host}:{self.port}"
-
-    async def stop(self):
-        if self._server is None:
-            return
-        self._server.stop()
-        if self._server_task is not None:
-            await self._server_task
-
-    def clear(self):
-        self.received_requests.clear()
-
-    def get_requests(self, request_type: str = None) -> list:
-        if request_type:
-            return [r for r in self.received_requests if r["type"] == request_type]
-        return self.received_requests
-
-
-@pytest_asyncio.fixture
-async def notification_server():
-    """Фикстура: поднимает notification сервер."""
-    server = NotificationServer()
-    base_url = await server.start()
-    yield (server, base_url)
-    await server.stop()
 
 
 class TestWebhookChannelE2E:

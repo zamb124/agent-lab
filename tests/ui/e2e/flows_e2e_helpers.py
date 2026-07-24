@@ -2553,6 +2553,8 @@ async def flows_trigger_editor_select_type(page: Page, trigger_type: str) -> Non
         "telegram": re.compile(r"Telegram"),
         "cron": re.compile(r"Cron|Расписан"),
         "webhook": re.compile(r"Webhook"),
+        "email": re.compile(r"Почта|Email|Mail", re.I),
+        "platform_event": re.compile(r"Событие платформы|Platform event", re.I),
     }
     label = type_labels.get(trigger_type)
     if label is None:
@@ -2560,6 +2562,25 @@ async def flows_trigger_editor_select_type(page: Page, trigger_type: str) -> Non
     target = option.filter(has_text=label).first
     await expect(target).to_be_visible(timeout=15_000)
     await target.click()
+
+
+async def flows_trigger_editor_expect_sample_panel(page: Page) -> None:
+    """Mapping tab: sample payload panel visible."""
+    editor = page.locator("flows-trigger-editor-modal").first
+    await flows_trigger_editor_open_tab(page, "mapping")
+    await expect(editor.locator(".sample-payload-block").first).to_be_visible(timeout=15_000)
+    await expect(editor.locator("pre.sample-json").first).to_be_visible(timeout=10_000)
+
+
+async def flows_trigger_editor_expect_ready_curl(page: Page) -> None:
+    """Config tab: ready curl block for webhook/telegram."""
+    editor = page.locator("flows-trigger-editor-modal").first
+    await flows_trigger_editor_open_tab(page, "config")
+    curl_box = editor.locator("pre.curl-box").first
+    await expect(curl_box).to_be_visible(timeout=15_000)
+    curl_text = await curl_box.inner_text()
+    if "curl -X POST" not in curl_text:
+        raise AssertionError(f"ready curl missing POST: {curl_text!r}")
 
 
 async def flows_trigger_editor_fill_identity(
@@ -2572,6 +2593,151 @@ async def flows_trigger_editor_fill_identity(
     fields = editor.locator("platform-field")
     await flows_set_platform_field(fields.nth(1), trigger_id)
     await flows_set_platform_field(fields.nth(2), name)
+
+
+async def flows_trigger_editor_configure_webhook(
+    page: Page,
+    *,
+    secret_token: str,
+    secret_header: str = "X-Trigger-Secret",
+    allowed_ips: list[str] | None = None,
+) -> None:
+    """Заполняет webhook config (secret / header / IP tags) на вкладке Configuration."""
+    editor = page.locator("flows-trigger-editor-modal").first
+    await expect(editor).to_be_visible(timeout=15_000)
+    ips = list(allowed_ips) if allowed_ips is not None else ["127.0.0.1"]
+    await editor.evaluate(
+        """
+        (el, payload) => {
+            el._config = {
+                ...(el._config && typeof el._config === 'object' ? el._config : {}),
+                secret_token: payload.secret_token,
+                secret_header: payload.secret_header,
+                allowed_ips: payload.allowed_ips,
+            };
+            el.isDirty = true;
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+        }
+        """,
+        {
+            "secret_token": secret_token,
+            "secret_header": secret_header,
+            "allowed_ips": ips,
+        },
+    )
+    await expect(editor.locator(".config-intro").first).to_be_visible(timeout=10_000)
+
+
+async def flows_trigger_editor_configure_platform_event(
+    page: Page,
+    *,
+    event_type: str,
+    filters: list[dict[str, object]] | None = None,
+) -> None:
+    """Задаёт event_type + filters на вкладке Configuration (реальный catalog на бэке)."""
+    editor = page.locator("flows-trigger-editor-modal").first
+    await expect(editor).to_be_visible(timeout=15_000)
+    await expect(
+        editor.locator(".config-section-title").filter(
+            has_text=re.compile(r"Событие платформы|Platform event", re.I)
+        )
+    ).to_be_visible(timeout=15_000)
+    # Catalog async load — ждём enum event_type
+    await expect(editor.locator("platform-field[type='enum']").first).to_be_visible(
+        timeout=30_000
+    )
+    filter_rows = list(filters) if filters is not None else []
+    await editor.evaluate(
+        """
+        (el, payload) => {
+            el._config = {
+                ...(el._config && typeof el._config === 'object' ? el._config : {}),
+                event_type: payload.event_type,
+                filters: payload.filters,
+            };
+            el._outputMapping = [
+                { state: 'content', payload: '@const:platform_event' },
+            ];
+            el.isDirty = true;
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+        }
+        """,
+        {"event_type": event_type, "filters": filter_rows},
+    )
+    await expect(editor.locator(".event-filter-row")).to_have_count(
+        len(filter_rows), timeout=10_000
+    )
+
+
+async def flows_trigger_editor_platform_event_change_type_clears_filters(
+    page: Page,
+    *,
+    next_event_type: str,
+) -> None:
+    """Смена event_type через change → filters сбрасываются в []."""
+    editor = page.locator("flows-trigger-editor-modal").first
+    event_field = editor.locator(".config-section platform-field[type='enum']").first
+    await expect(event_field).to_be_visible(timeout=10_000)
+    await event_field.evaluate(
+        """
+        (el, value) => {
+            el.value = value;
+            el.dispatchEvent(
+                new CustomEvent('change', {
+                    detail: { value },
+                    bubbles: true,
+                    composed: true,
+                })
+            );
+        }
+        """,
+        next_event_type,
+    )
+    cleared = await editor.evaluate(
+        """
+        (el) => {
+            const filters = el._config && Array.isArray(el._config.filters)
+                ? el._config.filters
+                : null;
+            return {
+                event_type: el._config ? el._config.event_type : null,
+                filters,
+            };
+        }
+        """
+    )
+    assert cleared["event_type"] == next_event_type
+    assert cleared["filters"] == []
+
+
+async def flows_trigger_editor_open_tab(page: Page, tab: str) -> None:
+    editor = page.locator("flows-trigger-editor-modal").first
+    control = editor.locator("platform-segmented-control").first
+    await expect(control).to_be_visible(timeout=10_000)
+    labels = {
+        "config": re.compile(r"Configuration|Конфигурац", re.I),
+        "mapping": re.compile(r"Mapping|Маппинг", re.I),
+        "output": re.compile(r"Output|Вывод", re.I),
+    }
+    label = labels.get(tab)
+    if label is None:
+        raise ValueError(f"Unsupported trigger editor tab: {tab!r}")
+    button = control.get_by_role("button", name=label).first
+    if await button.count() == 0:
+        button = control.locator("button, [role='button'], .segment").filter(has_text=label).first
+    await expect(button).to_be_visible(timeout=10_000)
+    await button.click()
+
+
+async def flows_trigger_editor_click_mapping_example(page: Page, *, index: int = 0) -> None:
+    """Кликает пример маппинга — должна появиться строка state→payload."""
+    editor = page.locator("flows-trigger-editor-modal").first
+    await flows_trigger_editor_open_tab(page, "mapping")
+    example = editor.locator("article.examples-row, button.examples-row").nth(index)
+    await expect(example).to_be_visible(timeout=10_000)
+    before = await editor.locator(".mapping-row").count()
+    await example.click()
+    await expect(editor.locator(".mapping-row")).to_have_count(before + 1, timeout=10_000)
 
 
 async def flows_save_variable_editor_modal(modal: Locator) -> None:

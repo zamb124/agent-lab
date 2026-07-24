@@ -17,6 +17,7 @@ from apps.flows.src.triggers.handlers.base import (
 )
 from apps.flows.src.triggers.handlers.email import EmailTriggerHandler
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
+from apps.flows.src.triggers.handlers.webhook import WebhookTriggerHandler
 from apps.flows.src.triggers.input_mapper import InputMapper
 from apps.flows.src.triggers.output_actions import OutputActionExecutor
 from apps.flows.src.triggers.registry import TriggerRegistry
@@ -31,4 +32,5 @@ __all__ = [
     "TriggerRegistrationError",
     "TriggerRegistry",
     "TriggerValidationError",
+    "WebhookTriggerHandler",
 ]

@@ -434,6 +434,12 @@ async def mail_sync_binding_task(
             messages=result.new_messages,
             dedup_ttl_seconds=config.notification_dedup_ttl_seconds,
         )
+        _ = await dispatch_email_triggers_for_messages(
+            container=as_flow_runtime_container(container),
+            binding=binding,
+            messages=result.new_messages,
+            dedup_ttl_seconds=config.notification_dedup_ttl_seconds,
+        )
     return {
         "mailbox_binding_id": mailbox_binding_id,
         "bootstrap": result.bootstrap,

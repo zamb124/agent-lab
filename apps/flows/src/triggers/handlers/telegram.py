@@ -11,6 +11,7 @@ import secrets
 from typing import override
 
 from apps.flows.config import get_settings as flows_get_settings
+from apps.flows.src.channels.telegram_api_base import get_telegram_api_base
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import (
     TelegramBotApiBooleanResponse,
@@ -28,7 +29,6 @@ from apps.flows.src.triggers.handlers.base import (
     TriggerValidationError,
 )
 from apps.flows.src.triggers.verify_draft import normalize_telegram_bot_token_for_api
-from core.config import get_settings
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
@@ -129,7 +129,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         allowed_updates = TelegramTriggerHandler.normalize_allowed_updates(
             flow_id, trigger.trigger_id, config
         )
-        api_url = f"{get_settings().telegram.api_base}/bot{bot_token}/setWebhook"
+        api_url = f"{get_telegram_api_base(trigger.config)}/bot{bot_token}/setWebhook"
 
         payload = {
             "url": webhook_url,
@@ -212,7 +212,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                 message="bot_token is empty after resolve",
             )
 
-        api_url = f"{get_settings().telegram.api_base}/bot{bot_token}/deleteWebhook"
+        api_url = f"{get_telegram_api_base(trigger.config)}/bot{bot_token}/deleteWebhook"
 
         async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.SMART) as client:
             response = await client.post(api_url, json={"drop_pending_updates": True})

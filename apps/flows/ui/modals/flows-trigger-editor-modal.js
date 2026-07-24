@@ -29,6 +29,15 @@ import '@platform/lib/components/platform-segmented-control.js';
 import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { TRIGGER_TYPES } from '../constants/trigger-types.js';
+import {
+    EMAIL_FILTER_PRESETS,
+    MAPPING_EXAMPLES,
+    TRIGGER_SAMPLE_DOCS,
+    TRIGGER_SAMPLE_PAYLOADS,
+    buildTelegramCurl,
+    buildWebhookCurl,
+    buildWebhookEndpointUrl,
+} from '../constants/trigger-samples.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { MAIL_EVENTS } from '@platform/lib/events/reducers/mail.js';
 
@@ -96,6 +105,24 @@ function defaultTelegramOutputAction(triggerId) {
 }
 
 /**
+ * Compact webhook callback preset (recipient URL filled by user).
+ * @param {string} [callbackUrl]
+ */
+function defaultWebhookCallbackOutputAction(callbackUrl) {
+    const url = String(callbackUrl || '').trim();
+    return {
+        channel: 'webhook',
+        action: 'send_message',
+        mapping: {
+            recipient: url.length > 0 ? `@const:${url}` : '',
+            text: '@state:response',
+        },
+        config: {},
+        condition: '',
+    };
+}
+
+/**
  * @param {Record<string, string>} a
  * @param {Record<string, string>} b
  */
@@ -129,32 +156,14 @@ function isDefaultTelegramOutputActionForm(a, triggerId) {
     return false;
 }
 
-const MAPPING_EXAMPLES = Object.freeze({
-    telegram: [
-        { path: 'message.text',          descKey: 'examples_telegram_text' },
-        { path: 'message.chat.id',       descKey: 'examples_telegram_chat_id' },
-        { path: 'message.from.id',       descKey: 'examples_telegram_user_id' },
-        { path: 'message.from.username', descKey: 'examples_telegram_username' },
-    ],
-    webhook: [
-        { path: 'body.data',         descKey: 'examples_webhook_body' },
-        { path: 'headers.X-Custom',  descKey: 'examples_webhook_header' },
-        { path: 'query.param',       descKey: 'examples_webhook_query' },
-    ],
-    cron: [
-        { path: 'scheduled_time', descKey: 'examples_cron_scheduled_time' },
-    ],
-    email: [
-        { path: 'from',    descKey: 'examples_email_from' },
-        { path: 'subject', descKey: 'examples_email_subject' },
-        { path: 'body',    descKey: 'examples_email_body' },
-    ],
-    platform_event: [
-        { path: 'event_type',        descKey: 'examples_platform_event_type' },
-        { path: 'payload',           descKey: 'examples_platform_event_payload' },
-        { path: 'actor_user_id',     descKey: 'examples_platform_event_actor' },
-    ],
-});
+const WEBHOOK_SECRET_HEADER_PRESETS = Object.freeze([
+    'X-Trigger-Secret',
+    'X-Webhook-Secret',
+    'Authorization',
+]);
+
+const WEBHOOK_SECRET_HEADER_CUSTOM = 'custom';
+const DEFAULT_WEBHOOK_SECRET_HEADER = 'X-Trigger-Secret';
 
 export class FlowsTriggerEditorModal extends PlatformFormModal {
     static modalKind = 'flows.trigger_editor';
@@ -177,6 +186,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         _hydrated: { state: true },
         _validationError: { state: true },
         _verifyHintText: { state: true },
+        _mappingTestResultText: { state: true },
         _catalogItems: { state: true },
     };
 
@@ -273,10 +283,68 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             }
             .mapping-legend { font-size: var(--text-xs); color: var(--text-tertiary); }
 
-            .examples-list { font-size: var(--text-sm); font-family: var(--font-mono); }
-            .examples-row { padding: var(--space-1) 0; display: flex; gap: var(--space-3); }
+            .examples-list { font-size: var(--text-sm); font-family: var(--font-mono); display: flex; flex-direction: column; gap: var(--space-1); }
+            .examples-row {
+                padding: var(--space-2) var(--space-3);
+                display: flex;
+                gap: var(--space-3);
+                align-items: baseline;
+                flex-wrap: wrap;
+                cursor: pointer;
+                border: 1px solid transparent;
+                border-radius: var(--radius-md);
+                background: transparent;
+                text-align: left;
+                font: inherit;
+                color: inherit;
+                width: 100%;
+            }
+            .examples-row:hover {
+                background: var(--accent-subtle);
+                border-color: var(--glass-border-subtle);
+            }
             .examples-row code { color: var(--accent); }
-            .examples-row .desc { color: var(--text-tertiary); }
+            .examples-row .desc { color: var(--text-tertiary); font-family: var(--font-sans); }
+            .examples-click-hint { font-size: var(--text-xs); color: var(--text-tertiary); margin: 0 0 var(--space-2); }
+            .webhook-endpoint-row {
+                display: grid;
+                grid-template-columns: 1fr auto;
+                gap: var(--space-2);
+                align-items: end;
+            }
+            .dx-toolbar {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                margin-bottom: var(--space-3);
+            }
+            .curl-box,
+            .sample-json {
+                margin: 0;
+                padding: var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-primary);
+                font-family: var(--font-mono);
+                font-size: var(--text-xs);
+                line-height: 1.45;
+                white-space: pre-wrap;
+                word-break: break-word;
+                overflow-x: auto;
+                max-height: 280px;
+            }
+            .sample-docs {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                margin: var(--space-2) 0 0;
+            }
+            .sample-docs a {
+                color: var(--accent);
+            }
+            .sample-payload-block {
+                margin-top: var(--space-4);
+            }
 
             .output-action-item {
                 display: flex;
@@ -335,6 +403,40 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 color: var(--text-tertiary);
                 line-height: 1.4;
             }
+            .email-mailbox-list,
+            .email-preset-list {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+            }
+            .email-chip {
+                padding: var(--space-2) var(--space-3);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-primary);
+                font: inherit;
+                font-size: var(--text-sm);
+                cursor: pointer;
+                text-align: left;
+                line-height: 1.35;
+            }
+            .email-chip:hover {
+                background: var(--accent-subtle);
+                border-color: var(--accent);
+            }
+            .email-chip.active {
+                background: var(--accent-subtle);
+                border-color: var(--accent);
+                color: var(--accent);
+                font-weight: var(--font-medium);
+            }
+            .email-chip-meta {
+                display: block;
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                margin-top: 2px;
+            }
         `,
     ];
 
@@ -357,6 +459,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this._hydrated = false;
         this._validationError = '';
         this._verifyHintText = '';
+        this._mappingTestResultText = '';
         this._catalogItems = [];
         this._catalogLoadStarted = false;
         this._catalogOp = this.useOp('flows/platform_events_catalog');
@@ -365,6 +468,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this._listOp = this.useOp('flows/triggers_list');
         this._verifyOp = this.useOp('flows/trigger_verify');
         this._reregisterOp = this.useOp('flows/trigger_reregister');
+        this._testOp = this.useOp('flows/trigger_test');
         this._editor = this.useOp('flows/editor');
         this._flowsCat = this.useResource('flows/flows', { autoload: false });
         this._mailSelect = this.select((s) => s.mail);
@@ -450,6 +554,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
 
     _hydrate() {
         this._verifyHintText = '';
+        this._mappingTestResultText = '';
         const t = this.trigger;
         if (t) {
             this._triggerId = t.trigger_id;
@@ -465,6 +570,9 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             if (t.type === 'email') {
                 this._config = this._normalizeEmailConfig(this._config);
                 this._ensureMailLoaded();
+            }
+            if (t.type === 'webhook') {
+                this._config = this._normalizeWebhookConfig(this._config);
             }
             const mapping = Object.keys(t.output_mapping).length > 0 ? t.output_mapping : t.input_mapping;
             this._outputMapping = Object.entries(mapping).map(([state, payload]) => ({ state, payload }));
@@ -771,9 +879,24 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     _renderTelegramConfig() {
         const c = this._config;
         const allowedUsers = Array.isArray(c.allowed_users) ? c.allowed_users.join(', ') : asString(c.allowed_users);
+        const origin = typeof window !== 'undefined' && window.location
+            ? String(window.location.origin)
+            : '';
+        const flowId = asString(this.flowId);
+        const triggerId = asString(this._triggerId).trim();
+        const internalSecret = asString(c._secret_token || c.secret_token);
+        const curl = origin && flowId
+            ? buildTelegramCurl({
+                origin,
+                flowId,
+                triggerId,
+                secretToken: internalSecret,
+            })
+            : '';
         return html`
             <div class="config-section">
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_telegram')}</div>
+                <p class="config-intro">${this.t('trigger_editor_modal.telegram_intro')}</p>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_bot_token')}</label>
                     <platform-field
@@ -808,6 +931,26 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                     ></platform-field>
                     <span class="hint">${this.t('trigger_editor_modal.hint_allowed_users')}</span>
                 </div>
+                ${curl ? html`
+                    <div class="field">
+                        <label>${this.t('trigger_editor_modal.field_ready_curl')}</label>
+                        <p class="hint">${this.t('trigger_editor_modal.hint_telegram_curl')}</p>
+                        <pre class="curl-box">${curl}</pre>
+                        <div class="dx-toolbar">
+                            <platform-button
+                                variant="primary"
+                                density="compact"
+                                @click=${() => this._copyText(
+                                    curl,
+                                    'flows:trigger_editor_modal.toast_curl_copied',
+                                    'flows:trigger_editor_modal.toast_curl_copy_failed',
+                                )}
+                            >
+                                ${this.t('trigger_editor_modal.copy_curl')}
+                            </platform-button>
+                        </div>
+                    </div>
+                ` : nothing}
             </div>
         `;
     }
@@ -857,11 +1000,88 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     }
 
     _renderWebhookConfig() {
-        const c = this._config;
-        const allowedIps = Array.isArray(c.allowed_ips) ? c.allowed_ips.join(', ') : asString(c.allowed_ips);
+        const c = this._normalizeWebhookConfig(this._config);
+        const secretHeader = asString(c.secret_header) || DEFAULT_WEBHOOK_SECRET_HEADER;
+        const headerIsCustom = !WEBHOOK_SECRET_HEADER_PRESETS.includes(secretHeader);
+        const headerSelectValue = headerIsCustom ? WEBHOOK_SECRET_HEADER_CUSTOM : secretHeader;
+        const allowedIps = Array.isArray(c.allowed_ips)
+            ? c.allowed_ips.filter((item) => typeof item === 'string')
+            : [];
+        const flowId = asString(this.flowId);
+        const triggerId = asString(this._triggerId).trim();
+        const origin = typeof window !== 'undefined' && window.location
+            ? String(window.location.origin)
+            : '';
+        const endpointUrl = origin
+            ? buildWebhookEndpointUrl({ origin, flowId, triggerId })
+            : `/flows/api/v1/triggers/webhook/${flowId}/${triggerId || '<trigger_id>'}`;
+        const curl = origin
+            ? buildWebhookCurl({
+                origin,
+                flowId,
+                triggerId,
+                secretToken: asString(c.secret_token),
+                secretHeader,
+            })
+            : '';
+        const secretHint = this.t('trigger_editor_modal.hint_secret_token', {
+            header: secretHeader,
+        });
+        const headerEnumConfig = {
+            values: [
+                ...WEBHOOK_SECRET_HEADER_PRESETS.map((name) => ({ value: name, label: name })),
+                {
+                    value: WEBHOOK_SECRET_HEADER_CUSTOM,
+                    label: this.t('trigger_editor_modal.secret_header_custom'),
+                },
+            ],
+        };
         return html`
             <div class="config-section">
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_webhook')}</div>
+                <p class="config-intro">${this.t('trigger_editor_modal.webhook_intro')}</p>
+                <div class="field">
+                    <label>${this.t('trigger_editor_modal.field_webhook_url')}</label>
+                    <div class="webhook-endpoint-row">
+                        <platform-field
+                            type="string"
+                            mode="view"
+                            .value=${endpointUrl}
+                        ></platform-field>
+                        <platform-button
+                            variant="ghost"
+                            density="compact"
+                            @click=${() => this._copyText(
+                                endpointUrl,
+                                'flows:trigger_editor_modal.toast_webhook_url_copied',
+                                'flows:trigger_editor_modal.toast_webhook_url_copy_failed',
+                            )}
+                        >
+                            ${this.t('trigger_editor_modal.copy_webhook_url')}
+                        </platform-button>
+                    </div>
+                    <span class="hint">${this.t('trigger_editor_modal.hint_webhook_url')}</span>
+                </div>
+                ${curl ? html`
+                    <div class="field">
+                        <label>${this.t('trigger_editor_modal.field_ready_curl')}</label>
+                        <p class="hint">${this.t('trigger_editor_modal.hint_ready_curl')}</p>
+                        <pre class="curl-box">${curl}</pre>
+                        <div class="dx-toolbar">
+                            <platform-button
+                                variant="primary"
+                                density="compact"
+                                @click=${() => this._copyText(
+                                    curl,
+                                    'flows:trigger_editor_modal.toast_curl_copied',
+                                    'flows:trigger_editor_modal.toast_curl_copy_failed',
+                                )}
+                            >
+                                ${this.t('trigger_editor_modal.copy_curl')}
+                            </platform-button>
+                        </div>
+                    </div>
+                ` : nothing}
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_secret_token')}</label>
                     <platform-field
@@ -877,24 +1097,69 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                             this._setConfig('secret_token', v);
                         }}
                     ></platform-field>
-                    <span class="hint">${this.t('trigger_editor_modal.hint_secret_token')}</span>
+                    <span class="hint">${secretHint}</span>
                 </div>
                 <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_allowed_ips')}</label>
                     <platform-field
-                        type="string"
+                        type="enum"
                         mode="edit"
-                        .value=${allowedIps}
-                        placeholder=${this.t('trigger_editor_modal.field_allowed_ips_placeholder')}
+                        .label=${this.t('trigger_editor_modal.field_secret_header')}
+                        .hint=${this.t('trigger_editor_modal.hint_secret_header')}
+                        .value=${headerSelectValue}
+                        .config=${headerEnumConfig}
                         @change=${(e) => {
                             const v = e.detail.value;
                             if (typeof v !== 'string') {
-                                throw new TypeError('flows-trigger-editor-modal: allowed_ips expects string detail.value');
+                                throw new TypeError('flows-trigger-editor-modal: secret_header enum expects string');
                             }
-                            this._setConfigList('allowed_ips', v, 'string');
+                            if (v === WEBHOOK_SECRET_HEADER_CUSTOM) {
+                                if (!headerIsCustom) {
+                                    this._setConfig('secret_header', 'X-Custom-Secret');
+                                }
+                                return;
+                            }
+                            this._setConfig('secret_header', v);
                         }}
                     ></platform-field>
-                    <span class="hint">${this.t('trigger_editor_modal.hint_allowed_ips')}</span>
+                </div>
+                ${headerIsCustom ? html`
+                    <div class="field">
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            .label=${this.t('trigger_editor_modal.field_secret_header_custom')}
+                            .value=${secretHeader}
+                            placeholder=${this.t('trigger_editor_modal.field_secret_header_custom_placeholder')}
+                            @change=${(e) => {
+                                const v = e.detail.value;
+                                if (typeof v !== 'string') {
+                                    throw new TypeError('flows-trigger-editor-modal: custom secret_header expects string');
+                                }
+                                this._setConfig('secret_header', v.trim() || DEFAULT_WEBHOOK_SECRET_HEADER);
+                            }}
+                        ></platform-field>
+                    </div>
+                ` : nothing}
+                <div class="field">
+                    <platform-field
+                        type="array"
+                        mode="edit"
+                        .label=${this.t('trigger_editor_modal.field_allowed_ips')}
+                        .hint=${this.t('trigger_editor_modal.hint_allowed_ips')}
+                        .value=${allowedIps}
+                        .config=${{ preserve_case: true }}
+                        placeholder=${this.t('trigger_editor_modal.field_allowed_ips_placeholder')}
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (!Array.isArray(v)) {
+                                throw new TypeError('flows-trigger-editor-modal: allowed_ips expects array detail.value');
+                            }
+                            this._setConfig(
+                                'allowed_ips',
+                                v.filter((item) => typeof item === 'string' && item.trim().length > 0),
+                            );
+                        }}
+                    ></platform-field>
                 </div>
             </div>
         `;
@@ -907,17 +1172,14 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         const c = this._config;
         const selectedId = typeof c.mailbox_binding_id === 'string' ? c.mailbox_binding_id : '';
         const subjectContains = typeof c.subject_contains === 'string' ? c.subject_contains : '';
-        const allowedSenders = Array.isArray(c.allowed_senders)
-            ? c.allowed_senders.filter((item) => typeof item === 'string').join(', ')
-            : '';
-        const mailboxEnumConfig = {
-            values: bindings.map((binding) => ({
-                value: binding.mailbox_binding_id,
-                label: binding.is_default
-                    ? `${binding.email_address} (${this.t('trigger_editor_modal.mailbox_default_badge')})`
-                    : binding.email_address,
-            })),
-        };
+        const allowedSendersList = Array.isArray(c.allowed_senders)
+            ? c.allowed_senders.filter((item) => typeof item === 'string')
+            : [];
+        const allowedSenders = allowedSendersList.join(', ');
+        const activePresetId = this._resolveActiveEmailFilterPresetId(
+            allowedSendersList,
+            subjectContains,
+        );
 
         if (bindings.length === 0) {
             const noConnection = connection === null;
@@ -944,26 +1206,51 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             <div class="config-section">
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_email')}</div>
                 <div class="email-stack">
-                    <platform-field
-                        type="enum"
-                        mode="edit"
-                        .label=${this.t('trigger_editor_modal.field_mailbox')}
-                        .hint=${this.t('trigger_editor_modal.hint_mailbox')}
-                        .value=${selectedId}
-                        .config=${mailboxEnumConfig}
-                        @change=${(e) => {
-                            const v = e.detail.value;
-                            if (typeof v !== 'string') {
-                                throw new TypeError('flows-trigger-editor-modal: mailbox_binding_id expects string');
+                    <p class="email-filter-hint">${this.t('trigger_editor_modal.hint_mailbox')}</p>
+                    <div class="email-mailbox-list" role="listbox" aria-label=${this.t('trigger_editor_modal.field_mailbox')}>
+                        ${bindings.map((binding) => {
+                            const bindingId = binding.mailbox_binding_id;
+                            if (typeof bindingId !== 'string' || bindingId.length === 0) {
+                                throw new TypeError('flows-trigger-editor-modal: mailbox_binding_id missing');
                             }
-                            this._setConfig('mailbox_binding_id', v);
-                        }}
-                    ></platform-field>
+                            const isActive = bindingId === selectedId;
+                            return html`
+                                <button
+                                    type="button"
+                                    role="option"
+                                    class="email-chip ${isActive ? 'active' : ''}"
+                                    aria-selected=${isActive ? 'true' : 'false'}
+                                    @click=${() => this._selectMailboxBinding(bindingId)}
+                                >
+                                    ${binding.email_address}
+                                    ${binding.is_default
+                                        ? html`<span class="email-chip-meta">${this.t('trigger_editor_modal.mailbox_default_badge')}</span>`
+                                        : nothing}
+                                </button>
+                            `;
+                        })}
+                    </div>
                     <platform-button variant="ghost" @click=${() => this._openMailSettings()}>
                         ${this.t('trigger_editor_modal.email_open_settings')}
                     </platform-button>
                     <div class="config-section-title">${this.t('trigger_editor_modal.section_email_filter')}</div>
-                    <p class="email-filter-hint">${this.t('trigger_editor_modal.hint_email_filter')}</p>
+                    <p class="email-filter-hint">${this.t('trigger_editor_modal.hint_email_filter_presets')}</p>
+                    <div class="email-preset-list" role="listbox" aria-label=${this.t('trigger_editor_modal.section_email_filter')}>
+                        ${EMAIL_FILTER_PRESETS.map((preset) => {
+                            const isActive = preset.id === activePresetId;
+                            return html`
+                                <button
+                                    type="button"
+                                    role="option"
+                                    class="email-chip ${isActive ? 'active' : ''}"
+                                    aria-selected=${isActive ? 'true' : 'false'}
+                                    @click=${() => this._applyEmailFilterPreset(preset.id)}
+                                >
+                                    ${this.t(`trigger_editor_modal.${preset.labelKey}`)}
+                                </button>
+                            `;
+                        })}
+                    </div>
                     <platform-field
                         type="string"
                         mode="edit"
@@ -1045,14 +1332,155 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         };
     }
 
+    _selectMailboxBinding(mailboxBindingId) {
+        if (typeof mailboxBindingId !== 'string' || mailboxBindingId.length === 0) {
+            throw new TypeError('flows-trigger-editor-modal: mailbox_binding_id required');
+        }
+        this._config = {
+            ...this._normalizeEmailConfig(this._config),
+            mailbox_binding_id: mailboxBindingId,
+        };
+        this.isDirty = true;
+    }
+
+    /**
+     * @param {readonly string[]} allowedSenders
+     * @param {string} subjectContains
+     * @returns {string | null}
+     */
+    _resolveActiveEmailFilterPresetId(allowedSenders, subjectContains) {
+        const subject = subjectContains.trim();
+        const sendersKey = [...allowedSenders].map((s) => s.trim()).filter((s) => s.length > 0).sort().join(',');
+        for (const preset of EMAIL_FILTER_PRESETS) {
+            const presetSubject = preset.subjectValueKey === null
+                ? ''
+                : this.t(`trigger_editor_modal.${preset.subjectValueKey}`).trim();
+            const presetSendersKey = [...preset.allowed_senders].map((s) => s.trim()).filter((s) => s.length > 0).sort().join(',');
+            if (sendersKey === presetSendersKey && subject === presetSubject) {
+                return preset.id;
+            }
+        }
+        return null;
+    }
+
+    _applyEmailFilterPreset(presetId) {
+        const preset = EMAIL_FILTER_PRESETS.find((item) => item.id === presetId);
+        if (!preset) {
+            throw new Error(`flows-trigger-editor-modal: unknown email filter preset ${presetId}`);
+        }
+        const subjectContains = preset.subjectValueKey === null
+            ? ''
+            : this.t(`trigger_editor_modal.${preset.subjectValueKey}`);
+        this._config = {
+            ...this._normalizeEmailConfig(this._config),
+            allowed_senders: [...preset.allowed_senders],
+            subject_contains: subjectContains,
+        };
+        this.isDirty = true;
+    }
+
+    _maybeApplyEmailMappingDefaults() {
+        if (this._type !== 'email') {
+            return;
+        }
+        if (this._outputMapping.some((row) => asString(row.state).trim().length > 0)) {
+            return;
+        }
+        this._applyAllMappingExamples();
+    }
+
     _ensurePlatformEventsCatalogLoaded() {
         if (this._catalogLoadStarted) return;
         this._catalogLoadStarted = true;
         void this._catalogOp.run({}).then((r) => {
             if (r && Array.isArray(r.items)) {
-                this._catalogItems = r.items;
+                this._catalogItems = r.items.map((raw) => this._normalizeCatalogItem(raw));
             }
         });
+    }
+
+    /**
+     * @param {unknown} raw
+     */
+    _normalizeCatalogItem(raw) {
+        if (!isPlainObject(raw)) {
+            throw new TypeError('flows-trigger-editor-modal: catalog item must be object');
+        }
+        const eventType = raw.event_type;
+        if (typeof eventType !== 'string' || !eventType.trim()) {
+            throw new TypeError('flows-trigger-editor-modal: catalog item.event_type required');
+        }
+        const description = typeof raw.description === 'string' ? raw.description : '';
+        const filterFieldsRaw = Array.isArray(raw.filter_fields) ? raw.filter_fields : [];
+        const filterFields = filterFieldsRaw.map((field) => this._normalizeFilterField(field));
+        return {
+            event_type: eventType,
+            description,
+            filter_fields: filterFields,
+        };
+    }
+
+    /**
+     * @param {unknown} raw
+     */
+    _normalizeFilterField(raw) {
+        if (!isPlainObject(raw)) {
+            throw new TypeError('flows-trigger-editor-modal: filter_fields item must be object');
+        }
+        const path = raw.path;
+        const label = raw.label;
+        const valueKind = raw.value_kind;
+        const opsRaw = raw.ops;
+        if (typeof path !== 'string' || !path.trim()) {
+            throw new TypeError('flows-trigger-editor-modal: filter_fields.path required');
+        }
+        if (typeof label !== 'string' || !label.trim()) {
+            throw new TypeError('flows-trigger-editor-modal: filter_fields.label required');
+        }
+        if (
+            valueKind !== 'string'
+            && valueKind !== 'integer'
+            && valueKind !== 'number'
+            && valueKind !== 'boolean'
+            && valueKind !== 'enum'
+        ) {
+            throw new TypeError(`flows-trigger-editor-modal: unknown value_kind ${String(valueKind)}`);
+        }
+        if (!Array.isArray(opsRaw) || opsRaw.length === 0) {
+            throw new TypeError('flows-trigger-editor-modal: filter_fields.ops required');
+        }
+        const ops = opsRaw.map((op) => {
+            if (op !== 'eq' && op !== 'ne' && op !== 'contains') {
+                throw new TypeError(`flows-trigger-editor-modal: unknown filter op ${String(op)}`);
+            }
+            return op;
+        });
+        let enumValues = null;
+        if (valueKind === 'enum') {
+            if (!Array.isArray(raw.enum_values) || raw.enum_values.length === 0) {
+                throw new TypeError('flows-trigger-editor-modal: enum filter_fields.enum_values required');
+            }
+            enumValues = raw.enum_values.map((v) => {
+                if (typeof v !== 'string') {
+                    throw new TypeError('flows-trigger-editor-modal: enum_values must be strings');
+                }
+                return v;
+            });
+        }
+        return {
+            path,
+            label,
+            description: typeof raw.description === 'string' ? raw.description : '',
+            value_kind: valueKind,
+            enum_values: enumValues,
+            ops,
+        };
+    }
+
+    _selectedCatalogEntry() {
+        const selectedType = asString(this._config.event_type);
+        const items = Array.isArray(this._catalogItems) ? this._catalogItems : [];
+        return items.find((item) => item.event_type === selectedType) ?? null;
     }
 
     _platformEventFilters() {
@@ -1066,15 +1494,27 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     }
 
     /**
-     * Строка из инпута → JSON-скаляр там, где это очевидно (true/false/число).
-     * @param {string} raw
+     * @param {{ value_kind: string, enum_values: string[] | null }} field
+     * @param {unknown} current
      */
-    _parseFilterValue(raw) {
-        const s = raw.trim();
-        if (s === 'true') return true;
-        if (s === 'false') return false;
-        if (s.length > 0 && /^-?\d+(\.\d+)?$/.test(s)) return Number(s);
-        return raw;
+    _defaultFilterValue(field, current) {
+        if (field.value_kind === 'boolean') {
+            return typeof current === 'boolean' ? current : false;
+        }
+        if (field.value_kind === 'integer' || field.value_kind === 'number') {
+            return typeof current === 'number' ? current : 0;
+        }
+        if (field.value_kind === 'enum') {
+            const values = field.enum_values;
+            if (values === null || values.length === 0) {
+                throw new TypeError('flows-trigger-editor-modal: enum field without values');
+            }
+            if (typeof current === 'string' && values.includes(current)) {
+                return current;
+            }
+            return values[0];
+        }
+        return typeof current === 'string' ? current : '';
     }
 
     _renderPlatformEventConfig() {
@@ -1091,13 +1531,15 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         if (selectedType.length > 0 && !eventEnumValues.some((v) => v.value === selectedType)) {
             eventEnumValues.unshift({ value: selectedType, label: selectedType });
         }
+        const selectedEntry = this._selectedCatalogEntry();
+        const filterFields = selectedEntry !== null ? selectedEntry.filter_fields : [];
         const filters = this._platformEventFilters();
-        const opEnumConfig = {
-            values: EVENT_FILTER_OPS.map((op) => ({
-                value: op.id,
-                label: this.t(`trigger_editor_modal.${op.labelKey}`),
-            })),
-        };
+        const canAddFilters = selectedType.length > 0 && filterFields.length > 0;
+        const pathEnumValues = filterFields.map((field) => ({
+            value: field.path,
+            label: `${field.path} — ${field.label}`,
+        }));
+
         return html`
             <div class="config-section">
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_platform_event')}</div>
@@ -1108,15 +1550,19 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                         mode="edit"
                         .value=${selectedType}
                         .config=${{ values: eventEnumValues }}
+                        .hint=${this.t('trigger_editor_modal.hint_event_type')}
                         @change=${(e) => {
                             const v = e.detail.value;
                             if (typeof v !== 'string') {
                                 throw new TypeError('flows-trigger-editor-modal: event_type expects string detail.value');
                             }
-                            this._setConfig('event_type', v);
+                            this._config = {
+                                ...this._config,
+                                event_type: v,
+                                filters: [],
+                            };
                         }}
                     ></platform-field>
-                    <span class="hint">${this.t('trigger_editor_modal.hint_event_type')}</span>
                 </div>
                 <div class="mapping-add-row">
                     <span style="font-weight: var(--font-medium); color: var(--text-secondary);">
@@ -1125,80 +1571,199 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                     <platform-button
                         variant="ghost"
                         density="compact"
+                        ?disabled=${!canAddFilters}
                         @click=${() => {
-                            this._setPlatformEventFilters([...filters, { path: '', op: 'eq', value: '' }]);
+                            if (!canAddFilters) return;
+                            const first = filterFields[0];
+                            this._setPlatformEventFilters([
+                                ...filters,
+                                {
+                                    path: first.path,
+                                    op: first.ops[0],
+                                    value: this._defaultFilterValue(first, ''),
+                                },
+                            ]);
                         }}
                     >
                         + ${this.t('trigger_editor_modal.event_filters_add')}
                     </platform-button>
                 </div>
-                ${filters.length === 0
+                ${selectedType.length > 0 && filterFields.length === 0
+                    ? html`<div class="mapping-empty">${this.t('trigger_editor_modal.event_filters_no_fields')}</div>`
+                    : nothing}
+                ${filters.length === 0 && canAddFilters
                     ? html`<div class="mapping-empty">${this.t('trigger_editor_modal.event_filters_empty')}</div>`
-                    : filters.map((f, idx) => html`
-                        <div class="event-filter-row">
-                            <platform-field
-                                type="string"
-                                mode="edit"
-                                .value=${asString(f.path)}
-                                placeholder=${this.t('trigger_editor_modal.event_filter_path_placeholder')}
-                                @change=${(e) => {
-                                    const v = e.detail.value;
-                                    if (typeof v !== 'string') {
-                                        throw new TypeError('flows-trigger-editor-modal: filter path expects string detail.value');
-                                    }
-                                    this._setPlatformEventFilters(
-                                        filters.map((row, i) => (i === idx ? { ...row, path: v } : row)),
-                                    );
-                                }}
-                            ></platform-field>
-                            <platform-field
-                                type="enum"
-                                mode="edit"
-                                .value=${asString(f.op) || 'eq'}
-                                .config=${opEnumConfig}
-                                @change=${(e) => {
-                                    const v = e.detail.value;
-                                    if (typeof v !== 'string') {
-                                        throw new TypeError('flows-trigger-editor-modal: filter op expects string detail.value');
-                                    }
-                                    this._setPlatformEventFilters(
-                                        filters.map((row, i) => (i === idx ? { ...row, op: v } : row)),
-                                    );
-                                }}
-                            ></platform-field>
-                            <platform-field
-                                type="string"
-                                mode="edit"
-                                .value=${typeof f.value === 'string' ? f.value : JSON.stringify(f.value)}
-                                placeholder=${this.t('trigger_editor_modal.event_filter_value_placeholder')}
-                                @change=${(e) => {
-                                    const v = e.detail.value;
-                                    if (typeof v !== 'string') {
-                                        throw new TypeError('flows-trigger-editor-modal: filter value expects string detail.value');
-                                    }
-                                    this._setPlatformEventFilters(
-                                        filters.map((row, i) => (i === idx
-                                            ? { ...row, value: this._parseFilterValue(v) }
-                                            : row)),
-                                    );
-                                }}
-                            ></platform-field>
-                            <platform-button
-                                variant="ghost"
-                                icon-only
-                                density="dense"
-                                danger
-                                title=${this.t('trigger_editor_modal.mapping_remove_title')}
-                                @click=${() => {
-                                    this._setPlatformEventFilters(filters.filter((_, i) => i !== idx));
-                                }}
-                            >
-                                <platform-icon name="trash" size="16"></platform-icon>
-                            </platform-button>
-                        </div>
-                    `)}
+                    : nothing}
+                ${filters.map((f, idx) => this._renderPlatformEventFilterRow(f, idx, filters, filterFields, pathEnumValues))}
                 <span class="hint">${this.t('trigger_editor_modal.hint_event_filters')}</span>
             </div>
+        `;
+    }
+
+    /**
+     * @param {Record<string, unknown>} filterRow
+     * @param {number} idx
+     * @param {Record<string, unknown>[]} filters
+     * @param {ReturnType<FlowsTriggerEditorModal['_normalizeFilterField']>[]} filterFields
+     * @param {{ value: string, label: string }[]} pathEnumValues
+     */
+    _renderPlatformEventFilterRow(filterRow, idx, filters, filterFields, pathEnumValues) {
+        const path = asString(filterRow.path);
+        const field = filterFields.find((item) => item.path === path) ?? filterFields[0] ?? null;
+        if (field === null) {
+            return nothing;
+        }
+        const op = asString(filterRow.op) || field.ops[0];
+        const opEnumConfig = {
+            values: field.ops.map((opId) => {
+                const meta = EVENT_FILTER_OPS.find((item) => item.id === opId);
+                if (meta === undefined) {
+                    throw new TypeError(`flows-trigger-editor-modal: missing i18n for op ${opId}`);
+                }
+                return {
+                    value: opId,
+                    label: this.t(`trigger_editor_modal.${meta.labelKey}`),
+                };
+            }),
+        };
+        const value = this._defaultFilterValue(field, filterRow.value);
+        return html`
+            <div class="event-filter-row">
+                <platform-field
+                    type="enum"
+                    mode="edit"
+                    .value=${field.path}
+                    .config=${{ values: pathEnumValues }}
+                    .hint=${field.description}
+                    @change=${(e) => {
+                        const v = e.detail.value;
+                        if (typeof v !== 'string') {
+                            throw new TypeError('flows-trigger-editor-modal: filter path expects string detail.value');
+                        }
+                        const nextField = filterFields.find((item) => item.path === v);
+                        if (nextField === undefined) {
+                            throw new TypeError(`flows-trigger-editor-modal: unknown filter path ${v}`);
+                        }
+                        this._setPlatformEventFilters(
+                            filters.map((row, i) => (i === idx
+                                ? {
+                                    path: nextField.path,
+                                    op: nextField.ops[0],
+                                    value: this._defaultFilterValue(nextField, ''),
+                                }
+                                : row)),
+                        );
+                    }}
+                ></platform-field>
+                <platform-field
+                    type="enum"
+                    mode="edit"
+                    .value=${op}
+                    .config=${opEnumConfig}
+                    @change=${(e) => {
+                        const v = e.detail.value;
+                        if (typeof v !== 'string') {
+                            throw new TypeError('flows-trigger-editor-modal: filter op expects string detail.value');
+                        }
+                        this._setPlatformEventFilters(
+                            filters.map((row, i) => (i === idx ? { ...row, op: v } : row)),
+                        );
+                    }}
+                ></platform-field>
+                ${this._renderFilterValueField(field, value, (nextValue) => {
+                    this._setPlatformEventFilters(
+                        filters.map((row, i) => (i === idx ? { ...row, value: nextValue } : row)),
+                    );
+                })}
+                <platform-button
+                    variant="ghost"
+                    icon-only
+                    density="dense"
+                    danger
+                    title=${this.t('trigger_editor_modal.mapping_remove_title')}
+                    @click=${() => {
+                        this._setPlatformEventFilters(filters.filter((_, i) => i !== idx));
+                    }}
+                >
+                    <platform-icon name="trash" size="16"></platform-icon>
+                </platform-button>
+            </div>
+        `;
+    }
+
+    /**
+     * @param {ReturnType<FlowsTriggerEditorModal['_normalizeFilterField']>} field
+     * @param {unknown} value
+     * @param {(v: unknown) => void} onChange
+     */
+    _renderFilterValueField(field, value, onChange) {
+        if (field.value_kind === 'enum') {
+            const values = field.enum_values;
+            if (values === null) {
+                throw new TypeError('flows-trigger-editor-modal: enum value field without enum_values');
+            }
+            return html`
+                <platform-field
+                    type="enum"
+                    mode="edit"
+                    .value=${typeof value === 'string' ? value : values[0]}
+                    .config=${{ values: values.map((v) => ({ value: v, label: v })) }}
+                    @change=${(e) => {
+                        const v = e.detail.value;
+                        if (typeof v !== 'string') {
+                            throw new TypeError('flows-trigger-editor-modal: enum filter value expects string');
+                        }
+                        onChange(v);
+                    }}
+                ></platform-field>
+            `;
+        }
+        if (field.value_kind === 'boolean') {
+            return html`
+                <platform-field
+                    type="boolean"
+                    mode="edit"
+                    .value=${typeof value === 'boolean' ? value : false}
+                    @change=${(e) => {
+                        const v = e.detail.value;
+                        if (typeof v !== 'boolean') {
+                            throw new TypeError('flows-trigger-editor-modal: boolean filter value expects boolean');
+                        }
+                        onChange(v);
+                    }}
+                ></platform-field>
+            `;
+        }
+        if (field.value_kind === 'integer' || field.value_kind === 'number') {
+            return html`
+                <platform-field
+                    type=${field.value_kind === 'integer' ? 'integer' : 'number'}
+                    mode="edit"
+                    .value=${typeof value === 'number' ? value : 0}
+                    @change=${(e) => {
+                        const v = e.detail.value;
+                        if (typeof v !== 'number') {
+                            throw new TypeError('flows-trigger-editor-modal: number filter value expects number');
+                        }
+                        onChange(v);
+                    }}
+                ></platform-field>
+            `;
+        }
+        return html`
+            <platform-field
+                type="string"
+                mode="edit"
+                .value=${typeof value === 'string' ? value : ''}
+                placeholder=${this.t('trigger_editor_modal.event_filter_value_placeholder')}
+                @change=${(e) => {
+                    const v = e.detail.value;
+                    if (typeof v !== 'string') {
+                        throw new TypeError('flows-trigger-editor-modal: string filter value expects string');
+                    }
+                    onChange(v);
+                }}
+            ></platform-field>
         `;
     }
 
@@ -1271,8 +1836,120 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                         : this.t('trigger_editor_modal.examples_select_type')}
                 </div>
                 ${this._renderMappingExamples()}
+                ${this._renderSamplePayloadPanel()}
             </div>
         `;
+    }
+
+    _renderSamplePayloadPanel() {
+        if (!this._type || !TRIGGER_SAMPLE_PAYLOADS[this._type]) {
+            return nothing;
+        }
+        const sample = TRIGGER_SAMPLE_PAYLOADS[this._type];
+        const sampleJson = formatJsonPretty(sample);
+        const docsUrl = TRIGGER_SAMPLE_DOCS[this._type] || '';
+        const docsKey = this._type === 'telegram'
+            ? 'sample_docs_link'
+            : this._type === 'webhook'
+                ? 'sample_docs_link_webhook'
+                : this._type === 'platform_event'
+                    ? 'sample_docs_link_platform_event'
+                    : 'sample_docs_link';
+        const canTest = Boolean(this.trigger)
+            && typeof this.flowId === 'string'
+            && this.flowId.length > 0
+            && asString(this._triggerId).length > 0;
+        return html`
+            <div class="field sample-payload-block">
+                <label>${this.t('trigger_editor_modal.sample_payload_title')}</label>
+                <p class="hint">${this.t('trigger_editor_modal.sample_payload_hint')}</p>
+                ${this._renderHowToFire()}
+                <pre class="sample-json">${sampleJson}</pre>
+                <div class="dx-toolbar">
+                    <platform-button
+                        variant="ghost"
+                        density="compact"
+                        @click=${() => this._copyText(
+                            sampleJson,
+                            'flows:trigger_editor_modal.toast_sample_copied',
+                            'flows:trigger_editor_modal.toast_sample_copy_failed',
+                        )}
+                    >
+                        ${this.t('trigger_editor_modal.copy_sample')}
+                    </platform-button>
+                    <platform-button
+                        variant="ghost"
+                        density="compact"
+                        ?disabled=${!canTest}
+                        title=${canTest
+                            ? this.t('trigger_editor_modal.run_sample_test')
+                            : this.t('trigger_editor_modal.run_sample_test_disabled')}
+                        @click=${() => this._onRunSampleTest()}
+                    >
+                        ${this.t('trigger_editor_modal.run_sample_test')}
+                    </platform-button>
+                </div>
+                ${!canTest
+                    ? html`<p class="hint">${this.t('trigger_editor_modal.run_sample_test_disabled')}</p>`
+                    : nothing}
+                ${this._mappingTestResultText
+                    ? html`
+                        <label>${this.t('trigger_editor_modal.sample_test_result')}</label>
+                        <pre class="sample-json">${this._mappingTestResultText}</pre>
+                    `
+                    : nothing}
+                ${docsUrl
+                    ? html`<p class="sample-docs">
+                        <a href=${docsUrl} target="_blank" rel="noopener noreferrer">
+                            ${this.t(`trigger_editor_modal.${docsKey}`)}
+                        </a>
+                    </p>`
+                    : nothing}
+            </div>
+        `;
+    }
+
+    _renderHowToFire() {
+        if (this._type === 'email') {
+            return html`<p class="hint">${this.t('trigger_editor_modal.howto_email')}</p>`;
+        }
+        if (this._type === 'platform_event') {
+            return html`<p class="hint">${this.t('trigger_editor_modal.howto_platform_event')}</p>`;
+        }
+        if (this._type === 'cron') {
+            return html`<p class="hint">${this.t('trigger_editor_modal.howto_cron')}</p>`;
+        }
+        return nothing;
+    }
+
+    async _onRunSampleTest() {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            throw new Error('flows-trigger-editor-modal: flowId required for sample test');
+        }
+        const triggerId = asString(this._triggerId);
+        if (triggerId.length === 0 || !this.trigger) {
+            this._mappingTestResultText = '';
+            this.toast('flows:trigger_editor_modal.run_sample_test_disabled', { type: 'error' });
+            this.requestUpdate();
+            return;
+        }
+        if (!this._type || !TRIGGER_SAMPLE_PAYLOADS[this._type]) {
+            throw new Error('flows-trigger-editor-modal: sample payload missing for type');
+        }
+        const body = TRIGGER_SAMPLE_PAYLOADS[this._type];
+        if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+            throw new Error('flows-trigger-editor-modal: sample payload must be a JSON object');
+        }
+        await this._testOp.run({
+            flow_id: this.flowId,
+            trigger_id: triggerId,
+            body,
+        });
+        const lr = this._testOp.lastResult;
+        this._mappingTestResultText = lr === null || lr === undefined
+            ? (this._testOp.error || this.t('trigger_editor_modal.verify_error_network'))
+            : formatJsonPretty(lr);
+        this.requestUpdate();
     }
 
     _renderMappingExamples() {
@@ -1281,12 +1958,34 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             return html`<p class="config-intro">${this.t('trigger_editor_modal.examples_select_type')}</p>`;
         }
         return html`
+            <p class="examples-click-hint">${this.t('trigger_editor_modal.examples_click_hint')}</p>
+            <div class="dx-toolbar">
+                <platform-button
+                    variant="primary"
+                    density="compact"
+                    @click=${() => this._applyAllMappingExamples()}
+                >
+                    ${this.t('trigger_editor_modal.apply_all_examples')}
+                </platform-button>
+            </div>
             <div class="examples-list">
                 ${examples.map((ex) => html`
-                    <div class="examples-row">
-                        <code>${ex.path}</code>
+                    <article
+                        role="button"
+                        tabindex="0"
+                        class="examples-row"
+                        title=${this.t('trigger_editor_modal.examples_click_title')}
+                        @click=${() => this._addMappingFromExample(ex)}
+                        @keydown=${(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                this._addMappingFromExample(ex);
+                            }
+                        }}
+                    >
+                        <code>${ex.state} → ${ex.payload}</code>
                         <span class="desc">— ${this.t(`trigger_editor_modal.${ex.descKey}`)}</span>
-                    </div>
+                    </article>
                 `)}
             </div>
         `;
@@ -1368,6 +2067,17 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             <div class="config-section-title">${this.t('trigger_editor_modal.output_section_title')}</div>
             ${showGeneralOutputIntro
                 ? html`<p class="config-intro">${this.t('trigger_editor_modal.output_intro')}</p>`
+                : nothing}
+            ${this._type === 'webhook'
+                ? html`
+                    <platform-button
+                        variant="ghost"
+                        density="compact"
+                        @click=${() => this._applyWebhookCallbackPreset()}
+                    >
+                        ${this.t('trigger_editor_modal.output_webhook_callback_preset')}
+                    </platform-button>
+                `
                 : nothing}
             ${this._outputActions.map((action, idx) => this._renderOutputAction(action, idx))}
 
@@ -1564,7 +2274,50 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             this._config = this._normalizeEmailConfig(this._config);
             this._ensureMailLoaded();
             this._maybeAutofillMailboxBinding();
+            this._maybeApplyEmailMappingDefaults();
         }
+        if (typeId === 'webhook') {
+            this._config = this._normalizeWebhookConfig(this._config);
+        }
+        this.isDirty = true;
+    }
+
+    _normalizeWebhookConfig(config) {
+        const next = isPlainObject(config) ? { ...config } : {};
+        const header = asString(next.secret_header).trim();
+        next.secret_header = header.length > 0 ? header : DEFAULT_WEBHOOK_SECRET_HEADER;
+        if (!Array.isArray(next.allowed_ips)) {
+            next.allowed_ips = [];
+        } else {
+            next.allowed_ips = next.allowed_ips.filter((item) => typeof item === 'string');
+        }
+        if (typeof next.secret_token !== 'string') {
+            next.secret_token = asString(next.secret_token);
+        }
+        return next;
+    }
+
+    _copyText(text, successKey, errorKey) {
+        this.copyToClipboard(String(text), {
+            success_i18n_key: successKey,
+            error_i18n_key: errorKey,
+        });
+    }
+
+    _applyAllMappingExamples() {
+        const examples = this._type ? MAPPING_EXAMPLES[this._type] : null;
+        if (!examples || examples.length === 0) {
+            return;
+        }
+        const byState = new Map(
+            this._outputMapping
+                .filter((m) => asString(m.state).trim().length > 0)
+                .map((m) => [asString(m.state).trim(), m]),
+        );
+        for (const ex of examples) {
+            byState.set(ex.state, { state: ex.state, payload: ex.payload });
+        }
+        this._outputMapping = [...byState.values()];
         this.isDirty = true;
     }
 
@@ -1587,6 +2340,28 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this.isDirty = true;
     }
 
+    _addMappingFromExample(ex) {
+        if (!isPlainObject(ex)) {
+            throw new TypeError('flows-trigger-editor-modal: mapping example must be an object');
+        }
+        const state = asString(ex.state);
+        const payload = asString(ex.payload);
+        if (!state || !payload) {
+            throw new TypeError('flows-trigger-editor-modal: mapping example requires state and payload');
+        }
+        const emptyIdx = this._outputMapping.findIndex(
+            (m) => asString(m.state).trim().length === 0 && asString(m.payload).trim().length === 0,
+        );
+        if (emptyIdx >= 0) {
+            this._outputMapping = this._outputMapping.map((m, i) => (
+                i === emptyIdx ? { state, payload } : m
+            ));
+        } else {
+            this._outputMapping = [...this._outputMapping, { state, payload }];
+        }
+        this.isDirty = true;
+    }
+
     _updateMapping(idx, field, value) {
         this._outputMapping = this._outputMapping.map((m, i) => (i === idx ? { ...m, [field]: value } : m));
         this.isDirty = true;
@@ -1603,8 +2378,17 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         const next
             = this._type === 'telegram' && defaultChannel === 'telegram'
                 ? defaultTelegramOutputAction(this._triggerId)
-                : { channel: defaultChannel, action: 'send_message', mapping: {}, config: {}, condition: '' };
+                : this._type === 'webhook' && defaultChannel === 'webhook'
+                    ? defaultWebhookCallbackOutputAction('')
+                    : { channel: defaultChannel, action: 'send_message', mapping: {}, config: {}, condition: '' };
         this._outputActions = [...this._outputActions, next];
+        this._outputTelegramExpanded = true;
+        this.isDirty = true;
+    }
+
+    _applyWebhookCallbackPreset() {
+        this._postFlowOutputEnabled = true;
+        this._outputActions = [defaultWebhookCallbackOutputAction('https://example.com/callback')];
         this._outputTelegramExpanded = true;
         this.isDirty = true;
     }
@@ -1724,7 +2508,9 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             name: this._name.trim(),
             type: this._type,
             enabled: this._enabled,
-            config: this._type === 'email' ? this._normalizeEmailConfig(this._config) : this._config,
+            config: this._type === 'email'
+                ? this._normalizeEmailConfig(this._config)
+                : (this._type === 'webhook' ? this._normalizeWebhookConfig(this._config) : this._config),
             output_mapping: outputMapping,
             output_actions: outputActions,
             post_flow_output_enabled: postFlow,

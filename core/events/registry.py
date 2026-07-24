@@ -10,6 +10,11 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from core.events.contract import assert_platform_event_type
+from core.events.payload_filter_fields import (
+    PlatformEventFilterField,
+    derive_filter_fields,
+    ensure_catalog_filter_fields,
+)
 from core.types import JsonObject
 
 _NOTIFY_PREFIX = "notify/"
@@ -19,11 +24,24 @@ _registry_descriptions: dict[str, str] = {}
 
 
 class PlatformEventCatalogEntry(BaseModel):
-    """Запись каталога: тип события + JSON Schema payload."""
+    """Запись каталога: тип события + JSON Schema payload + filter_fields."""
 
     event_type: str
     description: str
     payload_schema: JsonObject = Field(default_factory=dict)
+    filter_fields: list[PlatformEventFilterField] = Field(default_factory=list)
+
+    def with_ensured_filter_fields(self) -> PlatformEventCatalogEntry:
+        """Auto-heal пустого filter_fields из payload_schema (старые Redis dumps)."""
+        healed = ensure_catalog_filter_fields(
+            self.event_type,
+            self.description,
+            self.payload_schema,
+            self.filter_fields if self.filter_fields else None,
+        )
+        if healed == self.filter_fields:
+            return self
+        return self.model_copy(update={"filter_fields": healed})
 
 
 def _model_ref(payload_model: type[BaseModel]) -> str:
@@ -97,11 +115,27 @@ def platform_event_catalog() -> list[PlatformEventCatalogEntry]:
     entries: list[PlatformEventCatalogEntry] = []
     for event_type in registered_platform_event_types():
         payload_model = _registry_models[event_type]
+        payload_schema = payload_model.model_json_schema()
         entries.append(
             PlatformEventCatalogEntry(
                 event_type=event_type,
                 description=_registry_descriptions[event_type],
-                payload_schema=payload_model.model_json_schema(),
+                payload_schema=payload_schema,
+                filter_fields=derive_filter_fields(payload_schema),
             )
         )
     return entries
+
+
+def catalog_entry_for_event_type(event_type: str) -> PlatformEventCatalogEntry | None:
+    """In-process entry; неизвестный тип — None."""
+    payload_model = _registry_models.get(event_type)
+    if payload_model is None:
+        return None
+    payload_schema = payload_model.model_json_schema()
+    return PlatformEventCatalogEntry(
+        event_type=event_type,
+        description=_registry_descriptions[event_type],
+        payload_schema=payload_schema,
+        filter_fields=derive_filter_fields(payload_schema),
+    )

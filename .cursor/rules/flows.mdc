@@ -131,7 +131,7 @@ alwaysApply: false
 
 ## Triggers
 
-Хранятся в `FlowConfig.triggers`. Типы: `telegram`, `webhook`, `cron`, `email`, `platform_event`. Живые handlers — `telegram`, `email`, `platform_event`; `webhook`/`cron` — контракт без runtime (см. `apps/flows/docs/triggers_runtime_matrix.md`).
+Хранятся в `FlowConfig.triggers`. Типы: `telegram`, `webhook`, `cron`, `email`, `platform_event`. Живые handlers — `telegram`, `webhook`, `email`, `platform_event`; `cron` — контракт без runtime (см. `apps/flows/docs/triggers_runtime_matrix.md`).
 
 ```json
 "triggers": {
@@ -167,7 +167,11 @@ alwaysApply: false
 
 Webhook URL: `/flows/api/v1/triggers/{telegram|webhook}/{flow_id}/{trigger_id}`.
 
-**Email (platform mail):** `EmailTriggerConfig.mailbox_binding_id` — ящик текущего пользователя (`GET .../api/mail/bindings/me`). Фильтр опционален: `allowed_senders` (substring по `from`), `subject_contains` (пусто = все). Runtime: `EmailTriggerHandler` пишет Redis-индекс `flows:email_triggers:{mailbox_binding_id}`; `mail_sync_tick` после non-bootstrap new INBOX вызывает `dispatch_email_triggers_for_messages` → `TriggerExecutor`. UI: 1-клик default-ящик или CTA `openModal('platform.mail', { openSettings: true })`. Сырой IMAP/Mailgun в UI не используется.
+**Webhook (inbound HTTP):** `WebhookTriggerConfig` — `secret_token`, `secret_header` (default `X-Trigger-Secret`), `allowed_ips` (без `response_mode` — всегда async). Runtime: `WebhookTriggerHandler` (registry) + `generic_webhook` собирает envelope `{body, headers, query}`, проверяет secret/IP/rate limit, запускает `TriggerExecutor` → HTTP **202** `{status, task_id, context_id, session_id}`. UI: IP — `platform-field type="array"` (теги); Mapping — кликабельные примеры + sample→`/test`; готовый curl.
+
+**Telegram:** `TelegramTriggerConfig.api_base` (optional) — override Bot API base для verify/`setWebhook`/`deleteWebhook` и channel send (helper `get_telegram_api_base` в `channels/telegram_api_base.py`). Без override — `settings.telegram.api_base`.
+
+**Email (platform mail):** `EmailTriggerConfig.mailbox_binding_id` — ящик текущего пользователя (`GET .../api/mail/bindings/me`). Фильтр опционален: `allowed_senders` (substring по `from`), `subject_contains` (пусто = все). Runtime: `EmailTriggerHandler` пишет Redis-индекс `flows:email_triggers:{mailbox_binding_id}`; `mail_sync_tick` **и** `mail_sync_binding_task` после non-bootstrap new INBOX вызывают `dispatch_email_triggers_for_messages` → `TriggerExecutor` (детерминированный `task_id`/`context_id` из binding+flow+trigger+uid). UI: 1-клик default-ящик или CTA `openModal('platform.mail', { openSettings: true })`. Сырой IMAP/Mailgun в UI не используется.
 
 **Platform event (шина `platform:events`, → `events.mdc`):** `PlatformEventTriggerConfig` — `event_type` (из каталога, endpoint `GET /flows/api/v1/platform-events/catalog`) + `filters: list[EventFilter(path, op: eq|ne|contains, value)]` (AND, dot-path по payload). Runtime: `PlatformEventTriggerHandler` пишет Redis-индекс `flows:event_triggers:{event_type}` (member `company_id|flow_id|trigger_id`); consumer group `flows` (`PlatformEventConsumerService`, фоновая задача `flows_worker`) на каждое событие вызывает `dispatch_platform_event_triggers` → `TriggerExecutor`. Payload для `output_mapping`: `{event_id, event_type, company_id, payload, actor_user_id, occurred_ts}`. Идемпотентность at-least-once: `task_id`/`context_id` = `uuid5(event_id + trigger_id)`. Пост-выход в канал у типа отключён (как у cron). Тот же consumer выполняет системный employee-routing (→ `flow_employee.mdc`).
 
