@@ -2355,6 +2355,7 @@
     "close_node_ai": "Close AI assistant",
     "drag_hint": "Drag by header",
     "resize_hint": "Resize",
+    "resize_assistant": "Resize assistant chat width",
     "minimize_panel": "Minimize panel",
     "restore_panel": "Restore panel"
   },

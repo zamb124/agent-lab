@@ -305,12 +305,15 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             }
             .add-tools { display: flex; gap: var(--space-2); flex-wrap: wrap; }
             .filter-list {
-                display: flex; flex-direction: column; gap: var(--space-1);
-                max-height: 180px; overflow-y: auto;
-                padding: var(--space-2);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                gap: var(--space-2);
+                max-height: 180px;
+                overflow-y: auto;
+                min-width: 0;
+            }
+            .filter-list platform-field {
+                min-width: 0;
             }
             .filter-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
             .toggle { display: inline-flex; gap: var(--space-1); }
@@ -1273,6 +1276,8 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                                 <platform-field
                                     type="boolean"
                                     mode="edit"
+                                    pill-embed
+                                    pill-density="compact"
                                     .label=${`${n.name} (${n.id})`}
                                     .value=${customList.includes(n.id)}
                                     @change=${(e) => this._onFilterToggleChecked(n.id, e.detail.value === true)}

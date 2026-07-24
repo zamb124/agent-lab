@@ -11,8 +11,15 @@ import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import {
+    ASSISTANT_COL_WIDTH_DEFAULT,
+    ASSISTANT_COL_WIDTH_MAX,
+    ASSISTANT_COL_WIDTH_MIN,
+    normalizeAssistantWidth,
+    readAssistantWidthPref,
     readPropertyPanelRectPref,
+    scheduleAssistantWidthPersist,
     schedulePropertyPanelRectPersist,
+    writeAssistantWidthPref,
     writePropertyPanelRectPref,
 } from '../../_helpers/flows-editor-property-panel-prefs.js';
 
@@ -21,7 +28,10 @@ const PANEL_MIN_WIDTH = 480;
 const PANEL_MIN_HEIGHT = 320;
 const PANEL_MAX_WIDTH = 1200;
 const PANEL_MAX_WIDTH_AI = 1580;
-const ASSISTANT_COL_WIDTH = 380;
+/** Минимальная ширина колонки editor при drag splitter'а ассистента. */
+const EDITOR_COL_MIN_WIDTH = 360;
+/** Ширина видимого gutter между editor и chat. */
+const ASSISTANT_SPLITTER_GUTTER_PX = 10;
 export const PANEL_COLLAPSED_WIDTH = 280;
 export const PANEL_COLLAPSED_HEIGHT = 44;
 const PANEL_BASE_Z_INDEX = 25100;
@@ -71,7 +81,12 @@ export class FlowsFloatingPanel extends PlatformElement {
             }
 
             :host([data-dragging]),
-            :host([data-resizing]) {
+            :host([data-resizing]),
+            :host([data-assistant-resizing]) {
+                transition: none;
+            }
+
+            :host([data-assistant-resizing]) .panel-body {
                 transition: none;
             }
 
@@ -201,12 +216,15 @@ export class FlowsFloatingPanel extends PlatformElement {
                 position: relative;
                 z-index: 1;
                 display: grid;
-                grid-template-columns: minmax(0, 1fr) 0px;
+                grid-template-columns: minmax(0, 1fr) 0;
                 transition: grid-template-columns var(--duration-slower) var(--easing-smooth);
             }
 
             :host([ai-active]) .panel-body {
-                grid-template-columns: minmax(0, 1fr) var(--panel-assistant-width);
+                grid-template-columns:
+                    minmax(0, 1fr)
+                    10px
+                    var(--panel-assistant-width);
             }
 
             :host([data-collapsed]) .panel-body {
@@ -228,25 +246,89 @@ export class FlowsFloatingPanel extends PlatformElement {
             .panel-assistant {
                 display: flex;
                 flex-direction: column;
-                border-left: 1px solid transparent;
                 opacity: 0;
                 transform: translateX(12px);
                 transition:
                     opacity var(--duration-slow) var(--easing-smooth),
-                    transform var(--duration-slower) var(--easing-smooth),
-                    border-color var(--duration-fast) var(--easing-default);
+                    transform var(--duration-slower) var(--easing-smooth);
             }
 
             :host([ai-active]) .panel-assistant {
                 opacity: 1;
                 transform: translateX(0);
-                border-left-color: var(--border-subtle);
             }
 
             .panel-assistant ::slotted(*) {
                 flex: 1;
                 min-height: 0;
                 height: 100%;
+            }
+
+            .assistant-resize-handle {
+                z-index: 4;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+                border: none;
+                border-left: 1px solid var(--border-subtle);
+                border-right: 1px solid var(--border-subtle);
+                box-sizing: border-box;
+                cursor: col-resize;
+                touch-action: none;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 3px;
+                background: color-mix(in oklab, var(--bg-secondary) 88%, var(--bg-primary));
+                transition: background var(--duration-fast) var(--easing-default);
+            }
+
+            .assistant-resize-handle::before,
+            .assistant-resize-handle::after {
+                content: '';
+                width: 3px;
+                height: 3px;
+                border-radius: var(--radius-full);
+                background: var(--text-tertiary);
+                opacity: 0.85;
+                pointer-events: none;
+                transition:
+                    background var(--duration-fast) var(--easing-default),
+                    opacity var(--duration-fast) var(--easing-default);
+            }
+
+            .assistant-resize-grip {
+                width: 3px;
+                height: 3px;
+                border-radius: var(--radius-full);
+                background: var(--text-tertiary);
+                opacity: 0.85;
+                pointer-events: none;
+                transition:
+                    background var(--duration-fast) var(--easing-default),
+                    opacity var(--duration-fast) var(--easing-default);
+            }
+
+            .assistant-resize-handle:hover,
+            :host([data-assistant-resizing]) .assistant-resize-handle {
+                background: color-mix(in oklab, var(--accent) 16%, var(--bg-secondary));
+            }
+
+            .assistant-resize-handle:hover::before,
+            .assistant-resize-handle:hover::after,
+            .assistant-resize-handle:hover .assistant-resize-grip,
+            :host([data-assistant-resizing]) .assistant-resize-handle::before,
+            :host([data-assistant-resizing]) .assistant-resize-handle::after,
+            :host([data-assistant-resizing]) .assistant-resize-handle .assistant-resize-grip {
+                background: var(--accent);
+                opacity: 1;
+            }
+
+            :host(:not([ai-active])) .assistant-resize-handle,
+            :host([data-collapsed]) .assistant-resize-handle {
+                display: none;
             }
 
             .panel-body[data-lara-glow] {
@@ -345,8 +427,12 @@ export class FlowsFloatingPanel extends PlatformElement {
         this._panelRect = null;
         /** @type {number | null} */
         this._widthBeforeAi = null;
+        /** @type {number} */
+        this._assistantWidth = ASSISTANT_COL_WIDTH_DEFAULT;
         this._dragState = null;
         this._resizeState = null;
+        /** @type {{ startX: number, startAssistantWidth: number, panelWidth: number } | null} */
+        this._assistantResizeState = null;
         this._titlePointerDown = null;
         /** @type {Element | null} */
         this._pointerCaptureEl = null;
@@ -377,6 +463,7 @@ export class FlowsFloatingPanel extends PlatformElement {
 
     firstUpdated() {
         super.firstUpdated?.();
+        this._loadAssistantWidth();
         this.setAttribute('data-layout-ready', '');
         this._initFloatingLayout();
         this._bringPanelToFront();
@@ -397,6 +484,41 @@ export class FlowsFloatingPanel extends PlatformElement {
             return this.panelId;
         }
         return '__legacy__';
+    }
+
+    _assistantColumnWidth() {
+        const normalized = normalizeAssistantWidth(this._assistantWidth);
+        if (normalized === null) {
+            return ASSISTANT_COL_WIDTH_DEFAULT;
+        }
+        return normalized;
+    }
+
+    _loadAssistantWidth() {
+        const saved = readAssistantWidthPref();
+        this._assistantWidth = saved === null ? ASSISTANT_COL_WIDTH_DEFAULT : saved;
+        this._applyAssistantWidthCss();
+    }
+
+    _applyAssistantWidthCss() {
+        this.style.setProperty('--panel-assistant-width', `${this._assistantColumnWidth()}px`);
+    }
+
+    _setAssistantWidth(width, { persist = false, flush = false } = {}) {
+        const normalized = normalizeAssistantWidth(width);
+        if (normalized === null) {
+            throw new Error('flows-floating-panel: assistant width must be a finite number');
+        }
+        this._assistantWidth = normalized;
+        this._applyAssistantWidthCss();
+        if (!persist) {
+            return;
+        }
+        if (flush) {
+            writeAssistantWidthPref(normalized);
+        } else {
+            scheduleAssistantWidthPersist(normalized);
+        }
     }
 
     _panelViewport() {
@@ -434,7 +556,13 @@ export class FlowsFloatingPanel extends PlatformElement {
     }
 
     _setGeometryTransition(enabled) {
-        if (enabled && !this._dragState && !this._resizeState && !this._prefersReducedMotion()) {
+        if (
+            enabled
+            && !this._dragState
+            && !this._resizeState
+            && !this._assistantResizeState
+            && !this._prefersReducedMotion()
+        ) {
             this.setAttribute('data-geometry-transition', '');
             return;
         }
@@ -455,7 +583,8 @@ export class FlowsFloatingPanel extends PlatformElement {
         if (!this.aiActive || snapshot.collapsed) {
             return snapshot;
         }
-        const baseWidth = Math.max(this._panelMinWidth(false), snapshot.width - ASSISTANT_COL_WIDTH);
+        const assistantWidth = this._assistantColumnWidth();
+        const baseWidth = Math.max(this._panelMinWidth(false), snapshot.width - assistantWidth);
         const next = {
             ...snapshot,
             width: baseWidth,
@@ -463,20 +592,21 @@ export class FlowsFloatingPanel extends PlatformElement {
         if (typeof snapshot.expandedWidth === 'number') {
             next.expandedWidth = Math.max(
                 this._panelMinWidth(false),
-                snapshot.expandedWidth - ASSISTANT_COL_WIDTH,
+                snapshot.expandedWidth - assistantWidth,
             );
         }
         return next;
     }
 
     _syncAiPanelWidth(wasActive) {
-        if (this._collapsed || this._dragState || this._resizeState) {
+        if (this._collapsed || this._dragState || this._resizeState || this._assistantResizeState) {
             return;
         }
         const rect = this._panelRect ?? this._readCurrentPanelRect();
         if (!rect) {
             return;
         }
+        const assistantWidth = this._assistantColumnWidth();
         const viewport = this._panelViewport();
         const margin = PANEL_VIEWPORT_MARGIN;
         const maxAllowed = Math.min(
@@ -486,7 +616,7 @@ export class FlowsFloatingPanel extends PlatformElement {
 
         if (this.aiActive && !wasActive) {
             this._widthBeforeAi = rect.width;
-            const nextWidth = Math.min(rect.width + ASSISTANT_COL_WIDTH, maxAllowed);
+            const nextWidth = Math.min(rect.width + assistantWidth, maxAllowed);
             let nextLeft = rect.left;
             if (nextLeft + nextWidth > viewport.width - margin) {
                 nextLeft = Math.max(margin, viewport.width - margin - nextWidth);
@@ -507,7 +637,7 @@ export class FlowsFloatingPanel extends PlatformElement {
                 : this._panelMinWidth(false);
             const closeWidth = Math.max(
                 this._panelMinWidth(false),
-                Math.max(widthBeforeAi, rect.width - ASSISTANT_COL_WIDTH),
+                Math.max(widthBeforeAi, rect.width - assistantWidth),
             );
             this._widthBeforeAi = null;
             this._setGeometryTransition(true);
@@ -733,6 +863,7 @@ export class FlowsFloatingPanel extends PlatformElement {
             'platform-switch',
             'platform-help-hint',
             '.resize-handle',
+            '.assistant-resize-handle',
         ].join(',')));
     }
 
@@ -807,6 +938,30 @@ export class FlowsFloatingPanel extends PlatformElement {
         window.addEventListener('pointercancel', this._boundPanelPointerUp);
     }
 
+    _onAssistantResizePointerDown(e) {
+        if (e.button !== 0 || !this.aiActive || this._collapsed) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        this._endPanelPointerInteraction();
+        const rect = this._ensureFloatingPanelRect({ bringToFront: true });
+        if (!rect) {
+            throw new Error('flows-floating-panel: panel rect is required for assistant resize');
+        }
+        this._capturePanelPointer(e);
+        this._assistantResizeState = {
+            startX: e.clientX,
+            startAssistantWidth: this._assistantColumnWidth(),
+            panelWidth: rect.width,
+        };
+        this.setAttribute('data-assistant-resizing', '');
+        this._setGeometryTransition(false);
+        window.addEventListener('pointermove', this._boundPanelPointerMove);
+        window.addEventListener('pointerup', this._boundPanelPointerUp);
+        window.addEventListener('pointercancel', this._boundPanelPointerUp);
+    }
+
     _onPanelPointerMove(e) {
         if (this._dragState) {
             const dx = e.clientX - this._dragState.startX;
@@ -817,6 +972,25 @@ export class FlowsFloatingPanel extends PlatformElement {
                 top: this._dragState.startRect.top + dy,
             });
             this._persistPanelRect({ flush: false });
+            return;
+        }
+        if (this._assistantResizeState) {
+            const dx = e.clientX - this._assistantResizeState.startX;
+            // Влево (dx < 0) → чат шире за счёт editor; вправо → уже. Outer panel не двигаем.
+            const desiredAssistant = this._assistantResizeState.startAssistantWidth - dx;
+            const panelWidth = this._assistantResizeState.panelWidth;
+            const maxAssistant = Math.min(
+                ASSISTANT_COL_WIDTH_MAX,
+                Math.max(
+                    ASSISTANT_COL_WIDTH_MIN,
+                    panelWidth - EDITOR_COL_MIN_WIDTH - ASSISTANT_SPLITTER_GUTTER_PX,
+                ),
+            );
+            const nextAssistant = Math.min(
+                maxAssistant,
+                Math.max(ASSISTANT_COL_WIDTH_MIN, Math.round(desiredAssistant)),
+            );
+            this._setAssistantWidth(nextAssistant, { persist: true, flush: false });
             return;
         }
         if (this._resizeState) {
@@ -834,7 +1008,11 @@ export class FlowsFloatingPanel extends PlatformElement {
     _onPanelPointerUp(e) {
         const dragState = this._dragState;
         const titlePointerDown = this._titlePointerDown;
+        const hadAssistantResize = Boolean(this._assistantResizeState);
         this._endPanelPointerInteraction();
+        if (hadAssistantResize) {
+            this._setAssistantWidth(this._assistantColumnWidth(), { persist: true, flush: true });
+        }
         if (
             dragState
             && titlePointerDown
@@ -848,12 +1026,16 @@ export class FlowsFloatingPanel extends PlatformElement {
     }
 
     _endPanelPointerInteraction() {
-        const hadInteraction = Boolean(this._dragState || this._resizeState);
+        const hadInteraction = Boolean(
+            this._dragState || this._resizeState || this._assistantResizeState,
+        );
         this._releasePanelPointerCapture();
         this._dragState = null;
         this._resizeState = null;
+        this._assistantResizeState = null;
         this.removeAttribute('data-dragging');
         this.removeAttribute('data-resizing');
+        this.removeAttribute('data-assistant-resizing');
         if (typeof window !== 'undefined') {
             window.removeEventListener('pointermove', this._boundPanelPointerMove);
             window.removeEventListener('pointerup', this._boundPanelPointerUp);
@@ -875,7 +1057,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         if (shouldCollapse) {
             this._collapsed = true;
             const expandedWidth = this.aiActive
-                ? Math.max(this._panelMinWidth(false), currentRect.width - ASSISTANT_COL_WIDTH)
+                ? Math.max(this._panelMinWidth(false), currentRect.width - this._assistantColumnWidth())
                 : currentRect.width;
             this._applyFloatingPanelRect({
                 left: currentRect.left,
@@ -972,6 +1154,19 @@ export class FlowsFloatingPanel extends PlatformElement {
                         <slot name="editor"></slot>
                         <slot></slot>
                     </div>
+                    ${this.aiActive && !this._collapsed ? html`
+                        <div
+                            class="assistant-resize-handle"
+                            role="separator"
+                            aria-orientation="vertical"
+                            title=${this.t('floating_panel.resize_assistant')}
+                            aria-label=${this.t('floating_panel.resize_assistant')}
+                            tabindex="0"
+                            @pointerdown=${this._onAssistantResizePointerDown}
+                        >
+                            <span class="assistant-resize-grip"></span>
+                        </div>
+                    ` : nothing}
                     <div class="panel-assistant">
                         <slot name="assistant"></slot>
                     </div>

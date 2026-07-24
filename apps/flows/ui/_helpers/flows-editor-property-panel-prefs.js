@@ -2,7 +2,10 @@
  * Персональные prefs панелей свойств редактора flow (localStorage, не flow config).
  *
  * Ключ: platform:flows:editor_property_panel_prefs
- * Форма: { property_panels?: Record<string, { left, top, width, height, collapsed, expandedWidth?, expandedHeight? }> }
+ * Форма: {
+ *   property_panels?: Record<string, { left, top, width, height, collapsed, expandedWidth?, expandedHeight? }>,
+ *   assistant_width?: number,
+ * }
  */
 
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
@@ -11,6 +14,10 @@ export const FLOWS_EDITOR_PROPERTY_PANEL_PREFS_KEY = platformStorageKey(
     'flows',
     'editor_property_panel_prefs',
 );
+
+export const ASSISTANT_COL_WIDTH_DEFAULT = 380;
+export const ASSISTANT_COL_WIDTH_MIN = 280;
+export const ASSISTANT_COL_WIDTH_MAX = 640;
 
 /** @typedef {{ left: number, top: number, width: number, height: number, collapsed: boolean, expandedWidth?: number, expandedHeight?: number }} PropertyPanelRectPref */
 
@@ -22,12 +29,30 @@ let persistTimer = null;
 /** @type {{ panelId: string, rect: PropertyPanelRectPref } | null} */
 let pendingRectPref = null;
 
+/** @type {ReturnType<typeof setTimeout> | null} */
+let assistantWidthPersistTimer = null;
+
+/** @type {number | null} */
+let pendingAssistantWidth = null;
+
 function _isPlainObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
- * @returns {{ property_panels?: Record<string, unknown>, property_panel?: Record<string, unknown> }}
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+export function normalizeAssistantWidth(value) {
+    const width = Number(value);
+    if (!Number.isFinite(width)) {
+        return null;
+    }
+    return Math.min(ASSISTANT_COL_WIDTH_MAX, Math.max(ASSISTANT_COL_WIDTH_MIN, Math.round(width)));
+}
+
+/**
+ * @returns {{ property_panels?: Record<string, unknown>, property_panel?: Record<string, unknown>, assistant_width?: unknown }}
  */
 function _readRoot() {
     const raw = globalThis.localStorage.getItem(FLOWS_EDITOR_PROPERTY_PANEL_PREFS_KEY);
@@ -52,7 +77,7 @@ function _readRoot() {
 }
 
 /**
- * @param {{ property_panels?: Record<string, unknown> }} root
+ * @param {{ property_panels?: Record<string, unknown>, assistant_width?: number }} root
  */
 function _writeRoot(root) {
     globalThis.localStorage.setItem(FLOWS_EDITOR_PROPERTY_PANEL_PREFS_KEY, JSON.stringify(root));
@@ -114,6 +139,62 @@ export function readPropertyPanelRectPref(panelId) {
         return _normalizePropertyPanelRect(root.property_panel);
     }
     return null;
+}
+
+/**
+ * @returns {number | null}
+ */
+export function readAssistantWidthPref() {
+    const root = _readRoot();
+    return normalizeAssistantWidth(root.assistant_width);
+}
+
+/**
+ * @param {number} width
+ */
+function _flushAssistantWidthPref(width) {
+    const normalized = normalizeAssistantWidth(width);
+    if (normalized === null) {
+        throw new Error('writeAssistantWidthPref: width must be a finite number');
+    }
+    const root = _readRoot();
+    root.assistant_width = normalized;
+    _writeRoot(root);
+}
+
+/**
+ * @param {number} width
+ */
+export function scheduleAssistantWidthPersist(width) {
+    const normalized = normalizeAssistantWidth(width);
+    if (normalized === null) {
+        throw new Error('scheduleAssistantWidthPersist: width must be a finite number');
+    }
+    pendingAssistantWidth = normalized;
+    if (assistantWidthPersistTimer !== null) {
+        clearTimeout(assistantWidthPersistTimer);
+    }
+    assistantWidthPersistTimer = setTimeout(() => {
+        assistantWidthPersistTimer = null;
+        const batch = pendingAssistantWidth;
+        pendingAssistantWidth = null;
+        if (batch === null) {
+            return;
+        }
+        _flushAssistantWidthPref(batch);
+    }, PERSIST_DEBOUNCE_MS);
+}
+
+/**
+ * @param {number} width
+ */
+export function writeAssistantWidthPref(width) {
+    if (assistantWidthPersistTimer !== null) {
+        clearTimeout(assistantWidthPersistTimer);
+        assistantWidthPersistTimer = null;
+    }
+    pendingAssistantWidth = null;
+    _flushAssistantWidthPref(width);
 }
 
 /**
