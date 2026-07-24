@@ -21,6 +21,7 @@ import {
 } from '../../_helpers/flows-reflection-defaults.js';
 
 export class FlowsReflectionNodeEditor extends PlatformElement {
+    static i18nNamespace = 'flows';
     static properties = {
         nodeId: { type: String },
         flowId: { type: String },

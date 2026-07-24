@@ -238,6 +238,26 @@ async def flows_eval_create_judge_node(page: Page) -> None:
         has_text=re.compile(r"Judge llm_node|Judge", re.I)
     ).first
     await expect(judge_field).to_be_visible(timeout=15_000)
+    embedded = page.locator("flows-embedded-tool-config-modal").first
+    await expect(embedded).to_be_visible(timeout=15_000)
+    closed = await page.evaluate(
+        """
+        () => {
+            const el = document.querySelector('flows-embedded-tool-config-modal');
+            if (!el) return false;
+            if (typeof el.close === 'function') {
+                el.close();
+                return true;
+            }
+            el.open = false;
+            el.removeAttribute('open');
+            return true;
+        }
+        """
+    )
+    if closed is not True:
+        raise AssertionError("flows-embedded-tool-config-modal did not close after judge create")
+    await expect(embedded).to_be_hidden(timeout=15_000)
 
 
 async def flows_eval_api_list_cases(

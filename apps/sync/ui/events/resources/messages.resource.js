@@ -33,7 +33,7 @@
  *     byChannelId: { [channelId]: ChannelData },
  *     replyToMessageId: string | null,
  *     editMessageId: string | null,
- *     contextMenuTarget: { messageId, x, y } | null,
+ *     contextMenuTarget: { messageId, channelId, x, y } | null,
  *     flashMessageId: string | null,
  *     flashSeq: number,
  *   }
@@ -522,10 +522,12 @@ export const messagesStoreSlice = createSlice({
             case 'sync/messages_store/context_menu_requested': {
                 const p = event.payload;
                 if (!p || typeof p.messageId !== 'string') return state;
+                if (typeof p.channelId !== 'string' || p.channelId === '') return state;
                 return {
                     ...state,
                     contextMenuTarget: Object.freeze({
                         messageId: p.messageId,
+                        channelId: p.channelId,
                         x: typeof p.x === 'number' ? p.x : 0,
                         y: typeof p.y === 'number' ? p.y : 0,
                     }),

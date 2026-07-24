@@ -1,33 +1,39 @@
-# Run the agent on a schedule
+# Run the agent on a schedule (cron)
 
-**What for:** this guide configures a daily agent run without manual starts.
+**What for:** configure a daily automatic agent run without manual starts.
 
-**Problems it solves:** an order summary is needed every morning — a cron trigger automates it.
+**Problems it solves:** an order summary is needed every morning — the schedule starts the assistant at the right hour and timezone.
 
-**Result:** a schedule trigger with a cron expression is saved on the agent.
+**Result:** a cron trigger with expression, timezone, and starter text is saved.
 
-## Step 1. Open the triggers list
+## Step 1. Open the agent triggers list
 
-In the editor menu choose Triggers. Here you see all automatic agent runs — on a schedule, from Telegram, or via webhook.
+In the Green Garden Assistant editor open the menu and choose Triggers. All automatic runs live here, including schedules.
 
-![Open the triggers list](schedule-daily-run--01-triggers-modal-opened.png)
+![Open the agent triggers list](schedule-daily-run--01-triggers-modal-opened.png)
 
-## Step 2. Create a cron trigger
+## Step 2. Choose Cron and set the name
 
-Click +, pick Cron, and set the schedule to 0 9 * * * — the agent runs every day at 9:00.
+Click +, pick the Cron card. The identifier is Latin for the system; the name Daily order summary appears in the list. Leave Enabled on, or the schedule will not fire.
 
-![Create a cron trigger](schedule-daily-run--02-cron-trigger-configured.png)
+![Choose Cron and set the name](schedule-daily-run--02-cron-type-and-name.png)
 
-## Step 3. Save the trigger in the list
+## Step 3. Fill schedule, timezone, and starter text
 
-Click Save in the trigger editor. The new Daily order summary row appears in the agent automatic runs list.
+The cron expression 0 9 * * * means every day at 09:00 (minute, hour, day, month, weekday). Timezone Europe/Moscow keeps 09:00 Moscow time, not UTC. Initial text is the phrase the agent starts with, as if someone wrote it in chat.
 
-![Save the trigger in the list](schedule-daily-run--03-cron-trigger-saved.png)
+![Fill schedule, timezone, and starter text](schedule-daily-run--03-cron-fields-filled.png)
 
-## Step 4. Confirm the schedule is saved
+## Step 4. Open Mapping and inspect the sample data
 
-**Result demonstration.** The cron trigger appears in the list and is saved on the agent — the daily summary will run automatically.
+The Mapping tab shows which fields arrive when the schedule fires (time and timezone). Example paths can be added with one click — they connect inbound data to what the agent sees.
 
-**Summary.** You can open triggers, set a cron schedule, and save it for the Green Garden Assistant.
+![Open Mapping and inspect the sample data](schedule-daily-run--04-cron-mapping-sample.png)
 
-![Confirm the schedule is saved](schedule-daily-run--04-cron-trigger-published.png)
+## Step 5. Save and find the schedule in the list
+
+**Result demonstration.** The Daily order summary row appears in the triggers list — the agent will run each morning on the set schedule.
+
+**Summary.** You can configure cron: name, expression, timezone, and starter text.
+
+![Save and find the schedule in the list](schedule-daily-run--05-cron-trigger-published.png)

@@ -50,8 +50,10 @@
 | [platform-llm-config-editor](../platform-llm-config-editor/) | T0 | backlog |
 | [platform-llm-context-editor](../platform-llm-context-editor/) | T0 | backlog |
 | [platform-log-viewer](../platform-log-viewer/) | T0 | backlog |
-| [platform-mermaid-host](../platform-mermaid-host/) | T2 | backfill |
+| [platform-mail-calendar-rail](../platform-mail-calendar-rail/) | T0 | backlog |
+| [platform-mail-modal](../platform-mail-modal/) | T0 | backlog |
 | [platform-markdown-editor](../platform-markdown-editor/) | T0 | backlog |
+| [platform-mermaid-host](../platform-mermaid-host/) | T2 | backfill |
 | [platform-metric-card](../platform-metric-card/) | T0 | backfill |
 | [platform-mini-bar-chart](../platform-mini-bar-chart/) | T0 | backlog |
 | [platform-modal-search-field](../platform-modal-search-field/) | T0 | backlog |
@@ -88,8 +90,12 @@
 | [platform-variable-value-editor](../platform-variable-value-editor/) | T0 | backlog |
 | [platform-variables-panel](../platform-variables-panel/) | T0 | backlog |
 | [platform-viz-host](../platform-viz-host/) | T2 | backfill |
+| [platform-voice-dictation](../platform-voice-dictation/) | T0 | backlog |
 | [platform-work-item-badge](../platform-work-item-badge/) | T0 | backlog |
+| [platform-work-item-board](../platform-work-item-board/) | T0 | backlog |
+| [platform-work-item-detail](../platform-work-item-detail/) | T0 | backlog |
 | [platform-work-item-preview](../platform-work-item-preview/) | T0 | backlog |
+| [platform-work-item-row](../platform-work-item-row/) | T0 | backlog |
 
 ## Playground
 

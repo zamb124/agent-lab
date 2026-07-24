@@ -1,10 +1,10 @@
 # Time-travel the run history
 
-**What for:** review dialog execution history, understand each step, and pick a moment to fork or switch the active head.
+**What for:** this guide helps you review dialog execution history and find the moment to replay from.
 
 **Problems it solves:** after a failure it is unclear which step failed and you have to restart the whole dialog.
 
-**Result:** execution history is open with a readable event journal and Fork / Make head / Retry actions.
+**Result:** execution history is open with a list of events from the last run.
 
 ## Step 1. Open the agent chat
 
@@ -14,26 +14,20 @@ Open the Green Garden Assistant chat. Execution history is available for dialogs
 
 ## Step 2. Run the dialog
 
-Send a message and wait for the reply. After the run completes, the system stores the event chain in the durable ledger.
+Send a message and wait for the reply. After the run completes, the system stores the event chain you can navigate.
 
 ![Run the dialog](time-travel-history--02-history-run-done.png)
 
 ## Step 3. Open execution history
 
-Click the execution history button in the chat or choose the menu item. The **Execution history** modal opens: branch lineage on top, event journal on the left, inspector on the right.
+Click the execution history button in the chat or choose the menu item. A modal opens with the event chain from the last run.
 
 ![Open execution history](time-travel-history--03-durable-history-opened.png)
 
-## Step 4. Pick a step and an action
+## Step 4. Review the event list
 
-**Result demonstration.** The journal lists steps from the last run (input, nodes, terminal). The inspector shows a short summary, action consequences, and buttons:
+**Result demonstration.** The list shows events from the last run — you can pick a moment to replay or branch from.
 
-- **Fork** — new branch; session active head stays unchanged.
-- **Make head (Rewind)** — new branch becomes the active head; the run does not start by itself — continue with the next chat message.
-- **Retry from failure** — only on `NodeFailed`.
-
-After a command, an outcome card shows the new branch. Raw JSON stays under Advanced tabs.
-
-**Summary.** You can now read execution history and deliberately choose fork or head switch.
+**Summary.** You can now review Green Garden agent execution history and find the step you need.
 
 ![Review the event list](time-travel-history--04-durable-history-events.png)

@@ -705,8 +705,13 @@ export class SyncMessageBubble extends PlatformElement {
     _showContextMenu(x, y) {
         const messageId = this.message && this.message.message_id;
         if (typeof messageId !== 'string') return;
+        const channelId = this.message && typeof this.message.channel_id === 'string'
+            ? this.message.channel_id
+            : '';
+        if (channelId === '') return;
         this._store.showContextMenu({
             messageId,
+            channelId,
             x: typeof x === 'number' ? x : 0,
             y: typeof y === 'number' ? y : 0,
         });

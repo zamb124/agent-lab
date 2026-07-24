@@ -1215,18 +1215,24 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                             }
                             const isActive = bindingId === selectedId;
                             return html`
-                                <button
-                                    type="button"
+                                <article
                                     role="option"
+                                    tabindex="0"
                                     class="email-chip ${isActive ? 'active' : ''}"
                                     aria-selected=${isActive ? 'true' : 'false'}
                                     @click=${() => this._selectMailboxBinding(bindingId)}
+                                    @keydown=${(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            this._selectMailboxBinding(bindingId);
+                                        }
+                                    }}
                                 >
                                     ${binding.email_address}
                                     ${binding.is_default
                                         ? html`<span class="email-chip-meta">${this.t('trigger_editor_modal.mailbox_default_badge')}</span>`
                                         : nothing}
-                                </button>
+                                </article>
                             `;
                         })}
                     </div>
@@ -1239,15 +1245,21 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                         ${EMAIL_FILTER_PRESETS.map((preset) => {
                             const isActive = preset.id === activePresetId;
                             return html`
-                                <button
-                                    type="button"
+                                <article
                                     role="option"
+                                    tabindex="0"
                                     class="email-chip ${isActive ? 'active' : ''}"
                                     aria-selected=${isActive ? 'true' : 'false'}
                                     @click=${() => this._applyEmailFilterPreset(preset.id)}
+                                    @keydown=${(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            this._applyEmailFilterPreset(preset.id);
+                                        }
+                                    }}
                                 >
                                     ${this.t(`trigger_editor_modal.${preset.labelKey}`)}
-                                </button>
+                                </article>
                             `;
                         })}
                     </div>

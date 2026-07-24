@@ -411,14 +411,18 @@ services:
         label_ru: Общее
         label_en: General
         order: 1
+      namespaces:
+        label_ru: Пространства
+        label_en: Namespaces
+        order: 2
       settings-agent:
         label_ru: LinnexAgent в настройках
         label_en: LinnexAgent settings
-        order: 2
+        order: 3
       agent-download:
         label_ru: Скачивание LinnexAgent
         label_en: LinnexAgent download
-        order: 3
+        order: 4
 
   office:
     label_ru: Office

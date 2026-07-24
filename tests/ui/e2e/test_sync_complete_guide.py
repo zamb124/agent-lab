@@ -172,7 +172,10 @@ async def test_sync_complete_service_guide(
     )
     for index in range(2):
         switch = namespace_modal.locator("platform-switch").nth(index)
-        await switch.click()
+        # Дефолты company workspace живут между тестами одного worker — клик
+        # по уже включённому switch выключает его (checked attribute → null).
+        if await switch.get_attribute("checked") is None:
+            await switch.click()
         await expect(switch).to_have_attribute("checked", "", timeout=5_000)
     await sync_e2e_click_platform_button(namespace_modal, "Сохранить", "Save")
     await expect(namespace_modal).to_be_hidden(timeout=8_000)
@@ -208,7 +211,10 @@ async def test_sync_complete_service_guide(
     await create_modal.locator("input.field-pill-input").first.fill(channel_name)
     # В форме создания три переключателя: private, transcribe, speech-to-chat.
     for index in (1, 2):
-        await create_modal.locator("platform-switch").nth(index).click()
+        switch = create_modal.locator("platform-switch").nth(index)
+        if await switch.get_attribute("checked") is None:
+            await switch.click()
+        await expect(switch).to_have_attribute("checked", "", timeout=5_000)
     await scenario.step(
         "Заполнены название и параметры канала",
         ui_page_system,
@@ -328,8 +334,28 @@ async def test_sync_complete_service_guide(
     await textarea.press_sequentially(mention_text_tail)
     await composer.locator("button.send").evaluate("(el) => el.click()")
     mention_bubble = ui_page_system.locator("sync-message-bubble").last
+    peer_display_name = await ui_page_system.evaluate(
+        """(userId) => {
+            const bus = window.__PLATFORM_BUS__;
+            if (!bus || typeof bus.getState !== 'function') {
+                throw new Error('__PLATFORM_BUS__ unavailable');
+            }
+            const slice = bus.getState().syncCompanyMembers;
+            const items = slice && Array.isArray(slice.items) ? slice.items : [];
+            const member = items.find((m) => m && m.user_id === userId);
+            if (!member) {
+                throw new Error('peer missing in syncCompanyMembers');
+            }
+            if (typeof member.name === 'string' && member.name.length > 0) return member.name;
+            if (typeof member.display_name === 'string' && member.display_name.length > 0) {
+                return member.display_name;
+            }
+            return userId;
+        }""",
+        peer_uid,
+    )
     await expect(mention_bubble.locator(".body .mention")).to_contain_text(
-        "System User 2",
+        peer_display_name,
         timeout=8_000,
     )
     await expect(mention_bubble.locator(".body")).to_contain_text(mention_text_tail)
@@ -515,7 +541,7 @@ async def test_sync_complete_service_guide(
     await peer_bubble.locator(".sender").click()
     user_modal = ui_page_system.locator("platform-user-info-modal")
     await expect(user_modal).to_be_visible(timeout=8_000)
-    await expect(user_modal.get_by_text("System User 2", exact=False)).to_be_visible()
+    await expect(user_modal.get_by_text(peer_display_name, exact=False)).to_be_visible()
     await expect(user_modal.get_by_text(re.compile(r"Каналы вместе|Shared channels"))).to_be_visible()
     await scenario.step(
         "Открыта карточка профиля участника",

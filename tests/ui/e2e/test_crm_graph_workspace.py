@@ -12,6 +12,7 @@ from tests.ui.harness import AppUI
 
 @pytest.mark.asyncio
 @pytest.mark.e2e
+@pytest.mark.timeout(60)
 async def test_crm_mindmap_legacy_path_redirects_to_graph_workspace(
     crm_ui: AppUI,
     ui_page_system: Page,
@@ -26,6 +27,7 @@ async def test_crm_mindmap_legacy_path_redirects_to_graph_workspace(
 
 @pytest.mark.asyncio
 @pytest.mark.e2e
+@pytest.mark.timeout(60)
 async def test_crm_mindmap_legacy_with_root_redirects(
     crm_ui: AppUI,
     ui_page_system: Page,
@@ -43,6 +45,7 @@ async def test_crm_mindmap_legacy_with_root_redirects(
 
 @pytest.mark.asyncio
 @pytest.mark.e2e
+@pytest.mark.timeout(90)
 async def test_crm_graph_workspace_switch_3d_to_mindmap_updates_url(
     crm_ui: AppUI,
     ui_page_system: Page,

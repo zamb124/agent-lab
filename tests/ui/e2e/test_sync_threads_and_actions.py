@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 
 import pytest
@@ -21,15 +22,42 @@ from tests.ui.scenario_doc import ScenarioRecorder
 
 
 async def _open_message_context_menu(page: Page, bubble) -> None:
-    await bubble.click(button="right")
-    await expect(page.locator("sync-message-context-menu")).to_have_attribute(
-        "open", "", timeout=10_000
+    await page.wait_for_function(
+        """() => {
+            const bus = window.__PLATFORM_BUS__;
+            if (!bus || typeof bus.getState !== 'function') return false;
+            const user = bus.getState().auth && bus.getState().auth.user;
+            return !!(user && typeof user.user_id === 'string' && user.user_id.length > 0);
+        }""",
+        timeout=15_000,
     )
+    # data-own появляется после сверки sender с auth — без него Delete/Edit скрыты.
+    await expect(bubble).to_have_attribute("data-own", "", timeout=15_000)
+    menu = page.locator("sync-message-context-menu[open]")
+    for _attempt in range(3):
+        await bubble.click(button="right")
+        try:
+            await expect(menu).to_be_visible(timeout=5_000)
+            # Своё сообщение: Delete обязан быть (канал/message резолвятся из target).
+            delete_item = menu.locator(".item").filter(
+                has_text=re.compile(r"Удалить|Delete")
+            ).first
+            await expect(delete_item).to_be_visible(timeout=3_000)
+            return
+        except AssertionError:
+            await page.keyboard.press("Escape")
+            await asyncio.sleep(0.2)
+    await expect(menu).to_be_visible(timeout=5_000)
+    await expect(
+        menu.locator(".item").filter(has_text=re.compile(r"Удалить|Delete")).first
+    ).to_be_visible(timeout=5_000)
 
 
 async def _click_context_item(page: Page, *labels: str) -> None:
     pattern = re.compile("|".join(re.escape(label) for label in labels))
-    item = page.locator("sync-message-context-menu").locator(".item").filter(has_text=pattern).first
+    item = page.locator("sync-message-context-menu[open]").locator(".item").filter(
+        has_text=pattern
+    ).first
     await expect(item).to_be_visible(timeout=10_000)
     await item.click()
 

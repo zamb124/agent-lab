@@ -92,10 +92,13 @@ export class SyncMessageContextMenu extends PlatformElement {
         super.connectedCallback();
         document.addEventListener('pointerdown', this._boundOnDocClick, true);
         document.addEventListener('keydown', this._boundOnKey);
-        // Перенос хоста в body: гарантирует, что position: fixed работает
-        // от viewport, без containing-block эффектов от ancestor с
-        // backdrop-filter / will-change / transform / contain — свойства предков,
+        // Portal в body: fixed от viewport. Lit при каждом render channel-page
+        // создаёт новый хост, если предыдущий уже вынесен — чистим дубликаты,
+        // иначе open-меню с пустым channelId прячет Edit/Delete.
         if (this.parentNode !== document.body) {
+            for (const orphan of document.body.querySelectorAll('sync-message-context-menu')) {
+                if (orphan !== this) orphan.remove();
+            }
             document.body.appendChild(this);
         }
     }
@@ -111,14 +114,35 @@ export class SyncMessageContextMenu extends PlatformElement {
         return slice && slice.contextMenuTarget;
     }
 
+    _resolveChannelId() {
+        const target = this._currentTarget();
+        if (target && typeof target.channelId === 'string' && target.channelId !== '') {
+            return target.channelId;
+        }
+        if (typeof this.channelId === 'string' && this.channelId !== '') {
+            return this.channelId;
+        }
+        return '';
+    }
+
     _currentMessage() {
         const target = this._currentTarget();
         if (!target) return null;
         const slice = this._messagesStoreSel.value;
-        const channelData = slice && slice.byChannelId && slice.byChannelId[this.channelId];
+        if (!slice || !slice.byChannelId || typeof slice.byChannelId !== 'object') {
+            return null;
+        }
+        const channelId = this._resolveChannelId();
+        if (channelId === '') return null;
+        const channelData = slice.byChannelId[channelId];
         if (!channelData || !Array.isArray(channelData.items)) return null;
         const found = channelData.items.find((m) => m.message_id === target.messageId);
-        return found ? found : null;
+        if (found) return found;
+        const pendingMap = channelData.pendingByLocalId;
+        if (pendingMap && typeof pendingMap === 'object' && pendingMap[target.messageId]) {
+            return pendingMap[target.messageId];
+        }
+        return null;
     }
 
     _dismiss() {
@@ -153,8 +177,10 @@ export class SyncMessageContextMenu extends PlatformElement {
     _onDelete() {
         const t = this._currentTarget();
         if (!t) return;
+        const channelId = this._resolveChannelId();
+        if (channelId === '') return;
         this._delete.run({
-            channel_id: this.channelId,
+            channel_id: channelId,
             message_id: t.messageId,
         });
         this._dismiss();
@@ -163,8 +189,10 @@ export class SyncMessageContextMenu extends PlatformElement {
     _onReact(emoji) {
         const t = this._currentTarget();
         if (!t) return;
+        const channelId = this._resolveChannelId();
+        if (channelId === '') return;
         this._react.run({
-            channel_id: this.channelId,
+            channel_id: channelId,
             message_id: t.messageId,
             emoji,
         });
@@ -174,8 +202,10 @@ export class SyncMessageContextMenu extends PlatformElement {
     _onPin() {
         const t = this._currentTarget();
         if (!t) return;
+        const channelId = this._resolveChannelId();
+        if (channelId === '') return;
         this._pin.run({
-            channel_id: this.channelId,
+            channel_id: channelId,
             message_id: t.messageId,
             action: 'add',
         });
@@ -185,8 +215,10 @@ export class SyncMessageContextMenu extends PlatformElement {
     _onForward() {
         const t = this._currentTarget();
         if (!t) return;
+        const channelId = this._resolveChannelId();
+        if (channelId === '') return;
         this.openModal('sync.forward', {
-            message: { channel_id: this.channelId, message_id: t.messageId },
+            message: { channel_id: channelId, message_id: t.messageId },
         });
         this._dismiss();
     }

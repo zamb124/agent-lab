@@ -66,6 +66,11 @@ async def test_console_namespaces_list_filter_and_create(
             "и список карточек."
         ),
         label_en="Open the namespaces page",
+        details_en=(
+            "In the platform console, open Namespaces in the sidebar or go to /namespaces. "
+            "This shows the company registry of work and personal spaces. You should see "
+            "the page title and a list of cards."
+        ),
     )
 
     personal_filter = page_root.locator(".filter-tag").filter(
@@ -82,6 +87,10 @@ async def test_console_namespaces_list_filter_and_create(
             "именные каталоги сотрудников. Кнопка фильтра подсветится как активная."
         ),
         label_en="Filter personal namespaces",
+        details_en=(
+            "Click the Personal filter. The list keeps only employee personal catalogs. "
+            "The filter button appears pressed."
+        ),
     )
 
     all_filter = page_root.locator(".filter-tag").filter(
@@ -99,6 +108,11 @@ async def test_console_namespaces_list_filter_and_create(
             "нового пространства не появится в текущем отфильтрованном списке."
         ),
         label_en="Return to the full list",
+        details_en=(
+            "Click the All filter to show company workspaces and personal catalogs again. "
+            "Do this before creating a new workspace — otherwise the new card may stay "
+            "hidden behind the personal-only filter."
+        ),
     )
 
     create_btn = page_root.locator("page-header button, button.btn-primary").filter(
@@ -116,6 +130,10 @@ async def test_console_namespaces_list_filter_and_create(
             "с полями имени и описания — без выбора CRM-шаблона."
         ),
         label_en="Open the create workspace form",
+        details_en=(
+            "Click Create workspace. A form opens with name and description fields — "
+            "without choosing a CRM template."
+        ),
     )
 
     name_input = create_form.locator("input.field-pill-input").first
@@ -143,4 +161,11 @@ async def test_console_namespaces_list_filter_and_create(
             "личные каталоги и создать лёгкое workspace без CRM-шаблона."
         ),
         label_en="Confirm the new workspace in the list",
+        details_en=(
+            "**Result demonstration.** The list shows a card named "
+            f"{workspace_name}. A CRM settings link next to it means the space is "
+            "registered as a company workspace.\n\n"
+            "**Summary.** You can open the namespaces registry, filter personal "
+            "catalogs, and create a lightweight workspace without a CRM template."
+        ),
     )

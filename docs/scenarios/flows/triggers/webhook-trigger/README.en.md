@@ -1,10 +1,10 @@
-# Run the agent from a webhook
+# Run the agent from an HTTP webhook
 
-**What for:** this guide configures an agent run from an HTTP webhook from an external store system.
+**What for:** an external store system can start the agent with a plain HTTP POST.
 
-**Problems it solves:** warehouse or CRM events must arrive without Telegram and without a manual start.
+**Problems it solves:** warehouse or CRM events arrive neither from Telegram nor on a schedule — you need a protected URL with a secret.
 
-**Result:** a webhook trigger is saved on the Green Garden Assistant.
+**Result:** a webhook with secret, header, IP filter, and mapping is saved.
 
 ## Step 1. Open the triggers list
 
@@ -12,22 +12,28 @@ In the editor menu choose Triggers. Create a webhook here alongside schedule and
 
 ![Open the triggers list](webhook-trigger--01-webhook-triggers-modal.png)
 
-## Step 2. Choose the Webhook type
+## Step 2. Choose Webhook and set the name
 
-Click create and choose Webhook. The platform will accept an HTTP POST on the agent endpoint.
+Webhook accepts JSON over HTTP POST (not an A2A chat). Set an id and the name Warehouse events. The endpoint URL appears below — copy it into the external system.
 
-![Choose the Webhook type](webhook-trigger--02-webhook-type-selected.png)
+![Choose Webhook and set the name](webhook-trigger--02-webhook-type-and-name.png)
 
-## Step 3. Set id and name
+## Step 3. Configure secret, header, and allowed IPs
 
-Set a short id and a clear name such as Warehouse events so you can find the trigger among other autos.
+The secret is the request password — without it the platform rejects the call. Secret header (here Authorization) is the HTTP header name that carries that password. Allowed IPs are address tags; empty means no filter. Ready curl can be copied for a smoke test.
 
-![Set id and name](webhook-trigger--03-webhook-identity-filled.png)
+![Configure secret, header, and allowed IPs](webhook-trigger--03-webhook-security-filled.png)
 
-## Step 4. Save and find the webhook in the list
+## Step 4. Add mapping from an example
 
-**Result demonstration.** The Warehouse events webhook appears in the triggers list — an external system can call the agent over HTTP.
+On the Mapping tab click an example — for example content ← body.text. That turns warehouse JSON text into the agent input. Sample payload shows the expected shape.
 
-**Summary.** You can create a webhook trigger for external store events.
+![Add mapping from an example](webhook-trigger--04-webhook-mapping-example.png)
 
-![Save and find the webhook in the list](webhook-trigger--04-webhook-saved-in-list.png)
+## Step 5. Save the webhook and find it in the list
+
+**Result demonstration.** Warehouse events appears in the list — an external system can call the agent on a protected URL.
+
+**Summary.** You can configure a webhook: URL, secret, header, IPs, and mapping.
+
+![Save the webhook and find it in the list](webhook-trigger--05-webhook-saved-in-list.png)

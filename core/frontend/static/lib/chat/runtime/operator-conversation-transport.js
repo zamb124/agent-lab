@@ -403,7 +403,20 @@ export class OperatorConversationTransport {
         if (!response.ok) {
             throw new Error(`operator-transport: complete HTTP ${response.status}`);
         }
-        // Пузырь придёт через live operator_reply / operator_files на stream:{a2a_task_id}.
+        // Optimistic bubble: resume/consumer может отдать operator_reply позже;
+        // оператор сразу видит свой текст (дедуп в _operatorReply по content).
+        if (this._controller !== null && text !== '') {
+            this._controller.applyRuntimeVerb('operator_reply', {
+                task_id: this._a2aTaskId,
+                text,
+            });
+        }
+        if (this._controller !== null && fileRefs.length > 0) {
+            this._controller.applyRuntimeVerb('operator_files', {
+                task_id: this._a2aTaskId,
+                file_ids: fileRefs.map((ref) => ref.file_id),
+            });
+        }
     }
 
     async cancel() {

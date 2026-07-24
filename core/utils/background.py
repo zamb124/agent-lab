@@ -47,6 +47,10 @@ from core.types import JsonObject, JsonValue, require_json_object
 _logger = get_logger("platform.background")
 BackgroundResultT = TypeVar("BackgroundResultT")
 
+# asyncio loop keeps only weak refs to tasks; without a strong ref GC can destroy
+# long-running background loops (platform:events consumer, refresh loops, …).
+_BACKGROUND_TASKS: set[asyncio.Task[object]] = set()
+
 
 def run_with_log_context(
     coro: Awaitable[BackgroundResultT],
@@ -69,7 +73,9 @@ def run_with_log_context(
 
     Возвращает:
         asyncio.Task. Результат корутины не возвращается; вызывающий код
-        обязан забрать его сам, если нужен (через await task).
+        обязан забрать его сам, если нужен (через await task). Сильная ссылка
+        на Task удерживается в модуле до завершения (можно не сохранять
+        возврат, если await не нужен).
 
     Исключения:
         ValueError: если name пустой или нет background_kind вне request scope.
@@ -130,7 +136,10 @@ def run_with_log_context(
         finally:
             exit_request_scope(token)
 
-    return asyncio.create_task(runner(), name=name)
+    task = asyncio.create_task(runner(), name=name)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+    return task
 
 
 def _str_or_none(value: JsonValue | None) -> str | None:

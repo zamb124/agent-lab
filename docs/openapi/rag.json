@@ -199,6 +199,17 @@
             ],
             "title": "Default Calendar Id"
           },
+          "caldav_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caldav Base Url"
+          },
           "sync_enabled": {
             "type": "boolean",
             "title": "Sync Enabled",
@@ -374,6 +385,17 @@
             "type": "object",
             "title": "Metadata"
           },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
+          },
           "created_by_user_id": {
             "anyOf": [
               {
@@ -432,7 +454,9 @@
           "sync",
           "flows",
           "google",
-          "yandex"
+          "yandex",
+          "mailru",
+          "caldav"
         ],
         "title": "CalendarEventSource"
       },
@@ -547,6 +571,17 @@
             ],
             "title": "Default Calendar Id"
           },
+          "caldav_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caldav Base Url"
+          },
           "sync_enabled": {
             "type": "boolean",
             "title": "Sync Enabled",
@@ -642,7 +677,9 @@
         "enum": [
           "platform",
           "google",
-          "yandex"
+          "yandex",
+          "mailru",
+          "caldav"
         ],
         "title": "CalendarProvider"
       },
@@ -810,6 +847,17 @@
             },
             "type": "object",
             "title": "Metadata"
+          },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
           }
         },
         "additionalProperties": false,
@@ -820,6 +868,184 @@
           "end_at"
         ],
         "title": "CalendarUpsertRequest"
+      },
+      "CompanyMailConnectionPublic": {
+        "properties": {
+          "company_mail_connection_id": {
+            "type": "string",
+            "title": "Company Mail Connection Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/MailConnectionScope"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "mail_domain": {
+            "type": "string",
+            "title": "Mail Domain"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/MailProvider"
+          },
+          "imap_host": {
+            "type": "string",
+            "title": "Imap Host"
+          },
+          "imap_port": {
+            "type": "integer",
+            "title": "Imap Port"
+          },
+          "smtp_host": {
+            "type": "string",
+            "title": "Smtp Host"
+          },
+          "smtp_port": {
+            "type": "integer",
+            "title": "Smtp Port"
+          },
+          "use_ssl": {
+            "type": "boolean",
+            "title": "Use Ssl"
+          },
+          "supports_provision": {
+            "type": "boolean",
+            "title": "Supports Provision"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MailConnectionStatus"
+          },
+          "has_ispmanager_auth": {
+            "type": "boolean",
+            "title": "Has Ispmanager Auth"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_mail_connection_id",
+          "company_id",
+          "scope",
+          "mail_domain",
+          "provider",
+          "imap_host",
+          "imap_port",
+          "smtp_host",
+          "smtp_port",
+          "use_ssl",
+          "supports_provision",
+          "status",
+          "has_ispmanager_auth",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CompanyMailConnectionPublic"
+      },
+      "CompanyMailConnectionUpsertPayload": {
+        "properties": {
+          "mail_domain": {
+            "type": "string",
+            "title": "Mail Domain"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/MailProvider"
+          },
+          "imap_host": {
+            "type": "string",
+            "title": "Imap Host"
+          },
+          "imap_port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Imap Port"
+          },
+          "smtp_host": {
+            "type": "string",
+            "title": "Smtp Host"
+          },
+          "smtp_port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Smtp Port"
+          },
+          "use_ssl": {
+            "type": "boolean",
+            "title": "Use Ssl",
+            "default": true
+          },
+          "ispmanager_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ispmanager Base Url"
+          },
+          "ispmanager_authinfo_user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ispmanager Authinfo User"
+          },
+          "ispmanager_authinfo_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ispmanager Authinfo Password"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MailConnectionStatus",
+            "default": "active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mail_domain",
+          "provider",
+          "imap_host",
+          "imap_port",
+          "smtp_host",
+          "smtp_port"
+        ],
+        "title": "CompanyMailConnectionUpsertPayload"
       },
       "CompanyMembershipResponse": {
         "properties": {
@@ -1114,6 +1340,128 @@
         "title": "GlobalSearchResponse",
         "description": "Ответ с результатами глобального поиска"
       },
+      "GoogleWorkspaceAuthorizeResponse": {
+        "properties": {
+          "authorize_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Authorize Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "authorize_url"
+        ],
+        "title": "GoogleWorkspaceAuthorizeResponse",
+        "description": "Proactive Connect: URL для OAuth Google Workspace (Docs/Sheets)."
+      },
+      "GoogleWorkspaceCompanyCredentialPublic": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "impersonate_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impersonate Email"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "service",
+          "token_type",
+          "configured"
+        ],
+        "title": "GoogleWorkspaceCompanyCredentialPublic",
+        "description": "Публичная проекция company Google Workspace SA (без секретов)."
+      },
+      "GoogleWorkspaceCompanyCredentialPut": {
+        "properties": {
+          "service_account_json": {
+            "type": "string",
+            "title": "Service Account Json"
+          },
+          "impersonate_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impersonate Email"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "service_account_json"
+        ],
+        "title": "GoogleWorkspaceCompanyCredentialPut",
+        "description": "Admin PUT: Service Account JSON + optional DWD subject."
+      },
+      "GoogleWorkspaceSystemReconcileResult": {
+        "properties": {
+          "ensured": {
+            "type": "boolean",
+            "title": "Ensured"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ensured"
+        ],
+        "title": "GoogleWorkspaceSystemReconcileResult",
+        "description": "Результат seed system company Google Workspace SA из conf."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1126,6 +1474,133 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "InboundMailMessagePublic": {
+        "properties": {
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "from_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Address"
+          },
+          "to_addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "To Addresses"
+          },
+          "body_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Text"
+          },
+          "body_html": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Html"
+          },
+          "unread": {
+            "type": "boolean",
+            "title": "Unread",
+            "default": true
+          },
+          "flagged": {
+            "type": "boolean",
+            "title": "Flagged",
+            "default": false
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "in_reply_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Reply To"
+          },
+          "references": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "References"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/MailAttachmentPublic"
+            },
+            "type": "array",
+            "title": "Attachments"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "uid"
+        ],
+        "title": "InboundMailMessagePublic"
       },
       "IndexFileRequest": {
         "properties": {
@@ -1425,6 +1900,38 @@
         ],
         "title": "ListResponse[CredentialInfo]"
       },
+      "ListResponse_MailboxBindingMember_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailboxBindingMember"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[MailboxBindingMember]"
+      },
+      "ListResponse_MailboxBindingPublic_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailboxBindingPublic"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[MailboxBindingPublic]"
+      },
       "ListResponse_TeamMemberResponse_": {
         "properties": {
           "items": {
@@ -1457,6 +1964,1766 @@
         ],
         "title": "ListResponse[UserSearchResult]"
       },
+      "MailAttachment": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Filename"
+          },
+          "content_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content Type"
+          },
+          "content": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Content",
+            "default": ""
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Size",
+            "default": 0
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
+          },
+          "parse_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Error"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "filename",
+          "content_type"
+        ],
+        "title": "MailAttachment",
+        "description": "Вложение письма (MIME part). content может быть пустым при list/ошибке разбора."
+      },
+      "MailAttachmentPublic": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
+          },
+          "parse_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Error"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "content_base64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Base64"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "filename",
+          "content_type",
+          "size"
+        ],
+        "title": "MailAttachmentPublic"
+      },
+      "MailConnectionScope": {
+        "type": "string",
+        "enum": [
+          "company",
+          "personal"
+        ],
+        "title": "MailConnectionScope"
+      },
+      "MailConnectionStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "degraded",
+          "disabled"
+        ],
+        "title": "MailConnectionStatus"
+      },
+      "MailDraftSavePayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject",
+            "default": ""
+          },
+          "body_text": {
+            "type": "string",
+            "title": "Body Text",
+            "default": ""
+          },
+          "body_html": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Html"
+          },
+          "to_addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "To Addresses"
+          },
+          "uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uid"
+          },
+          "in_reply_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Reply To"
+          },
+          "references": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "References"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id"
+        ],
+        "title": "MailDraftSavePayload"
+      },
+      "MailDraftSaveResult": {
+        "properties": {
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "uid",
+          "folder"
+        ],
+        "title": "MailDraftSaveResult"
+      },
+      "MailFolder": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "delimiter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delimiter"
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Flags"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MailFolderRole",
+            "default": "other"
+          },
+          "selectable": {
+            "type": "boolean",
+            "title": "Selectable",
+            "default": true
+          },
+          "unseen_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Unseen Count",
+            "default": 0
+          },
+          "message_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Message Count",
+            "default": 0
+          },
+          "sort_index": {
+            "type": "integer",
+            "title": "Sort Index",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "MailFolder"
+      },
+      "MailFolderListResult": {
+        "properties": {
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/MailFolder"
+            },
+            "type": "array",
+            "title": "Folders"
+          },
+          "namespace_prefix": {
+            "type": "string",
+            "title": "Namespace Prefix",
+            "default": ""
+          },
+          "delimiter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delimiter"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "missing_standard_roles": {
+            "items": {
+              "$ref": "#/components/schemas/MailFolderRole"
+            },
+            "type": "array",
+            "title": "Missing Standard Roles"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale",
+            "default": false
+          },
+          "needs_sync": {
+            "type": "boolean",
+            "title": "Needs Sync",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MailFolderListResult"
+      },
+      "MailFolderRole": {
+        "type": "string",
+        "enum": [
+          "inbox",
+          "sent",
+          "drafts",
+          "trash",
+          "junk",
+          "archive",
+          "other"
+        ],
+        "title": "MailFolderRole"
+      },
+      "MailFoldersEnsurePayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id"
+        ],
+        "title": "MailFoldersEnsurePayload"
+      },
+      "MailFoldersReorderPayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "folder_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Folder Names"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id",
+          "folder_names"
+        ],
+        "title": "MailFoldersReorderPayload"
+      },
+      "MailMessageFlagPayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder",
+            "default": "INBOX"
+          },
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id",
+          "uid"
+        ],
+        "title": "MailMessageFlagPayload"
+      },
+      "MailMessageFlagResult": {
+        "properties": {
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          },
+          "unread": {
+            "type": "boolean",
+            "title": "Unread"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "uid",
+          "unread"
+        ],
+        "title": "MailMessageFlagResult"
+      },
+      "MailMessageListItem": {
+        "properties": {
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "from_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Address"
+          },
+          "to_addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "To Addresses"
+          },
+          "snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet"
+          },
+          "attachment_count": {
+            "type": "integer",
+            "title": "Attachment Count",
+            "default": 0
+          },
+          "unread": {
+            "type": "boolean",
+            "title": "Unread",
+            "default": true
+          },
+          "flagged": {
+            "type": "boolean",
+            "title": "Flagged",
+            "default": false
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "in_reply_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Reply To"
+          },
+          "references": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "References"
+          },
+          "rag_index_status": {
+            "$ref": "#/components/schemas/MailRagIndexStatus",
+            "default": "skipped"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "uid"
+        ],
+        "title": "MailMessageListItem"
+      },
+      "MailMessageListPayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder",
+            "default": "INBOX"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 50
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id"
+        ],
+        "title": "MailMessageListPayload"
+      },
+      "MailMessageListResult": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailMessageListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "default": false
+          },
+          "needs_sync": {
+            "type": "boolean",
+            "title": "Needs Sync",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MailMessageListResult",
+        "description": "List + sync meta (до CursorPage wrapper в API)."
+      },
+      "MailMessageMovePayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder"
+          },
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          },
+          "destination_folder": {
+            "type": "string",
+            "title": "Destination Folder"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id",
+          "folder",
+          "uid",
+          "destination_folder"
+        ],
+        "title": "MailMessageMovePayload"
+      },
+      "MailMessageMoveResult": {
+        "properties": {
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder"
+          },
+          "destination_folder": {
+            "type": "string",
+            "title": "Destination Folder"
+          },
+          "destination_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination Uid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "uid",
+          "folder",
+          "destination_folder"
+        ],
+        "title": "MailMessageMoveResult"
+      },
+      "MailMessageRagIndexPayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder",
+            "default": "INBOX"
+          },
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id",
+          "uid"
+        ],
+        "title": "MailMessageRagIndexPayload"
+      },
+      "MailMessageRagIndexResult": {
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder"
+          },
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          },
+          "rag_index_status": {
+            "$ref": "#/components/schemas/MailRagIndexStatus"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "accepted",
+          "mailbox_binding_id",
+          "folder",
+          "uid",
+          "rag_index_status"
+        ],
+        "title": "MailMessageRagIndexResult"
+      },
+      "MailMessageSearchPayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Q"
+          },
+          "folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 50
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id",
+          "q"
+        ],
+        "title": "MailMessageSearchPayload"
+      },
+      "MailMessageStarPayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder",
+            "default": "INBOX"
+          },
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          },
+          "flagged": {
+            "type": "boolean",
+            "title": "Flagged"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id",
+          "uid",
+          "flagged"
+        ],
+        "title": "MailMessageStarPayload"
+      },
+      "MailMessageStarResult": {
+        "properties": {
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          },
+          "flagged": {
+            "type": "boolean",
+            "title": "Flagged"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "uid",
+          "flagged"
+        ],
+        "title": "MailMessageStarResult"
+      },
+      "MailProvider": {
+        "type": "string",
+        "enum": [
+          "ispmanager",
+          "generic_imap_smtp"
+        ],
+        "title": "MailProvider"
+      },
+      "MailRagIndexStatus": {
+        "type": "string",
+        "enum": [
+          "ready",
+          "pending",
+          "failed",
+          "skipped"
+        ],
+        "title": "MailRagIndexStatus",
+        "description": "Статус фоновой RAG-индексации письма (не блокирует local-first persist)."
+      },
+      "MailReconcileResult": {
+        "properties": {
+          "connection_ensured": {
+            "type": "boolean",
+            "title": "Connection Ensured"
+          },
+          "role_mailboxes_ensured": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Role Mailboxes Ensured"
+          },
+          "user_bindings_ensured": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "User Bindings Ensured"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "connection_ensured",
+          "role_mailboxes_ensured",
+          "user_bindings_ensured"
+        ],
+        "title": "MailReconcileResult"
+      },
+      "MailSendPayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "to_addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "To Addresses"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "body_text": {
+            "type": "string",
+            "title": "Body Text"
+          },
+          "body_html": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Html"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "in_reply_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Reply To"
+          },
+          "references": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "References"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/MailAttachment"
+            },
+            "type": "array",
+            "title": "Attachments"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id",
+          "to_addresses",
+          "subject",
+          "body_text"
+        ],
+        "title": "MailSendPayload"
+      },
+      "MailSendResult": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "accepted": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Accepted"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "message_id",
+          "accepted"
+        ],
+        "title": "MailSendResult"
+      },
+      "MailServerHealth": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/MailProvider"
+          },
+          "provision_ok": {
+            "type": "boolean",
+            "title": "Provision Ok"
+          },
+          "imap_ok": {
+            "type": "boolean",
+            "title": "Imap Ok"
+          },
+          "smtp_ok": {
+            "type": "boolean",
+            "title": "Smtp Ok"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "provision_ok",
+          "imap_ok",
+          "smtp_ok"
+        ],
+        "title": "MailServerHealth"
+      },
+      "MailSyncNowPayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id"
+        ],
+        "title": "MailSyncNowPayload"
+      },
+      "MailSyncNowResult": {
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "accepted",
+          "mailbox_binding_id"
+        ],
+        "title": "MailSyncNowResult"
+      },
+      "MailThreadMessagePublic": {
+        "properties": {
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "from_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Address"
+          },
+          "to_addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "To Addresses"
+          },
+          "body_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Text"
+          },
+          "body_html": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Html"
+          },
+          "unread": {
+            "type": "boolean",
+            "title": "Unread",
+            "default": true
+          },
+          "flagged": {
+            "type": "boolean",
+            "title": "Flagged",
+            "default": false
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "in_reply_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Reply To"
+          },
+          "references": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "References"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/MailAttachmentPublic"
+            },
+            "type": "array",
+            "title": "Attachments"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "uid",
+          "folder"
+        ],
+        "title": "MailThreadMessagePublic"
+      },
+      "MailThreadPayload": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder",
+            "default": "INBOX"
+          },
+          "uid": {
+            "type": "string",
+            "title": "Uid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id",
+          "uid"
+        ],
+        "title": "MailThreadPayload"
+      },
+      "MailThreadResult": {
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "participant_emails": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Participant Emails"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailThreadMessagePublic"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "marked_seen_uids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Marked Seen Uids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "thread_id"
+        ],
+        "title": "MailThreadResult"
+      },
+      "MailboxBindingCreatePayload": {
+        "properties": {
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MailboxBindingKind",
+            "default": "user"
+          },
+          "local_part": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Part"
+          },
+          "email_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Address"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "sync_enabled": {
+            "type": "boolean",
+            "title": "Sync Enabled",
+            "default": true
+          },
+          "provision": {
+            "type": "boolean",
+            "title": "Provision",
+            "default": true
+          },
+          "is_default": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Default"
+          },
+          "calendar_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Color"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MailboxBindingCreatePayload"
+      },
+      "MailboxBindingHealthcheckPayload": {
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "imap_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imap Host"
+          },
+          "imap_port": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 65535.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imap Port"
+          },
+          "smtp_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Host"
+          },
+          "smtp_port": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 65535.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Port"
+          },
+          "use_ssl": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Ssl"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MailboxBindingHealthcheckPayload",
+        "description": "Проверка login существующего binding; password/hosts опциональны (иначе stored)."
+      },
+      "MailboxBindingKind": {
+        "type": "string",
+        "enum": [
+          "user",
+          "role"
+        ],
+        "title": "MailboxBindingKind"
+      },
+      "MailboxBindingMember": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MailboxBindingMemberRole"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id",
+          "user_id",
+          "company_id",
+          "role",
+          "created_at"
+        ],
+        "title": "MailboxBindingMember"
+      },
+      "MailboxBindingMemberPayload": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MailboxBindingMemberRole",
+            "default": "member"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "MailboxBindingMemberPayload"
+      },
+      "MailboxBindingMemberRole": {
+        "type": "string",
+        "enum": [
+          "member",
+          "manager"
+        ],
+        "title": "MailboxBindingMemberRole"
+      },
+      "MailboxBindingPatchPayload": {
+        "properties": {
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "sync_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Enabled"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "calendar_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Color"
+          },
+          "imap_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imap Host"
+          },
+          "imap_port": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 65535.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imap Port"
+          },
+          "smtp_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Host"
+          },
+          "smtp_port": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 65535.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Port"
+          },
+          "use_ssl": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Ssl"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MailboxBindingPatchPayload"
+      },
+      "MailboxBindingPublic": {
+        "properties": {
+          "mailbox_binding_id": {
+            "type": "string",
+            "title": "Mailbox Binding Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "company_mail_connection_id": {
+            "type": "string",
+            "title": "Company Mail Connection Id"
+          },
+          "connection_scope": {
+            "$ref": "#/components/schemas/MailConnectionScope"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MailboxBindingKind"
+          },
+          "email_address": {
+            "type": "string",
+            "title": "Email Address"
+          },
+          "local_part": {
+            "type": "string",
+            "title": "Local Part"
+          },
+          "sync_enabled": {
+            "type": "boolean",
+            "title": "Sync Enabled"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          },
+          "calendar_color": {
+            "type": "string",
+            "title": "Calendar Color"
+          },
+          "has_password": {
+            "type": "boolean",
+            "title": "Has Password"
+          },
+          "imap_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imap Host"
+          },
+          "imap_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imap Port"
+          },
+          "smtp_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Host"
+          },
+          "smtp_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Port"
+          },
+          "use_ssl": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Ssl"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mailbox_binding_id",
+          "company_id",
+          "company_mail_connection_id",
+          "connection_scope",
+          "kind",
+          "email_address",
+          "local_part",
+          "sync_enabled",
+          "is_default",
+          "calendar_color",
+          "has_password",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MailboxBindingPublic"
+      },
       "Namespace": {
         "properties": {
           "name": {
@@ -1486,6 +3753,24 @@
             "title": "По умолчанию",
             "description": "Является ли namespace дефолтным для компании",
             "default": false
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NamespaceKind",
+            "title": "Вид",
+            "description": "company_workspace | personal | technical",
+            "default": "company_workspace"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Владелец",
+            "description": "user_id владельца; обязателен для kind=personal"
           },
           "crm_settings": {
             "anyOf": [
@@ -1703,6 +3988,16 @@
         "title": "NamespaceDeleteResponse",
         "description": "Ответ удаления namespace."
       },
+      "NamespaceKind": {
+        "type": "string",
+        "enum": [
+          "company_workspace",
+          "personal",
+          "technical"
+        ],
+        "title": "NamespaceKind",
+        "description": "Вид платформенного namespace (company workspace / personal / technical)."
+      },
       "NamespaceSyncSettings": {
         "properties": {
           "transcribe_voice_messages": {
@@ -1783,6 +4078,126 @@
           "offset"
         ],
         "title": "OffsetPage[RAGDocument]"
+      },
+      "PersonalMailboxConnectPayload": {
+        "properties": {
+          "email_address": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Email Address"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Password"
+          },
+          "imap_host": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Imap Host"
+          },
+          "imap_port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Imap Port",
+            "default": 993
+          },
+          "smtp_host": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Smtp Host"
+          },
+          "smtp_port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Smtp Port",
+            "default": 465
+          },
+          "use_ssl": {
+            "type": "boolean",
+            "title": "Use Ssl",
+            "default": true
+          },
+          "sync_enabled": {
+            "type": "boolean",
+            "title": "Sync Enabled",
+            "default": true
+          },
+          "calendar_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Color"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email_address",
+          "password",
+          "imap_host",
+          "smtp_host"
+        ],
+        "title": "PersonalMailboxConnectPayload"
+      },
+      "PersonalMailboxHealthcheckPayload": {
+        "properties": {
+          "email_address": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Email Address"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Password"
+          },
+          "imap_host": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Imap Host"
+          },
+          "imap_port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Imap Port",
+            "default": 993
+          },
+          "smtp_host": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Smtp Host"
+          },
+          "smtp_port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Smtp Port",
+            "default": 465
+          },
+          "use_ssl": {
+            "type": "boolean",
+            "title": "Use Ssl",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email_address",
+          "password",
+          "imap_host",
+          "smtp_host"
+        ],
+        "title": "PersonalMailboxHealthcheckPayload"
       },
       "PlatformBrandResponse": {
         "properties": {

@@ -17,6 +17,7 @@ set_flow_settings(_flow_worker_settings)
 
 import os
 import socket
+import asyncio
 
 from taskiq import TaskiqState
 
@@ -46,6 +47,14 @@ logger = get_logger(__name__)
 broker = wire_worker("flows_worker")
 
 
+class _WorkerBackgroundTasks:
+    platform_events_consumer: asyncio.Task[None] | None = None
+    cbr_rate_refresh: asyncio.Task[None] | None = None
+
+
+_worker_background_tasks = _WorkerBackgroundTasks()
+
+
 async def _startup(state: TaskiqState) -> None:
     service_name = "flows_worker"
     settings = get_settings()
@@ -59,7 +68,7 @@ async def _startup(state: TaskiqState) -> None:
 
     _cbr_fallback = settings.billing.usd_to_rub_rate
     await _cbr_refresh_once(fallback=_cbr_fallback)
-    _ = run_with_log_context(
+    _worker_background_tasks.cbr_rate_refresh = run_with_log_context(
         _cbr_loop_coro(fallback=_cbr_fallback),
         name="billing.cbr_rate_refresh",
         background_kind="startup",
@@ -86,7 +95,9 @@ async def _startup(state: TaskiqState) -> None:
     platform_events_consumer = container.platform_event_consumer_service.build_group_consumer(
         consumer_name=f"{socket.gethostname()}-{os.getpid()}",
     )
-    _ = run_with_log_context(
+    # Strong ref: asyncio loop keeps only weak refs to tasks; discarding the
+    # Task lets GC destroy the consumer mid-flight (HITL resume lag grows).
+    _worker_background_tasks.platform_events_consumer = run_with_log_context(
         platform_events_consumer.run(),
         name="platform_events.flows_consumer",
         background_kind="startup",
@@ -111,6 +122,14 @@ async def _startup(state: TaskiqState) -> None:
 async def _shutdown(state: TaskiqState) -> None:
     container = get_container()
     _ = state
+    consumer_task = _worker_background_tasks.platform_events_consumer
+    if consumer_task is not None and not consumer_task.done():
+        _ = consumer_task.cancel()
+        try:
+            await consumer_task
+        except asyncio.CancelledError:
+            pass
+    _worker_background_tasks.platform_events_consumer = None
     try:
         await container.redis_client.close()
         logger.info("worker.redis_disconnected")

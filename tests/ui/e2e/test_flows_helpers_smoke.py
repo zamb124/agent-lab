@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 from playwright.async_api import Page, expect
@@ -14,7 +15,7 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_api_create_flow,
     flows_api_get_flow,
     flows_branch_condition_payload,
-    flows_canvas_node_ids,
+    flows_canvas_has_edge,
     flows_doc_flow_id,
     flows_drop_node,
     flows_graph_payload,
@@ -48,15 +49,23 @@ async def test_flows_canvas_wiring_smoke(
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
 
-    await flows_drop_node(page, "llm_node", x=520, y=320)
-    node_ids = await flows_canvas_node_ids(page)
-    new_nodes = [n for n in node_ids if n not in {"start", "end"}]
-    assert new_nodes, "LLM node was not added to the canvas"
-    llm_id = new_nodes[0]
+    llm_id = await flows_drop_node(page, "llm_node", x=520, y=320)
+    if not llm_id:
+        raise AssertionError("LLM node was not added to the canvas")
 
     await flows_wire_ports(page, "start", llm_id)
     await flows_wire_ports(page, llm_id, "end")
+    if not await flows_canvas_has_edge(page, "start", llm_id):
+        raise AssertionError(f"branchData missing edge start->{llm_id} before publish")
+    if not await flows_canvas_has_edge(page, llm_id, "end"):
+        raise AssertionError(f"branchData missing edge {llm_id}->end before publish")
 
+    await page.locator("flows-flow-canvas").first.evaluate(
+        "(el) => { el._editor.setDirty({ dirty: true }); }"
+    )
+    await expect(
+        page.locator("flows-editor-header").get_by_text(re.compile(r"^\s*(?:Draft|Черновик)\s*$"))
+    ).to_be_visible(timeout=5_000)
     await flows_publish_editor(page)
     await expect(page.locator("flows-editor-header")).to_be_visible(timeout=15_000)
 

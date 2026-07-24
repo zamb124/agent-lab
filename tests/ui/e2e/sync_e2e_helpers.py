@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 
@@ -412,30 +413,42 @@ async def sync_api_find_message_id_with_text(
     auth_token: str,
     channel_id: str,
     substring: str,
+    *,
+    attempts: int = 12,
+    delay_s: float = 0.25,
 ) -> str:
-    async with _sync_client(origin, auth_token) as client:
-        r = await client.get(f"/sync/api/v1/channels/{channel_id}/messages")
-        r.raise_for_status()
-        payload = r.json()
-    if not isinstance(payload, dict):
-        raise AssertionError("GET messages должен вернуть объект пагинации.")
-    messages = payload.get("items")
-    if not isinstance(messages, list):
-        raise AssertionError("GET messages должен вернуть массив в поле items.")
-    for m in messages:
-        if not isinstance(m, dict):
-            continue
-        mid = m.get("message_id") if isinstance(m.get("message_id"), str) else m.get("id")
-        contents = m.get("contents")
-        if not isinstance(mid, str) or not isinstance(contents, list):
-            continue
-        for block in contents:
-            if not isinstance(block, dict):
+    last_error: AssertionError | None = None
+    for attempt in range(attempts):
+        async with _sync_client(origin, auth_token) as client:
+            r = await client.get(f"/sync/api/v1/channels/{channel_id}/messages")
+            r.raise_for_status()
+            payload = r.json()
+        if not isinstance(payload, dict):
+            raise AssertionError("GET messages должен вернуть объект пагинации.")
+        messages = payload.get("items")
+        if not isinstance(messages, list):
+            raise AssertionError("GET messages должен вернуть массив в поле items.")
+        for m in messages:
+            if not isinstance(m, dict):
                 continue
-            data = block.get("data")
-            if isinstance(data, dict) and substring in str(data.get("body", "")):
-                return mid
-    raise AssertionError(f"Сообщение с текстом, содержащим {substring!r}, не найдено.")
+            mid = m.get("message_id") if isinstance(m.get("message_id"), str) else m.get("id")
+            contents = m.get("contents")
+            if not isinstance(mid, str) or not isinstance(contents, list):
+                continue
+            for block in contents:
+                if not isinstance(block, dict):
+                    continue
+                data = block.get("data")
+                if isinstance(data, dict) and substring in str(data.get("body", "")):
+                    return mid
+        last_error = AssertionError(
+            f"Сообщение с текстом, содержащим {substring!r}, не найдено."
+        )
+        if attempt + 1 < attempts:
+            await asyncio.sleep(delay_s)
+    if last_error is None:
+        raise AssertionError(f"Сообщение с текстом, содержащим {substring!r}, не найдено.")
+    raise last_error
 
 
 async def sync_e2e_expect_team_member_loaded(page: Page, user_id: str, *, timeout: float = 30_000) -> None:

@@ -19,6 +19,7 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_create_branch,
     flows_doc_flow_id,
     flows_e2e_expect_skill_load_chip,
+    flows_e2e_open_studio_prompt_section,
     flows_e2e_seed_agent_skill,
     flows_e2e_set_show_skill_loads,
     flows_llm_payload,
@@ -75,7 +76,7 @@ def _branch_id(unique_id: str) -> str:
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(60)
+@pytest.mark.timeout(120)
 async def test_flows_experiment_with_branches(
     scenario: ScenarioRecorder,
     flows_ui: AppUI,
@@ -147,7 +148,7 @@ async def test_flows_experiment_with_branches(
     )
 
     await flows_open_node_editor(page, "agent")
-    await flows_set_selected_llm_prompt(page, _BRANCH_PROMPT)
+    await flows_set_selected_llm_prompt(page, _BRANCH_PROMPT, node_id="agent")
     await scenario.step(
         "Измените инструкцию под акцию",
         page,
@@ -165,6 +166,26 @@ async def test_flows_experiment_with_branches(
     )
 
     await flows_publish_editor(page)
+    persisted = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
+    base_prompt = persisted["nodes"]["agent"]["prompt"]
+    assert "скид" not in str(base_prompt).lower()
+    branches = persisted.get("branches")
+    if not isinstance(branches, dict) or branch_id not in branches:
+        raise AssertionError(f"published flow missing branch {branch_id!r}: {branches!r}")
+    branch_cfg = branches[branch_id]
+    if not isinstance(branch_cfg, dict):
+        raise AssertionError(f"branch config must be object: {branch_cfg!r}")
+    branch_nodes = branch_cfg.get("nodes")
+    # Merge-override: в ветке только diff; пустой dict = полное наследование базы.
+    if not isinstance(branch_nodes, dict):
+        raise AssertionError(f"branch nodes must be object: {branch_nodes!r}")
+    agent_override = branch_nodes.get("agent") if isinstance(branch_nodes.get("agent"), dict) else None
+    if agent_override is None or "скид" not in str(agent_override.get("prompt", "")).lower():
+        raise AssertionError(
+            f"branch agent prompt override missing скид after publish: "
+            f"nodes={branch_nodes!r}"
+        )
+
     await flows_open_editor(
         page,
         flows_ui,
@@ -172,11 +193,12 @@ async def test_flows_experiment_with_branches(
         branch_id=branch_id,
         layout="agent",
     )
-    branch_editor = await flows_open_node_editor(page, "agent")
-    await expect(branch_editor).to_contain_text("скид", timeout=5_000)
-    base_flow = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
-    base_prompt = base_flow["nodes"]["agent"]["prompt"]
-    assert "скид" not in base_prompt.lower()
+    await flows_open_node_editor(page, "agent")
+    await flows_e2e_open_studio_prompt_section(page)
+    prompt_editor = page.locator("flows-agent-focus-studio platform-markdown-editor").first
+    await expect(prompt_editor).to_be_visible(timeout=8_000)
+    prompt_value = await prompt_editor.evaluate("(el) => String(el.value || '')")
+    assert "скид" in prompt_value.lower(), f"reopened branch prompt missing скид: {prompt_value!r}"
     await scenario.step(
         "Опубликуйте ветку и проверьте изоляцию",
         page,

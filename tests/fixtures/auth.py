@@ -325,6 +325,19 @@ async def test_company_subdomains_initialized(
         await frontend_container.subdomain_repository.set_mapping(slug, company_id)
 
     await ensure_company_subdomain("system", "system")
+    # UI E2E overrides auth_token_company2 → ui_e2e_*_c2. Agent desktop E2E still
+    # expects literal company_id/subdomain "company2" for Host routing.
+    company2 = await frontend_container.company_repository.get("company2")
+    if company2 is None:
+        owner_id = "test_company2_owner"
+        company2 = make_test_company(
+            company_id="company2",
+            name="Company 2",
+            owner_user_id=owner_id,
+            members={owner_id: ["owner", "admin"]},
+            subdomain="company2",
+        )
+        await frontend_container.company_repository.set(company2)
     await ensure_company_subdomain("company2", "company2")
 
 

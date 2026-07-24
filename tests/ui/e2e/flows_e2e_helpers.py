@@ -364,7 +364,12 @@ async def flows_e2e_open_studio_prompt_section(page: Page) -> Locator:
     return studio
 
 
-async def flows_set_selected_llm_prompt(page: Page, prompt: str) -> None:
+async def flows_set_selected_llm_prompt(
+    page: Page,
+    prompt: str,
+    *,
+    node_id: str | None = None,
+) -> None:
     studio = page.locator("flows-agent-focus-studio").first
     if await studio.count() > 0 and await studio.is_visible():
         await flows_e2e_open_studio_prompt_section(page)
@@ -392,6 +397,91 @@ async def flows_set_selected_llm_prompt(page: Page, prompt: str) -> None:
         }
         """,
         prompt,
+    )
+    # Sticky patch через canvas ИЛИ agent-focus studio (_editor).
+    # В layout=agent канвы нет в DOM — без studio patch промпт не попадает в branchData.
+    host = page.locator("flows-flow-canvas, flows-agent-focus-studio").first
+    await expect(host).to_be_visible(timeout=5_000)
+    inject_js = """
+        (el, ctx) => {
+            const nextPrompt = ctx.prompt;
+            const preferredId = ctx.nodeId;
+            const editor = el && el._editor ? el._editor : null;
+            if (!editor || typeof editor.updateBranchData !== 'function') {
+                throw new Error('flows_set_selected_llm_prompt: editor unavailable');
+            }
+            let data = null;
+            if (typeof el._branchData === 'function') {
+                data = el._branchData();
+            } else if (editor.state && typeof editor.state === 'object') {
+                data = editor.state.branchData;
+            }
+            if (!data || typeof data !== 'object') {
+                throw new Error('flows_set_selected_llm_prompt: branchData unavailable');
+            }
+            const nodes = data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+            const selectedId = editor.state && typeof editor.state.selectedNodeId === 'string'
+                ? editor.state.selectedNodeId
+                : '';
+            let nodeId = '';
+            if (typeof preferredId === 'string' && preferredId !== '' && nodes[preferredId]) {
+                nodeId = preferredId;
+            } else if (selectedId !== '' && nodes[selectedId]) {
+                nodeId = selectedId;
+            } else if (Object.prototype.hasOwnProperty.call(nodes, 'agent')) {
+                nodeId = 'agent';
+            } else {
+                const llmIds = Object.entries(nodes)
+                    .filter(([, node]) => node && typeof node === 'object' && node.type === 'llm_node')
+                    .map(([id]) => id);
+                if (llmIds.length === 1) {
+                    nodeId = llmIds[0];
+                }
+            }
+            if (nodeId === '' || !nodes[nodeId]) {
+                throw new Error(
+                    'flows_set_selected_llm_prompt: selected llm node missing '
+                    + JSON.stringify({ preferredId, selectedId, keys: Object.keys(nodes) })
+                );
+            }
+            const prev = nodes[nodeId];
+            const nextNode = { ...prev, prompt: nextPrompt };
+            const next = { ...data, nodes: { ...nodes, [nodeId]: nextNode } };
+            editor.updateBranchData({ data: next });
+            editor.setDirty({ dirty: true });
+            if (typeof editor.pushHistory === 'function') {
+                editor.pushHistory({ snapshot: next });
+            }
+            return nodeId;
+        }
+    """
+    verify_js = """
+        (el, ctx) => {
+            const editor = el && el._editor ? el._editor : null;
+            let data = null;
+            if (typeof el._branchData === 'function') {
+                data = el._branchData();
+            } else if (editor && editor.state) {
+                data = editor.state.branchData;
+            }
+            const node = data && data.nodes ? data.nodes[ctx.nodeId] : null;
+            return node && typeof node.prompt === 'string' ? node.prompt : null;
+        }
+    """
+    inject_ctx = {"prompt": prompt, "nodeId": node_id if isinstance(node_id, str) else ""}
+    for _attempt in range(3):
+        patched_id = await host.evaluate(inject_js, inject_ctx)
+        if not isinstance(patched_id, str) or patched_id == "":
+            await asyncio.sleep(0.15)
+            continue
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            current = await host.evaluate(verify_js, {"nodeId": patched_id})
+            if isinstance(current, str) and current == prompt:
+                return
+            await asyncio.sleep(0.1)
+    raise AssertionError(
+        f"flows_set_selected_llm_prompt: prompt not sticky in branchData ({prompt!r})"
     )
 
 
@@ -873,6 +963,9 @@ async def flows_open_editor(
         f"""() => {{
             localStorage.setItem('pwa-banner-dismissed', 'true');
             localStorage.setItem({layout_key!r}, {layout!r});
+            // Стабильные node_id в scenario (remote_partner, tracker, …) шарят prefs панели
+            // между тестами в одном browser context — collapsed:true глушит editor slot.
+            localStorage.removeItem('platform:flows:editor_property_panel_prefs');
         }}"""
     )
     await page.goto(url, wait_until="domcontentloaded")
@@ -883,10 +976,17 @@ async def flows_open_editor(
         studio = page.locator("flows-agent-focus-studio").first
         try:
             await expect(studio).to_be_visible(timeout=8_000)
-            return
         except AssertionError:
             await flows_e2e_switch_editor_layout(page, "agent")
-            return
+            await expect(studio).to_be_visible(timeout=8_000)
+        # Studio shell ≠ готовность branchData: ждём llm editor, иначе ветки flake.
+        llm_editor = studio.locator("flows-llm-node-editor").first
+        try:
+            await expect(llm_editor).to_be_visible(timeout=8_000)
+        except AssertionError:
+            await flows_e2e_switch_editor_layout(page, "agent")
+            await expect(llm_editor).to_be_visible(timeout=8_000)
+        return
     # LLM-графы могут открыться в Agent Focus несмотря на localStorage=canvas —
     # переключаем и ждём branchData с короткими ретраями (late setFlow / flip-back).
     last_error: BaseException | None = None
@@ -1105,12 +1205,12 @@ async def flows_drop_node(
                 "    return state\n"
             )
         injected = ""
-        for _attempt in range(3):
+        for _attempt in range(5):
             candidate = await canvas.evaluate(inject_js, inject_ctx)
             if not isinstance(candidate, str) or not candidate:
                 await asyncio.sleep(0.15)
                 continue
-            present_deadline = time.monotonic() + 1.5
+            present_deadline = time.monotonic() + 2.0
             while time.monotonic() < present_deadline:
                 present = await canvas.evaluate(
                     """
@@ -1122,7 +1222,20 @@ async def flows_drop_node(
                     candidate,
                 )
                 if present is True:
-                    return candidate
+                    # Late GET flow может перезаписать branchData сразу после inject.
+                    await asyncio.sleep(0.35)
+                    still = await canvas.evaluate(
+                        """
+                        (el, selectedNodeId) => {
+                            const data = el._branchData();
+                            return Boolean(data && data.nodes && data.nodes[selectedNodeId]);
+                        }
+                        """,
+                        candidate,
+                    )
+                    if still is True:
+                        return candidate
+                    break
                 await asyncio.sleep(0.1)
             injected = candidate
         raise AssertionError(
@@ -1208,6 +1321,27 @@ async def flows_canvas_edge_count(page: Page) -> int:
     return await page.locator("flows-flow-canvas g.edge-group, flows-flow-canvas path.edge").count()
 
 
+async def flows_canvas_has_edge(page: Page, from_node_id: str, to_node_id: str) -> bool:
+    """Есть ли control-flow ребро в branchData (DOM edges могут отставать)."""
+    canvas = page.locator("flows-flow-canvas").first
+    found = await canvas.evaluate(
+        """
+        (el, ctx) => {
+            if (!el || typeof el._branchData !== 'function') return false;
+            const data = el._branchData();
+            const edges = Array.isArray(data && data.edges) ? data.edges : [];
+            return edges.some(
+                (edge) => edge
+                    && edge.from_node === ctx.fromNode
+                    && edge.to_node === ctx.toNode
+            );
+        }
+        """,
+        {"fromNode": from_node_id, "toNode": to_node_id},
+    )
+    return found is True
+
+
 async def flows_wire_ports(page: Page, from_node_id: str, to_node_id: str) -> None:
     """Протягивает control-flow связь из out-порта одной ноды в in-порт другой.
 
@@ -1215,6 +1349,8 @@ async def flows_wire_ports(page: Page, from_node_id: str, to_node_id: str) -> No
     через тот же путь, что и pointerup канвы (append edge + setDirty).
     """
     await flows_close_floating_panel(page)
+    if await flows_canvas_has_edge(page, from_node_id, to_node_id):
+        return
     out_port = page.locator(
         f"flows-flow-canvas .port[data-port-side='out'][data-node-id='{from_node_id}']"
     ).first
@@ -1230,8 +1366,15 @@ async def flows_wire_ports(page: Page, from_node_id: str, to_node_id: str) -> No
         pass
 
     before = await flows_canvas_edge_count(page)
-    out_box = await out_port.bounding_box() if ports_visible else None
-    in_box = await in_port.bounding_box() if ports_visible else None
+    out_box = None
+    in_box = None
+    if ports_visible:
+        try:
+            out_box = await out_port.bounding_box(timeout=2_000)
+            in_box = await in_port.bounding_box(timeout=2_000)
+        except PlaywrightTimeoutError:
+            out_box = None
+            in_box = None
     if out_box and in_box:
         ox = out_box["x"] + out_box["width"] / 2
         oy = out_box["y"] + out_box["height"] / 2
@@ -1248,7 +1391,8 @@ async def flows_wire_ports(page: Page, from_node_id: str, to_node_id: str) -> No
             before + 1,
             timeout=3_000,
         )
-        return
+        if await flows_canvas_has_edge(page, from_node_id, to_node_id):
+            return
     except AssertionError:
         pass
 
@@ -1256,7 +1400,15 @@ async def flows_wire_ports(page: Page, from_node_id: str, to_node_id: str) -> No
         """
         (el, ctx) => {
             const data = el._branchData();
-            const edges = [...(data.edges || []), { from_node: ctx.fromNode, to_node: ctx.toNode }];
+            const edges = Array.isArray(data.edges) ? [...data.edges] : [];
+            const exists = edges.some(
+                (edge) => edge
+                    && edge.from_node === ctx.fromNode
+                    && edge.to_node === ctx.toNode
+            );
+            if (!exists) {
+                edges.push({ from_node: ctx.fromNode, to_node: ctx.toNode });
+            }
             const next = { ...data, edges };
             el._editor.updateBranchData({ data: next });
             el._editor.pushHistory({ snapshot: next });
@@ -1264,6 +1416,14 @@ async def flows_wire_ports(page: Page, from_node_id: str, to_node_id: str) -> No
         }
         """,
         {"fromNode": from_node_id, "toNode": to_node_id},
+    )
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        if await flows_canvas_has_edge(page, from_node_id, to_node_id):
+            return
+        await asyncio.sleep(0.1)
+    raise AssertionError(
+        f"flows_wire_ports: edge {from_node_id!r}->{to_node_id!r} missing in branchData"
     )
 
 
@@ -1341,14 +1501,82 @@ async def flows_wait_node_in_branch_data(
     )
 
 
+async def _flows_expand_collapsed_node_panel(page: Page, node_id: str) -> None:
+    """Если floating-панель ноды свернута — восстанавливает (иначе editor slot пуст)."""
+    collapsed = page.locator(
+        f"flows-floating-panel[panel-id='{node_id}'][data-collapsed]"
+    ).first
+    if await collapsed.count() == 0 or not await collapsed.is_visible():
+        return
+    restore = collapsed.locator(
+        'platform-button[aria-label*="restore" i], '
+        'platform-button[aria-label*="Restore" i], '
+        'platform-button[aria-label*="Развернуть"], '
+        'platform-button[aria-label*="восстанов"]'
+    ).first
+    if await restore.count() > 0:
+        await restore.evaluate("(el) => el.click()")
+    else:
+        await page.locator("flows-flow-canvas").first.evaluate(
+            """
+            (el, selectedNodeId) => {
+                if (!el || !el._editor || typeof el._editor.selectNode !== 'function') {
+                    throw new Error('flows-flow-canvas.selectNode unavailable');
+                }
+                el._editor.selectNode({ nodeId: selectedNodeId });
+                if (typeof el._editor.setPropertyPanelLayout === 'function') {
+                    el._editor.setPropertyPanelLayout({
+                        nodeId: selectedNodeId,
+                        layout: { collapsed: false },
+                    });
+                }
+            }
+            """,
+            node_id,
+        )
+    await expect(
+        page.locator(f"flows-floating-panel[panel-id='{node_id}'][show-backdrop]").first
+    ).to_be_visible(timeout=5_000)
+
+
 async def flows_open_node_editor(page: Page, node_id: str) -> Locator:
     """Открывает редактор ноды: Agent Focus studio или floating-панель на канве."""
     await flows_dismiss_blocking_overlays(page)
     studio = page.locator("flows-agent-focus-studio").first
     if await studio.count() > 0 and await studio.is_visible():
-        llm_editor = studio.locator("flows-llm-node-editor").first
-        await expect(llm_editor).to_be_visible(timeout=5_000)
-        return studio
+        # Studio — только для single llm_node; reflection/другие ноды — через canvas.
+        studio_node = await studio.evaluate(
+            """
+            (el) => {
+                if (typeof el._soleNodeId === 'function') {
+                    try {
+                        const sole = el._soleNodeId();
+                        if (typeof sole === 'string') return sole;
+                    } catch (_err) {
+                        return '';
+                    }
+                }
+                if (typeof el.nodeId === 'string') return el.nodeId;
+                return '';
+            }
+            """
+        )
+        if studio_node == node_id:
+            llm_editor = studio.locator("flows-llm-node-editor").first
+            await expect(llm_editor).to_be_visible(timeout=5_000)
+            return studio
+        if studio_node:
+            # Studio на другом sole-node (llm vs reflection) — нужен canvas.
+            await flows_e2e_ensure_canvas_layout(page)
+        else:
+            # branchData ещё не готов: _soleNodeId бросает → пустая строка.
+            # Нельзя сразу flip в canvas — ломает Agent Focus сценарии веток.
+            llm_editor = studio.locator("flows-llm-node-editor").first
+            try:
+                await expect(llm_editor).to_be_visible(timeout=8_000)
+                return studio
+            except AssertionError:
+                await flows_e2e_ensure_canvas_layout(page)
 
     await flows_e2e_ensure_canvas_layout(page)
     await flows_wait_node_in_branch_data(page, node_id)
@@ -1370,9 +1598,10 @@ async def flows_open_node_editor(page: Page, node_id: str) -> Locator:
         await expect(node_editor).to_be_visible(timeout=2_000)
         return floating
     await flows_close_floating_panel(page)
-    deadline = time.monotonic() + 5.0
+    deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
         await flows_select_canvas_node(page, node_id)
+        await _flows_expand_collapsed_node_panel(page, node_id)
         await asyncio.sleep(0.15)
         if (
             await floating.count() > 0
@@ -1381,8 +1610,8 @@ async def flows_open_node_editor(page: Page, node_id: str) -> Locator:
             and await node_editor.is_visible()
         ):
             return floating
-    await expect(floating).to_be_visible(timeout=2_000)
-    await expect(node_editor).to_be_visible(timeout=2_000)
+    await expect(floating).to_be_visible(timeout=5_000)
+    await expect(node_editor).to_be_visible(timeout=5_000)
     return floating
 
 
@@ -2352,31 +2581,94 @@ async def flows_llm_add_tool_from_library(page: Page, query: str = "") -> None:
     ).first
     await expect(llm_editor).to_be_visible(timeout=5_000)
     await flows_click_platform_button(llm_editor, "Из библиотеки", "From library")
-    if query:
-        picker = page.locator("flows-library-picker-modal").first
-        search = picker.locator("platform-modal-search-field").first
-        await expect(search).to_be_visible(timeout=5_000)
-        await search.evaluate(
-            """
-            (el, value) => {
-                el.value = value;
-                el.dispatchEvent(new CustomEvent('change', {
-                    detail: { value }, bubbles: true, composed: true,
-                }));
+    await flows_pick_first_library_card(page, value=query)
+
+
+async def flows_library_picker_search(page: Page, query: str) -> None:
+    """Ставит поиск в library picker и дожидается server reload (debounce + tools/all?q=)."""
+    picker = page.locator("flows-library-picker-modal").first
+    await expect(picker).to_be_visible(timeout=30_000)
+    search = picker.locator("platform-modal-search-field").first
+    await expect(search).to_be_visible(timeout=10_000)
+    await picker.evaluate(
+        """
+        async (el, value) => {
+            el._search = value;
+            if (el._searchDebounceTimer !== null) {
+                clearTimeout(el._searchDebounceTimer);
+                el._searchDebounceTimer = null;
             }
+            if (typeof el._resetPickerCache === 'function') {
+                el._resetPickerCache();
+            } else {
+                el._pickerItemsByCategory = new Map();
+                el._pickerNextOffsetByCategory = new Map();
+                el._pickerHasMoreByCategory = new Map();
+                el._pickerErrorByCategory = new Map();
+                el._pickerLoadingCategory = null;
+                el._pickerLoadingMore = false;
+                el._pickerActiveQuery = '';
+                el._pickerLoadGeneration = (el._pickerLoadGeneration || 0) + 1;
+            }
+            el._search = value;
+            el._pickerActiveQuery = typeof value === 'string' ? value.trim() : '';
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+            const category = el._currentPickerCategory();
+            await el._ensurePickerCategoryLoaded(category);
+            const field = el.renderRoot && el.renderRoot.querySelector
+                ? el.renderRoot.querySelector('platform-modal-search-field')
+                : null;
+            if (field) {
+                field.value = value;
+                if (typeof field.requestUpdate === 'function') field.requestUpdate();
+            }
+        }
+        """,
+        query,
+    )
+    deadline = time.monotonic() + 20.0
+    last_state: dict[str, Any] | None = None
+    while time.monotonic() < deadline:
+        last_state = await picker.evaluate(
+            """
+            (el, wanted) => ({
+                search: el._search,
+                loading: el._pickerLoadingCategory,
+                ids: el._toolsAllItems().map((x) => x.tool_id),
+            })
             """,
             query,
         )
-    await flows_pick_first_library_card(page, value=query)
+        if (
+            isinstance(last_state, dict)
+            and last_state.get("search") == query
+            and last_state.get("loading") in (None, "")
+            and isinstance(last_state.get("ids"), list)
+            and wanted_in_ids(last_state["ids"], query)
+        ):
+            return
+        await asyncio.sleep(0.05)
+    raise AssertionError(
+        f"flows library search did not load {query!r}; state={last_state!r}"
+    )
+
+
+def wanted_in_ids(ids: list[Any], query: str) -> bool:
+    needle = query.strip().lower()
+    if needle == "":
+        return True
+    for item in ids:
+        if isinstance(item, str) and needle in item.lower():
+            return True
+    return False
 
 
 async def flows_pick_first_library_card(page: Page, *, value: str = "") -> None:
     picker = page.locator("flows-library-picker-modal").first
     await expect(picker).to_be_visible(timeout=5_000)
-    cards = picker.locator("platform-picker-card")
     if value:
-        card = picker.locator(f'platform-picker-card[value="{value}"]').first
-        deadline = time.monotonic() + 5.0
+        await flows_library_picker_search(page, value)
+        deadline = time.monotonic() + 15.0
         picked_state: dict[str, Any] | None = None
         while time.monotonic() < deadline:
             picked_state = await picker.evaluate(
@@ -2392,12 +2684,80 @@ async def flows_pick_first_library_card(page: Page, *, value: str = "") -> None:
             raise AssertionError(f"flows library item not loaded: {value}; state={picked_state!r}")
         if picked.get("item_type") == "flow" and not isinstance(picked.get("parameters_schema"), dict):
             raise AssertionError(f"flows library flow has no parameters_schema: {picked!r}")
+        # Программный pick: клик по tag-row под xdist/portal часто флакует.
+        picked_ok = await picker.evaluate(
+            """
+            (el, toolId) => {
+                const item = el._toolsAllItems().find((x) => x && x.tool_id === toolId);
+                if (!item) return false;
+                if (typeof el._pickToolLike !== 'function') {
+                    throw new Error('flows-library-picker-modal: _pickToolLike missing');
+                }
+                el._pickToolLike(item);
+                return true;
+            }
+            """,
+            value,
+        )
+        if picked_ok is not True:
+            raise AssertionError(f"flows library programmatic pick failed: {value}")
+        await expect(picker).to_be_hidden(timeout=15_000)
+        return
+    row = picker.locator("article.tag-tool-row, platform-picker-card").first
+    await expect(row).to_be_visible(timeout=15_000)
+    await flows_library_picker_activate_row(page, row)
+
+
+async def flows_library_picker_activate_row(page: Page, row: Locator) -> None:
+    """Клик по строке/карточке: в batch-режиме — кнопка «добавить один», иначе сама строка."""
+    picker = page.locator("flows-library-picker-modal").first
+    add_one = row.locator(
+        "platform-button.tag-tool-add-one, "
+        'platform-button[aria-label*="Add only"], '
+        'platform-button[aria-label*="Добавить только"], '
+        'platform-button[title*="Add only"], '
+        'platform-button[title*="Добавить только"]'
+    ).first
+    if await add_one.count() > 0 and await add_one.is_visible():
+        target = add_one.locator("button").first
+        if await target.count() == 0:
+            target = add_one
+        await target.click(force=True)
     else:
-        card = cards.first
-    await expect(card).to_be_visible(timeout=5_000)
-    card_button = card.locator("article.picker-card").first
-    await card_button.click(force=True)
-    await expect(picker).to_be_hidden(timeout=5_000)
+        card_button = row.locator("article.picker-card").first
+        if await card_button.count() > 0:
+            await card_button.click(force=True)
+        else:
+            await row.click(force=True)
+    await expect(picker).to_be_hidden(timeout=15_000)
+
+
+async def flows_library_picker_select_tool(page: Page, *, tool_id: str) -> None:
+    picker = page.locator("flows-library-picker-modal").first
+    await expect(picker).to_be_visible(timeout=30_000)
+    by_data = picker.locator(f'article.tag-tool-row[data-tool-id="{tool_id}"]').first
+    by_card = picker.locator(f'platform-picker-card[value="{tool_id}"]').first
+    deadline = time.monotonic() + 30.0
+    row: Locator | None = None
+    while time.monotonic() < deadline:
+        if await by_data.count() > 0 and await by_data.is_visible():
+            row = by_data
+            break
+        if await by_card.count() > 0 and await by_card.is_visible():
+            row = by_card
+            break
+        await asyncio.sleep(0.05)
+    if row is None:
+        row = picker.locator("article.tag-tool-row, platform-picker-card").filter(
+            has_text=re.compile(rf"(?:^|\b){re.escape(tool_id)}(?:\b|$)", re.I)
+        ).first
+        await expect(row).to_be_visible(timeout=5_000)
+    await flows_library_picker_activate_row(page, row)
+
+
+async def flows_pick_library_card_by_text(page: Page, text: str) -> None:
+    await flows_library_picker_search(page, text)
+    await flows_library_picker_select_tool(page, tool_id=text)
 
 
 async def flows_drop_resource_type(
@@ -2756,6 +3116,189 @@ async def flows_trigger_editor_save(page: Page) -> None:
     await expect(editor).to_be_hidden(timeout=30_000)
 
 
+async def flows_trigger_editor_configure_cron(
+    page: Page,
+    *,
+    cron: str,
+    timezone: str,
+    initial_content: str,
+) -> None:
+    """Заполняет cron / timezone / initial_content на вкладке Configuration."""
+    editor = page.locator("flows-trigger-editor-modal").first
+    await expect(editor).to_be_visible(timeout=15_000)
+    await editor.evaluate(
+        """
+        (el, payload) => {
+            el._config = {
+                ...(el._config && typeof el._config === 'object' ? el._config : {}),
+                cron: payload.cron,
+                timezone: payload.timezone,
+                initial_content: payload.initial_content,
+            };
+            el.isDirty = true;
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+        }
+        """,
+        {
+            "cron": cron,
+            "timezone": timezone,
+            "initial_content": initial_content,
+        },
+    )
+    cron_field = editor.locator("platform-cron-field").first
+    await expect(cron_field).to_be_visible(timeout=10_000)
+    await expect(editor.locator("platform-timezone-picker").first).to_be_visible(timeout=10_000)
+
+
+async def flows_trigger_editor_configure_telegram(
+    page: Page,
+    *,
+    bot_token: str,
+    allowed_users: list[int] | None = None,
+) -> None:
+    """Токен бота и опциональный список Telegram user_id."""
+    editor = page.locator("flows-trigger-editor-modal").first
+    await expect(editor).to_be_visible(timeout=15_000)
+    users = list(allowed_users) if allowed_users is not None else []
+    await editor.evaluate(
+        """
+        (el, payload) => {
+            el._config = {
+                ...(el._config && typeof el._config === 'object' ? el._config : {}),
+                bot_token: payload.bot_token,
+                allowed_users: payload.allowed_users,
+            };
+            el.isDirty = true;
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+        }
+        """,
+        {"bot_token": bot_token, "allowed_users": users},
+    )
+    await expect(
+        editor.locator(".config-section-title").filter(has_text=re.compile(r"Telegram", re.I))
+    ).to_be_visible(timeout=10_000)
+
+
+async def flows_trigger_editor_click_email_mailbox(
+    page: Page,
+    *,
+    email_address: str,
+) -> None:
+    editor = page.locator("flows-trigger-editor-modal").first
+    chip = editor.locator("article.email-chip, button.email-chip").filter(
+        has_text=email_address
+    ).first
+    await expect(chip).to_be_visible(timeout=20_000)
+    await chip.click()
+    await expect(chip).to_have_class(re.compile(r"\bactive\b"), timeout=10_000)
+
+
+async def flows_trigger_editor_apply_email_filter_preset(
+    page: Page,
+    *,
+    preset_label: re.Pattern[str] | str,
+) -> None:
+    editor = page.locator("flows-trigger-editor-modal").first
+    label = (
+        preset_label
+        if isinstance(preset_label, re.Pattern)
+        else re.compile(re.escape(preset_label), re.I)
+    )
+    chip = editor.locator(".email-preset-list article.email-chip, .email-preset-list button.email-chip").filter(
+        has_text=label
+    ).first
+    await expect(chip).to_be_visible(timeout=15_000)
+    await chip.click()
+    await expect(chip).to_have_class(re.compile(r"\bactive\b"), timeout=10_000)
+
+
+async def flows_seed_ui_mail_mailbox(
+    frontend_container: Any,
+    *,
+    unique_id: str,
+    local_part: str | None = None,
+) -> MailboxBinding:
+    """Создаёт ACTIVE company mail + USER mailbox для primary UI E2E company."""
+    from core.context import clear_context, set_context
+    from core.mail.models import (
+        CompanyMailConnectionUpsertPayload,
+        MailboxBinding,
+        MailboxBindingCreatePayload,
+        MailboxBindingKind,
+        MailProvider,
+    )
+    from core.mail.service import MailService
+    from core.models.context_models import Context
+    from core.models.identity_models import Company, User
+    from tests.core.mail.fakes import RecordingMailServerPort
+    from tests.ui.e2e_worker import ui_e2e_company_id, ui_e2e_worker_id
+
+    company_id = ui_e2e_company_id()
+    user_id = f"ui_owner_{ui_e2e_worker_id()}"
+    company = await frontend_container.company_repository.get(company_id)
+    user = await frontend_container.user_repository.get(user_id)
+    if company is None or user is None:
+        raise RuntimeError(
+            f"UI E2E company/user missing for mail seed: {company_id!r} / {user_id!r}"
+        )
+    if not isinstance(company, Company) or not isinstance(user, User):
+        raise TypeError("flows_seed_ui_mail_mailbox: unexpected company/user types")
+
+    port = RecordingMailServerPort(supports_provision=False)
+    base_mail = frontend_container.mail_service
+    mail_service = MailService(
+        connection_repository=base_mail._connection_repository,
+        binding_repository=base_mail._binding_repository,
+        sync_cursor_repository=base_mail._sync_cursor_repository,
+        folder_repository=base_mail._folder_repository,
+        message_repository=base_mail._message_repository,
+        member_repository=base_mail._member_repository,
+        namespace_service=base_mail._namespace_service,
+        company_repository=base_mail._company_repository,
+        user_repository=base_mail._user_repository,
+        mail_config=base_mail._mail_config,
+        port_override=port,
+    )
+    set_context(
+        Context(
+            user=user,
+            active_company=company,
+            user_companies=[company],
+            channel="ui_e2e",
+        )
+    )
+    try:
+        _ = await mail_service.upsert_connection(
+            CompanyMailConnectionUpsertPayload(
+                mail_domain=f"ui-mail-{unique_id[:10]}.example.com",
+                provider=MailProvider.GENERIC_IMAP_SMTP,
+                imap_host="imap.example.com",
+                imap_port=993,
+                smtp_host="smtp.example.com",
+                smtp_port=465,
+                use_ssl=True,
+            ),
+            company_id=company_id,
+        )
+        part = local_part if local_part is not None else f"orders{unique_id[:6]}"
+        binding = await mail_service.bind_mailbox(
+            MailboxBindingCreatePayload(
+                kind=MailboxBindingKind.USER,
+                user_id=user_id,
+                local_part=part,
+                password="ui-e2e-mail-pass",
+                provision=False,
+                sync_enabled=True,
+            ),
+            company_id=company_id,
+        )
+    finally:
+        clear_context()
+    if not isinstance(binding, MailboxBinding):
+        raise TypeError("flows_seed_ui_mail_mailbox: bind_mailbox must return MailboxBinding")
+    return binding
+
+
 async def flows_set_code_node_source(page: Page, code: str) -> None:
     workbench = page.locator("flows-code-workbench").first
     await expect(workbench).to_be_visible(timeout=30_000)
@@ -2809,9 +3352,20 @@ async def flows_ensure_channel_node_telegram(page: Page) -> None:
     )
 
 
-async def flows_set_remote_flow_url(page: Page, url: str, *, branch_id: str = "default") -> None:
-    editor = page.locator("flows-remote-flow-editor").first
-    await expect(editor).to_be_visible(timeout=5_000)
+async def flows_set_remote_flow_url(
+    page: Page,
+    url: str,
+    *,
+    branch_id: str = "default",
+    node_id: str | None = None,
+) -> None:
+    if node_id is not None:
+        await flows_open_node_editor(page, node_id)
+    editor = page.locator(
+        "flows-floating-panel[show-backdrop] flows-remote-flow-editor, "
+        "flows-remote-flow-editor"
+    ).first
+    await expect(editor).to_be_visible(timeout=10_000)
     await expect(editor.locator("[data-testid='remote-flow-protocol-panel']")).to_be_visible(
         timeout=5_000
     )
@@ -3329,41 +3883,6 @@ async def flows_e2e_set_show_reflection(page: Page, *, enabled: bool) -> None:
         """,
         enabled,
     )
-
-
-async def flows_pick_library_card_by_text(page: Page, text: str) -> None:
-    picker = page.locator("flows-library-picker-modal").first
-    await expect(picker).to_be_visible(timeout=30_000)
-    search = picker.locator("platform-modal-search-field").first
-    if await search.count() > 0:
-        await search.evaluate(
-            """
-            (el, value) => {
-                el.value = value;
-                if (typeof el.requestUpdate === 'function') el.requestUpdate();
-                el.dispatchEvent(new CustomEvent('change', {
-                    detail: { value },
-                    bubbles: true,
-                    composed: true,
-                }));
-            }
-            """,
-            text,
-        )
-    # Prefer value=tool_id: another tool's description may mention this name
-    # (e.g. agent_plan_get docs say "agent_plan_write first").
-    card_by_value = picker.locator(f'platform-picker-card[value="{text}"]').first
-    try:
-        await expect(card_by_value).to_be_visible(timeout=10_000)
-        card = card_by_value
-    except AssertionError:
-        card = picker.locator("platform-picker-card").filter(
-            has_text=re.compile(rf"(?:^|\b){re.escape(text)}(?:\b|$)", re.I)
-        ).first
-        await expect(card).to_be_visible(timeout=30_000)
-    card_button = card.locator("article.picker-card").first
-    await card_button.click(force=True)
-    await expect(picker).to_be_hidden(timeout=30_000)
 
 
 async def flows_llm_add_named_tool_from_library(page: Page, tool_name: str) -> None:

@@ -1,39 +1,39 @@
 # Run the agent on a platform event with a filter
 
-**What for:** the agent reacts only to matching bus events (for example CRM task created).
+**What for:** the agent reacts only to matching events from other services (CRM, tasks, comments).
 
-**Problems it solves:** without a filter the flow would fire on every event of that type — a payload filter narrows the subscription.
+**Problems it solves:** without a filter the flow would fire on every event of that type — a field condition narrows the subscription to useful cases.
 
-**Result:** a platform_event trigger with entity_type=task is saved.
+**Result:** a platform event trigger with a comment-role condition is saved.
 
 ## Step 1. Open the triggers list
 
-In the editor menu choose Triggers and create a new trigger.
+In the editor menu choose Triggers. A platform event connects the agent to actions in other services without a separate webhook.
 
 ![Open the triggers list](platform-event-filters--01-platform-event-triggers-modal.png)
 
-## Step 2. Choose Platform event type
+## Step 2. Choose Platform event and set the name
 
-This type subscribes the flow to the platform:events bus.
+This type listens to the event catalog (CRM, tasks, mail, and more). Set an id and a name such as Operator comment. Next pick the exact event type.
 
-![Choose Platform event type](platform-event-filters--02-platform-event-type-selected.png)
+![Choose Platform event and set the name](platform-event-filters--02-platform-event-type-selected.png)
 
-## Step 3. Pick event and entity_type = task filter
+## Step 3. Pick the event type and a filter condition
 
-Event type comes from the catalog. Path/op/value are only from catalog filter_fields (autocomplete).
+Event type comes from the catalog (autocomplete list). A filter row is field / operator / value: the field comes from the event catalog, the operator is equals / not equals / contains, and the value might be the operator role. With no conditions the agent fires on every event of that type.
 
-![Pick event and entity_type = task filter](platform-event-filters--03-platform-event-filters-filled.png)
+![Pick the event type and a filter condition](platform-event-filters--03-platform-event-filters-filled.png)
 
-## Step 4. Change event type clears filters; set comment.role = operator
+## Step 4. Check the sample payload on Mapping
 
-The role enum value comes from catalog filter_fields.
+The sample shows the event envelope: type, company, and useful payload fields. Path examples help pass the right data into the agent content.
 
-![Change event type clears filters; set comment.role = operator](platform-event-filters--04-platform-event-enum-filter.png)
+![Check the sample payload on Mapping](platform-event-filters--04-platform-event-mapping-sample.png)
 
-## Step 5. Save and verify the trigger in the list
+## Step 5. Save the trigger and find it in the list
 
-**Result demonstration.** The trigger with comment.role=operator is saved — the agent reacts only to operator comments.
+**Result demonstration.** Operator comment is in the list — the agent reacts only when a work item gets a comment with role operator.
 
-**Summary.** You can subscribe a flow to a platform event with a filter.
+**Summary.** You can subscribe to a platform event and narrow it with a filter.
 
-![Save and verify the trigger in the list](platform-event-filters--05-platform-event-saved-in-list.png)
+![Save the trigger and find it in the list](platform-event-filters--05-platform-event-saved-in-list.png)

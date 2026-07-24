@@ -2,28 +2,28 @@
 
 A long walkthrough of the main Sync workflow: space, channel, messages, mentions, attachments, message menu, pins, threads, channel settings, member profile, and real realtime updates.
 
-## Step 1. Sync opened in the selected space
+## Step 1. Sync opened with the company chat list
 
 On the first screen, check three interface areas:
 
 - on the left are the chat list, search, and search scope switch;
-- above the list are the selected space, settings pencil, and meeting button;
-- in the center are channel cards for the selected space.
+- above the list are the Sync settings gear and the meeting button;
+- in the center are channel cards you have access to.
 
-A Sync space is a platform namespace. It is shared across platform services, and Sync stores only its own settings there: auto-transcription of voice messages and the «speech from calls into the feed» mode.
+Sync has no namespace switcher: you see all chats by membership. Transcription defaults live on the company workspace ``default``.
 
-![Sync opened in the selected space](sync-complete-guide--01-sync-opened-in-the-selected-space.png)
+![Sync opened with the company chat list](sync-complete-guide--01-sync-opened-with-the-company-chat-list.png)
 
-## Step 2. Sync space settings opened
+## Step 2. Company Sync defaults opened
 
-The pencil next to the space does not create or rename the namespace. It opens Sync settings for the selected space.
+The gear in the chat list header opens Sync settings for the company workspace ``default`` (it does not create or switch namespaces).
 
-- «Auto-transcribe voice messages» enables STT for new voice messages in channels of this space.
+- «Auto-transcribe voice messages» enables STT for new voice messages in company channels by default.
 - «Speech from calls into the feed» publishes speech segments from call participants into the channel feed when the backend and LiveKit egress are configured.
 
-These values act as space defaults; a specific channel can override them in channel settings.
+These values act as company defaults; a specific channel can override them in channel settings.
 
-![Sync space settings opened](sync-complete-guide--02-sync-space-settings-opened.png)
+![Company Sync defaults opened](sync-complete-guide--02-company-sync-defaults-opened.png)
 
 ## Step 3. Channel creation form opened
 

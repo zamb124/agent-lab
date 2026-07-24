@@ -500,9 +500,6 @@ async def test_flows_notify_in_telegram(
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
     await flows_wait_node_in_branch_data(page, channel_node_id)
-    panel = await flows_open_node_editor(page, channel_node_id)
-    editor = panel.locator("flows-channel-node-editor").first
-    await expect(editor).to_be_visible(timeout=5_000)
     await scenario.step(
         "Добавьте ноду канала",
         page,
@@ -518,9 +515,15 @@ async def test_flows_notify_in_telegram(
         ),
     )
 
-    await expect(editor.get_by_text(re.compile(r"Telegram|телеграм", re.I)).first).to_be_visible(
-        timeout=5_000
-    )
+    panel = await flows_open_node_editor(page, channel_node_id)
+    editor = panel.locator("flows-channel-node-editor").first
+    await expect(editor).to_be_visible(timeout=10_000)
+    channel_field = editor.locator('platform-field[data-field="channel"]').first
+    await expect(channel_field).to_be_visible(timeout=5_000)
+    channel_value = await channel_field.evaluate("(el) => el.value")
+    if channel_value != "telegram":
+        raise AssertionError(f"expected channel=telegram, got {channel_value!r}")
+    await expect(editor.locator("platform-variable-input").first).to_be_visible(timeout=5_000)
     await scenario.step(
         "Выберите Telegram и укажите бота",
         page,
@@ -536,6 +539,13 @@ async def test_flows_notify_in_telegram(
         ),
     )
 
+    panel = await flows_open_node_editor(page, channel_node_id)
+    editor = panel.locator("flows-channel-node-editor").first
+    await expect(editor).to_be_visible(timeout=10_000)
+    channel_field = editor.locator('platform-field[data-field="channel"]').first
+    channel_value = await channel_field.evaluate("(el) => el.value")
+    if channel_value != "telegram":
+        raise AssertionError(f"expected channel=telegram on review, got {channel_value!r}")
     await scenario.step(
         "Проверьте настройки канала перед публикацией",
         page,
@@ -618,9 +628,7 @@ async def test_flows_call_remote_agent(
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
-    panel = await flows_open_node_editor(page, remote_node_id)
-    editor = panel.locator("flows-remote-flow-editor").first
-    await expect(editor).to_be_visible(timeout=5_000)
+    await flows_wait_node_in_branch_data(page, remote_node_id)
     await scenario.step(
         "Добавьте ноду внешнего агента",
         page,
@@ -636,7 +644,14 @@ async def test_flows_call_remote_agent(
         ),
     )
 
-    await flows_set_remote_flow_url(page, _REMOTE_AGENT_URL)
+    panel = await flows_open_node_editor(page, remote_node_id)
+    editor = panel.locator("flows-remote-flow-editor").first
+    await expect(editor).to_be_visible(timeout=10_000)
+    await flows_set_remote_flow_url(
+        page,
+        _REMOTE_AGENT_URL,
+        node_id=remote_node_id,
+    )
     await expect(
         editor.locator(".remote-flow-endpoint-stack platform-field").first.get_by_role("textbox")
     ).to_have_value(_REMOTE_AGENT_URL, timeout=5_000)
@@ -655,6 +670,8 @@ async def test_flows_call_remote_agent(
         ),
     )
 
+    panel = await flows_open_node_editor(page, remote_node_id)
+    editor = panel.locator("flows-remote-flow-editor").first
     await expect(
         editor.locator(".remote-flow-endpoint-stack platform-field").first.get_by_role("textbox")
     ).to_have_value(_REMOTE_AGENT_URL, timeout=5_000)

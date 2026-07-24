@@ -122,7 +122,9 @@ async def test_flows_enable_flow_employee(
         await page.keyboard.press("Escape")
         await expect(employee_modal).to_be_hidden(timeout=10_000)
 
+        await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
         card = page.locator(f'.flow-card[data-flow-id="{flow_id}"]').first
+        await expect(card).to_be_visible(timeout=30_000)
         await expect(card.locator(".employee-avatar-badge")).to_be_visible(timeout=15_000)
         await scenario.step(
             "Убедитесь в значке сотрудника в списке flow",

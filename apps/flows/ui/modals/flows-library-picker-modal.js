@@ -746,6 +746,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this._pickerLoadingCategory = null;
         this._pickerLoadingMore = false;
         this._pickerActiveQuery = '';
+        /** @type {number} инвалидирует in-flight tools/all при смене q / повторном load */
+        this._pickerLoadGeneration = 0;
         this._searchDebounceTimer = null;
         this._scrollObserver = null;
         this._observedSentinel = null;
@@ -772,6 +774,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this._pickerLoadingCategory = null;
         this._pickerLoadingMore = false;
         this._pickerActiveQuery = '';
+        this._pickerLoadGeneration += 1;
     }
 
     _teardownScrollObserver() {
@@ -866,6 +869,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             this._pickerHasMoreByCategory.delete(category);
             this._pickerActiveQuery = q;
             append = false;
+            // Смена q отменяет in-flight load предыдущего запроса.
+            this._pickerLoadGeneration += 1;
+            this._pickerLoadingCategory = null;
+            this._pickerLoadingMore = false;
         }
         if (!append && this._pickerItemsByCategory.has(category)) {
             return;
@@ -879,12 +886,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             }
             this._pickerLoadingMore = true;
         } else {
-            if (this._pickerLoadingCategory === category) {
-                return;
-            }
             this._pickerLoadingCategory = category;
             this._pickerErrorByCategory.delete(category);
         }
+        const loadGeneration = this._pickerLoadGeneration;
         this.requestUpdate();
         const offset = append
             ? (this._pickerNextOffsetByCategory.get(category) || 0)
@@ -898,6 +903,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                     q: q.length > 0 ? q : undefined,
                 },
             );
+            if (loadGeneration !== this._pickerLoadGeneration) {
+                return;
+            }
+            if (this._pickerSearchQuery() !== q) {
+                return;
+            }
             const prev = append && Array.isArray(this._pickerItemsByCategory.get(category))
                 ? this._pickerItemsByCategory.get(category)
                 : [];
@@ -924,6 +935,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             this._pickerLoadingMore = false;
             this.requestUpdate();
         } catch (err) {
+            if (loadGeneration !== this._pickerLoadGeneration) {
+                return;
+            }
             this._pickerLoadingCategory = null;
             this._pickerLoadingMore = false;
             const fromOp = typeof this._toolsAll.error === 'string' && this._toolsAll.error.length > 0
@@ -2197,6 +2211,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 class="tag-tool-row"
                 role="button"
                 tabindex="0"
+                data-tool-id=${toolId}
                 data-selected=${selected ? 'true' : 'false'}
                 @click=${() => {
                     if (batchEnabled) {

@@ -228,7 +228,11 @@ async def test_adhoc_call_channel_is_visible_and_survives_channel_switch(
         channel_prefix="Основной канал",
     )
 
-    await ui_page_system.locator("sync-chat-list .platform-namespace-trailing-action-btn").first.click()
+    await ui_page_system.locator(
+        "sync-chat-list .header-action-btn"
+    ).filter(
+        has=ui_page_system.locator("platform-icon[name='phone-plus']")
+    ).first.click()
     overlay = ui_page_system.locator("sync-call-overlay-modal")
     await expect(overlay).to_be_visible(timeout=30_000)
     await _ensure_overlay_chat_open(overlay)

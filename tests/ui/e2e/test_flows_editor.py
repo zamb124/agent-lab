@@ -481,7 +481,7 @@ async def test_flows_organize_large_graph(
         ),
     )
 
-    await flows_set_selected_llm_prompt(page, _ORGANIZE_GRAPH_PROMPT_FIXED)
+    await flows_set_selected_llm_prompt(page, _ORGANIZE_GRAPH_PROMPT_FIXED, node_id="llm_1")
     await scenario.step(
         "Исправьте инструкцию проблемного блока",
         page,
