@@ -3,8 +3,10 @@
 import asyncio
 
 import pytest
+from pydantic import BaseModel, ValidationError
 
 from apps.flows.src.runtime.exception_policy import (
+    is_tool_arg_validation_error,
     node_exception_policy,
     normalize_allow_types,
     should_absorb_exception,
@@ -60,6 +62,16 @@ def test_should_absorb_whitelist() -> None:
         )
         is False
     )
+
+
+def test_is_tool_arg_validation_error() -> None:
+    class _Args(BaseModel):
+        required_field: str
+
+    with pytest.raises(ValidationError) as caught:
+        _Args.model_validate({})
+    assert is_tool_arg_validation_error(caught.value) is True
+    assert is_tool_arg_validation_error(ValueError("x")) is False
 
 
 def test_normalize_allow_types_strips() -> None:

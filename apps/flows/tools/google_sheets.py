@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_TAGS = ["google_sheets", "google", "spreadsheets"]
+_TAGS = ["google_sheets"]
 
 
 def _require_state(state: ExecutionState | None) -> ExecutionState:

@@ -134,6 +134,20 @@ class TestValidateSttResultText:
         )
         assert text == "Привет мир"
 
+    def test_empty_text_means_no_speech(self) -> None:
+        from core.clients.stt_client import STTTranscriptionResult
+        from core.files.models import AudioTranscriptionStatus
+
+        result = STTTranscriptionResult(
+            provider="mock",
+            status=AudioTranscriptionStatus.DONE,
+            text="",
+        )
+        text = validate_stt_result_text(
+            transcript_result=result, job_id="test-empty", context="unit"
+        )
+        assert text == ""
+
     def test_raises_on_failed_status(self) -> None:
         from core.clients.stt_client import STTTranscriptionResult
         from core.files.models import AudioTranscriptionStatus

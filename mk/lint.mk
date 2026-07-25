@@ -36,6 +36,8 @@ _lint-py:
 	@echo "=== lint: files canon ==="
 	uv run python scripts/check_files_canon.py
 	@bash scripts/check_files_ui_canon.sh
+	@echo "=== lint: tool tags taxonomy ==="
+	uv run python scripts/check_tool_tags.py
 	@echo "=== lint: no binding_id ==="
 	uv run python scripts/check_office_file_id_canon.py
 

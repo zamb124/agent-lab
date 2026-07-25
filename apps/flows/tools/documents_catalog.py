@@ -21,7 +21,7 @@ from core.files.reader.models import MAX_READ_BUDGET, CompressionMode, ReadFileA
 from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 
-_DOCUMENTS_CATALOG_TAGS = ["documents", "office", "catalog"]
+_DOCUMENTS_CATALOG_TAGS = ["documents"]
 
 
 class DocumentsListCatalogArgs(BaseModel):
@@ -323,8 +323,10 @@ async def documents_find(
 @tool(
     name="documents_read",
     description=(
-        "Read content of a Documents library file by file_id "
-        "(FileReader with page_start/page_end pagination). Not limited to state.files."
+        "Read content of a Documents library / catalog file by file_id "
+        "(from UI context, documents_find, or documents_list_catalog; "
+        "FileReader with page_start/page_end). Not limited to state.files. "
+        "Do not use read_agent_skill_reference for catalog or SPA UI file_id."
     ),
     tags=_DOCUMENTS_CATALOG_TAGS,
     parameters_model=DocumentsReadArgs,

@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
+import { AGENT_SKILL_ICON } from '../../_helpers/agent-skill-map.js';
 
 export class FlowsAgentSkillsHowItWorks extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -82,6 +83,9 @@ export class FlowsAgentSkillsHowItWorks extends PlatformElement {
                 display: flex;
                 flex-wrap: wrap;
                 gap: var(--space-2);
+            }
+            .action-skill-example platform-icon {
+                color: var(--accent);
             }
             :host([compact]) .wrap {
                 gap: var(--space-2);
@@ -167,8 +171,8 @@ export class FlowsAgentSkillsHowItWorks extends PlatformElement {
                                 <platform-icon name="upload" size="16"></platform-icon>
                                 ${this.t('agent_skills.action_import')}
                             </platform-button>
-                            <platform-button variant="ghost" density="compact" @click=${() => this._emit('example')}>
-                                <platform-icon name="sparkles" size="16"></platform-icon>
+                            <platform-button class="action-skill-example" variant="ghost" density="compact" @click=${() => this._emit('example')}>
+                                <platform-icon name=${AGENT_SKILL_ICON} size="16"></platform-icon>
                                 ${this.t('agent_skills.action_open_example')}
                             </platform-button>
                         </div>

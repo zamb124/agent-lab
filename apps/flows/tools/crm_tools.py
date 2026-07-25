@@ -230,7 +230,7 @@ class CrmCreateNoteAndAnalyzeArgs(BaseModel):
         "Не добавляй фильтры по типу или пространству, если пользователь об этом не просил. "
         "Ответ — JSON: успех, список совпадений и блоки для чата."
     ),
-    tags=["crm", "search"],
+    tags=["crm"],
     parameters_model=CrmSearchEntitiesArgs,
 )
 async def crm_search_entities(
@@ -318,7 +318,7 @@ async def crm_search_entities(
         "note_date — ISO дата YYYY-MM-DD (опционально). namespace — опционально, иначе берётся из контекста. "
         "Возвращает JSON: entity, blocks (карточка для чата)."
     ),
-    tags=["crm", "notes"],
+    tags=["crm"],
     parameters_model=CrmCreateNoteArgs,
 )
 async def crm_create_note(
@@ -453,7 +453,7 @@ async def crm_create_note(
         "Создаёт заметку в CRM и сразу запускает AI-анализ того же текста (извлечение сущностей). "
         "Передай name, description. Опционально note_date (YYYY-MM-DD), extract_entity_types, mentioned_entity_ids, namespace."
     ),
-    tags=["crm", "notes", "ai"],
+    tags=["crm"],
     parameters_model=CrmCreateNoteAndAnalyzeArgs,
 )
 async def crm_create_note_and_analyze(
@@ -545,7 +545,7 @@ async def crm_create_note_and_analyze(
         "После согласия пользователя — crm_apply_analysis_draft или crm_discard_analysis_draft. "
         "Не вызывать без явного согласия на анализ."
     ),
-    tags=["crm", "ai"],
+    tags=["crm"],
     parameters_model=CrmAnalyzeNoteTextArgs,
 )
 async def crm_analyze_note_text(
@@ -674,7 +674,7 @@ async def crm_get_entity(entity_id: str, *, state: "ExecutionState") -> str:
         "Создаёт сущность CRM (POST /crm/api/v1/entities): entity_type и name обязательны. "
         "namespace берётся из active_namespace если не указан. Для confirm-first заметок используй crm_create_note."
     ),
-    tags=["crm", "mutation"],
+    tags=["crm"],
     parameters_model=CrmCreateEntityArgs,
 )
 async def crm_create_entity(
@@ -722,7 +722,7 @@ async def crm_create_entity(
     description=(
         "Создаёт связь (POST /crm/api/v1/relationships между source и target)."
     ),
-    tags=["crm", "mutation", "graph"],
+    tags=["crm"],
     parameters_model=CrmCreateRelationshipArgs,
 )
 async def crm_create_relationship(
@@ -829,7 +829,7 @@ async def crm_list_entity_types(
         "(POST /crm/api/v1/entities/daily-summary, date YYYY-MM-DD). "
         "Для диапазона дат — crm_period_summary."
     ),
-    tags=["crm", "summaries"],
+    tags=["crm"],
     parameters_model=CrmDailySummaryArgs,
 )
 async def crm_daily_summary(
@@ -1149,7 +1149,7 @@ async def _poll_note_analyze_task(
         "Updates a CRM entity (PUT /crm/api/v1/entities/{entity_id}). "
         "Pass only fields to change. Never invent entity_id."
     ),
-    tags=["crm", "mutation"],
+    tags=["crm"],
     parameters_model=CrmUpdateEntityArgs,
 )
 async def crm_update_entity(
@@ -1204,7 +1204,7 @@ async def crm_update_entity(
         "Cascade-deletes a CRM entity "
         "(DELETE /crm/api/v1/entities/{entity_id}). Confirm with the user first."
     ),
-    tags=["crm", "mutation"],
+    tags=["crm"],
     parameters_model=CrmDeleteEntityArgs,
 )
 async def crm_delete_entity(entity_id: str, *, state: "ExecutionState") -> str:
@@ -1232,7 +1232,7 @@ async def crm_delete_entity(entity_id: str, *, state: "ExecutionState") -> str:
         "(POST /crm/api/v1/entities/query, entity_type=note). "
         "date_from required; date_to optional (defaults to date_from)."
     ),
-    tags=["crm", "notes"],
+    tags=["crm"],
     parameters_model=CrmListNotesArgs,
 )
 async def crm_list_notes(
@@ -1322,7 +1322,7 @@ async def crm_list_notes(
         "(POST /crm/api/v1/tasks/note-analyze mode=apply). "
         "Use after crm_analyze_note_text when the user accepts the draft. Analyze ≠ apply."
     ),
-    tags=["crm", "ai", "mutation"],
+    tags=["crm"],
     parameters_model=CrmApplyAnalysisDraftArgs,
 )
 async def crm_apply_analysis_draft(note_id: str, *, state: "ExecutionState") -> str:
@@ -1361,7 +1361,7 @@ async def crm_apply_analysis_draft(note_id: str, *, state: "ExecutionState") -> 
         "Discards note AI analysis draft without applying "
         "(DELETE /crm/api/v1/entities/notes/{note_id}/analysis-draft)."
     ),
-    tags=["crm", "ai", "mutation"],
+    tags=["crm"],
     parameters_model=CrmDiscardAnalysisDraftArgs,
 )
 async def crm_discard_analysis_draft(note_id: str, *, state: "ExecutionState") -> str:
@@ -1389,7 +1389,7 @@ async def crm_discard_analysis_draft(note_id: str, *, state: "ExecutionState") -
         "Merges source entity into survivor "
         "(POST /crm/api/v1/entities/merge). Survivor keeps entity_id; source is deleted."
     ),
-    tags=["crm", "mutation"],
+    tags=["crm"],
     parameters_model=CrmMergeEntitiesArgs,
 )
 async def crm_merge_entities(
@@ -1430,7 +1430,7 @@ async def crm_merge_entities(
         "Period notes summary "
         "(POST /crm/api/v1/entities/period-summary, date_from/date_to YYYY-MM-DD)."
     ),
-    tags=["crm", "summaries"],
+    tags=["crm"],
     parameters_model=CrmPeriodSummaryArgs,
 )
 async def crm_period_summary(
@@ -1484,7 +1484,7 @@ async def crm_period_summary(
         "(POST /crm/api/v1/activity-tasks). Returns entity_id and work_item_id. "
         "Further work mutations — load work-items tools."
     ),
-    tags=["crm", "mutation", "worktracker"],
+    tags=["crm", "worktracker"],
     parameters_model=CrmCreateActivityTaskArgs,
 )
 async def crm_create_activity_task(

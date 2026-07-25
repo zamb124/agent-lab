@@ -119,7 +119,7 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 
 ### Транскрипция (sync_worker)
 
-`sync_transcribe_audio_message_task` / `sync_transcribe_video_message_task` (`apps/sync/realtime/tasks.py`) через `transcribe_audio_with_chunking` и `core.clients.voice_resolver.get_stt_client` (`company_id` сообщения, язык — `settings.voice.stt.default_language`). Лимиты ffmpeg при превышении чанка — `settings.media_transcriber.{chunk_max_upload_bytes, chunk_duration_seconds, ...}`. Видео — извлечение дорожки через `ffmpeg`, тот же пайплайн. `ffmpeg` обязателен в runtime-образе.
+`sync_transcribe_audio_message_task` / `sync_transcribe_video_message_task` (`apps/sync/realtime/tasks.py`) через `transcribe_audio_with_chunking` и `core.clients.voice_resolver.get_stt_client` (`company_id` сообщения, язык — `settings.voice.stt.default_language`). Лимиты ffmpeg при превышении чанка — `settings.media_transcriber.{chunk_max_upload_bytes, chunk_duration_seconds, ...}`. Видео — извлечение дорожки через `ffmpeg`, тот же пайплайн. `ffmpeg` обязателен в runtime-образе. Пустой STT text (`""`) — валидный кейс «нет речи»: статус `DONE`, `transcription_text=""`, UI `<platform-audio-message-player>` показывает i18n `audio_player.no_speech` (не `FAILED`).
 
 `sync_aggregate_call_transcript_task` собирает агрегат по сессии звонка (сообщения с `call_id`) → новое текстовое сообщение в ленте. Если нечего собирать — одно сообщение с текстом из корневого ключа `call_aggregate_empty_body` в `core/i18n/translations/ru/sync.json` (без `ValueError`).
 

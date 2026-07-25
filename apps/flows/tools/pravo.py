@@ -131,7 +131,7 @@ async def _run_rag_search(
 @tool(
     name="pravo_catalog_search",
     description=_PRAVO_CATALOG_SEARCH_DESCRIPTION,
-    tags=["law", "rag", "knowledge", "external"],
+    tags=["knowledge"],
     parameters_model=PravoCatalogSearchArgs,
 )
 async def pravo_catalog_search(keyword: str, page: int = 1) -> JsonObject:
@@ -159,7 +159,7 @@ async def pravo_catalog_search(keyword: str, page: int = 1) -> JsonObject:
 @tool(
     name="pravo_document_rag_search",
     description=_PRAVO_DOCUMENT_RAG_SEARCH_DESCRIPTION,
-    tags=["law", "rag", "knowledge", "external"],
+    tags=["knowledge"],
     parameters_model=PravoDocumentRagSearchArgs,
 )
 async def pravo_document_rag_search(

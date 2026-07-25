@@ -138,17 +138,17 @@ def validate_stt_result_text(
     job_id: str,
     context: str,
 ) -> str:
-    """Проверяет, что STT вернул успешный непустой результат."""
+    """Проверяет, что STT вернул успешный статус.
+
+    Пустой text — валидный кейс «нет речи», не ошибка.
+    """
     if transcript_result.status != AudioTranscriptionStatus.DONE:
         message = (
             "STT вернул неуспешный статус транскрипции "
             + f"для job_id={job_id}: {transcript_result.status.value}. context={context}"
         )
         raise ValueError(message)
-    transcript_text = transcript_result.text
-    if transcript_text.strip() == "":
-        raise ValueError(f"STT вернул пустую транскрипцию для job_id={job_id}. context={context}")
-    return transcript_text
+    return transcript_result.text
 
 
 def is_stt_format_not_recognized_error(error: Exception) -> bool:
@@ -425,8 +425,6 @@ async def transcribe_audio_with_chunking(
         ).strip()
         if chunk_text != "":
             chunk_texts.append(chunk_text)
-    if len(chunk_texts) == 0:
-        raise ValueError(f"STT вернул пустые транскрипции для всех чанков job_id={job_id}.")
     if last_provider == "":
         raise ValueError("STT не вернул идентификатор провайдера (last_provider пуст).")
     full_text = "\n".join(chunk_texts)

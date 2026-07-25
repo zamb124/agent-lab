@@ -42,7 +42,7 @@ class SummarizeTextArgs(BaseModel):
         "Кратко суммирует текст через платформенный LLM. "
         "Провайдер и модель сначала берутся из company capability settings."
     ),
-    tags=["text", "llm"],
+    tags=["text"],
     parameters_model=SummarizeTextArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )

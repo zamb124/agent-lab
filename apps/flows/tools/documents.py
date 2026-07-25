@@ -216,7 +216,7 @@ async def _apply_document_mutation(
         "После успешного вызова state.files[] получает capabilities.document.editor_url, "
         "а пользователь видит файл в панели файлов чата и может редактировать его в iframe."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsOpenFileArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -300,7 +300,7 @@ async def documents_open_file(
         "Поддерживает .docx, .xlsx, .txt, .csv. Перед правкой documents синхронизирует "
         "открытый OnlyOffice редактор через forcesave."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsReplaceTextArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -332,7 +332,7 @@ async def documents_replace_text(
         "Добавляет текст в конец существующего документа по тому же file_id. "
         "Поддерживает .docx и .txt/.csv; открытый редактор синхронизируется перед правкой."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsAppendTextArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -362,7 +362,7 @@ async def documents_append_text(
         "Обновляет ячейки в существующем Excel/CSV файле по тому же file_id. "
         "cells задаётся как JSON object с адресами A1/B2; открытый редактор синхронизируется перед правкой."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsUpdateCellsArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -466,7 +466,7 @@ def _document_item_brief(raw: JsonObject) -> JsonObject:
         "Prefer this over create_file when the user wants an empty OOXML in Documents. "
         "Requires catalog_id. Returns file_id, catalog_id, editor_url."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsCreateEmptyArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -519,7 +519,7 @@ async def documents_create_empty(
         "Renames a Documents binding title by file_id. "
         "Does not rewrite file bytes. Returns file_id and title."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsRenameArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -554,7 +554,7 @@ async def documents_rename(
         "Moves a Documents binding into another catalog_id. "
         "Requires access to source and destination catalogs. Returns document brief."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsMoveArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -585,7 +585,7 @@ async def documents_move(
         "Copies a Documents file into catalog_id (new file_id). "
         "Optional title. Returns file_id, catalog_id, editor_url."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsCopyArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -627,7 +627,7 @@ async def documents_copy(
         "Soft-deletes a Documents binding (moves to trash). "
         "Use documents_restore or documents_permanent_delete next. Returns file_id."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsFileIdArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -651,7 +651,7 @@ async def documents_delete(file_id: str, *, state: ExecutionState) -> JsonObject
         "Lists soft-deleted Documents bindings in the active namespace (trash). "
         "Returns items[] with file_id, title, catalog_id."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsListDeletedArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -681,7 +681,7 @@ async def documents_list_deleted(*, state: ExecutionState) -> JsonObject:
         "Restores a soft-deleted Documents binding from trash. "
         "Returns document brief."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsFileIdArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -706,7 +706,7 @@ async def documents_restore(file_id: str, *, state: ExecutionState) -> JsonObjec
         "Permanently deletes a Documents binding that is already in trash. "
         "Not for active documents — soft-delete first. Returns file_id."
     ),
-    tags=["documents", "files", "office"],
+    tags=["documents"],
     parameters_model=DocumentsFileIdArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )

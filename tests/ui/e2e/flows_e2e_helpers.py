@@ -2703,7 +2703,7 @@ async def flows_pick_first_library_card(page: Page, *, value: str = "") -> None:
             raise AssertionError(f"flows library programmatic pick failed: {value}")
         await expect(picker).to_be_hidden(timeout=15_000)
         return
-    row = picker.locator("article.tag-tool-row, platform-picker-card").first
+    row = picker.locator("platform-picker-card").first
     await expect(row).to_be_visible(timeout=15_000)
     await flows_library_picker_activate_row(page, row)
 
@@ -2735,7 +2735,7 @@ async def flows_library_picker_activate_row(page: Page, row: Locator) -> None:
 async def flows_library_picker_select_tool(page: Page, *, tool_id: str) -> None:
     picker = page.locator("flows-library-picker-modal").first
     await expect(picker).to_be_visible(timeout=30_000)
-    by_data = picker.locator(f'article.tag-tool-row[data-tool-id="{tool_id}"]').first
+    by_data = picker.locator(f'platform-picker-card[data-tool-id="{tool_id}"]').first
     by_card = picker.locator(f'platform-picker-card[value="{tool_id}"]').first
     deadline = time.monotonic() + 30.0
     row: Locator | None = None
@@ -2748,7 +2748,7 @@ async def flows_library_picker_select_tool(page: Page, *, tool_id: str) -> None:
             break
         await asyncio.sleep(0.05)
     if row is None:
-        row = picker.locator("article.tag-tool-row, platform-picker-card").filter(
+        row = picker.locator("platform-picker-card").filter(
             has_text=re.compile(rf"(?:^|\b){re.escape(tool_id)}(?:\b|$)", re.I)
         ).first
         await expect(row).to_be_visible(timeout=5_000)

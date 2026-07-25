@@ -198,7 +198,7 @@ def _state_json(state: ExecutionState) -> JsonObject:
         "Generate and execute code in an isolated Humanitec language runner. "
         "Supports python, javascript, typescript, go and csharp. The generated code uses capability-gateway for every platform capability."
     ),
-    tags=["codegen", "sandbox", "capabilities"],
+    tags=["misc"],
     parameters_model=SandboxCodegenArgs,
 )
 async def sandbox_codegen(

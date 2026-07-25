@@ -404,6 +404,12 @@ export class FrontendApp extends PlatformApp {
         this._publicSiteBundle = this.useOp('frontend/public_site_bundle');
         this._companiesSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
+        // Реактивность document.title: ждём bundle, иначе _syncPublicHtmlMeta
+        // записывает сырой ключ и lock'ает sig до смены route.
+        this._i18nPublicMetaSel = this.select((s) => ({
+            locale: s.i18n.locale,
+            hasBundle: !!s.i18n.translations[s.i18n.locale],
+        }));
         this._frontendMql = null;
         this._onFrontendMobileMql = null;
         this._frontendMobile =
@@ -588,58 +594,98 @@ export class FrontendApp extends PlatformApp {
         if (!routeKey) return;
         if (DOCUMENT_META_SKIP.has(routeKey)) return;
 
+        const i18nMeta = this._i18nPublicMetaSel.value;
+        if (!i18nMeta || !i18nMeta.hasBundle) {
+            // Бандл ещё не в state — не трогаем title и не lock'аем sig.
+            // После I18N_LOCALE_LOADED select триггерит updated() → повторный sync.
+            return;
+        }
+
         const rawPath = window.location.pathname.replace(/\/+$/, '') || '/';
-        const sig = `${routeKey}|${rawPath}`;
+        const sig = `${routeKey}|${rawPath}|${i18nMeta.locale}`;
         if (this._lastPublicMetaSig === sig) return;
-        this._lastPublicMetaSig = sig;
 
         const origin = window.location.origin;
         const canonicalUrl = `${origin}${rawPath.startsWith('/') ? rawPath : `/${rawPath}`}`;
         const ogImageUrl = `${origin}/static/frontend/assets/images/main_img.png`;
 
-        let title;
-        let description;
+        let titleKey;
+        let descriptionKey;
+        let titleNs;
+        let descriptionNs;
         switch (routeKey) {
             case 'landing':
-                title = this.t('meta.home_title', {}, 'landing');
-                description = this.t('meta.home_description', {}, 'landing');
+                titleKey = 'meta.home_title';
+                descriptionKey = 'meta.home_description';
+                titleNs = 'landing';
+                descriptionNs = 'landing';
                 break;
             case 'search':
-                title = this.t('meta.search_title', {}, 'landing');
-                description = this.t('meta.search_description', {}, 'landing');
+                titleKey = 'meta.search_title';
+                descriptionKey = 'meta.search_description';
+                titleNs = 'landing';
+                descriptionNs = 'landing';
                 break;
             case 'blog':
-                title = this.t('meta.blog_title', {}, 'landing');
-                description = this.t('meta.blog_description', {}, 'landing');
+                titleKey = 'meta.blog_title';
+                descriptionKey = 'meta.blog_description';
+                titleNs = 'landing';
+                descriptionNs = 'landing';
                 break;
             case 'about':
-                title = this.t('meta.about_title', {}, 'landing');
-                description = this.t('meta.about_description', {}, 'landing');
+                titleKey = 'meta.about_title';
+                descriptionKey = 'meta.about_description';
+                titleNs = 'landing';
+                descriptionNs = 'landing';
                 break;
             case 'roadmap':
-                title = this.t('meta.roadmap_title', {}, 'landing');
-                description = this.t('meta.roadmap_description', {}, 'landing');
+                titleKey = 'meta.roadmap_title';
+                descriptionKey = 'meta.roadmap_description';
+                titleNs = 'landing';
+                descriptionNs = 'landing';
                 break;
             case 'digital-workers':
-                title = this.t('meta.digital_workers_title', {}, 'landing');
-                description = this.t('meta.digital_workers_description', {}, 'landing');
+                titleKey = 'meta.digital_workers_title';
+                descriptionKey = 'meta.digital_workers_description';
+                titleNs = 'landing';
+                descriptionNs = 'landing';
                 break;
             case 'support':
-                title = this.t('meta.support_title', {}, 'landing');
-                description = this.t('meta.support_description', {}, 'landing');
+                titleKey = 'meta.support_title';
+                descriptionKey = 'meta.support_description';
+                titleNs = 'landing';
+                descriptionNs = 'landing';
                 break;
             case 'policy':
-                title = this.t('title', {}, 'privacy');
-                description = this.t('meta.policy_description', {}, 'landing');
+                titleKey = 'title';
+                descriptionKey = 'meta.policy_description';
+                titleNs = 'privacy';
+                descriptionNs = 'landing';
                 break;
             case 'terms':
-                title = this.t('title', {}, 'terms');
-                description = this.t('meta.terms_description', {}, 'landing');
+                titleKey = 'title';
+                descriptionKey = 'meta.terms_description';
+                titleNs = 'terms';
+                descriptionNs = 'landing';
                 break;
             default:
                 return;
         }
 
+        const title = this.t(titleKey, {}, titleNs);
+        const description = this.t(descriptionKey, {}, descriptionNs);
+        if (title === titleKey) {
+            throw new Error(
+                `FrontendApp._syncPublicHtmlMeta: missing i18n key ${titleNs}:${titleKey} for route "${routeKey}"`,
+            );
+        }
+        if (description === descriptionKey) {
+            throw new Error(
+                `FrontendApp._syncPublicHtmlMeta: missing i18n key ${descriptionNs}:${descriptionKey} for route "${routeKey}"`,
+            );
+        }
+
+        this._lastPublicMetaSig = sig;
         applyPublicDocumentMeta({ title, description, canonicalUrl, ogImageUrl });
     }
 

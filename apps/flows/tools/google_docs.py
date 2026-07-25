@@ -181,7 +181,7 @@ async def _get_docs_client(state: ExecutionState | None) -> GoogleDocsClient:
 @tool(
     name="gdocs_create_document",
     description=_CREATE_DESCRIPTION,
-    tags=["google_docs", "documents"],
+    tags=["google_docs"],
     parameters_model=GDocsCreateArgs,
 )
 async def gdocs_create_document(
@@ -220,7 +220,7 @@ async def gdocs_create_document(
 @tool(
     name="gdocs_read_document",
     description=_READ_DESCRIPTION,
-    tags=["google_docs", "documents"],
+    tags=["google_docs"],
     parameters_model=GDocsDocumentIdArgs,
 )
 async def gdocs_read_document(
@@ -236,7 +236,7 @@ async def gdocs_read_document(
 @tool(
     name="gdocs_append_text",
     description=_APPEND_DESCRIPTION,
-    tags=["google_docs", "documents"],
+    tags=["google_docs"],
     parameters_model=GDocsAppendTextArgs,
 )
 async def gdocs_append_text(
@@ -253,7 +253,7 @@ async def gdocs_append_text(
 @tool(
     name="gdocs_insert_text",
     description=_INSERT_DESCRIPTION,
-    tags=["google_docs", "documents"],
+    tags=["google_docs"],
     parameters_model=GDocsInsertTextArgs,
 )
 async def gdocs_insert_text(
@@ -271,7 +271,7 @@ async def gdocs_insert_text(
 @tool(
     name="gdocs_find_replace",
     description=_FIND_REPLACE_DESCRIPTION,
-    tags=["google_docs", "documents"],
+    tags=["google_docs"],
     parameters_model=GDocsFindReplaceArgs,
 )
 async def gdocs_find_replace(
@@ -309,7 +309,7 @@ async def gdocs_find_replace(
 @tool(
     name="gdocs_delete_range",
     description=_DELETE_RANGE_DESCRIPTION,
-    tags=["google_docs", "documents"],
+    tags=["google_docs"],
     parameters_model=GDocsDeleteRangeArgs,
 )
 async def gdocs_delete_range(
@@ -327,7 +327,7 @@ async def gdocs_delete_range(
 @tool(
     name="gdocs_share_document",
     description=_SHARE_DESCRIPTION,
-    tags=["google_docs", "documents"],
+    tags=["google_docs"],
     parameters_model=GDocsShareArgs,
 )
 async def gdocs_share_document(

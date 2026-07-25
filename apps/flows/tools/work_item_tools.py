@@ -31,7 +31,7 @@ from core.worktracker.models import (
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-_TAGS = ["misc", "worktracker"]
+_TAGS = ["worktracker"]
 
 AssigneeType = Literal["unassigned", "self", "user", "queue", "flow_employee", "agent"]
 TerminalCompleteState = Literal["done", "failed"]

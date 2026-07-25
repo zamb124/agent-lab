@@ -11,7 +11,9 @@
 1. Выбери подходящий skill из index.
 2. Вызови `load_agent_skill`.
 3. Следуй body skill и его tools; при необходимости грузи children из `depends_on`.
-4. Для reference-файлов — `read_agent_skill_reference`.
+4. Для Tier-3 methodology skill (`references`/`assets` из ответа load) —
+   `read_agent_skill_reference` (лучше `original_name`).
+   Документы библиотеки Documents — `documents_read` после load `documents-catalog`, не этот tool.
 
 Не выдумывай id сущностей/нод/файлов. Standing tool: **ask_user** — один чёткий вопрос при нехватке данных.
 

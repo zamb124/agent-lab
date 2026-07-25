@@ -25,7 +25,7 @@ class FormatTextMarkdownArgs(BaseModel):
         "Превращает произвольный текст в аккуратный Markdown. "
         "Провайдер и модель берутся из company capability llm_format_markdown."
     ),
-    tags=["text", "markdown"],
+    tags=["text"],
     parameters_model=FormatTextMarkdownArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )

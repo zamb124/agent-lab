@@ -6,8 +6,15 @@ from __future__ import annotations
 
 import asyncio
 
+from pydantic import ValidationError
+
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
 from core.types import JsonObject, JsonValue, require_json_array
+
+
+def is_tool_arg_validation_error(exc: BaseException) -> bool:
+    """Pydantic ValidationError от валидации аргументов tool — всегда tool result в ReAct."""
+    return isinstance(exc, ValidationError)
 
 
 def normalize_allow_types(raw: JsonValue | None) -> list[str]:

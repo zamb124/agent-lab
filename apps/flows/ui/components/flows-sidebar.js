@@ -54,6 +54,9 @@ export class FlowsSidebar extends PlatformElement {
                 min-width: 0;
                 margin: 0;
             }
+            .home-nav-skills platform-icon {
+                color: var(--accent);
+            }
             platform-service-sidebar[collapsed] .home-nav-row {
                 flex-direction: column;
                 align-items: center;
@@ -128,7 +131,7 @@ export class FlowsSidebar extends PlatformElement {
                         ${this.collapsed ? nothing : html`<span class="home-nav-label">${this.t('flows_sidebar.home')}</span>`}
                     </platform-button>
                     <platform-button
-                        class="home-nav"
+                        class="home-nav home-nav-skills"
                         variant=${routeKey === 'agent_skills' ? 'secondary' : 'ghost'}
                         density="compact"
                         ?icon-only=${this.collapsed}

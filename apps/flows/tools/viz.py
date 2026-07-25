@@ -218,7 +218,7 @@ class VizOpenFileArgs(BaseModel):
         "для inline preview в чате и открытия через Documents viewer (handler=viz). "
         "flowchart/sequence/gantt → Mermaid source; chart/timeline → ECharts option."
     ),
-    tags=["viz", "files", "charts"],
+    tags=["viz"],
     parameters_model=CreateVizArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -275,7 +275,7 @@ async def create_viz(
         "Обновляет .viz: читает существующий file_id, патчит title/spec, создаёт новую версию FileRecord "
         "и обновляет state.files[]. Возвращает files[] + blocks[type=viz]."
     ),
-    tags=["viz", "files", "charts"],
+    tags=["viz"],
     parameters_model=UpdateVizArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -342,7 +342,7 @@ async def update_viz(
         "Экспортирует .viz в SVG (с заголовком и содержимым) или JSON-копию. "
         "PNG интерактивного графика — через Export в Documents viewer (ECharts canvas)."
     ),
-    tags=["viz", "files", "charts"],
+    tags=["viz"],
     parameters_model=ExportVizArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -405,7 +405,7 @@ async def export_viz(
         "Подтверждает, что .viz файл из state.files готов к открытию в Documents viewer "
         "(openFile → handler=viz). Возвращает file + blocks[type=viz] для chat panel."
     ),
-    tags=["viz", "files", "charts"],
+    tags=["viz"],
     parameters_model=VizOpenFileArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )

@@ -56,6 +56,9 @@ export class FlowsAgentSkillEditModal extends PlatformModal {
                 align-items: center;
                 gap: var(--space-2);
             }
+            .skill-edit-title platform-icon {
+                color: var(--accent);
+            }
         `,
     ];
 

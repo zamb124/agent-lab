@@ -68,7 +68,7 @@ def _parse_write_steps(steps: list[JsonValue]) -> list[AgentPlanStepWriteInput]:
         "Создаёт или полностью перезаписывает план выполнения агента (checklist шагов). "
         "Всегда передавай полный список steps. Хранится в state; UI показывает checklist."
     ),
-    tags=["planning", "misc"],
+    tags=["flows"],
     parameters_model=AgentPlanWriteArgs,
 )
 async def agent_plan_write(
@@ -89,7 +89,7 @@ async def agent_plan_write(
 @tool(
     name="agent_plan_get",
     description="Возвращает текущий AgentPlan из state. Если плана ещё нет — ошибка: сначала agent_plan_write.",
-    tags=["planning", "misc"],
+    tags=["flows"],
     parameters_model=AgentPlanGetArgs,
 )
 async def agent_plan_get(*, state: "ExecutionState") -> JsonObject:

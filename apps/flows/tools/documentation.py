@@ -232,7 +232,7 @@ async def _search_docs(
 @tool(
     name="docs_search",
     description=_DOCS_SEARCH_DESCRIPTION,
-    tags=["docs", "documentation", "rag", "lara"],
+    tags=["knowledge"],
     parameters_model=DocsSearchArgs,
 )
 async def docs_search(
@@ -251,7 +251,7 @@ async def docs_search(
         "Детерминированно ищет по публичной документации и возвращает готовый "
         "контекст prompt_context + prompt_links для ответа Lara без LLM tool-calling."
     ),
-    tags=["docs", "documentation", "rag", "lara"],
+    tags=["knowledge"],
     parameters_model=DocsPrepareContextArgs,
 )
 async def docs_prepare_context(

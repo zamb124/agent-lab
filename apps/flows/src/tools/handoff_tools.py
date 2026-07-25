@@ -60,7 +60,7 @@ class HandbackToParentArgs(BaseModel):
         "Переменные передаются ЯВНО — только то, что нужно дочернему агенту. "
         "Дочерний агент НЕ получает доступ к стейту родителя."
     ),
-    tags=["flows", "handoff"],
+    tags=["flows"],
     parameters_model=HandoffToFlowArgs,
 )
 async def handoff_to_flow(
@@ -97,7 +97,7 @@ async def handoff_to_flow(
         "Переменные возвращаются ЯВНО — только то, что нужно родителю. "
         "Всё остальное остаётся в стейте дочернего flow."
     ),
-    tags=["flows", "handoff"],
+    tags=["flows"],
     parameters_model=HandbackToParentArgs,
 )
 async def handback_to_parent(

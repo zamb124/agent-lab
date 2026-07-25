@@ -43,7 +43,7 @@ async def _index_search_impl(
 @tool(
     name="index_search",
     description="Hybrid search across platform RAG indexes by search_index_id slug",
-    tags=["search", "index"],
+    tags=["web"],
     parameters_model=IndexSearchToolArgs,
 )
 async def index_search(
@@ -66,7 +66,7 @@ class RunetSearchToolArgs(StrictBaseModel):
 @tool(
     name="runet_search",
     description="Hybrid search in the runet platform index",
-    tags=["search", "runet"],
+    tags=["web"],
     parameters_model=RunetSearchToolArgs,
 )
 async def runet_search(query: str, limit: int = 8) -> JsonObject:
@@ -94,7 +94,7 @@ class WebSearchToolArgs(StrictBaseModel):
         "Serper/Google, Tavily). Returns normalized, ranked results with per-provider status. "
         "Use provider_strategy='merge' with providers=['auto'] for broad research coverage."
     ),
-    tags=["search", "web"],
+    tags=["web"],
     parameters_model=WebSearchToolArgs,
 )
 async def web_search(

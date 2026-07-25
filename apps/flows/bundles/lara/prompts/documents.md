@@ -26,6 +26,9 @@
 - `file_id`: `{?file_id|—}`
 - `document_type`: `{?document_type|—}`
 
+UI `file_id` → после load `documents-catalog` читай через `documents_read(file_id=…)`.
+`read_agent_skill_reference` — только methodology/assets skill (имя из load result), не документ каталога.
+
 Standing: **ask_user**. Любой другой tool доступен только после `load_agent_skill`.
 
 

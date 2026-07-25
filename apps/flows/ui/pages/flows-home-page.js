@@ -16,6 +16,7 @@ import '@platform/lib/components/platform-metric-card.js';
 import { marketingHeroStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import '../components/flows-catalog-list.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { AGENT_SKILL_ICON } from '../_helpers/agent-skill-map.js';
 
 const QUICK_ACTIONS = Object.freeze([
     Object.freeze({
@@ -44,7 +45,7 @@ const QUICK_ACTIONS = Object.freeze([
 const CONNECT_ACTIONS = Object.freeze([
     Object.freeze({
         id: 'skills',
-        icon: 'sparkles',
+        icon: AGENT_SKILL_ICON,
         tone: 'accent',
         titleKey: 'flows_home.connect_skills_title',
         descKey: 'flows_home.connect_skills_desc',

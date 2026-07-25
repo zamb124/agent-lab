@@ -38,11 +38,17 @@ class ReadAgentSkillReferenceArgs(BaseModel):
     agent_skill_id: str = Field(..., min_length=1, description="Loaded Agent Skill id")
     file_id: str | None = Field(
         default=None,
-        description="file_id of a reference/asset FileRef on the skill",
+        description=(
+            "file_id of a reference/asset FileRef from load_agent_skill for this skill; "
+            "never a Documents library / SPA UI file_id"
+        ),
     )
     original_name: str | None = Field(
         default=None,
-        description="original_name of a reference/asset FileRef on the skill",
+        description=(
+            "Prefer original_name from load_agent_skill references/assets "
+            "(e.g. documents-employee-methodology.md)"
+        ),
     )
 
 
@@ -52,7 +58,7 @@ class ReadAgentSkillReferenceArgs(BaseModel):
         "Load full Agent Skill instructions into context and unlock that skill's tools. "
         "Use when the task matches a skill from the available skills index."
     ),
-    tags=["agent_skills", "context"],
+    tags=["flows"],
     parameters_model=LoadAgentSkillArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -147,10 +153,12 @@ def _push_skill_loaded_ui_event(state: "ExecutionState", load_payload: JsonObjec
 @tool(
     name="read_agent_skill_reference",
     description=(
-        "Read a Tier-3 reference or asset file belonging to a loaded Agent Skill "
-        "(by file_id or original_name)."
+        "Read a Tier-3 methodology/asset file listed in a loaded Agent Skill "
+        "references/assets (from load_agent_skill). Prefer original_name. "
+        "Not for Documents library or SPA UI file_id — use documents_read after "
+        "loading documents-catalog."
     ),
-    tags=["agent_skills", "files"],
+    tags=["flows"],
     parameters_model=ReadAgentSkillReferenceArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )

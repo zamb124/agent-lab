@@ -34,7 +34,7 @@ class CalculatorArgs(BaseModel):
 @tool(
     name="calculator",
     description="Вычисляет математические выражения. Поддерживает: +, -, *, /, **, %, sqrt, sin, cos, tan, log, exp, pi, e",
-    tags=["math"],
+    tags=["misc"],
     parameters_model=CalculatorArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )

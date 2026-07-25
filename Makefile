@@ -1,6 +1,6 @@
 .PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc sync-example-docs
 .PHONY: test-frontend test-rag test-crawl-llm-live
-.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-taskiq-canon build-i18n
+.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-tool-tags check-taskiq-canon build-i18n
 .PHONY: clean-i18n-unused base
 .PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
 
@@ -182,6 +182,9 @@ check-files-canon:
 	@uv run python scripts/check_files_canon.py
 	@bash scripts/check_files_ui_canon.sh
 
+check-tool-tags:
+	@uv run python scripts/check_tool_tags.py
+
 check-mcp-branding-bundle:
 	@uv run python scripts/check_mcp_branding_bundle.py
 
@@ -264,7 +267,7 @@ k8s-deploy: render-helm-app-conf require-image-tag
 	  --values $(HELM_VALUES) \
 	  --values $(HELM_VALUES_PROD) \
 	  --set image.tag=$(IMAGE_TAG) \
-	  "$${JSON_ARGS[@]}" \
+	  $${JSON_ARGS[@]+"$${JSON_ARGS[@]}"} \
 	  --wait --timeout $(HELM_WAIT_TIMEOUT) \
 	'
 	@PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/helm_cleanup_stale_ingress.sh

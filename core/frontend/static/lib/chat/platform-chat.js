@@ -40,6 +40,11 @@ import {
     readLaraLauncherPosition,
     writeLaraLauncherPosition,
 } from './launcher-position-preference.js';
+import {
+    clampLaraPanelWidth,
+    readLaraPanelWidth,
+    writeLaraPanelWidth,
+} from './panel-width-preference.js';
 
 let mid = 0;
 
@@ -796,6 +801,54 @@ export class PlatformChat extends LitElement {
             flex-direction: column;
             color: var(--platform-chat-text);
         }
+        .panel-resize-handle {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 10px;
+            cursor: ew-resize;
+            touch-action: none;
+            z-index: 2;
+            background: transparent;
+            border: none;
+            padding: 0;
+        }
+        .panel-resize-handle[data-edge='left'] {
+            left: 0;
+        }
+        .panel-resize-handle[data-edge='right'] {
+            right: 0;
+        }
+        .panel-resize-handle::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 3px;
+            height: 40px;
+            transform: translate(-50%, -50%);
+            border-radius: 2px;
+            background: color-mix(in srgb, var(--platform-chat-muted, var(--text-tertiary, #64748b)) 55%, transparent);
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        .panel-resize-handle:hover::after,
+        .panel-resize-handle:focus-visible::after,
+        .panel.panel--resizing .panel-resize-handle::after {
+            opacity: 1;
+        }
+        .panel.panel--maximized .panel-resize-handle,
+        .panel.panel--collapsed .panel-resize-handle {
+            display: none;
+        }
+        .panel.panel--resizing {
+            transition: none;
+        }
+        @media (max-width: 767px) {
+            .panel-resize-handle {
+                display: none;
+            }
+        }
         @media (min-width: 768px) {
             .panel.panel--maximized {
                 top: max(24px, env(safe-area-inset-top, 0px));
@@ -997,6 +1050,10 @@ export class PlatformChat extends LitElement {
         this._panelDragActive = false;
         this._panelDragPosition = null;
         this._panelDragContext = null;
+        /** @type {number | null} */
+        this._panelWidthPx = null;
+        /** @type {{ pointerId: number, startX: number, startWidth: number, edge: 'left' | 'right' } | null} */
+        this._panelResizeContext = null;
         this._fabDragPosition = null;
         this._fabDragContext = null;
         this._fabDragActive = false;
@@ -1004,6 +1061,8 @@ export class PlatformChat extends LitElement {
         this._initialOpenConsumed = false;
         this._onPanelDragPointerMove = this._onPanelDragPointerMove.bind(this);
         this._onPanelDragPointerUp = this._onPanelDragPointerUp.bind(this);
+        this._onPanelResizePointerMove = this._onPanelResizePointerMove.bind(this);
+        this._onPanelResizePointerUp = this._onPanelResizePointerUp.bind(this);
         this._onFabDragPointerMove = this._onFabDragPointerMove.bind(this);
         this._onFabDragPointerUp = this._onFabDragPointerUp.bind(this);
         this._onViewportResize = this._onViewportResize.bind(this);
@@ -1350,11 +1409,13 @@ export class PlatformChat extends LitElement {
                 }
                 if (document.fullscreenElement === panel) {
                     this._stopPanelDrag();
+                    this._stopPanelResize();
                     this._panelNativeFullscreen = true;
                     return;
                 }
                 if (this._panelNativeFullscreen || this._drawerOwnsNativeFullscreen) {
                     this._stopPanelDrag();
+                    this._stopPanelResize();
                     this._panelNativeFullscreen = false;
                     this._drawerOwnsNativeFullscreen = false;
                     if (this.panelMaximized) {
@@ -1398,6 +1459,7 @@ export class PlatformChat extends LitElement {
             });
         }
         this._stopPanelDrag();
+        this._stopPanelResize();
         this._stopFabDrag();
         if (this._onPopStateEmbedParams) {
             window.removeEventListener('popstate', this._onPopStateEmbedParams);
@@ -1428,6 +1490,7 @@ export class PlatformChat extends LitElement {
         if (this.display === 'drawer') {
             this._bindToggleListener();
             this._restoreFabDragPosition();
+            this._restorePanelWidth();
         }
     }
 
@@ -1590,6 +1653,7 @@ export class PlatformChat extends LitElement {
             this.fabUnreadCount = 0;
         } else {
             this._stopPanelDrag();
+            this._stopPanelResize();
         }
         this.open = next;
     }
@@ -1842,6 +1906,9 @@ export class PlatformChat extends LitElement {
         if (this._panelDragPosition && !this.panelMaximized) {
             style += `;top:${this._panelDragPosition.top}px;left:${this._panelDragPosition.left}px;right:auto;bottom:auto`;
         }
+        if (this._panelWidthPx !== null && !this.panelMaximized) {
+            style += `;--embed-panel-width:${this._panelWidthPx}px`;
+        }
         return style;
     }
 
@@ -1914,6 +1981,7 @@ export class PlatformChat extends LitElement {
 
     _onViewportResize() {
         this._syncPanelToViewport();
+        this._syncPanelWidthToViewport();
         this._syncFabToViewport();
     }
 
@@ -1991,8 +2059,138 @@ export class PlatformChat extends LitElement {
         this._stopPanelDrag();
     }
 
+    _panelResizeEdge() {
+        return this.getAttribute('data-embed-position') === 'bottom-left' ? 'right' : 'left';
+    }
+
+    _isPanelResizable() {
+        if (!this.open || this.panelMaximized) {
+            return false;
+        }
+        if (this._panelNativeFullscreen || this._drawerOwnsNativeFullscreen) {
+            return false;
+        }
+        return !this._isMobileViewportForNativeFullscreen();
+    }
+
+    _restorePanelWidth() {
+        const width = readLaraPanelWidth(
+            this.launcherStorageScope,
+            this._fabPreferenceBranchId(),
+        );
+        if (width === null) {
+            return;
+        }
+        if (typeof window === 'undefined') {
+            this._panelWidthPx = width;
+            return;
+        }
+        this._panelWidthPx = clampLaraPanelWidth(width, window.innerWidth);
+        this.requestUpdate();
+    }
+
+    _syncPanelWidthToViewport() {
+        if (this._panelWidthPx === null) {
+            return;
+        }
+        if (typeof window === 'undefined') {
+            return;
+        }
+        const clamped = clampLaraPanelWidth(this._panelWidthPx, window.innerWidth);
+        if (clamped === this._panelWidthPx) {
+            return;
+        }
+        this._panelWidthPx = clamped;
+        writeLaraPanelWidth(
+            this.launcherStorageScope,
+            this._fabPreferenceBranchId(),
+            clamped,
+        );
+        this.requestUpdate();
+    }
+
+    _bindPanelResizeListeners() {
+        window.addEventListener('pointermove', this._onPanelResizePointerMove);
+        window.addEventListener('pointerup', this._onPanelResizePointerUp);
+        window.addEventListener('pointercancel', this._onPanelResizePointerUp);
+    }
+
+    _unbindPanelResizeListeners() {
+        window.removeEventListener('pointermove', this._onPanelResizePointerMove);
+        window.removeEventListener('pointerup', this._onPanelResizePointerUp);
+        window.removeEventListener('pointercancel', this._onPanelResizePointerUp);
+    }
+
+    _stopPanelResize() {
+        const wasResizing = this._panelResizeContext !== null;
+        this._panelResizeContext = null;
+        this._unbindPanelResizeListeners();
+        if (wasResizing) {
+            this.requestUpdate();
+        }
+    }
+
+    _onPanelResizePointerDown(event) {
+        if (!this._isPanelResizable()) {
+            return;
+        }
+        if (event.button !== 0) {
+            return;
+        }
+        const panel = this.renderRoot?.querySelector('.panel');
+        if (!(panel instanceof HTMLElement)) {
+            return;
+        }
+        this._stopPanelDrag();
+        const rect = panel.getBoundingClientRect();
+        const edge = this._panelResizeEdge();
+        this._panelResizeContext = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startWidth: rect.width,
+            edge,
+        };
+        if (this._panelWidthPx === null) {
+            this._panelWidthPx = clampLaraPanelWidth(rect.width, window.innerWidth);
+        }
+        this._bindPanelResizeListeners();
+        this.requestUpdate();
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    _onPanelResizePointerMove(event) {
+        const context = this._panelResizeContext;
+        if (context === null || event.pointerId !== context.pointerId) {
+            return;
+        }
+        const deltaX = event.clientX - context.startX;
+        const nextWidth = context.edge === 'left'
+            ? context.startWidth - deltaX
+            : context.startWidth + deltaX;
+        this._panelWidthPx = clampLaraPanelWidth(nextWidth, window.innerWidth);
+        this.requestUpdate();
+        event.preventDefault();
+    }
+
+    _onPanelResizePointerUp(event) {
+        const context = this._panelResizeContext;
+        if (context === null || event.pointerId !== context.pointerId) {
+            return;
+        }
+        if (this._panelWidthPx !== null) {
+            writeLaraPanelWidth(
+                this.launcherStorageScope,
+                this._fabPreferenceBranchId(),
+                this._panelWidthPx,
+            );
+        }
+        this._stopPanelResize();
+    }
+
     _minimize() {
         this._stopPanelDrag();
+        this._stopPanelResize();
         const panel = this.renderRoot?.querySelector('.panel');
         const fs = typeof document !== 'undefined' ? document.fullscreenElement : null;
         if (this._drawerOwnsNativeFullscreen || this._panelNativeFullscreen || (fs && panel && fs === panel)) {
@@ -2008,6 +2206,7 @@ export class PlatformChat extends LitElement {
 
     async _togglePanelFullscreen() {
         this._stopPanelDrag();
+        this._stopPanelResize();
         const panel = this.renderRoot?.querySelector('.panel');
         if (!panel) {
             return;
@@ -3905,11 +4104,23 @@ export class PlatformChat extends LitElement {
                 : ''}
 
             <div
-                class="panel ${this.panelMaximized ? 'panel--maximized' : ''} ${!this.open ? 'panel--collapsed' : ''}"
+                class="panel ${this.panelMaximized ? 'panel--maximized' : ''} ${!this.open ? 'panel--collapsed' : ''} ${this._panelResizeContext !== null ? 'panel--resizing' : ''}"
                 style=${this._panelInlineStyle()}
                 aria-hidden=${this.open ? 'false' : 'true'}
                 ?inert=${!this.open}
             >
+                ${this._isPanelResizable()
+                    ? html`
+                          <button
+                              type="button"
+                              class="panel-resize-handle"
+                              data-edge=${this._panelResizeEdge()}
+                              aria-label=${L.panel_resize}
+                              title=${L.panel_resize}
+                              @pointerdown=${this._onPanelResizePointerDown}
+                          ></button>
+                      `
+                    : nothing}
                 <div class=${panelHeadClass} @pointerdown=${this._onPanelHeadPointerDown}>
                     <span class="panel-head-title">${headTitle}</span>
                     ${this._renderActiveDevicePresence(L)}

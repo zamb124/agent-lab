@@ -150,7 +150,7 @@ class RagSearchArgs(StrictBaseModel):
 @tool(
     name="rag_create_namespace",
     description=_RAG_CREATE_NAMESPACE_DESCRIPTION,
-    tags=["rag", "knowledge"],
+    tags=["knowledge"],
     parameters_model=RagCreateNamespaceArgs,
 )
 async def rag_create_namespace(
@@ -168,7 +168,7 @@ async def rag_create_namespace(
 @tool(
     name="rag_add_text",
     description=_RAG_ADD_TEXT_DESCRIPTION,
-    tags=["rag", "knowledge"],
+    tags=["knowledge"],
     parameters_model=RagAddTextArgs,
 )
 async def rag_add_text(
@@ -209,7 +209,7 @@ async def rag_add_text(
 @tool(
     name="rag_search",
     description=_RAG_SEARCH_DESCRIPTION,
-    tags=["rag", "knowledge"],
+    tags=["knowledge"],
     parameters_model=RagSearchArgs,
 )
 async def rag_search(

@@ -3,7 +3,7 @@
  */
 
 /** Fixed platform icon for Agent Skills (chips, list, picker, sidebar). */
-export const AGENT_SKILL_ICON = 'sparkles';
+export const AGENT_SKILL_ICON = 'scroll-text';
 
 export function requireAgentSkillString(value, field) {
     if (typeof value !== 'string') {

@@ -134,7 +134,7 @@ def _resolve_file_refs_for_read(
         "Для PDF автоматически извлекается текстовый слой и OCR встроенных изображений "
         "(vision); для сканов без текста — OCR всей страницы."
     ),
-    tags=["files", "ocr", "document"],
+    tags=["files"],
     parameters_model=ReadFileArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -216,7 +216,7 @@ async def read_file(
 @tool(
     name="create_file",
     description=_CREATE_FILE_TOOL_DESCRIPTION,
-    tags=["files", "storage"],
+    tags=["files"],
     parameters_model=CreateFileArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )

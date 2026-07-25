@@ -276,7 +276,7 @@ class FlowsPatchFlowArgs(BaseModel):
         "Отображает блоки UI в чате. Передай blocks_json — JSON-массив объектов "
         "с полем type: card | table | actions | file_card | text и полями схемы."
     ),
-    tags=["ui"],
+    tags=["flows"],
     parameters_model=PushEmbedBlocksArgs,
 )
 async def push_embed_blocks(blocks_json: str, *, state: "ExecutionState") -> str:
@@ -291,7 +291,7 @@ async def push_embed_blocks(blocks_json: str, *, state: "ExecutionState") -> str
         "Точечно возвращает одну ноду flow по flow_id + branch_id + node_id "
         "(полный config ноды, включая prompt/code). Не отдаёт весь graph."
     ),
-    tags=["flows", "query"],
+    tags=["flows"],
     parameters_model=FlowsGetNodeArgs,
 )
 async def flows_get_node(
@@ -321,7 +321,7 @@ async def flows_get_node(
         "Индекс нод ветки flow: node_id, name, type, description, tools[]. "
         "Без prompt/code тел нод. Для полного тела одной ноды — flows_get_node."
     ),
-    tags=["flows", "query"],
+    tags=["flows"],
     parameters_model=FlowsListNodesArgs,
 )
 async def flows_list_nodes(
@@ -351,7 +351,7 @@ async def flows_list_nodes(
         "Опционально — полное тело одной ноды (node_id). "
         "Не возвращает полный FlowConfig; для одной ноды предпочитай flows_get_node."
     ),
-    tags=["flows", "query"],
+    tags=["flows"],
     parameters_model=FlowsReadContextArgs,
 )
 async def flows_read_context(
@@ -394,7 +394,7 @@ async def flows_read_context(
         "Готовит patch ноды flow для применения во внешнем UI. "
         "Возвращает node_before/node_after и ui_events; сам tool не сохраняет flow."
     ),
-    tags=["flows", "mutation"],
+    tags=["flows"],
     parameters_model=FlowsPatchNodeArgs,
 )
 async def flows_patch_node(
@@ -566,7 +566,7 @@ async def flows_patch_node(
         "Готовит patch к самому flow (name/description/tags/variables) для применения во внешнем UI. "
         "Возвращает flow_before/flow_after и ui_events; сам tool не сохраняет flow."
     ),
-    tags=["flows", "mutation"],
+    tags=["flows"],
     parameters_model=FlowsPatchFlowArgs,
 )
 async def flows_patch_flow(

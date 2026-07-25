@@ -8,6 +8,7 @@ import '../components/platform-help-hint.js';
 import '../components/platform-assistant-message-actions.js';
 import { formatFileSize } from '../utils/format-file-size.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
+import { AGENT_SKILL_ICON_NAME } from './agent-skill-icon.js';
 import {
     pairFlowChatToolCallsAndResults,
     flowChatToolRowDisplayName,
@@ -1498,7 +1499,7 @@ export class FlowsChatMessage extends PlatformElement {
                         <span class="skill-load-chip">
                             <platform-help-hint .text=${hint} .label=${label}>
                                 <span class="skill-load-chip-inner">
-                                    <platform-icon name="sparkles" size="14"></platform-icon>
+                                    <platform-icon name=${AGENT_SKILL_ICON_NAME} size="14"></platform-icon>
                                     <span>${label}</span>
                                 </span>
                             </platform-help-hint>

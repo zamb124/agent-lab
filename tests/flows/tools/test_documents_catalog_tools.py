@@ -16,7 +16,7 @@ _CATALOG_TOOL_IDS = (
     "documents_read",
     "documents_get_link",
 )
-_EXPECTED_TAGS = {"documents", "office", "catalog"}
+_EXPECTED_TAGS = {"documents"}
 
 
 def test_documents_catalog_builtins_registered_with_tags() -> None:

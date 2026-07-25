@@ -19,7 +19,7 @@ from core.types import require_json_object
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-_TAGS = ["crm", "lara", "graph"]
+_TAGS = ["crm"]
 
 
 def _require_context_namespace() -> str:
@@ -147,7 +147,7 @@ async def crm_list_relationships(
         "Deletes a CRM relationship by relationship_id "
         "(DELETE /crm/api/v1/relationships/{relationship_id}). Confirm with the user first."
     ),
-    tags=[*_TAGS, "mutation"],
+    tags=_TAGS,
     parameters_model=CrmDeleteRelationshipArgs,
 )
 async def crm_delete_relationship(relationship_id: str, *, state: "ExecutionState") -> str:

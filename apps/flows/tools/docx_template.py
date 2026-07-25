@@ -90,7 +90,7 @@ class FillDocxTemplateArgs(BaseModel):
 @tool(
     name="fill_docx_template",
     description=_FILL_DOCX_DESCRIPTION,
-    tags=["files", "docx", "template"],
+    tags=["files"],
     parameters_model=FillDocxTemplateArgs,
 )
 async def fill_docx_template(

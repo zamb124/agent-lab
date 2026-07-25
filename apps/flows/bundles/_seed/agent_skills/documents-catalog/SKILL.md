@@ -25,5 +25,6 @@ Navigate and administer the Documents library (catalogs + documents) without inv
 ## Rules
 
 - Never invent `catalog_id` or `file_id`.
+- Never pass catalog/UI `file_id` to `read_agent_skill_reference` — that tool is only for skill methodology/assets from `load_agent_skill`; catalog documents use `documents_read`.
 - File create/edit/trash — load `document-workspace`.
 - Company knowledge outside catalog index — `knowledge-rag`.

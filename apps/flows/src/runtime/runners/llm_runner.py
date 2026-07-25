@@ -55,7 +55,10 @@ from apps.flows.src.runtime.effective_llm_config import (
     EffectiveLLMConfig,
     resolve_effective_llm_config_for_node,
 )
-from apps.flows.src.runtime.exception_policy import should_absorb_exception
+from apps.flows.src.runtime.exception_policy import (
+    is_tool_arg_validation_error,
+    should_absorb_exception,
+)
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.llm_config_params import split_llm_config_for_client
 from apps.flows.src.runtime.llm_context_memory import (
@@ -1882,7 +1885,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 if not completed:
                     raise RuntimeError(f"Failed to mark tool activity as failed: {activity_id!r}")
                 enabled, allow_types = self._exception_policy_from_node_config()
-                if should_absorb_exception(e, enabled=enabled, allow_types=allow_types):
+                absorb = is_tool_arg_validation_error(e) or should_absorb_exception(
+                    e, enabled=enabled, allow_types=allow_types
+                )
+                if absorb:
                     self._record_tool_exception(
                         state, tool_name, tool_call_id, e
                     )

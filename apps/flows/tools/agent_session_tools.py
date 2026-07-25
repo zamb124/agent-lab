@@ -87,7 +87,7 @@ class FinalAnswerArgs(BaseModel):
 @tool(
     name="reason",
     description="Запиши свои рассуждения перед принятием решения. Опиши: что наблюдаешь, анализ ситуации, план действий, следующий шаг.",
-    tags=["reasoning", "internal"],
+    tags=["misc"],
     react_role=ReactToolRole.REASON,
     parameters_model=ReasonArgs,
 )
@@ -126,7 +126,7 @@ async def ask_user(question: str, *, state: "ExecutionState") -> str:
 @tool(
     name="hitl_operator_task",
     description="Ставит выполнение на паузу до обработки оператором: заголовок задачи, очередь назначения, текст статуса для пользователя в чате.",
-    tags=["misc", "hitl"],
+    tags=["misc"],
     parameters_model=HitlOperatorTaskArgs,
 )
 async def hitl_operator_task(
@@ -175,7 +175,7 @@ async def hitl_operator_task(
 @tool(
     name="final_answer",
     description="Формирует финальный обоснованный ответ. Требует указать ответ, обоснование, уверенность и источники.",
-    tags=["validation"],
+    tags=["misc"],
     react_role=ReactToolRole.EXIT,
     parameters_model=FinalAnswerArgs,
 )

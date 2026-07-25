@@ -19,7 +19,7 @@ from core.types import JsonObject
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-_TAGS = ["misc", "platform", "team"]
+_TAGS = ["misc"]
 
 
 class TeamListMembersArgs(StrictBaseModel):

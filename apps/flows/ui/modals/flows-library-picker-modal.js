@@ -18,7 +18,14 @@ import '@platform/lib/components/platform-picker-card.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/common/flows-code-language-segment.js';
-import { registryItemIconName, registryItemTitle } from '../_helpers/flows-registry-item-icon.js';
+import '../components/common/flows-code-language-icon.js';
+import {
+    registryItemLanguage,
+    registryItemTitle,
+    registryItemVisualKind,
+    renderRegistryItemCardIcon,
+    tagGroupIconName,
+} from '../_helpers/flows-registry-item-icon.js';
 import { renderMcpServerIcon } from '../_helpers/mcp-server-icon.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from '../_helpers/flows-mcp-tool-registry.js';
@@ -27,7 +34,10 @@ import { fetchToolsAllPage, TAG_GROUPS_PAGE_LIMIT, TOOLS_ALL_PAGE_LIMIT } from '
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { hueFromString } from '@platform/lib/utils/hash-string.js';
-import { normalizeFlowCodeLanguage } from '../_helpers/flows-code-languages.js';
+import {
+    flowCodeLanguageShortLabel,
+    normalizeFlowCodeLanguage,
+} from '../_helpers/flows-code-languages.js';
 
 const SEARCH_DEBOUNCE_MS = 280;
 
@@ -295,6 +305,23 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             }
             .lib-card-icon platform-icon {
                 flex-shrink: 0;
+            }
+            .tag-group-tools .lib-card-icon {
+                width: 40px;
+                height: 40px;
+            }
+            .tag-group-tools .lib-card-icon[data-kind='code'] flows-code-language-icon {
+                width: 30px;
+                height: 30px;
+            }
+            .mcp-picker-tools-grid .lib-card-icon {
+                width: 36px;
+                height: 36px;
+            }
+            .mcp-picker-tools-grid .lib-card-icon .mcp-server-icon-img {
+                width: 18px;
+                height: 18px;
+                object-fit: contain;
             }
             .lib-md {
                 font-size: var(--text-xs);
@@ -578,7 +605,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 align-items: flex-start;
                 justify-content: space-between;
                 gap: var(--space-3);
-                padding: var(--space-4);
+                padding: var(--space-3);
                 border-bottom: 1px solid var(--border-subtle);
                 background: color-mix(in srgb, var(--tag-group-accent, var(--accent)) 8%, var(--glass-solid));
             }
@@ -630,66 +657,25 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 flex-shrink: 0;
             }
             .tag-group-tools {
-                display: flex;
-                flex-direction: column;
-                padding: var(--space-2);
-                gap: 2px;
-            }
-            .tag-tool-row {
                 display: grid;
-                grid-template-columns: auto minmax(0, 1fr) auto;
-                align-items: start;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                cursor: pointer;
-                text-align: left;
-                border: 1px solid transparent;
-                background: transparent;
-                color: inherit;
-                width: 100%;
-                box-sizing: border-box;
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                gap: var(--space-3);
+                padding: var(--space-3);
+                align-items: stretch;
             }
-            .tag-tool-row:hover {
-                background: var(--glass-tint-medium);
-            }
-            .tag-tool-row[data-selected='true'] {
-                border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-                background: color-mix(in srgb, var(--accent) 10%, transparent);
-            }
-            .tag-tool-check {
-                width: 18px;
-                height: 18px;
-                margin-top: 2px;
-                border-radius: 4px;
-                border: 1.5px solid var(--border-strong);
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                flex-shrink: 0;
-                color: var(--accent);
-                background: var(--glass-solid);
-            }
-            .tag-tool-row[data-selected='true'] .tag-tool-check {
-                border-color: var(--accent);
-                background: color-mix(in srgb, var(--accent) 18%, var(--glass-solid));
-            }
-            .tag-tool-main {
+            .tag-group-tools platform-picker-card {
+                display: block;
+                min-height: 148px;
+                height: 100%;
                 min-width: 0;
+            }
+            .tag-tool-card-body {
                 display: flex;
                 flex-direction: column;
-                gap: 2px;
-            }
-            .tag-tool-title {
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: var(--text-primary);
-                word-break: break-word;
-            }
-            .tag-tool-id {
-                font-size: 11px;
-                color: var(--text-tertiary);
-                font-family: var(--font-mono);
+                gap: var(--space-2);
+                width: 100%;
+                min-width: 0;
+                flex: 1 1 auto;
             }
             .tag-tool-desc {
                 font-size: var(--text-xs);
@@ -697,14 +683,72 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 line-height: 1.35;
                 display: -webkit-box;
                 -webkit-box-orient: vertical;
-                -webkit-line-clamp: 2;
+                -webkit-line-clamp: 3;
+                overflow: hidden;
+                word-break: break-word;
+            }
+            .tag-tool-meta {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--space-1);
+                margin-top: auto;
+            }
+            .tag-tool-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 10px;
+                font-weight: var(--font-medium);
+                letter-spacing: 0.02em;
+                padding: 2px 6px;
+                border-radius: var(--radius-sm);
+                background: var(--glass-tint-medium);
+                color: var(--text-tertiary);
+                max-width: 100%;
+                word-break: break-all;
+            }
+            .tag-tool-chip[data-kind='code'] {
+                color: var(--text-secondary);
+            }
+            .tag-tool-chip[data-kind='flow'] {
+                background: color-mix(in srgb, var(--accent-secondary) 22%, var(--glass-tint-medium));
+                color: var(--text-secondary);
+            }
+            .tag-tool-chip[data-kind='mcp'] {
+                background: color-mix(in srgb, var(--success) 18%, var(--glass-tint-medium));
+                color: var(--text-secondary);
+            }
+            .tag-tool-chip[data-kind='tool'] {
+                background: var(--accent-subtle);
+                color: var(--accent);
+            }
+            .tag-tool-id {
+                font-size: 10px;
+                color: var(--text-tertiary);
+                font-family: var(--font-mono);
+                line-height: 1.3;
+                word-break: break-all;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 1;
                 overflow: hidden;
             }
             .tag-tool-add-one {
+                margin-left: auto;
                 opacity: 0.55;
             }
-            .tag-tool-row:hover .tag-tool-add-one {
+            .tag-group-tools platform-picker-card:hover .tag-tool-add-one,
+            .tag-group-tools platform-picker-card:focus-within .tag-tool-add-one {
                 opacity: 1;
+            }
+            @media (max-width: 640px) {
+                .tag-group-tools {
+                    grid-template-columns: 1fr;
+                }
+                .tag-tool-add-one {
+                    opacity: 0.85;
+                }
             }
             .picker-footer {
                 display: flex;
@@ -1342,9 +1386,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 @select=${() => this._pickToolLike(tool)}
             >
                 <div slot="icon">
-                    <div class="mcp-picker-tool-icon">
-                        ${renderMcpServerIcon(server, 18)}
-                    </div>
+                    ${renderRegistryItemCardIcon(tool, { size: 18, server })}
                 </div>
                 <div class="mcp-picker-tool-server">
                     ${renderMcpServerIcon(server, 14)}
@@ -1533,12 +1575,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     _renderMcpToolCard(t) {
         const title = registryItemTitle(t);
         const desc = typeof t.description === 'string' ? _truncateText(t.description, 120) : '';
-        const icon = registryItemIconName(t);
         const mcpServerId = typeof t.mcp_server_id === 'string' ? t.mcp_server_id : '';
         const server = this._mcpServerById(mcpServerId);
-        const iconNode = server
-            ? renderMcpServerIcon(server, 18)
-            : html`<platform-icon name=${icon} size="18"></platform-icon>`;
         return html`
             <platform-picker-card
                 value=${typeof t.tool_id === 'string' ? t.tool_id : title}
@@ -1546,9 +1584,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 @select=${() => this._pickToolLike(t)}
             >
                 <div slot="icon">
-                    <div class="mcp-picker-tool-icon">
-                        ${iconNode}
-                    </div>
+                    ${renderRegistryItemCardIcon(t, { size: 18, server })}
                 </div>
                 ${desc.length > 0 ? html`<div class="mcp-picker-tool-desc">${desc}</div>` : nothing}
             </platform-picker-card>
@@ -2006,41 +2042,23 @@ export class FlowsLibraryPickerModal extends PlatformModal {
 
     _tagGroupTitle(tag) {
         const knownKeys = {
-            math: 'tool_picker_modal.tag_groups.math',
             crm: 'tool_picker_modal.tag_groups.crm',
-            browser: 'tool_picker_modal.tag_groups.browser',
-            mcp: 'tool_picker_modal.tag_groups.mcp',
-            planning: 'tool_picker_modal.tag_groups.planning',
-            misc: 'tool_picker_modal.tag_groups.misc',
-            files: 'tool_picker_modal.tag_groups.files',
             documents: 'tool_picker_modal.tag_groups.documents',
-            office: 'tool_picker_modal.tag_groups.office',
-            catalog: 'tool_picker_modal.tag_groups.catalog',
-            viz: 'tool_picker_modal.tag_groups.viz',
-            text: 'tool_picker_modal.tag_groups.text',
-            scheduling: 'tool_picker_modal.tag_groups.scheduling',
-            rag: 'tool_picker_modal.tag_groups.rag',
-            search: 'tool_picker_modal.tag_groups.search',
-            docs: 'tool_picker_modal.tag_groups.docs',
+            files: 'tool_picker_modal.tag_groups.files',
             sync: 'tool_picker_modal.tag_groups.sync',
             worktracker: 'tool_picker_modal.tag_groups.worktracker',
-            flows: 'tool_picker_modal.tag_groups.flows',
-            handoff: 'tool_picker_modal.tag_groups.handoff',
-            agent_skills: 'tool_picker_modal.tag_groups.agent_skills',
-            linnex_agent: 'tool_picker_modal.tag_groups.linnex_agent',
-            device: 'tool_picker_modal.tag_groups.device',
-            google_docs: 'tool_picker_modal.tag_groups.google_docs',
-            law: 'tool_picker_modal.tag_groups.law',
-            knowledge: 'tool_picker_modal.tag_groups.knowledge',
-            codegen: 'tool_picker_modal.tag_groups.codegen',
-            sandbox: 'tool_picker_modal.tag_groups.sandbox',
-            validation: 'tool_picker_modal.tag_groups.validation',
-            reasoning: 'tool_picker_modal.tag_groups.reasoning',
-            hitl: 'tool_picker_modal.tag_groups.hitl',
-            ai: 'tool_picker_modal.tag_groups.ai',
-            lara: 'tool_picker_modal.tag_groups.lara',
-            flow: 'tool_picker_modal.tag_groups.flow',
             web: 'tool_picker_modal.tag_groups.web',
+            knowledge: 'tool_picker_modal.tag_groups.knowledge',
+            scheduling: 'tool_picker_modal.tag_groups.scheduling',
+            google_docs: 'tool_picker_modal.tag_groups.google_docs',
+            google_sheets: 'tool_picker_modal.tag_groups.google_sheets',
+            viz: 'tool_picker_modal.tag_groups.viz',
+            flows: 'tool_picker_modal.tag_groups.flows',
+            device: 'tool_picker_modal.tag_groups.device',
+            text: 'tool_picker_modal.tag_groups.text',
+            misc: 'tool_picker_modal.tag_groups.misc',
+            mcp: 'tool_picker_modal.tag_groups.mcp',
+            flow: 'tool_picker_modal.tag_groups.flow',
         };
         const key = knownKeys[tag];
         if (typeof key === 'string') {
@@ -2132,6 +2150,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const hue = hueFromString(tag);
         const allSelected = this._groupAllSelected(tools);
         const batchEnabled = this._mcpBulkAddEnabled();
+        const groupIcon = tagGroupIconName(tag);
         return html`
             <section
                 class="tag-group"
@@ -2142,7 +2161,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 <div class="tag-group-head">
                     <div class="tag-group-head-main">
                         <div class="tag-group-icon" aria-hidden="true">
-                            <platform-icon name="layers" size="22"></platform-icon>
+                            <platform-icon name=${groupIcon} size="22"></platform-icon>
                         </div>
                         <div class="tag-group-titles">
                             <h3 id=${`tag-group-${tag}`}>${this._tagGroupTitle(tag)}</h3>
@@ -2194,37 +2213,46 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                     ? nothing
                     : html`
                         <div class="tag-group-tools" role="list">
-                            ${tools.map((t) => this._renderTagToolRow(t, { batchEnabled }))}
+                            ${tools.map((t) => this._renderTagToolCard(t, { batchEnabled }))}
                         </div>
                     `}
             </section>
         `;
     }
 
-    _renderTagToolRow(t, { batchEnabled }) {
+    _tagToolKindChipLabel(kind, language) {
+        if (kind === 'code' && language.length > 0) {
+            return flowCodeLanguageShortLabel(language);
+        }
+        if (kind === 'flow') {
+            return this.t('tool_picker_modal.kind_flow');
+        }
+        if (kind === 'mcp') {
+            return this.t('tool_picker_modal.kind_mcp');
+        }
+        if (kind === 'code') {
+            return this.t('tool_picker_modal.kind_code');
+        }
+        return this.t('tool_picker_modal.kind_tool');
+    }
+
+    _renderTagToolCard(t, { batchEnabled }) {
         const toolId = typeof t.tool_id === 'string' ? t.tool_id : '';
         const title = registryItemTitle(t);
         const desc = typeof t.description === 'string' ? _truncateText(t.description, 140) : '';
         const selected = this._isToolSelected(toolId);
+        const kind = registryItemVisualKind(t);
+        const language = registryItemLanguage(t);
+        const chipLabel = this._tagToolKindChipLabel(kind, language);
+        const mcpServerId = typeof t.mcp_server_id === 'string' ? t.mcp_server_id : '';
+        const server = mcpServerId.length > 0 ? this._mcpServerById(mcpServerId) : null;
         return html`
-            <article
-                class="tag-tool-row"
-                role="button"
-                tabindex="0"
+            <platform-picker-card
+                value=${toolId.length > 0 ? toolId : title}
+                title=${title}
+                ?selected=${batchEnabled && selected}
                 data-tool-id=${toolId}
-                data-selected=${selected ? 'true' : 'false'}
-                @click=${() => {
-                    if (batchEnabled) {
-                        this._toggleToolSelection(toolId);
-                        return;
-                    }
-                    this._pickToolLike(t);
-                }}
-                @keydown=${(e) => {
-                    if (e.key !== 'Enter' && e.key !== ' ') {
-                        return;
-                    }
-                    e.preventDefault();
+                @select=${() => {
                     if (batchEnabled) {
                         this._toggleToolSelection(toolId);
                         return;
@@ -2232,37 +2260,37 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                     this._pickToolLike(t);
                 }}
             >
-                <span class="tag-tool-check" aria-hidden="true">
-                    ${selected
-                        ? html`<platform-icon name="check" size="12"></platform-icon>`
-                        : nothing}
-                </span>
-                <span class="tag-tool-main">
-                    <span class="tag-tool-title">${title}</span>
+                <div slot="icon">
+                    ${renderRegistryItemCardIcon(t, { size: 28, server })}
+                </div>
+                <div class="tag-tool-card-body">
                     ${toolId.length > 0 && toolId !== title
                         ? html`<span class="tag-tool-id">${toolId}</span>`
                         : nothing}
-                    ${desc.length > 0 ? html`<span class="tag-tool-desc">${desc}</span>` : nothing}
-                </span>
-                ${batchEnabled
-                    ? html`
-                        <platform-button
-                            class="tag-tool-add-one"
-                            variant="ghost"
-                            icon-only
-                            density="dense"
-                            title=${this.t('tool_picker_modal.tag_tool_add_one_aria')}
-                            aria-label=${this.t('tool_picker_modal.tag_tool_add_one_aria')}
-                            @click=${(e) => {
-                                e.stopPropagation();
-                                this._pickToolLike(t);
-                            }}
-                        >
-                            <platform-icon name="plus" size="14"></platform-icon>
-                        </platform-button>
-                    `
-                    : nothing}
-            </article>
+                    ${desc.length > 0 ? html`<div class="tag-tool-desc">${desc}</div>` : nothing}
+                    <div class="tag-tool-meta">
+                        <span class="tag-tool-chip" data-kind=${kind}>${chipLabel}</span>
+                        ${batchEnabled
+                            ? html`
+                                <platform-button
+                                    class="tag-tool-add-one"
+                                    variant="ghost"
+                                    icon-only
+                                    density="dense"
+                                    title=${this.t('tool_picker_modal.tag_tool_add_one_aria')}
+                                    aria-label=${this.t('tool_picker_modal.tag_tool_add_one_aria')}
+                                    @click=${(e) => {
+                                        e.stopPropagation();
+                                        this._pickToolLike(t);
+                                    }}
+                                >
+                                    <platform-icon name="plus" size="14"></platform-icon>
+                                </platform-button>
+                            `
+                            : nothing}
+                    </div>
+                </div>
+            </platform-picker-card>
         `;
     }
 

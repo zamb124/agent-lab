@@ -18,7 +18,7 @@ from core.types import JsonObject, JsonValue, require_json_object
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-_TAGS = ["crm", "lara", "ops"]
+_TAGS = ["crm"]
 
 
 def _require_context_namespace() -> str:
@@ -135,7 +135,7 @@ async def crm_list_suggests(
         "Resolves (accepts) a CRM suggest "
         "(POST /crm/api/v1/namespaces/{namespace}/suggests/{suggest_id}/resolve)."
     ),
-    tags=[*_TAGS, "mutation"],
+    tags=_TAGS,
     parameters_model=CrmSuggestIdArgs,
 )
 async def crm_resolve_suggest(
@@ -168,7 +168,7 @@ async def crm_resolve_suggest(
         "Dismisses a CRM suggest "
         "(POST /crm/api/v1/namespaces/{namespace}/suggests/{suggest_id}/dismiss)."
     ),
-    tags=[*_TAGS, "mutation"],
+    tags=_TAGS,
     parameters_model=CrmSuggestIdArgs,
 )
 async def crm_dismiss_suggest(

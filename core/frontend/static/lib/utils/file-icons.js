@@ -122,6 +122,7 @@ export const UI_ICON_MAP = Object.freeze({
     database: 'database', avatar: 'avatar', adjustment: 'adjustment', brightness: 'brightness',
     'building-one': 'building-one', calendar: 'calendar', 'calendar-solid': 'calendar-solid',
     checklist: 'checklist', 'book-open': 'book-open', 'doc-detail': 'doc-detail',
+    'scroll-text': 'scroll-text', 'agent-skill': 'scroll-text',
     'video-call': 'video-call', 'phone-ended': 'phone-ended',
     'circular-connection': 'circular-connection', network: 'database-network',
     sparkle: 'sparkle', star: 'star', link: 'circular-connection', filter: 'filter', search: 'search',

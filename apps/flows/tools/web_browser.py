@@ -151,7 +151,7 @@ class BrowserPageSnapshotArgs(BaseModel):
 @tool(
     name="browser_duckduckgo_links",
     description=_BROWSER_DUCKDUCKGO_LINKS_DESCRIPTION,
-    tags=["browser", "mcp", "search", "web"],
+    tags=["web"],
     parameters_model=BrowserDuckduckgoLinksArgs,
 )
 async def browser_duckduckgo_links(
@@ -172,7 +172,7 @@ async def browser_duckduckgo_links(
 @tool(
     name="browser_duckduckgo_links_batch",
     description=_BROWSER_DUCKDUCKGO_LINKS_BATCH_DESCRIPTION,
-    tags=["browser", "mcp", "search", "web"],
+    tags=["web"],
     parameters_model=BrowserDuckduckgoLinksBatchArgs,
 )
 async def browser_duckduckgo_links_batch(
@@ -193,7 +193,7 @@ async def browser_duckduckgo_links_batch(
 @tool(
     name="browser_page_markdown",
     description=_BROWSER_PAGE_MARKDOWN_DESCRIPTION,
-    tags=["browser", "mcp", "web", "files"],
+    tags=["web"],
     parameters_model=BrowserPageMarkdownArgs,
 )
 async def browser_page_markdown(
@@ -227,7 +227,7 @@ async def browser_page_markdown(
 @tool(
     name="browser_page_snapshot",
     description=_BROWSER_PAGE_SNAPSHOT_DESCRIPTION,
-    tags=["browser", "mcp", "web", "files"],
+    tags=["web"],
     parameters_model=BrowserPageSnapshotArgs,
 )
 async def browser_page_snapshot(

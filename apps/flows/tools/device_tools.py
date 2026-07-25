@@ -51,7 +51,7 @@ def _require_device_id(state: "ExecutionState") -> str:
         "via the device tunnel. Call before device_tools_call when unsure which "
         "local tools exist. Fails if the device tunnel is offline."
     ),
-    tags=["linnex_agent", "device", "local"],
+    tags=["device"],
     parameters_model=DeviceToolsListArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
@@ -79,7 +79,7 @@ async def device_tools_list(*, state: "ExecutionState") -> JsonObject:
         "Use device_tools_list first for available names. device_id comes from the "
         "session (cannot be overridden). Honors DevicePolicy on the desktop."
     ),
-    tags=["linnex_agent", "device", "local"],
+    tags=["device"],
     parameters_model=DeviceToolsCallArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )

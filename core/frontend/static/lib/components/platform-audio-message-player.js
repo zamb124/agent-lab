@@ -32,9 +32,9 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         css`
             :host {
                 display: block;
-                width: fit-content;
+                width: min(360px, 100%);
                 max-width: 100%;
-                min-width: 220px;
+                min-width: min(220px, 100%);
                 box-sizing: border-box;
                 --platform-audio-bar-inactive: rgba(8, 105, 60, 0.33);
                 --platform-audio-bar-active: rgba(8, 105, 60, 0.88);
@@ -43,18 +43,20 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                 --platform-audio-transcribe-bg: rgba(255, 255, 255, 0.56);
                 --platform-audio-transcribe-fg: rgba(6, 95, 70, 0.95);
                 --platform-audio-transcription-text: rgba(6, 95, 70, 0.95);
+                --platform-audio-transcription-muted: rgba(6, 95, 70, 0.62);
             }
 
             .root {
-                width: fit-content;
-                min-width: 220px;
-                max-width: min(360px, 100%);
+                width: 100%;
+                min-width: 0;
+                max-width: 100%;
                 border: none;
                 background: transparent;
                 padding: 0;
                 display: flex;
                 flex-direction: column;
                 gap: 6px;
+                box-sizing: border-box;
             }
 
             .row {
@@ -172,6 +174,12 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                 margin: 0;
                 padding: 0;
                 align-self: stretch;
+                text-align: start;
+            }
+
+            .transcription.muted {
+                color: var(--platform-audio-transcription-muted);
+                font-style: italic;
             }
 
             .transcription.error {
@@ -361,6 +369,26 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         return this._transcriptionForDisplay() !== '';
     }
 
+    _renderTranscriptionBlock() {
+        if (this.transcriptionStatus === 'processing') {
+            return html`<div class="transcription">${this.t('audio_player.transcribe_processing')}</div>`;
+        }
+        if (this.transcriptionStatus === 'done') {
+            if (this._hasTranscriptionToShow()) {
+                return html`<div class="transcription">${this._transcriptionForDisplay()}</div>`;
+            }
+            return html`<div class="transcription muted">${this.t('audio_player.no_speech')}</div>`;
+        }
+        if (
+            this.transcriptionStatus === 'failed'
+            && typeof this.transcriptionError === 'string'
+            && this.transcriptionError.trim() !== ''
+        ) {
+            return html`<div class="transcription error">${this.transcriptionError.trimEnd()}</div>`;
+        }
+        return '';
+    }
+
     _bars() {
         if (Array.isArray(this.waveform) && this.waveform.length > 0) {
             return this.waveform.slice(0, 48).map((v) => {
@@ -384,7 +412,6 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         const activeBarsCount = Math.floor(activeRatio * bars.length);
         const transcribeLoading = this.transcriptionStatus === 'processing';
         const transcribeDone = this.transcriptionStatus === 'done';
-        const transcribeFailed = this.transcriptionStatus === 'failed';
 
         return html`
             <div class="root">
@@ -434,13 +461,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                 `
                         : ''}
                 </div>
-                ${transcribeLoading ? html`<div class="transcription">${this.t('audio_player.transcribe_processing')}</div>` : ''}
-                ${transcribeDone && this._hasTranscriptionToShow()
-                    ? html`<div class="transcription">${this._transcriptionForDisplay()}</div>`
-                    : ''}
-                ${transcribeFailed && typeof this.transcriptionError === 'string' && this.transcriptionError.trim() !== ''
-                    ? html`<div class="transcription error">${this.transcriptionError.trimEnd()}</div>`
-                    : ''}
+                ${this._renderTranscriptionBlock()}
             </div>
         `;
     }

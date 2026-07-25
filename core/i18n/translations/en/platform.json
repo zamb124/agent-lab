@@ -7,7 +7,8 @@
     },
     "audio_player": {
         "transcribe_aria": "Transcribe",
-        "transcribe_processing": "Transcribing…"
+        "transcribe_processing": "Transcribing…",
+        "no_speech": "No speech in this audio"
     },
     "menu": {
         "user_button_title": "User menu",

@@ -747,13 +747,11 @@ async def transcribe_audio_message_core(
                     language=settings.voice.stt.default_language,
                 )
                 stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, used_provider)
-                if transcript_text.strip() == "":
-                    raise ValueError("STT вернул пустую транскрипцию аудиосообщения.")
-
+                # Пустой text — нет речи в аудио; статус DONE, UI показывает no_speech.
                 done_contents = _replace_audio_transcription(
                     contents=source_contents,
                     status=AudioTranscriptionStatus.DONE,
-                    transcription_text=transcript_text,
+                    transcription_text=transcript_text.strip(),
                     transcription_error=None,
                 )
                 await container.message_repository.replace_message_contents(
@@ -910,13 +908,11 @@ async def transcribe_video_message_core(
                 language=settings.voice.stt.default_language,
             )
             video_stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, used_provider)
-            if transcript_text.strip() == "":
-                raise ValueError("STT вернул пустую транскрипцию видеосообщения.")
-
+            # Пустой text — нет речи; статус DONE, UI показывает no_speech.
             done_contents = _replace_video_transcription(
                 contents=source_contents,
                 status=AudioTranscriptionStatus.DONE,
-                transcription_text=transcript_text,
+                transcription_text=transcript_text.strip(),
                 transcription_error=None,
             )
             await container.message_repository.replace_message_contents(

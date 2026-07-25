@@ -418,15 +418,13 @@ export class SyncMessageBubble extends PlatformElement {
         }
         .audio-attachment {
             display: block;
-            align-self: flex-start;
-            width: max-content;
-            max-width: min(360px, 100%);
+            align-self: stretch;
+            width: min(360px, 100%);
+            max-width: 100%;
             min-width: 0;
             margin: 0;
             padding: 0;
-        }
-        :host([data-own]) .audio-attachment {
-            align-self: flex-end;
+            box-sizing: border-box;
         }
         .image-wrap {
             margin: -2px 0;

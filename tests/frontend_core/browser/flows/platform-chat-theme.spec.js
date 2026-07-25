@@ -72,6 +72,7 @@ describe('platform-chat theme tokens', () => {
         }
         fixtureCleanup();
         window.localStorage.removeItem(platformStorageKey('crm', 'lara_launcher_position.crm'));
+        window.localStorage.removeItem(platformStorageKey('crm', 'lara_panel_width.crm'));
     });
 
     it('maps --platform-chat-panel-bg to platform glass-solid-strong', () => {
@@ -188,5 +189,98 @@ describe('platform-chat theme tokens', () => {
         el.renderRoot.querySelector('.fab').click();
         await elementUpdated(el);
         expect(el.open).to.equal(true);
+    });
+
+    it('persists dragged panel width and restores on remount', async () => {
+        const previousMatchMedia = window.matchMedia;
+        window.matchMedia = (query) => {
+            if (String(query).includes('max-width: 767px')) {
+                return {
+                    matches: false,
+                    media: String(query),
+                    onchange: null,
+                    addListener() {},
+                    removeListener() {},
+                    addEventListener() {},
+                    removeEventListener() {},
+                    dispatchEvent() {
+                        return false;
+                    },
+                };
+            }
+            return previousMatchMedia.call(window, query);
+        };
+
+        try {
+            const el = await fixture(html`
+                <platform-chat
+                    display="drawer"
+                    profile="spa"
+                    flow-id="lara"
+                    branch-id="crm"
+                    launcher-storage-scope="crm"
+                    flows-base-url="/flows"
+                    initial-open
+                ></platform-chat>
+            `);
+            await elementUpdated(el);
+            expect(el.open).to.equal(true);
+
+            const handle = el.renderRoot.querySelector('.panel-resize-handle');
+            expect(handle).to.exist;
+            expect(handle.getAttribute('data-edge')).to.equal('left');
+
+            const panel = el.renderRoot.querySelector('.panel');
+            const startWidth = panel.getBoundingClientRect().width;
+            expect(startWidth).to.be.above(0);
+
+            handle.dispatchEvent(new PointerEvent('pointerdown', {
+                pointerId: 21,
+                button: 0,
+                clientX: 40,
+                clientY: 120,
+                bubbles: true,
+            }));
+            window.dispatchEvent(new PointerEvent('pointermove', {
+                pointerId: 21,
+                clientX: 40 - 120,
+                clientY: 120,
+            }));
+            window.dispatchEvent(new PointerEvent('pointerup', {
+                pointerId: 21,
+                clientX: 40 - 120,
+                clientY: 120,
+            }));
+            await elementUpdated(el);
+
+            const serialized = window.localStorage.getItem(
+                platformStorageKey('crm', 'lara_panel_width.crm'),
+            );
+            expect(serialized).to.be.a('string');
+            const savedWidth = JSON.parse(serialized);
+            expect(savedWidth).to.be.a('number');
+            expect(savedWidth).to.be.at.least(320);
+            expect(savedWidth).to.be.above(startWidth);
+
+            fixtureCleanup();
+            const restored = await fixture(html`
+                <platform-chat
+                    display="drawer"
+                    profile="spa"
+                    flow-id="lara"
+                    branch-id="crm"
+                    launcher-storage-scope="crm"
+                    flows-base-url="/flows"
+                    initial-open
+                ></platform-chat>
+            `);
+            await elementUpdated(restored);
+            const restoredPanel = restored.renderRoot.querySelector('.panel');
+            expect(restoredPanel.style.getPropertyValue('--embed-panel-width').trim()).to.equal(
+                `${savedWidth}px`,
+            );
+        } finally {
+            window.matchMedia = previousMatchMedia;
+        }
     });
 });

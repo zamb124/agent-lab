@@ -14,7 +14,7 @@ import '../common/flows-code-language-icon.js';
 import './flows-agent-skills-how-it-works.js';
 import { asArray, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { buildPlatformAuxiliaryFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
-import { AGENT_SKILL_ICON, mapAgentSkillItem, buildAgentSkillDuplicatePayload, suggestAgentSkillCopyId, isValidAgentSkillId } from '../../_helpers/agent-skill-map.js';
+import { AGENT_SKILL_ICON, mapAgentSkillItem, buildAgentSkillDuplicatePayload, suggestAgentSkillCopyId, isValidAgentSkillId, replaceAttachedAgentSkillId } from '../../_helpers/agent-skill-map.js';
 import {
     getToolLabel,
     getToolRefVisualMeta,
@@ -166,6 +166,9 @@ export class FlowsAgentSkillEditor extends PlatformElement {
             .chip platform-icon,
             .chip flows-code-language-icon {
                 flex-shrink: 0;
+            }
+            .chip-skill platform-icon {
+                color: var(--accent);
             }
             .chip:hover {
                 border-color: var(--accent);
@@ -375,6 +378,30 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         const id = asString(agentSkillId);
         this._patchDraft({
             depends_on: asArray(this._draft?.depends_on).filter((x) => asString(x) !== id),
+        });
+    }
+
+    _onOpenDepends(agentSkillId) {
+        const id = asString(agentSkillId);
+        if (id.length === 0) {
+            throw new Error('flows-agent-skill-editor: depends agent_skill_id required');
+        }
+        this.openModal('flows.agent_skill_edit', {
+            agentSkillId: id,
+            onDuplicated: ({ fromId, toId }) => {
+                if (typeof fromId !== 'string' || typeof toId !== 'string') {
+                    return;
+                }
+                if (fromId.length === 0 || toId.length === 0 || fromId === toId) {
+                    return;
+                }
+                const current = asArray(this._draft?.depends_on)
+                    .map((sid) => asString(sid))
+                    .filter((sid) => sid.length > 0);
+                this._patchDraft({
+                    depends_on: replaceAttachedAgentSkillId(current, fromId, toId),
+                });
+            },
         });
     }
 
@@ -805,7 +832,18 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                 </div>
                 <div class="chips">
                     ${asArray(draft.depends_on).map((depId) => html`
-                        <span class="chip" style="cursor: default;">
+                        <span
+                            class="chip chip-skill"
+                            role="button"
+                            tabindex="0"
+                            @click=${() => this._onOpenDepends(depId)}
+                            @keydown=${(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    this._onOpenDepends(depId);
+                                }
+                            }}
+                        >
                             <platform-icon name=${AGENT_SKILL_ICON} size="14"></platform-icon>
                             <span class="chip-label">${this._skillLabel(depId)}</span>
                             <platform-button
@@ -813,7 +851,10 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                                 icon-only
                                 density="compact"
                                 aria-label=${this.t('agent_skills.depends_remove')}
-                                @click=${() => this._removeDepends(depId)}
+                                @click=${(e) => {
+                                    e.stopPropagation();
+                                    this._removeDepends(depId);
+                                }}
                             >
                                 <platform-icon name="x" size="12"></platform-icon>
                             </platform-button>

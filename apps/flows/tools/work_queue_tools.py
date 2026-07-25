@@ -16,7 +16,7 @@ from core.worktracker.models import UserActor, WorkActor
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-_TAGS = ["misc", "worktracker"]
+_TAGS = ["worktracker"]
 
 
 class WorkQueueListArgs(StrictBaseModel):

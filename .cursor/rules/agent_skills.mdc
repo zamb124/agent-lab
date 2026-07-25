@@ -55,10 +55,10 @@ alwaysApply: false
 - llm_node editor: секция **Skills** только в режиме Tools (`structured_output=false`); в Structured скрыта (attach в конфиге сохраняется). Magic tools never appear in tools chips.
 - Skill chip click → `flows.agent_skill_edit` (тот же `<flows-agent-skill-editor>`, что Skill Library). X на чипе — detach.
 - Duplicate в editor: create с новым `agent_skill_id` + клон полей; из chip-модалки `onDuplicated` заменяет attach на копию.
-- Skill editor: tool chip → `flows.embedded_tool_config` (Save пишет в `tool_refs`); depends_on через `flows.agent_skill_picker` (поиск); references/assets — `openFile` → `platform.file_viewer`.
+- Skill editor: tool chip → `flows.embedded_tool_config` (Save пишет в `tool_refs`); depends_on chip click → `flows.agent_skill_edit` (X — detach); depends_on add через `flows.agent_skill_picker` (поиск); references/assets — `openFile` → `platform.file_viewer`.
 - Entry points: sidebar Skills, home connect card, llm_node «Manage skills».
 - UI copy: **Skill**; поля API остаются `agent_skill_id` / `agent_skills`.
-- Platform icon для Skill везде один: `AGENT_SKILL_ICON` (`sparkles`) из `apps/flows/ui/_helpers/agent-skill-map.js` — chips, list, picker, sidebar, llm_node.
+- Platform icon для Skill везде один: `AGENT_SKILL_ICON` (`scroll-text`) из `apps/flows/ui/_helpers/agent-skill-map.js` — chips, list, picker, sidebar, llm_node. Core chat chip `platform.skill_loaded` — `AGENT_SKILL_ICON_NAME` из `core/frontend/static/lib/chat/agent-skill-icon.js` (то же имя `scroll-text`). Цвет — `var(--accent)` / `--flows-chat-accent` через `currentColor`.
 - Tool chips в Skill editor используют тот же visual meta, что llm_node (`getToolRefVisualMeta` / language icon).
 - Skill Library page и skill picker при открытии вызывают `ensure-seed`, затем list — backfill каталога без полного company re-init.
 - Chat: `load_agent_skill` → ui_event `platform.skill_loaded` → чипы в `<platform-chat>` (SPA/embed/editor). Mute: `FlowChatSettings.show_skill_loads` / embed `chat_override`.

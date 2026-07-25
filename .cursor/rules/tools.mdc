@@ -36,26 +36,42 @@ alwaysApply: false
 
 ## Builtin tools
 
-- Lifecycle: `reason`, `ask_user`, `hitl_operator_task`, `self_check`, `final_answer`, `finish`.
-- Agent plan: `agent_plan_write`, `agent_plan_get` — flat checklist в `ExecutionState.agent_plan` (full overwrite); skill `agent-planning`; UI block `type=agent_plan` (→ **`agent_plan.mdc`**).
-- Files: `read_file`, `create_file`.
-- Documents (Office) mutate/open: `documents_open_file`, `documents_replace_text`, `documents_append_text`, `documents_update_cells` — tags `documents`/`files`/`office`.
-- Documents catalog pack (Flows + Lara): `documents_list_catalog`, `documents_find`, `documents_read`, `documents_get_link` — модуль `apps/flows/tools/documents_catalog.py`, tags `documents`/`office`/`catalog`. Browse/search/read/link поверх Office BFF; вешаются на любой `llm_node.tools` или unlock через Agent Skill `documents-catalog`.
-- Viz (`.viz` visualizations): `create_viz`, `update_viz`, `export_viz`, `viz_open_file` — модуль `apps/flows/tools/viz.py`, tags `viz`/`files`/`charts`. Persistence = `FileRecord` (`application/vnd.platform.viz+json`); UI open через `openFile` → Office handler `viz` → `<platform-viz-host>` (ECharts/Mermaid). Chat: block `type=viz` + `files[]`.
-- Text: `summarize_text`, `format_text_markdown`.
-- Scheduling: `schedule_*`, `list_scheduled_tasks`, `cancel_scheduled_task`.
-- Google Docs: `gdocs_*`.
-- Google Sheets: `sheets_*` (OAuth `service=workspace`, shared with Docs).
-- Browser: `browser_*`.
-- CRM/Lara: `crm_*`, `push_embed_blocks`.
-- Agent handoff: `handoff_to_flow`, `handback_to_parent` (`apps/flows/src/tools/handoff_tools.py` → **`handoff.mdc`**).
+- Lifecycle: `reason`, `ask_user`, `hitl_operator_task`, `self_check`, `final_answer`, `finish` — tag `misc`.
+- Agent plan: `agent_plan_write`, `agent_plan_get` — tag `flows`; flat checklist в `ExecutionState.agent_plan` (→ **`agent_plan.mdc`**).
+- Files: `read_file`, `create_file`, `fill_docx_template` — tag `files`.
+- Documents (Office) mutate/open + catalog: `documents_*` — tag `documents` (`apps/flows/tools/documents.py`, `documents_catalog.py`).
+- Viz (`.viz`): `create_viz`, `update_viz`, `export_viz`, `viz_open_file` — tag `viz`. Persistence = `FileRecord` (`application/vnd.platform.viz+json`).
+- Text: `summarize_text`, `format_text_markdown` — tag `text`.
+- Scheduling: `schedule_*`, `list_scheduled_tasks`, `cancel_scheduled_task` — tag `scheduling`.
+- Google Docs: `gdocs_*` — tag `google_docs`.
+- Google Sheets: `sheets_*` — tag `google_sheets` (OAuth `service=workspace`, shared with Docs).
+- Web: `browser_*`, index/web search — tag `web`.
+- Knowledge: `rag_*`, platform docs, `pravo_*` — tag `knowledge`.
+- CRM: `crm_*`, `push_embed_blocks` — tag `crm`; activity tasks — dual `crm`+`worktracker`.
+- Sync / Worktracker / Device / Flows editor / handoff / agent_skills — tags `sync` / `worktracker` / `device` / `flows`.
+- Agent handoff: `handoff_to_flow`, `handback_to_parent` (`apps/flows/src/tools/handoff_tools.py` → **`handoff.mdc`**) — tag `flows`.
 
 ## Tag groups (tool picker)
 
-- Группа в UI picker = **tag** tool (`BaseTool.tags` / `ToolReference.tags`). Тул может входить в несколько групп.
-- Платформенные LLM-описания групп: `ToolTagGroup` (`tool_tag_group:{tag}`, table `tool_tag_groups`, `is_global=True`) — `description_ru` / `description_en` + `content_hash`.
+Группа в UI picker = **tag** tool (`BaseTool.tags` / `ToolReference.tags`).
+
+### Whitelist (builtins)
+
+`crm`, `documents`, `files`, `sync`, `worktracker`, `web`, `knowledge`, `scheduling`, `google_docs`, `google_sheets`, `viz`, `flows`, `device`, `text`, `misc`.
+
+### Правила
+
+- **1 tag на тул** (primary). **2** только для frozenset `{crm, worktracker}` (activity tasks).
+- Facet-теги запрещены: `mutation`, `ops`, `notes`, `charts`, `lara`, `graph`, `ai`, `office`, `catalog`, `browser`, `search`, `rag`, `law`, `mcp` на builtins, `misc` рядом с доменным тегом и т.п.
+- Primary tag — **первый** в списке (иконка группы/карточки).
+- Системные (не whitelist builtins): MCP sync → `["mcp", "mcp:<server_id>"]`; flow-as-tool row → `flow`.
+- CI: `scripts/check_tool_tags.py` (часть `make lint`).
+
+### Описания групп
+
+- `ToolTagGroup` (`tool_tag_group:{tag}`, table `tool_tag_groups`, `is_global=True`) — `description_ru` / `description_en` + `content_hash`.
 - API: `GET /flows/api/v1/tools/tag-groups`; UI factory `flows/tool_tag_groups`.
-- Idle: `tool_tag_groups_describe_tick` — daily cron (`0 3 * * *`) + enqueue из `idle_worker_startup` на релизе; skip LLM если `content_hash` не изменился.
-- Не путать с `AgentSkill` (methodology packs) и `AgentToolkit` (desktop MCP extensions).
+- Idle: `tool_tag_groups_describe_tick` — daily cron (`0 3 * * *`) + enqueue из `idle_worker_startup`; skip LLM если `content_hash` не изменился.
+- Не путать с `AgentSkill` и `AgentToolkit`.
 
 Новый platform API для пользовательского кода добавляется не как Python namespace helper, а как capability в `apps/capability_gateway/services/registry.py`.

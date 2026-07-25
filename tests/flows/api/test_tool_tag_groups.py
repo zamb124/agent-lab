@@ -44,12 +44,12 @@ async def test_list_tool_tag_groups_returns_stored(client, container, unique_id)
 async def test_describe_skips_unchanged_hash(container, monkeypatch):
     service = container.tool_tag_group_service
     tools_by_tag = service._collect_builtin_tools_by_tag()
-    assert "math" in tools_by_tag
-    math_tools = tools_by_tag["math"]
-    content_hash = service._content_hash(math_tools)
+    assert "misc" in tools_by_tag
+    misc_tools = tools_by_tag["misc"]
+    content_hash = service._content_hash(misc_tools)
     await container.tool_tag_group_repository.set(
         ToolTagGroup(
-            tag="math",
+            tag="misc",
             description_ru="старое",
             description_en="old",
             content_hash=content_hash,
@@ -62,15 +62,14 @@ async def test_describe_skips_unchanged_hash(container, monkeypatch):
 
     monkeypatch.setattr(service, "_describe_tag_with_llm", _fail_llm)
 
-    # Only run for math by stubbing collect to a single tag
     monkeypatch.setattr(
         service,
         "_collect_builtin_tools_by_tag",
-        lambda: {"math": math_tools},
+        lambda: {"misc": misc_tools},
     )
 
     async def _empty_usage(_tools_by_tag):
-        return {"math": []}
+        return {"misc": []}
 
     monkeypatch.setattr(service, "_sample_flow_usage_by_tag", _empty_usage)
 
@@ -89,16 +88,16 @@ async def test_describe_writes_llm_result(container, monkeypatch):
     monkeypatch.setattr(
         service,
         "_collect_builtin_tools_by_tag",
-        lambda: {"math": tools},
+        lambda: {"misc": tools},
     )
 
     async def _empty_usage(_tools_by_tag):
-        return {"math": ["demo_flow"]}
+        return {"misc": ["demo_flow"]}
 
     monkeypatch.setattr(service, "_sample_flow_usage_by_tag", _empty_usage)
 
     async def _fake_llm(*, tag, tools, usage_flow_ids):
-        assert tag == "math"
+        assert tag == "misc"
         assert tools == [("calculator", "Math expressions")]
         assert usage_flow_ids == ["demo_flow"]
         return ToolTagGroupDescribeResult(
@@ -110,7 +109,7 @@ async def test_describe_writes_llm_result(container, monkeypatch):
 
     stats = await service.describe_all_platform_tags()
     assert stats.tags_updated == 1
-    stored = await container.tool_tag_group_repository.get("math")
+    stored = await container.tool_tag_group_repository.get("misc")
     assert stored is not None
     assert stored.description_ru == "Счёт и формулы"
     assert stored.description_en == "Calc and formulas"

@@ -14,7 +14,7 @@ from core.types import JsonObject, require_json_object
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-_TAGS = ["misc", "sync"]
+_TAGS = ["sync"]
 ChannelTypeLiteral = Literal["direct", "topic"]
 
 

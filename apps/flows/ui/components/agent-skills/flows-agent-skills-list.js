@@ -72,6 +72,7 @@ export class FlowsAgentSkillsList extends PlatformElement {
             }
             .card-name platform-icon {
                 flex-shrink: 0;
+                color: var(--accent);
             }
             .card-name-text {
                 min-width: 0;

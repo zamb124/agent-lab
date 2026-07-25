@@ -17,7 +17,7 @@ Namespace comes from session (`X-Platform-Namespace`); tools fail closed if miss
 | What folders do I have? | `documents_list_catalog` (no catalog_id) |
 | Browse folder | `documents_list_catalog(catalog_id=…)` |
 | Find by meaning/title | `documents_find(query, catalog_id?, mode=auto\|semantic\|lexical)` |
-| Read content | `documents_read(file_id=…)` |
+| Read content | `documents_read(file_id=…)` — never `read_agent_skill_reference` for catalog/UI `file_id` |
 | SPA editor/preview URL | `documents_get_link` — **not** a public internet share |
 | Blank Office doc in catalog | `documents_create_empty(title, document_type, catalog_id)` |
 | Create from text/markdown | `create_file` → `documents_open_file(catalog_id=…)` |

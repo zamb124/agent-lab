@@ -28,7 +28,9 @@ CRM NetWorkle с этого входа: `load_agent_skill("networkle")` → chil
 У тебя полный Tier-1 index Agent Skills платформы. Для задачи:
 1. Выбери skill → `load_agent_skill`.
 2. Следуй body; при необходимости грузи children из `depends_on`.
-3. Для reference — `read_agent_skill_reference`.
+3. Для Tier-3 methodology skill (`references`/`assets` из ответа load) —
+   `read_agent_skill_reference` (лучше `original_name`).
+   Документы библиотеки Documents — `documents_read` после load `documents-catalog`, не этот tool.
 
 Кратко по доменам (загружай соответствующий skill перед действием):
 - **CRM NetWorkle** — `networkle` (+ children)
