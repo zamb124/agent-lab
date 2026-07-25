@@ -232,8 +232,8 @@ describe('node editors — top-level NodeConfig contract', () => {
         tabs[1].click();
         await elementUpdated(workbench);
         await elementUpdated(el);
-        const jsonEditor = workbench.shadowRoot.querySelector('flows-code-editor[language="json"]');
-        expect(jsonEditor).to.not.be.null;
+        const schemaEditor = workbench.shadowRoot.querySelector('platform-schema-editor');
+        expect(schemaEditor).to.not.be.null;
     });
 
     it('flows-code-node-editor — round-trip Код → Схема → Код сохраняет code', async () => {

@@ -137,7 +137,44 @@ export function toolRefToInitialNode(raw, toolId) {
         return { ...raw, node_id: rid, type: 'hitl_node' };
     }
     if (explicitType === 'code' || (typeof raw.code === 'string' && raw.code.length > 0)) {
-        return { ...raw, node_id: rid, type: 'code' };
+        const nameFromName = asString(raw.name);
+        const nameFromTitle = asString(raw.title);
+        const displayName =
+            nameFromName.length > 0
+                ? nameFromName
+                : nameFromTitle.length > 0
+                    ? nameFromTitle
+                    : rid;
+        const out = {
+            node_id: rid,
+            type: 'code',
+            name: displayName,
+            description: typeof raw.description === 'string' ? raw.description : '',
+            code: typeof raw.code === 'string' ? raw.code : '',
+            language: normalizeFlowCodeLanguage(raw.language),
+            parameters_schema: isPlainObject(raw.parameters_schema)
+                ? raw.parameters_schema
+                : { type: 'object', properties: {}, required: [] },
+        };
+        if (typeof raw.entrypoint === 'string' && raw.entrypoint.length > 0) {
+            out.entrypoint = raw.entrypoint;
+        }
+        if (isPlainObject(raw.input_mapping)) {
+            out.input_mapping = raw.input_mapping;
+        }
+        if (isPlainObject(raw.output_mapping)) {
+            out.output_mapping = raw.output_mapping;
+        }
+        if (isPlainObject(raw.state_mapping)) {
+            out.state_mapping = raw.state_mapping;
+        }
+        if (Array.isArray(raw.files)) {
+            out.files = raw.files;
+        }
+        if (isPlainObject(raw.resources)) {
+            out.resources = raw.resources;
+        }
+        return out;
     }
     throw new Error('flows-tool-ref: cannot build inline node from ref');
 }
@@ -213,7 +250,65 @@ export function registryToolItemToNode(t) {
     return out;
 }
 
+/**
+ * Заменяет tool в llm_node.tools по tool_id (строка или object-ref).
+ * @param {unknown} tools
+ * @param {Record<string, unknown>} updated
+ * @returns {unknown[]}
+ */
+export function replaceToolRefInToolsList(tools, updated) {
+    if (!isPlainObject(updated)) {
+        throw new Error('flows-tool-ref: updated tool ref must be an object');
+    }
+    const updatedId = asString(updated.tool_id);
+    if (updatedId.length === 0) {
+        throw new Error('flows-tool-ref: updated.tool_id required');
+    }
+    const current = Array.isArray(tools) ? tools : [];
+    let replaced = false;
+    const next = current.map((entry) => {
+        const id = typeof entry === 'string' ? entry : (isPlainObject(entry) ? asString(entry.tool_id) : '');
+        if (id === updatedId) {
+            replaced = true;
+            return updated;
+        }
+        return entry;
+    });
+    if (!replaced) {
+        next.push(updated);
+    }
+    return next;
+}
+
 const STRIP_NODE_KEYS = new Set(['position', 'layout']);
+
+/** Поля ToolReference (+ mapping) для code/inline tool; type=code — GraphNodeConfig, не ToolReference. */
+const CODE_TOOL_REF_KEYS = new Set([
+    'name',
+    'title',
+    'description',
+    'parameters_schema',
+    'params',
+    'resources',
+    'language',
+    'entrypoint',
+    'code',
+    'permission',
+    'tags',
+    'react_role',
+    'public_fields',
+    'code_mode',
+    'mcp_server_id',
+    'mcp_tool_name',
+    'mcp_schema_hash',
+    'mcp_schema_version',
+    'mcp_output_schema',
+    'mcp_annotations',
+    'mcp_execution',
+    'input_mapping',
+    'output_mapping',
+    'state_mapping',
+]);
 
 /**
  * @param {Record<string, unknown>} node
@@ -237,8 +332,7 @@ export function nodeConfigToToolRef(node) {
                 || k === 'server_id'
                 || k === 'tool_name'
                 || k === 'headers'
-                || k === 'state_mapping'
-                || k === 'input_mapping'
+                || k === 'type'
             ) {
                 continue;
             }
@@ -246,10 +340,18 @@ export function nodeConfigToToolRef(node) {
             out[k] = v;
         }
         out.tool_id = nid;
-        out.type = 'mcp';
         out.code_mode = 'mcp_tool';
         out.mcp_server_id = serverId;
         out.mcp_tool_name = toolName;
+        return out;
+    }
+    const nodeType = asString(node.type);
+    if (nodeType === 'code' || (typeof node.code === 'string' && node.code.length > 0 && nodeType.length === 0)) {
+        const out = { tool_id: nid };
+        for (const key of CODE_TOOL_REF_KEYS) {
+            if (!(key in node)) continue;
+            out[key] = node[key];
+        }
         return out;
     }
     const out = {};

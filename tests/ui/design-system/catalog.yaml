@@ -285,6 +285,16 @@ components:
   doc_slug: platform-searchable-combobox
   status: backfill
   tier: T0
+- component: platform-schema-editor
+  doc_slug: platform-schema-editor
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
+- component: platform-schema-parameter-card
+  doc_slug: platform-schema-parameter-card
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-segmented-control
   doc_slug: platform-segmented-control
   status: production

@@ -163,6 +163,16 @@ export class FlowsCodeNodeEditor extends PlatformElement {
                 .previewExecutionState=${this.previewExecutionState}
                 .dataflowNode=${this.dataflowNode}
                 ?embedded=${this.embedded}
+                @change=${(e) => {
+                    const detail = e.detail;
+                    if (!detail || typeof detail !== 'object' || !('patch' in detail)) {
+                        return;
+                    }
+                    e.stopPropagation();
+                    this.emit('change', detail);
+                }}
+                @delete-node=${(e) => this.emit('delete-node', e.detail)}
+                @duplicate-node=${(e) => this.emit('duplicate-node', e.detail)}
             >
                 <div slot="settings" class="settings-wrap">
                     <flows-code-workbench

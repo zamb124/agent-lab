@@ -1,0 +1,13 @@
+component: platform-schema-editor
+doc_slug: platform-schema-editor
+tier: T0
+title_ru: Schema Editor
+title_en: Schema Editor
+import: "@platform/lib/components/schema/platform-schema-editor.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

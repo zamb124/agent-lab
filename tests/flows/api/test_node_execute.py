@@ -207,6 +207,44 @@ async def run(args, state):
         assert diff_by_path["doubled"]["change_type"] == "added"
 
     @pytest.mark.asyncio
+    async def test_function_strips_tool_reference_catalog_extras(self, client, app):
+        """Editor/tool payload с полями ToolReference не ломает GraphNodeConfig validate."""
+        code = """
+async def run(args, state):
+    state['result'] = 'ok'
+    return state
+"""
+        response = await client.post(
+            "/flows/api/v1/code/execute",
+            json={
+                "node_type": "code",
+                "node_config": {
+                    "code": code,
+                    "title": "ask_user",
+                    "tags": ["misc"],
+                    "params": {},
+                    "code_mode": "inline_code",
+                    "permission": [],
+                    "react_role": "standard",
+                    "parameters_schema": {
+                        "type": "object",
+                        "properties": {
+                            "question": {"type": "string"},
+                        },
+                        "required": ["question"],
+                    },
+                },
+                "state": {},
+            },
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert_execute_response(data, expected_success=True)
+        assert data["output_state"]["result"] == "ok"
+        assert data.get("error") is None or "extra_forbidden" not in str(data.get("error"))
+
+    @pytest.mark.asyncio
     async def test_function_async_code(self, client, app):
         """async def run(args, state)."""
         code = """

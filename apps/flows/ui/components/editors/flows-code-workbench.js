@@ -13,9 +13,9 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/schema/platform-schema-editor.js';
 import '../common/flows-code-language-segment.js';
 import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
-import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import {
     FLOW_CODE_LANGUAGES,
     flowCodeLanguageOptions,
@@ -116,8 +116,23 @@ export class FlowsCodeWorkbench extends PlatformElement {
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
-            .schema-editor-wrap[data-invalid] flows-code-editor {
+            .schema-editor-wrap {
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                gap: 0;
+            }
+            .schema-editor-wrap[data-invalid] {
                 border-color: var(--error);
+            }
+            .schema-editor-wrap flows-code-editor {
+                border: none;
+                border-radius: 0;
+            }
+            .schema-body {
+                padding: var(--space-3);
+                box-sizing: border-box;
+                min-height: 0;
             }
             .schema-error {
                 color: var(--error);
@@ -388,16 +403,25 @@ export class FlowsCodeWorkbench extends PlatformElement {
     }
 
     _onSchemaEditorChange(e) {
-        const value = asString(e.detail?.value);
-        try {
-            const parsed = value.trim().length === 0 ? null : JSON.parse(value);
-            this._schemaInvalid = false;
-            this._schemaError = '';
-            this._emitWorkbench({ type: 'parameters_schema', parameters_schema: parsed });
-        } catch (err) {
-            this._schemaInvalid = true;
-            this._schemaError = err instanceof Error ? err.message : String(err);
+        e.stopPropagation();
+        const detail = e.detail;
+        if (!detail || typeof detail !== 'object' || !('valid' in detail)) {
+            throw new Error('flows-code-workbench: schema-change detail');
         }
+        if (detail.valid !== true) {
+            this._schemaInvalid = true;
+            this._schemaError =
+                typeof detail.error === 'string' && detail.error.length > 0
+                    ? detail.error
+                    : this.t('tool_create_modal.toast_schema_invalid');
+            return;
+        }
+        this._schemaInvalid = false;
+        this._schemaError = '';
+        this._emitWorkbench({
+            type: 'parameters_schema',
+            parameters_schema: detail.value,
+        });
     }
 
     _emitLanguageChange(language) {
@@ -532,7 +556,6 @@ export class FlowsCodeWorkbench extends PlatformElement {
     render() {
         const code = typeof this.code === 'string' ? this.code : '';
         const parametersSchema = this._parametersSchemaObject();
-        const schemaText = formatJsonPretty(parametersSchema);
         const cmLang = this._cmLanguageForCodeTab();
         const completionCtx = this._completionContextPayload();
         const varKeysEff = this._effectiveCompletionVariableKeys();
@@ -596,13 +619,19 @@ export class FlowsCodeWorkbench extends PlatformElement {
                     : html`
                         <div class="schema-editor-wrap" ?data-invalid=${this._schemaInvalid}>
                             <flows-code-editor
-                                language="json"
-                                .value=${schemaText}
-                                @change=${this._onSchemaEditorChange}
+                                .headerOnly=${true}
+                                language="text"
+                                .value=${''}
                             >
                                 <div slot="toolbar-start">${this._renderToolbarStart()}</div>
                             </flows-code-editor>
-                            ${this._schemaInvalid ? html`<div class="schema-error">${this._schemaError}</div>` : ''}
+                            <div class="schema-body">
+                                <platform-schema-editor
+                                    .value=${parametersSchema}
+                                    @schema-change=${this._onSchemaEditorChange}
+                                ></platform-schema-editor>
+                                ${this._schemaInvalid ? html`<div class="schema-error">${this._schemaError}</div>` : ''}
+                            </div>
                         </div>
                     `}
             </div>

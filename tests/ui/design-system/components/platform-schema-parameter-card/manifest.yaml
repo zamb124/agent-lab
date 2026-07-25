@@ -1,0 +1,13 @@
+component: platform-schema-parameter-card
+doc_slug: platform-schema-parameter-card
+tier: T0
+title_ru: Schema Parameter Card
+title_en: Schema Parameter Card
+import: "@platform/lib/components/schema/platform-schema-parameter-card.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

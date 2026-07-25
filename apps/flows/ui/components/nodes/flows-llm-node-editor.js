@@ -33,7 +33,7 @@ import './flows-base-node-editor.js';
 import '@platform/lib/components/platform-markdown-editor.js';
 import '../common/flows-code-language-icon.js';
 import '../editors/flows-llm-config-editor.js';
-import '@platform/lib/components/platform-json-editor.js';
+import '@platform/lib/components/schema/platform-schema-editor.js';
 import '@platform/lib/components/llm/llm-context-editor.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-button.js';
@@ -53,7 +53,6 @@ import {
 import { normalizeToolRef } from '../../_helpers/flows-tool-ref.js';
 import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from '../../_helpers/flows-mcp-tool-registry.js';
 import { sanitizeToolName } from '@platform/lib/utils/sanitize-tool-name.js';
-import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import { buildPromptVariableContext } from '../../_helpers/prompt-variable-catalog.js';
 import {
@@ -833,8 +832,15 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     }
 
     _onOutputSchemaChange(e) {
-        if (!e.detail || !('parsed' in e.detail)) return;
-        this._emitPatch({ output_schema: e.detail.parsed });
+        e.stopPropagation();
+        const detail = e.detail;
+        if (!detail || typeof detail !== 'object' || !('valid' in detail)) {
+            throw new Error('flows-llm-node-editor: schema-change detail');
+        }
+        if (detail.valid !== true) {
+            return;
+        }
+        this._emitPatch({ output_schema: detail.value });
     }
 
     _reactPatch(patch) {
@@ -1112,24 +1118,12 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this.openModal('flows.embedded_tool_config', {
             toolRef: raw,
             nodeId: '',
+            hostNodeId: this.nodeId,
             onSaved: null,
             focusMode: false,
             flowId: this.flowId,
             branchId: this.branchId,
-            onSave: (updated) => {
-                if (updated === null || updated === undefined || typeof updated !== 'object') {
-                    return;
-                }
-                if (typeof updated.tool_id !== 'string' || updated.tool_id.length === 0) {
-                    return;
-                }
-                const tools = Array.isArray(this.nodeConfig?.tools) ? [...this.nodeConfig.tools] : [];
-                const next = tools.map((t) => {
-                    const id = typeof t === 'string' ? t : t.tool_id;
-                    return id === updated.tool_id ? updated : t;
-                });
-                this._emitPatch({ tools: next });
-            },
+            onSave: null,
         });
     }
 
@@ -1364,7 +1358,6 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const raw = this.nodeConfig?.output_schema;
         const schemaObj =
             !_isUnsetOutputSchema(raw) && typeof raw === 'object' ? raw : DEFAULT_STRUCTURED_OUTPUT_SCHEMA;
-        const schema = formatJsonPretty(schemaObj);
         return html`
             <section class="block">
                 ${this._sectionHeading(
@@ -1373,10 +1366,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 )}
                 <div class="block-card content-panel">
                     <div class="block-hint">${this.t('llm_node_editor.output_schema_strict_hint')}</div>
-                    <platform-json-editor validate-json show-toolbar="false"
-                        .value=${schema}
-                        @change=${this._onOutputSchemaChange}
-                    ></platform-json-editor>
+                    <platform-schema-editor
+                        .value=${schemaObj}
+                        @schema-change=${this._onOutputSchemaChange}
+                    ></platform-schema-editor>
                 </div>
             </section>
         `;

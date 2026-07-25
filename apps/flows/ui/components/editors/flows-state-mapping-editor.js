@@ -195,7 +195,7 @@ export class FlowsStateMappingEditor extends PlatformElement {
         }
     }
 
-    _emitChange() {
+    _buildMappingFromRows() {
         if (this._isOutput) {
             const mapping = {};
             for (const r of this._rows) {
@@ -206,8 +206,7 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 }
                 mapping[a] = b;
             }
-            this.emit('change', { mapping });
-            return;
+            return mapping;
         }
         const mapping = {};
         for (const r of this._rows) {
@@ -217,7 +216,19 @@ export class FlowsStateMappingEditor extends PlatformElement {
             }
             mapping[param] = _buildInputSource(r.sourceType, r.sourcePath);
         }
-        this.emit('change', { mapping });
+        return mapping;
+    }
+
+    /**
+     * Актуальный mapping из локальных строк (для Save, когда DOM-событие не дошло до родителя).
+     * @returns {Record<string, string>}
+     */
+    getMapping() {
+        return this._buildMappingFromRows();
+    }
+
+    _emitChange() {
+        this.emit('change', { mapping: this._buildMappingFromRows() });
     }
 
     _addRow() {

@@ -860,7 +860,16 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         });
     }
     _onMapping(field, e) {
-        const mapping = e.detail?.mapping;
+        const detail = e && typeof e === 'object' ? e.detail : null;
+        // platform-field внутри mapping-editor тоже шлёт bubbled `change` с detail.value —
+        // реагируем только на emit редактора { mapping }.
+        if (!isPlainObject(detail) || !Object.prototype.hasOwnProperty.call(detail, 'mapping')) {
+            return;
+        }
+        if (typeof e.stopPropagation === 'function') {
+            e.stopPropagation();
+        }
+        const mapping = detail.mapping;
         this._emitPatch({ [field]: isPlainObject(mapping) ? mapping : {} });
     }
 

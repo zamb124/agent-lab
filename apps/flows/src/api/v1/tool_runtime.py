@@ -6,7 +6,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 from fastapi import APIRouter, HTTPException
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.runtime.exceptions import FlowInterrupt
@@ -22,12 +22,15 @@ from core.capabilities import (
 )
 from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
+from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
+
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["tool-runtime"])
 _RESERVED_SDK_METHODS = frozenset({"call", "then"})
@@ -181,6 +184,20 @@ async def call_tool_runtime(
                     correlation_id=str(exc.correlation_id) if exc.correlation_id is not None else None,
                 ),
             )
+        except ValidationError as exc:
+            logger.info(
+                "tool_runtime.arguments_invalid tool_id=%s error_count=%s",
+                request.tool_id,
+                exc.error_count(),
+            )
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "tool_id": request.tool_id,
+                    "message": "Tool arguments failed validation",
+                    "errors": exc.errors(),
+                },
+            ) from exc
         return CapabilityCallResponse(
             status="ok",
             result=result,

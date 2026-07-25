@@ -21,6 +21,7 @@ import {
     toolRefToInitialNode,
     registryToolItemToNode,
     nodeConfigToToolRef,
+    replaceToolRefInToolsList,
 } from '../_helpers/flows-tool-ref.js';
 
 export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
@@ -33,6 +34,8 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         onSaved: { attribute: false },
         toolRef: { type: Object, attribute: false },
         nodeId: { type: String, attribute: false },
+        /** llm_node id — Save toolRef пишет прямо в editor.branchData.nodes[hostNodeId].tools */
+        hostNodeId: { type: String, attribute: false },
         flowId: { type: String, attribute: false },
         branchId: { type: String, attribute: false },
         focusMode: { type: Boolean, attribute: false },
@@ -90,6 +93,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         this.onSaved = null;
         this.toolRef = null;
         this.nodeId = '';
+        this.hostNodeId = '';
         this.flowId = '';
         this.branchId = 'base';
         this.focusMode = false;
@@ -248,7 +252,23 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             const byId = this._tools.byId;
             const item = byId && isPlainObject(byId) ? byId[this._registryToolId] : null;
             if (item) {
-                this._node = registryToolItemToNode(item);
+                const base = registryToolItemToNode(item);
+                // Сохраняем mapping с текущего toolRef (llm_node.tools), иначе registry
+                // затирает input/output/state_mapping при повторном открытии.
+                const raw = isPlainObject(this.toolRef) ? this.toolRef : null;
+                const merged = { ...base };
+                if (raw !== null) {
+                    if (isPlainObject(raw.input_mapping)) {
+                        merged.input_mapping = raw.input_mapping;
+                    }
+                    if (isPlainObject(raw.output_mapping)) {
+                        merged.output_mapping = raw.output_mapping;
+                    }
+                    if (isPlainObject(raw.state_mapping)) {
+                        merged.state_mapping = raw.state_mapping;
+                    }
+                }
+                this._node = merged;
                 this._editorNodeId = this._registryToolId;
                 this._loadPhase = 'ready';
                 this._registryToolId = null;
@@ -300,6 +320,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         if (this._loadPhase !== 'ready' || this._node === null) {
             return;
         }
+        this._flushMappingEditorsIntoNode();
         const flowId = asString(this.flowId).trim();
         const nodeId = asString(this.nodeId).trim();
         let flow = isPlainObject(this._flowSnapshot) ? this._flowSnapshot : this._flows.byId[flowId];
@@ -324,10 +345,94 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         this.closeAfterSave();
     }
 
+    _commitToolRefToHostNode(ref) {
+        const hostNodeId = asString(this.hostNodeId).trim();
+        if (hostNodeId.length === 0) {
+            throw new Error('flows-embedded-tool-config-modal: hostNodeId required');
+        }
+        const editorState = asObject(this._editor.state);
+        const branchData = isPlainObject(editorState.branchData) ? editorState.branchData : null;
+        if (branchData === null || !isPlainObject(branchData.nodes)) {
+            throw new Error('flows-embedded-tool-config-modal: editor branchData.nodes required');
+        }
+        const hostNode = branchData.nodes[hostNodeId];
+        if (!isPlainObject(hostNode)) {
+            throw new Error(`flows-embedded-tool-config-modal: host node not found: ${hostNodeId}`);
+        }
+        const nextTools = replaceToolRefInToolsList(hostNode.tools, ref);
+        const nodes = {
+            ...branchData.nodes,
+            [hostNodeId]: { ...hostNode, tools: nextTools },
+        };
+        const nextData = { ...branchData, nodes };
+        this._editor.updateBranchData({ data: nextData });
+        this._editor.setDirty({ dirty: true });
+        this._editor.pushHistory({ snapshot: nextData });
+    }
+
+    /**
+     * Mapping editor держит строки локально; если DOM-change не дошёл до _node —
+     * перед Save забираем mapping напрямую из редактора.
+     */
+    _flushMappingEditorsIntoNode() {
+        const root = this.renderRoot || this;
+        const editors = [];
+        const collect = (node) => {
+            if (!node || typeof node.querySelectorAll !== 'function') {
+                return;
+            }
+            node.querySelectorAll('flows-state-mapping-editor').forEach((el) => editors.push(el));
+            node.querySelectorAll('*').forEach((el) => {
+                if (el.shadowRoot) {
+                    collect(el.shadowRoot);
+                }
+            });
+        };
+        collect(root);
+        if (editors.length === 0) {
+            return;
+        }
+        const n = asObject(this._node);
+        if (n === null) {
+            return;
+        }
+        let next = { ...n };
+        let changed = false;
+        for (const editor of editors) {
+            if (typeof editor.getMapping !== 'function') {
+                continue;
+            }
+            const mapping = editor.getMapping();
+            if (!isPlainObject(mapping)) {
+                continue;
+            }
+            const kind = asString(editor.kind);
+            if (kind === 'output') {
+                const field = asString(next.type) === 'mcp' || asString(next.type) === 'external_api'
+                    ? 'state_mapping'
+                    : 'output_mapping';
+                next = { ...next, [field]: mapping };
+                changed = true;
+            } else {
+                next = { ...next, input_mapping: mapping };
+                changed = true;
+            }
+        }
+        if (changed) {
+            this._node = next;
+            this.isDirty = true;
+        }
+    }
+
     _saveToolRef() {
         if (this._node === null) return;
+        this._flushMappingEditorsIntoNode();
         const ref = nodeConfigToToolRef(this._node);
-        if (typeof this.onSave === 'function') {
+        const hostNodeId = asString(this.hostNodeId).trim();
+        if (hostNodeId.length > 0) {
+            // Прямой commit в editor state — не зависит от detached onSave родителя.
+            this._commitToolRefToHostNode(ref);
+        } else if (typeof this.onSave === 'function') {
             this.onSave(ref);
         }
         this.closeAfterSave();

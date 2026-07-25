@@ -23,7 +23,7 @@ from core.http.client import HttpRequestKwargs
 from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_log_context, get_logger
 from core.test_scope import TEST_SCOPE_HEADER, resolve_test_scope
-from core.types import JsonValue, require_json_value
+from core.types import JsonValue, parse_json_value, require_json_value
 
 logger = get_logger(__name__)
 
@@ -35,9 +35,40 @@ NAMESPACE_HEADER = "X-Platform-Namespace"
 
 
 class ServiceClientError(Exception):
-    """Ошибка межсервисного взаимодействия"""
+    """Ошибка межсервисного взаимодействия."""
 
-    pass
+    status_code: int | None
+    response_text: str | None
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        response_text: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.response_text = response_text
+
+    @property
+    def is_client_error(self) -> bool:
+        return self.status_code is not None and 400 <= self.status_code < 500
+
+    def http_detail(self) -> JsonValue | str:
+        """Тело для HTTPException.detail: FastAPI `detail` из JSON peer-ответа, иначе текст."""
+        if self.response_text is None:
+            return str(self)
+        response_text = self.response_text.strip()
+        if response_text == "":
+            return str(self)
+        try:
+            parsed = parse_json_value(response_text, "service_client.response")
+        except ValueError:
+            return self.response_text
+        if isinstance(parsed, dict) and "detail" in parsed:
+            return parsed["detail"]
+        return parsed
 
 
 class ServiceClient:
@@ -169,10 +200,12 @@ class ServiceClient:
 
         except httpx.HTTPStatusError as e:
             raise ServiceClientError(
-                f"HTTP {e.response.status_code} при запросе к {service}: {e.response.text}"
-            )
+                f"HTTP {e.response.status_code} при запросе к {service}: {e.response.text}",
+                status_code=e.response.status_code,
+                response_text=e.response.text,
+            ) from e
         except Exception as e:
-            raise ServiceClientError(f"Ошибка запроса к {service}: {e}")
+            raise ServiceClientError(f"Ошибка запроса к {service}: {e}") from e
 
     async def get(
         self,

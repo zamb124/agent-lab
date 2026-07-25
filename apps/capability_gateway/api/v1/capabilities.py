@@ -1,6 +1,6 @@
 """HTTP API capability-gateway."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from apps.capability_gateway.dependencies import ContainerDep
 from core.capabilities import (
@@ -10,6 +10,7 @@ from core.capabilities import (
     CapabilityLanguage,
     CapabilityManifest,
 )
+from core.clients.service_client import ServiceClientError
 
 router = APIRouter(prefix="/capabilities", tags=["capabilities"])
 
@@ -32,4 +33,11 @@ async def call_capability(
     container: ContainerDep,
     request: CapabilityCallRequest,
 ) -> CapabilityCallResponse:
-    return await container.capability_registry.call(request)
+    try:
+        return await container.capability_registry.call(request)
+    except ServiceClientError as exc:
+        # 4xx peer (например tool-runtime 422) — не маскировать под 500 gateway.
+        status_code = exc.status_code
+        if status_code is not None and 400 <= status_code < 500:
+            raise HTTPException(status_code=status_code, detail=exc.http_detail()) from exc
+        raise

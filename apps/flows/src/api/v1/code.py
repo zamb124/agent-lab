@@ -1349,6 +1349,42 @@ def _validate_node_config(config: JsonObject) -> None:
             raise ValueError("tool_name обязателен для mcp")
 
 
+def _graph_node_config_allowed_keys() -> frozenset[str]:
+    """Имена полей GraphNodeConfig и их alias'ы (editor/API JSON)."""
+    keys: set[str] = set()
+    for field_name, field_info in GraphNodeConfig.model_fields.items():
+        keys.add(field_name)
+        alias = field_info.alias
+        if isinstance(alias, str) and alias:
+            keys.add(alias)
+    return frozenset(keys)
+
+
+_GRAPH_NODE_CONFIG_ALLOWED_KEYS: frozenset[str] = _graph_node_config_allowed_keys()
+
+
+def _graph_node_config_for_execute(config: JsonObject) -> JsonObject:
+    """
+    Проекция editor/tool payload в GraphNodeConfig.
+
+    UI редактор tool может прислать catalog-поля ToolReference
+    (tags/title/params/code_mode/permission/react_role) — для execute они
+    не нужны и запрещены GraphNodeConfig(extra=forbid).
+    """
+    cleaned: JsonObject = {
+        key: value
+        for key, value in config.items()
+        if key in _GRAPH_NODE_CONFIG_ALLOWED_KEYS
+    }
+    raw_name = cleaned.get("name")
+    name_empty = not isinstance(raw_name, str) or not raw_name.strip()
+    if name_empty:
+        title = config.get("title")
+        if isinstance(title, str) and title.strip():
+            cleaned["name"] = title
+    return cleaned
+
+
 async def _build_node_config(request: ExecuteRequest) -> JsonObject:
     """Строит node_config из ExecuteRequest."""
     config = require_json_object(copy.deepcopy(request.node_config), "execute.node_config")
@@ -1358,6 +1394,7 @@ async def _build_node_config(request: ExecuteRequest) -> JsonObject:
     if request.entrypoint is not None:
         config["entrypoint"] = request.entrypoint
 
+    config = _graph_node_config_for_execute(config)
     _validate_node_config(config)
     _ = GraphNodeConfig.model_validate(config)
 

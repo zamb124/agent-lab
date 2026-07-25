@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import copy
-from typing import ClassVar, Self
+from typing import ClassVar, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -59,6 +59,21 @@ class ToolReference(BaseModel):
         default_factory=list,
         description="Группы с доступом к tool. Пустой список = доступ для всех",
     )
+    input_mapping: JsonObject = Field(
+        default_factory=dict,
+        description=(
+            "Маппинг входов при открытии tool как ноды в редакторе / node-as-tool: "
+            "target -> @state/@var или JSON-константа"
+        ),
+    )
+    output_mapping: dict[str, str] | None = Field(
+        default=None,
+        description="Маппинг выходов tool-as-node в state; None = без remapping",
+    )
+    state_mapping: JsonObject = Field(
+        default_factory=dict,
+        description="Дополнительный state mapping tool-as-node (MCP/editor)",
+    )
 
     @field_validator("permission", mode="before")
     @classmethod
@@ -66,6 +81,18 @@ class ToolReference(BaseModel):
         if v is None:
             return []
         return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def strip_graph_node_type(cls, data: object) -> object:
+        """UI editor пишет type=code|mcp в tool ref; у ToolReference поля type нет."""
+        if not isinstance(data, dict):
+            return data
+        payload = cast(JsonObject, data)
+        raw_type = payload.get("type")
+        if raw_type not in {"code", "mcp"}:
+            return payload
+        return {key: value for key, value in payload.items() if key != "type"}
 
     @model_validator(mode="after")
     def default_display_name(self) -> Self:

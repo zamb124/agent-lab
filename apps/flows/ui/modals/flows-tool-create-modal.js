@@ -9,6 +9,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-segmented-control.js';
+import '@platform/lib/components/schema/platform-schema-editor.js';
 import '../components/editors/flows-code-editor.js';
 import { asString } from '../_helpers/flows-resolvers.js';
 import {
@@ -33,7 +34,8 @@ export class FlowsToolCreateModal extends PlatformFormModal {
         _description: { state: true },
         _code: { state: true },
         _language: { state: true },
-        _schemaJson: { state: true },
+        _parametersSchema: { state: true },
+        _schemaValid: { state: true },
         _codeValidationStatus: { state: true },
         _codeValidationMessage: { state: true },
     };
@@ -98,7 +100,8 @@ export class FlowsToolCreateModal extends PlatformFormModal {
         this._description = '';
         this._language = 'python';
         this._code = starterCodeForLanguage(this._language);
-        this._schemaJson = JSON.stringify(EMPTY_PARAMETERS_SCHEMA, null, 2);
+        this._parametersSchema = { ...EMPTY_PARAMETERS_SCHEMA, properties: {} };
+        this._schemaValid = true;
         this._codeValidationStatus = 'idle';
         this._codeValidationMessage = '';
         this._codeValidationTimer = 0;
@@ -281,15 +284,23 @@ export class FlowsToolCreateModal extends PlatformFormModal {
             </div>
             <div class="field">
                 <label>${this.t('tool_create_modal.field_schema')}</label>
-                <flows-code-editor
-                    language="json"
-                    .value=${this._schemaJson}
-                    @change=${(e) => {
-                        const v = asString(e.detail?.value);
-                        this._schemaJson = v.length > 0 ? v : JSON.stringify(EMPTY_PARAMETERS_SCHEMA, null, 2);
+                <platform-schema-editor
+                    .value=${this._parametersSchema}
+                    @schema-change=${(e) => {
+                        const detail = e.detail;
+                        if (!detail || typeof detail !== 'object' || !('valid' in detail)) {
+                            throw new Error('flows-tool-create-modal: schema-change detail');
+                        }
+                        this._schemaValid = detail.valid === true;
+                        if (detail.valid === true) {
+                            this._parametersSchema =
+                                detail.value && typeof detail.value === 'object'
+                                    ? detail.value
+                                    : { ...EMPTY_PARAMETERS_SCHEMA, properties: {} };
+                        }
                         this.isDirty = true;
                     }}
-                ></flows-code-editor>
+                ></platform-schema-editor>
             </div>
         `;
     }
@@ -297,6 +308,7 @@ export class FlowsToolCreateModal extends PlatformFormModal {
     renderFooter() {
         const valid = TOOL_ID_PATTERN.test(this._toolId)
             && this._name.trim()
+            && this._schemaValid
             && this._codeValidationStatus !== 'pending'
             && this._codeValidationStatus !== 'invalid';
         return html`
@@ -308,13 +320,11 @@ export class FlowsToolCreateModal extends PlatformFormModal {
     }
 
     _save() {
-        let parameters_schema;
-        try {
-            parameters_schema = JSON.parse(this._schemaJson);
-        } catch (err) {
+        if (!this._schemaValid) {
             this.toast('flows:tool_create_modal.toast_schema_invalid', { type: 'error' });
             return;
         }
+        const parameters_schema = this._parametersSchema;
         if (!parameters_schema || typeof parameters_schema !== 'object' || Array.isArray(parameters_schema)) {
             this.toast('flows:tool_create_modal.toast_schema_invalid', { type: 'error' });
             return;
