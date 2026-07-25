@@ -271,6 +271,11 @@ jobs:
           HELM_RELEASE: ${{ env.K8S_RELEASE }}
         run: bash deploy/scripts/helm_clear_pending_release.sh
 
+      - name: Fix kubelet Node RBAC (system:node → system:nodes)
+        # Пустой subjects у system:node + деградация Node authorizer → kubelet не стартует
+        # новые Pod (Pending без Events), DNS Job таймаутится с 0 Active.
+        run: bash deploy/scripts/fix-kubelet-node-rbac.sh
+
       - name: Setup brand DNS (Reg.ru A records, egress via master node Job)
         env:
           REGRU_USERNAME: ${{ secrets.REGRU_USERNAME }}
