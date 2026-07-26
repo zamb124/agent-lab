@@ -67,7 +67,10 @@ async def _read_persisted_audio_bytes(
     """
     record = await container.files_service.get(file_id)
     s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-    audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
+    try:
+        audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
+    finally:
+        await s3.close()
     return audio_bytes, record.original_name, record.content_type
 
 

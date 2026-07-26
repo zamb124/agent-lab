@@ -11,7 +11,6 @@ from core.types import JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
 
-_CAILA_OPENAI_ENDPOINT = "/api/openai/v1/chat/completions"
 _CAILA_OPENAI_API = "OPENAI"
 
 
@@ -56,9 +55,10 @@ class CailaModelCatalogAdapter(OpenAICompatibleModelCatalogAdapter):
             headers=self.provider_model_list_headers(),
             response_label="caila.models.response",
         )
-        if not isinstance(payload, list):
-            raise ValueError("caila models response должен быть массивом")
-        records = self._extract_caila_model_records(payload)
+        if isinstance(payload, list):
+            records = self._extract_caila_model_records(payload)
+        else:
+            records = self._extract_provider_model_records(payload, "caila")
         merged_records = self._merge_model_records(records)
         if probe_embeddings:
             merged_records = await self._probe_embedding_dimensions(merged_records)

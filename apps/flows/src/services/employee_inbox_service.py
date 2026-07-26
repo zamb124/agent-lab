@@ -19,6 +19,7 @@ from __future__ import annotations
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
+from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
 from core.identity.flow_employee import is_flow_employee, require_flow_employee_flow_id
 from core.logging import get_logger
@@ -155,10 +156,6 @@ class EmployeeInboxService:
         if sender is None:
             raise ValueError(f"employee inbox: sender {sender_user_id} not found")
 
-        flow_config = await container.flow_repository.get(flow_id)
-        if flow_config is None:
-            raise ValueError(f"employee inbox: flow {flow_id} not found")
-
         initiator_context = build_job_context(
             company=company,
             user=sender,
@@ -167,38 +164,50 @@ class EmployeeInboxService:
             session_id="",
             channel="employee_inbox",
         )
-        execution = await resolve_execution_context(
-            container,
-            flow_config=flow_config,
-            initiator_context=initiator_context,
-        )
+        previous_context = get_context()
+        set_context(initiator_context)
+        try:
+            flow_config = await container.flow_repository.get(flow_id)
+            if flow_config is None:
+                raise ValueError(f"employee inbox: flow {flow_id} not found")
 
-        session_id = f"{flow_id}:{context_id}"
-        logger.info(
-            "employee_inbox.run",
-            flow_id=flow_id,
-            employee_user_id=employee_user_id,
-            source=source,
-            context_id=context_id,
-        )
-        _ = await enqueue(
-            TASK_PROCESS_FLOW,
-            flow_id=flow_id,
-            session_id=session_id,
-            user_id=execution.context.user.user_id,
-            initiator_user_id=execution.initiator_user_id,
-            content=text,
-            branch_id=branch_id,
-            channel="a2a",
-            task_id=context_id,
-            context_id=context_id,
-            metadata=metadata,
-            is_resume=False,
-            files=[],
-            context_data=execution.context.to_dict(),
-            trace_context=None,
-            background_kind="employee_inbox",
-        )
+            execution = await resolve_execution_context(
+                container,
+                flow_config=flow_config,
+                initiator_context=initiator_context,
+            )
+
+            session_id = f"{flow_id}:{context_id}"
+            logger.info(
+                "employee_inbox.run",
+                flow_id=flow_id,
+                employee_user_id=employee_user_id,
+                source=source,
+                context_id=context_id,
+            )
+            _ = await enqueue(
+                TASK_PROCESS_FLOW,
+                flow_id=flow_id,
+                session_id=session_id,
+                user_id=execution.context.user.user_id,
+                initiator_user_id=execution.initiator_user_id,
+                content=text,
+                branch_id=branch_id,
+                channel="a2a",
+                task_id=context_id,
+                context_id=context_id,
+                metadata=metadata,
+                is_resume=False,
+                files=[],
+                context_data=execution.context.to_dict(),
+                trace_context=None,
+                background_kind="employee_inbox",
+            )
+        finally:
+            if previous_context is None:
+                clear_context()
+            else:
+                set_context(previous_context)
         return True
 
     async def _write_back_started(

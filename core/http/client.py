@@ -48,6 +48,15 @@ _HTTPX_REQUEST_ONLY_KEYS = frozenset({"content", "data", "files", "json", "exten
 # Базовый набор статусов для SMART (401 добавляется через settings.proxy.retry_http_401_via_proxy).
 HTTP_STATUS_RETRY_VIA_PROXY = frozenset({403, 429, 451})
 
+# Google Generative Language и аналоги: direct из RU часто даёт 400 FAILED_PRECONDITION
+# ("User location is not supported"), при этом сеть успешна — DIRECT_FIRST не уходит в proxy.
+_GEO_BLOCK_BODY_MARKERS: frozenset[str] = frozenset(
+    {
+        "user location is not supported",
+        "failed_precondition",
+    }
+)
+
 
 class HttpRequestKwargs(TypedDict, total=False):
     content: RequestContent | None
@@ -141,6 +150,20 @@ def _retry_http_statuses_for_smart() -> frozenset[int]:
     if get_settings().proxy.retry_http_401_via_proxy:
         s.add(401)
     return frozenset(s)
+
+
+def _response_indicates_geo_block(response: httpx.Response) -> bool:
+    """Узкий маркер geo-block (не любой HTTP 400)."""
+    if response.status_code != 400:
+        return False
+    body = response.text.lower()
+    return any(marker in body for marker in _GEO_BLOCK_BODY_MARKERS)
+
+
+def _should_retry_http_via_proxy(response: httpx.Response) -> bool:
+    if response.status_code in _retry_http_statuses_for_smart():
+        return True
+    return _response_indicates_geo_block(response)
 
 
 async def _request_direct_burst(
@@ -561,8 +584,7 @@ class SmartProxyClient:
                         await egress_prefer_proxy_set(origin)
                     return response
                 raise
-            retry_status = _retry_http_statuses_for_smart()
-            if response.status_code in retry_status and _platform_proxy_active():
+            if _should_retry_http_via_proxy(response) and _platform_proxy_active():
                 logger.warning(
                     "HTTP %s для %s, повтор через platform proxy",
                     response.status_code,
@@ -731,8 +753,7 @@ class _StreamContextManager:
                 else:
                     raise
             else:
-                retry_status = _retry_http_statuses_for_smart()
-                if response.status_code in retry_status and _platform_proxy_active():
+                if _should_retry_http_via_proxy(response) and _platform_proxy_active():
                     logger.warning(
                         "HTTP %s для stream %s, повтор через platform proxy",
                         response.status_code,

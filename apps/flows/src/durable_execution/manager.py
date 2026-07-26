@@ -43,8 +43,11 @@ from apps.flows.src.models import SessionConfig
 from apps.flows.src.models.enums import SessionStatus
 from core.clients.redis_client import RedisClient
 from core.context import get_context
+from core.logging import get_logger
 from core.state import TERMINAL_TASK_STATES, ExecutionState, ExecutionTaskState
 from core.types import JsonObject, parse_json_object, require_json_object
+
+logger = get_logger(__name__)
 
 
 def create_initial_state(
@@ -228,15 +231,25 @@ class DurableWorkflowRuntime:
         head_state_hash = refreshed_instance.head_state_hash
         if head_state_hash is None:
             raise RuntimeError(f"Workflow instance has no head_state_hash: {session_id!r}")
-        await self._cache_projection(
-            company_id=company_id,
-            session_id=session_id,
-            state_json=self._dump_state(state),
-            head_sequence=int(refreshed_instance.head_sequence),
-            head_state_hash=head_state_hash,
-            execution_branch_id=refreshed_instance.active_execution_branch_id,
-            status=self._workflow_status_from_value(refreshed_instance.status),
-        )
+        state_json = self._dump_state(state)
+        try:
+            await self._cache_projection(
+                company_id=company_id,
+                session_id=session_id,
+                state_json=state_json,
+                head_sequence=int(refreshed_instance.head_sequence),
+                head_state_hash=head_state_hash,
+                execution_branch_id=refreshed_instance.active_execution_branch_id,
+                status=self._workflow_status_from_value(refreshed_instance.status),
+            )
+        except WorkflowProjectionMismatchError:
+            logger.error(
+                "workflow.projection_mismatch_on_read",
+                session_id=session_id,
+                expected_hash=head_state_hash,
+                computed_hash=hash_state_json(state_json),
+            )
+            _ = await self._redis.delete(cache_key)
         return state
 
     async def get_active_execution_position(
@@ -605,7 +618,15 @@ class DurableWorkflowRuntime:
         )
         sessions: list[SessionConfig] = []
         for instance in instances:
-            state = await self.get_state(instance.session_id)
+            try:
+                state = await self.get_state(instance.session_id)
+            except WorkflowProjectionMismatchError as exc:
+                logger.error(
+                    "workflow.search_sessions_skip_mismatch",
+                    session_id=instance.session_id,
+                    error=str(exc),
+                )
+                continue
             if state is None:
                 continue
             resolved_flow_id, context_id = instance.session_id.split(":", 1)

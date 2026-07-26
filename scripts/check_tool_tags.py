@@ -37,7 +37,9 @@ def _collect_errors() -> list[str]:
         module = import_module(module_name)
         tool = getattr(module, attr_name)
         tags = list(tool.get_tags())
-        tool_id = getattr(tool, "name", attr_name)
+        tool_id = tool.name
+        if not isinstance(tool_id, str) or tool_id.strip() == "":
+            raise ValueError(f"{module_name}.{attr_name}: tool.name must be non-empty str")
         if not (1 <= len(tags) <= 2):
             errors.append(
                 f"{tool_id}: expected 1–2 tags, got {len(tags)} {tags!r}"

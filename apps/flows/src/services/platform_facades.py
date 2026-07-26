@@ -157,7 +157,10 @@ async def get_file_bytes(file_id: str) -> bytes:
     if record is None:
         raise ValueError(f"Файл {file_id} не найден в хранилище")
     s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-    return await s3.download_bytes(record.s3_key)
+    try:
+        return await s3.download_bytes(record.s3_key)
+    finally:
+        await s3.close()
 
 
 async def transcribe_audio(
@@ -198,7 +201,10 @@ async def transcribe_audio(
     container = require_current_container()
     record = await container.files_service.get(file_id.strip())
     s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-    audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
+    try:
+        audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
+    finally:
+        await s3.close()
 
     override = SpeechOverride(
         provider=_speech_provider(provider),

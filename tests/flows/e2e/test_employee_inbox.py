@@ -94,6 +94,39 @@ async def test_work_item_assigned_enqueues_with_write_back(
     await client.delete(f"/flows/api/v1/flows/{flow_id}")
 
 
+async def test_work_item_assigned_enqueues_without_request_context(
+    app, client, container, unique_id, system_user_id
+):
+    """Consumer-path: нет HTTP Context — inbox сам ставит company перед FlowRepository."""
+    from core.context import clear_context, get_context
+
+    _ = app
+    flow_id = f"inbox_wi_nocontext_{unique_id}"
+    await _provision_employee_flow(client, flow_id, system_user_id)
+    emp_id = flow_employee_user_id(flow_id)
+
+    work_item = await container.work_item_service.create_manual_task(
+        company_id="system",
+        title=f"Inbox nocontext {unique_id}",
+        created_by=SystemActor(),
+    )
+
+    clear_context()
+    assert get_context() is None
+
+    dispatched = await container.employee_inbox_service.dispatch_work_item_assigned(
+        company_id="system",
+        employee_user_id=emp_id,
+        sender_user_id=system_user_id,
+        work_item_id=work_item.work_item_id,
+        text="do the task without request context",
+    )
+    assert dispatched is True
+    assert get_context() is None
+
+    await client.delete(f"/flows/api/v1/flows/{flow_id}")
+
+
 async def test_not_flow_employee_ignored(app, container, unique_id, system_user_id):
     """Обычный пользователь, не сотрудник-агент — диспатч игнорируется."""
     _ = app

@@ -20,6 +20,7 @@ from core.ai.providers import (
 )
 from core.config import BaseSettings, get_settings
 from core.config.llm_openai_compat import (
+    normalize_llm_api_key,
     resolve_provider_openai_v1_base_url,
     yandex_llm_openai_root_from_provider_cfg,
     yandex_provider_http_headers,
@@ -470,7 +471,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
                 url,
                 headers=headers,
                 timeout=30.0,
-                strategy=ProxyStrategy.DIRECT_FIRST,
+                strategy=ProxyStrategy.SMART,
                 direct_attempts=3,
                 proxy_attempts=3,
             )
@@ -530,8 +531,8 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
         cfg = self._configured_llm_provider()
         if cfg is None:
             raise ValueError(f"{self.provider} provider config не настроен")
-        api_key = cfg.api_key
-        if not isinstance(api_key, str) or not api_key.strip():
+        api_key = normalize_llm_api_key(cfg.api_key)
+        if not api_key:
             raise ValueError(f"{self.provider} API key не настроен")
         headers = {"Content-Type": "application/json"}
         if self.provider == "yandex":
@@ -540,7 +541,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
                 **yandex_provider_http_headers(yandex_config),
                 "Content-Type": "application/json",
             }
-        headers["Authorization"] = f"Bearer {api_key.strip()}"
+        headers["Authorization"] = f"Bearer {api_key}"
         if self.provider == "openrouter":
             openrouter_config = cast(OpenRouterProviderConfig, cfg)
             site_url = openrouter_config.site_url
@@ -569,7 +570,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
                 return False
             return True
         cfg = self._configured_llm_provider()
-        if cfg is None or not cfg.api_key:
+        if cfg is None or not normalize_llm_api_key(cfg.api_key):
             return False
         if self.provider == "yandex":
             yandex_config = cast(YandexLLMProviderConfig, cfg)
@@ -592,7 +593,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
         if cfg is None:
             raise ValueError(f"{self.provider} provider config не настроен")
         if self.provider == "google":
-            api_key = (cfg.api_key or "").strip()
+            api_key = normalize_llm_api_key(cfg.api_key)
             if not api_key:
                 raise ValueError("google provider api_key не настроен")
             return {
@@ -644,8 +645,9 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
                 headers=self.embedding_probe_headers(),
                 json={"model": model_id, "input": "dimension probe"},
                 timeout=self.embedding_probe_timeout_seconds(),
-                strategy=ProxyStrategy.DIRECT_ONLY,
+                strategy=ProxyStrategy.SMART,
                 direct_attempts=1,
+                proxy_attempts=2,
             )
         except (httpx.HTTPError, OSError, ValueError) as exc:
             logger.info(
@@ -682,8 +684,9 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
                 headers=self.embedding_probe_headers(),
                 json={"inputs": "dimension probe"},
                 timeout=_EMBEDDING_PROBE_TIMEOUT_SECONDS,
-                strategy=ProxyStrategy.DIRECT_ONLY,
+                strategy=ProxyStrategy.SMART,
                 direct_attempts=1,
+                proxy_attempts=2,
             )
         except (httpx.HTTPError, OSError, ValueError) as exc:
             logger.info(

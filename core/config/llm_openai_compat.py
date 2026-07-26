@@ -61,6 +61,11 @@ def _norm_api_key(raw: str | None) -> str:
     return s
 
 
+def normalize_llm_api_key(raw: str | None) -> str:
+    """Пустая строка, если ключ отсутствует или это conf-placeholder ``YOUR_*_API_KEY``."""
+    return _norm_api_key(raw)
+
+
 def _active_llm_provider_block(
     llm: LLMConfig,
 ) -> tuple[str, _LLMProviderConfig | None]:

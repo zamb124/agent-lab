@@ -2040,7 +2040,10 @@ class CapabilityRegistry:
             record = await self._container.files_service.get(file_id)
 
             s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-            audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
+            try:
+                audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
+            finally:
+                await s3.close()
 
             result = await transcribe_audio_bytes(
                 company_id=company.company_id,

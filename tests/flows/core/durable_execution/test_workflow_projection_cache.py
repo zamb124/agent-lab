@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -88,3 +88,52 @@ async def test_projection_cache_deleted_on_terminal() -> None:
 
     assert redis.set_calls == []
     assert redis.delete_calls == ["flows:workflow_projection:company-1:flow:ctx-1"]
+
+
+@pytest.mark.asyncio
+async def test_get_state_returns_rehydrated_state_on_projection_mismatch() -> None:
+    """Read-path: mismatch при кешировании не роняет get_state — state из ledger отдаётся."""
+    from apps.flows.src.durable_execution.hashing import hash_state_json
+    from apps.flows.src.durable_execution.repository import WorkflowProjectionMismatchError
+
+    state = _minimal_state()
+    state_json = DurableWorkflowRuntime._dump_state(state)
+    good_hash = hash_state_json(state_json)
+    bad_hash = "0" * 64
+    assert good_hash != bad_hash
+
+    instance = MagicMock()
+    instance.head_sequence = 3
+    instance.head_state_hash = bad_hash
+    instance.active_execution_branch_id = "branch-1"
+    instance.status = WorkflowStatus.running.value
+
+    repository = AsyncMock()
+    repository.get_instance = AsyncMock(return_value=instance)
+    repository.load_state_at_head = AsyncMock(return_value=(state, instance))
+
+    redis = _RecordingRedis()
+
+    async def _redis_get(_key: str) -> str | None:
+        return None
+
+    redis.get = _redis_get  # type: ignore[method-assign]
+
+    runtime = DurableWorkflowRuntime(repository=repository, redis_client=redis)  # type: ignore[arg-type]
+    runtime._company_id = lambda: "company-1"  # type: ignore[method-assign]
+    runtime._get_cached_head = AsyncMock(return_value=None)  # type: ignore[method-assign]
+
+    loaded = await runtime.get_state("flow:ctx-1")
+    assert loaded is not None
+    assert loaded.session_id == "flow:ctx-1"
+    assert "flows:workflow_projection:company-1:flow:ctx-1" in redis.delete_calls
+    with pytest.raises(WorkflowProjectionMismatchError):
+        await runtime._cache_projection(  # noqa: SLF001
+            company_id="company-1",
+            session_id="flow:ctx-1",
+            state_json=state_json,
+            head_sequence=3,
+            head_state_hash=bad_hash,
+            execution_branch_id="branch-1",
+            status=WorkflowStatus.running,
+        )

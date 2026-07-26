@@ -3,6 +3,8 @@
 import asyncio
 from datetime import datetime, timezone
 
+import httpx
+
 from apps.flows.config import get_settings
 from apps.idle_worker.tasks.task_names import (
     TASK_REFRESH_PLATFORM_FREE_MODELS,
@@ -133,10 +135,29 @@ class LLMModelsService:
             logger.info("Синхронизировано %d моделей от %s", len(records), provider)
             return len(records)
         except AIProviderAdapterError as exc:
-            logger.error("Ошибка при синхронизации моделей от %s: %s", provider, exc)
+            logger.error(
+                "llm_models.sync_provider_failed",
+                provider=provider,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+            return 0
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "llm_models.sync_provider_failed",
+                provider=provider,
+                error_type=type(exc).__name__,
+                status_code=exc.response.status_code,
+                error=str(exc),
+            )
             return 0
         except Exception as exc:
-            logger.error("Ошибка при синхронизации моделей от %s: %s", provider, exc)
+            logger.error(
+                "llm_models.sync_provider_failed",
+                provider=provider,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
             return 0
 
     async def sync_models(self) -> int:

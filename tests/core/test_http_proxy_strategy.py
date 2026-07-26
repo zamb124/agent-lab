@@ -406,6 +406,93 @@ class TestProxyStrategy:
         first.aclose.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_smart_geo_400_retries_via_proxy_when_configured(self):
+        """SMART: Google geo 400 напрямую, затем успех через platform proxy."""
+        first = MagicMock()
+        first.status_code = 400
+        first.text = (
+            '{"error":{"code":400,"message":"User location is not supported for the API use.",'
+            '"status":"FAILED_PRECONDITION"}}'
+        )
+        first.aclose = AsyncMock()
+
+        second = MagicMock()
+        second.status_code = 200
+        type(second).is_success = PropertyMock(return_value=True)
+
+        class FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                self.proxy_kw = kwargs.get("proxy")
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            async def request(self, method, url, **kwargs):
+                if self.proxy_kw is None:
+                    return first
+                return second
+
+        mock_settings = MagicMock()
+        mock_settings.proxy.get_next_proxy.return_value = "http://127.0.0.1:1"
+        mock_settings.proxy.connect_timeout = 15.0
+        mock_settings.proxy.mark_last_proxy_failed = MagicMock()
+
+        with patch("core.http.client.egress_prefer_proxy_get", new_callable=AsyncMock, return_value=False):
+            with patch("core.http.client.egress_prefer_proxy_set", new_callable=AsyncMock):
+                with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
+                    with patch("core.http.client._platform_proxy_active", return_value=True):
+                        with patch(
+                            "core.http.client.SmartProxyClient._get_settings",
+                            return_value=mock_settings,
+                        ):
+                            async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
+                                r = await client.request(
+                                    "GET",
+                                    "https://generativelanguage.googleapis.com/v1beta/openai/models",
+                                )
+
+        assert r.status_code == 200
+        first.aclose.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_smart_plain_400_does_not_retry_via_proxy(self):
+        """SMART: обычный 400 без geo-маркеров не уходит в proxy."""
+        first = MagicMock()
+        first.status_code = 400
+        first.text = '{"error":{"message":"bad request"}}'
+        first.aclose = AsyncMock()
+
+        class FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                self.proxy_kw = kwargs.get("proxy")
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            async def request(self, method, url, **kwargs):
+                return first
+
+        with patch("core.http.client.egress_prefer_proxy_get", new_callable=AsyncMock, return_value=False):
+            with patch(
+                "core.http.client.SmartProxyClient._request_via_proxy_rotation",
+                new_callable=AsyncMock,
+            ) as mock_rotate:
+                with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
+                    with patch("core.http.client._platform_proxy_active", return_value=True):
+                        async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
+                            r = await client.request("GET", "https://api.example.com/x")
+
+        assert r.status_code == 400
+        mock_rotate.assert_not_called()
+        first.aclose.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_smart_403_no_proxy_when_not_configured(self):
         """SMART: 403 и прокси выключен — отдаём первый ответ."""
         first = MagicMock()
