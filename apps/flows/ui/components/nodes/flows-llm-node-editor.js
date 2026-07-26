@@ -1412,7 +1412,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         if (this.nodeConfig?.structured_output) return '';
         const react = this.nodeConfig?.react && typeof this.nodeConfig.react === 'object' ? this.nodeConfig.react : {};
         const loopMode = react.loop_mode === 'explicit' ? 'explicit' : 'auto';
-        const maxIter = typeof react.max_iterations === 'number' ? react.max_iterations : 10;
+        const maxIter = typeof react.max_iterations === 'number' ? react.max_iterations : 25;
         const exitTool =
             typeof react.exit_tool === 'string' && react.exit_tool.length > 0 ? react.exit_tool : 'finish';
         const strict = react.strict === undefined ? true : Boolean(react.strict);

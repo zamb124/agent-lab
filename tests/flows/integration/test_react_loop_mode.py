@@ -13,8 +13,9 @@ import time
 import pytest
 
 from apps.flows.src.container import get_container
-from apps.flows.src.models import FlowConfig
+from apps.flows.src.models import FlowConfig, ReactConfig
 from apps.flows.src.runtime.flow import Flow
+from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from core.errors import FlowExecutionError
 from core.state import ExecutionState
 from core.types import JsonObject
@@ -660,6 +661,11 @@ class TestReactLoopModeMaxIterations:
     Тесты ограничения итераций в ReAct цикле.
     """
 
+    def test_react_config_default_max_iterations_is_25(self) -> None:
+        """Платформенный дефолт ReactConfig.max_iterations = 25."""
+        assert ReactConfig().max_iterations == 25
+        assert LlmNodeRunner.MAX_ITERATIONS == 25
+
     async def test_max_iterations_limit(self, app, unique_id, mock_llm_with_queue):
         """
         Агент падает явно при достижении max_iterations без exit tool.
@@ -710,8 +716,58 @@ class TestReactLoopModeMaxIterations:
             session_id=f"{flow.flow_id}:test-context",
             content="Loop",
         )
-        with pytest.raises(FlowExecutionError):
+        with pytest.raises(FlowExecutionError) as exc_info:
             await run_flow_state(flow, state)
+        err = exc_info.value
+        assert "reached max_iterations=3" in err.message
+        assert "iterations_used=3" in err.message
+        assert err.payload["iterations_used"] == 3
+        assert err.payload["max_iterations"] == 3
+        assert err.payload["loop_mode"] == "explicit"
+        assert err.payload["node_id"] == "agent"
+        await container.flow_repository.delete(flow_id)
+
+    async def test_auto_empty_final_response_is_not_max_iterations(
+        self, app, unique_id, mock_llm_with_queue
+    ):
+        """
+        AUTO: пустой текст без tools — empty final, не budget exhausted.
+        """
+        flow_id = f"test_empty_final_{unique_id}"
+        container = get_container()
+        flow_config = FlowConfig(
+            flow_id=flow_id,
+            name="Empty Final Agent",
+            entry="agent",
+            nodes={
+                "agent": {
+                    "type": "llm_node",
+                    "prompt": "Отвечай текстом.",
+                    "tools": [INLINE_CALCULATOR],
+                    "react": {"loop_mode": "auto", "max_iterations": 5},
+                }
+            },
+            edges=[],
+        )
+        await container.flow_repository.set(flow_config)
+        mock_llm_with_queue([{"type": "text", "content": ""}])
+        flow = await container.flow_factory.get_flow(flow_id)
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id=f"{flow.flow_id}:test-context",
+            content="Привет",
+        )
+        with pytest.raises(FlowExecutionError) as exc_info:
+            await run_flow_state(flow, state)
+        err = exc_info.value
+        assert "empty final response" in err.message
+        assert "reached max_iterations" not in err.message
+        assert err.payload["iterations_used"] == 1
+        assert err.payload["max_iterations"] == 5
+        assert err.payload["loop_mode"] == "auto"
+        assert err.payload["node_id"] == "agent"
         await container.flow_repository.delete(flow_id)
 
 

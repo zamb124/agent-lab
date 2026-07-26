@@ -977,7 +977,7 @@
     "react_loop_auto": "auto",
     "react_loop_explicit": "explicit",
     "react_max_iterations": "Max iterations",
-    "react_max_iterations_hint": "Hard cap on ReAct steps in one run. 3-10 is usually enough; higher values increase cost and latency.",
+    "react_max_iterations_hint": "Hard cap on ReAct steps in one run. 10-25 is usually enough; higher values increase cost and latency.",
     "react_strict": "Strict mode (reminder when exit_tool not used)",
     "react_exit_tool": "Exit tool",
     "react_exit_tool_hint": "Tool used by the model to end an explicit loop. The name must match the sanitized tool name visible to the LLM.",

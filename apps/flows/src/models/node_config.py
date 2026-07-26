@@ -79,7 +79,7 @@ class ReactConfig(StrictBaseModel):
         default="finish", description="Tool который завершает цикл в режиме explicit"
     )
     max_iterations: int = Field(
-        default=10, description="Максимум итераций перед принудительным выходом"
+        default=25, description="Максимум итераций перед принудительным выходом"
     )
     strict: bool = Field(
         default=True,

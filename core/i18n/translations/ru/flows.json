@@ -977,7 +977,7 @@
     "react_loop_auto": "auto",
     "react_loop_explicit": "explicit",
     "react_max_iterations": "Макс итераций",
-    "react_max_iterations_hint": "Жёсткий лимит шагов ReAct за один запуск. Обычно 3–10 достаточно; высокий лимит увеличивает стоимость и задержку.",
+    "react_max_iterations_hint": "Жёсткий лимит шагов ReAct за один запуск. Обычно 10–25 достаточно; высокий лимит увеличивает стоимость и задержку.",
     "react_strict": "Строгий режим (reminder при отсутствии exit_tool)",
     "react_exit_tool": "Exit tool",
     "react_exit_tool_hint": "Tool, которым модель явно завершает explicit loop. Имя должно совпадать с sanitized tool name, который увидит LLM.",

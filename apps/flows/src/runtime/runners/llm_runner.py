@@ -263,7 +263,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
     Stream-first: ТОЛЬКО STREAM!
     """
 
-    MAX_ITERATIONS: ClassVar[int] = 10
+    MAX_ITERATIONS: ClassVar[int] = 25
     MAX_STREAM_IDLE_RETRIES: ClassVar[int] = 4  # При idle timeout 10с — макс 50с ожидания (5 попыток × 10с)
     tools: list[BaseTool]
 
@@ -1352,16 +1352,26 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 )
                                 await self._checkpoint_state(state)
                 if not final_response:
+                    error_payload: JsonObject = {
+                        "node_id": sid,
+                        "max_iterations": max_iterations,
+                        "iterations_used": iteration,
+                        "loop_mode": loop_mode.value,
+                    }
+                    if iteration >= max_iterations:
+                        raise FlowExecutionError(
+                            message=(
+                                f"LLM node '{llm_node_label}' reached max_iterations={max_iterations} "
+                                f"without final response (iterations_used={iteration})"
+                            ),
+                            payload=error_payload,
+                        )
                     raise FlowExecutionError(
                         message=(
-                            f"LLM node '{llm_node_label}' reached max_iterations={max_iterations} "
-                            "without final response"
+                            f"LLM node '{llm_node_label}' returned empty final response "
+                            f"after {iteration} iteration(s)"
                         ),
-                        payload={
-                            "node_id": sid,
-                            "max_iterations": max_iterations,
-                            "loop_mode": loop_mode.value,
-                        },
+                        payload=error_payload,
                     )
             except FlowInterrupt:
                 await self._checkpoint_state(state)
