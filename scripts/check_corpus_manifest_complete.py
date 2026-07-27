@@ -13,8 +13,9 @@ import httpx
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from tests.core.files.corpus.manifest import ALL_PATHS, CORPUS, CORPUS_DIR
-from tests.core.files.corpus.models import READER_CORPUS_PREFIX_EXCLUDE
+# Импорт после правки sys.path: корпус тестов лежит вне пакета scripts.
+from tests.core.files.corpus.manifest import ALL_PATHS, CORPUS, CORPUS_DIR  # noqa: E402
+from tests.core.files.corpus.models import READER_CORPUS_PREFIX_EXCLUDE  # noqa: E402
 
 REPO = "Unstructured-IO/unstructured"
 BRANCH = "main"

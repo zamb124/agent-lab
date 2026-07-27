@@ -18,6 +18,8 @@ from httpx import ASGITransport, AsyncClient
 from core.worktracker.models import Board, BoardColumn, WorkItem, WorkItemState, WorkQueue
 from tests.fixtures.platform_events import (
     PlatformEventsReceive,
+)
+from tests.fixtures.platform_events import (
     platform_events_listener as open_platform_events_stream,
 )
 

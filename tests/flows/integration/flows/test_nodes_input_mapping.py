@@ -5,6 +5,9 @@
 Тестирует реальную работу маппинга в нодах.
 """
 
+from a2a.types import Message, Part
+from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
+
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.nodes import (
@@ -840,12 +843,6 @@ class TestMessagesFilter:
 
     def test_filter_all_returns_all_messages(self, container: FlowRuntimeContainer):
         """messages_filter='all' возвращает все сообщения"""
-        from a2a.types import Message, Part
-        from a2a.types.a2a_pb2 import (
-            ROLE_USER,
-            ROLE_AGENT,
-        )
-
         node = llm_node(
             container, node_id="test_node", config={"prompt": "Test", "messages_filter": "all"}
         )
@@ -889,8 +886,6 @@ class TestMessagesFilter:
         self, container: FlowRuntimeContainer
     ):
         """messages_filter='own' — только сообщения с metadata.node_id == эта нода"""
-        from a2a.types import Message, Part
-
         node = llm_node(
             container, node_id="test_node", config={"prompt": "Test", "messages_filter": "own"}
         )
@@ -941,8 +936,6 @@ class TestMessagesFilter:
 
     def test_filter_list_returns_specified_nodes(self, container: FlowRuntimeContainer):
         """messages_filter=['node1', 'node2'] — только сообщения с node_id из списка"""
-        from a2a.types import Message, Part
-
         node = llm_node(
             container,
             node_id="test_node",
@@ -1006,8 +999,6 @@ class TestMessagesFilter:
 
     def test_own_filter_full_log_not_truncated(self, container: FlowRuntimeContainer):
         """messages_filter=own сужает только срез для LLM; полный лог в state накапливается."""
-        from a2a.types import Message, Part
-
         from apps.flows.src.runtime.runners.llm_runner import new_assistant_message
 
         node = llm_node(
@@ -1058,7 +1049,10 @@ class TestMessagesFilter:
         assert u.metadata["node_id"] == "n1"
         a = new_assistant_message("a", "n1", [{"name": "t", "id": "1"}], "ctx", "tid")
         assert a.metadata["node_id"] == "n1"
-        assert a.metadata.get("tool_calls")
+        # metadata сообщения A2A — protobuf Struct: доступ по ключу и `in`,
+        # без dict-метода get.
+        assert "tool_calls" in a.metadata
+        assert len(a.metadata["tool_calls"]) == 1
         tr = new_tool_result_message("1", "ok", "n1", "ctx", "tid")
         assert tr.metadata["node_id"] == "n1"
 
@@ -1085,7 +1079,7 @@ class TestSaveToMessages:
         assert len(state.messages) == 1
         msg = state.messages[0]
         assert msg.metadata["node_id"] == "my_node"
-        assert msg.parts[0].root.text == "Result text"
+        assert msg.parts[0].text == "Result text"
 
     def test_output_mapping_from_config(self, container: FlowRuntimeContainer):
         """output_mapping можно задать в config"""

@@ -14,13 +14,13 @@ from core.events.payload_filter_fields import (
     filter_field_by_path,
     validate_event_filters_against_fields,
 )
-from core.types import JsonObject
 from core.events.registry import (
     PlatformEventCatalogEntry,
     catalog_entry_for_event_type,
     platform_event_catalog,
     register_platform_event,
 )
+from core.types import JsonObject
 from core.worktracker import events as _worktracker_events
 from core.worktracker.events import WORK_ITEM_COMMENT_CREATED
 

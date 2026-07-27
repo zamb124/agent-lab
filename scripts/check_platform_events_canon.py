@@ -28,6 +28,9 @@ REGISTER_SCAN_DIRS = ("apps", "core")
 SKIP_PARTS = {"node_modules", "__pycache__", ".git", "documentation-dist"}
 TEXT_SUFFIXES = {".py", ".js", ".md", ".mdc", ".json", ".ts", ".tsx", ".yml", ".yaml"}
 PY_SUFFIX = ".py"
+# Сколько символов тела-выражения arrow-функции просматривать: тело без
+# фигурных скобок не имеет однозначной границы без парсера JS.
+EXPRESSION_BODY_WINDOW = 200
 JS_SUFFIX = ".js"
 
 FORBIDDEN_SUBSTRINGS = (
@@ -412,15 +415,11 @@ def _extract_arrow_or_fn_handler(text: str, use_event_match_end: int) -> str | N
                 if end < 0:
                     return None
                 return text[i : end + 1]
-            # expression body: this._foo(...)
-            semi = text.find(")", i)
-            # find end of useEvent call
-            # fall through: take until `);` of useEvent
-            depth = 1  # already inside useEvent(
-            j = i
-            # We are inside useEvent(type, <expr>) — find matching close for useEvent
-            # Better: from original open paren of useEvent
-            return text[i : i + 200]
+            # Тело-выражение без фигурных скобок (`() => this._foo(...)`):
+            # границу такого тела точно определяет только парсер JS, поэтому
+            # берём окно фиксированной длины — проверкам канона хватает, так как
+            # они ищут в теле обращения к фабрикам, а не разбирают его целиком.
+            return text[i : i + EXPRESSION_BODY_WINDOW]
     if text.startswith("function", i):
         brace = text.find("{", i)
         if brace < 0:

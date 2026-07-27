@@ -3,8 +3,6 @@
 import asyncio
 from datetime import datetime, timezone
 
-import httpx
-
 from apps.flows.config import get_settings
 from apps.idle_worker.tasks.task_names import (
     TASK_REFRESH_PLATFORM_FREE_MODELS,
@@ -139,15 +137,7 @@ class LLMModelsService:
                 "llm_models.sync_provider_failed",
                 provider=provider,
                 error_type=type(exc).__name__,
-                error=str(exc),
-            )
-            return 0
-        except httpx.HTTPStatusError as exc:
-            logger.error(
-                "llm_models.sync_provider_failed",
-                provider=provider,
-                error_type=type(exc).__name__,
-                status_code=exc.response.status_code,
+                status_code=exc.status_code,
                 error=str(exc),
             )
             return 0

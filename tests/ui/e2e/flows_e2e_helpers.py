@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -14,6 +14,9 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.ui.e2e.ui_e2e_pwa import ui_e2e_dismiss_pwa_install_banner
 from tests.ui.harness import AppUI
+
+if TYPE_CHECKING:
+    from core.mail.models import MailboxBinding
 
 
 def flows_company_origin(origin: str, company_slug: str | None = None) -> str:

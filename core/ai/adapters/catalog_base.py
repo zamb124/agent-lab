@@ -77,7 +77,16 @@ _EMBEDDING_PROBE_TIMEOUT_SECONDS = 8.0
 
 
 class AIProviderAdapterError(RuntimeError):
-    """Provider catalog discovery failed before records could be normalized."""
+    """Provider catalog discovery failed before records could be normalized.
+
+    HTTP-ответ провайдера тоже приходит сюда: транспортная деталь не должна
+    утекать в сервисы, поэтому статус ответа сохраняется полем, а не типом
+    исключения httpx.
+    """
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code: int | None = status_code
 
 
 class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
@@ -485,7 +494,13 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             await asyncio.sleep(min(max(retry_delay, 1.0 + attempt_index), 5.0))
         if response is None:
             raise AIProviderAdapterError(f"{self.provider} models response не получен")
-        _ = response.raise_for_status()
+        try:
+            _ = response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise AIProviderAdapterError(
+                f"{self.provider} models response: HTTP {exc.response.status_code}",
+                status_code=exc.response.status_code,
+            ) from exc
         return parse_json_value(response.content, response_label)
 
     def _configured_llm_provider(self) -> _ConfiguredLLMProvider | None:
