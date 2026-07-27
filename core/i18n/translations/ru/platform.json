@@ -100,6 +100,11 @@
             "menu_description": "Совместное редактирование Office",
             "description": "Совместное редактирование Office-файлов: список привязок, редактор в iframe, изоляция по namespace, секреты только на BFF"
         },
+        "wiki": {
+            "name": "Вики",
+            "menu_description": "База знаний компании: страницы, связи, поиск",
+            "description": "База знаний с деревом страниц внутри пространства: пишите документацию, связывайте её с сущностями NetWorkle и документами, находите смыслом, а не точным словом"
+        },
         "litserve": {
             "name": "{modelsProductName}",
             "menu_description": "Локальные эмбеддинги и реранк",
@@ -658,5 +663,86 @@
             "unavailable_https": "Микрофон доступен только в защищённом контексте (HTTPS)",
             "unavailable_recorder": "Запись голоса не поддерживается в этом браузере"
         }
+    },
+    "editor": {
+        "load_failed": "Не удалось загрузить редактор",
+        "format_toolbar": "Форматирование",
+        "placeholder": "Нажмите / для команд",
+        "block": {
+            "heading_1": "Заголовок 1",
+            "heading_2": "Заголовок 2",
+            "heading_3": "Заголовок 3",
+            "bullet_list": "Маркированный список",
+            "ordered_list": "Нумерованный список",
+            "task_list": "Список задач",
+            "toggle": "Сворачиваемый блок",
+            "callout": "Выноска",
+            "blockquote": "Цитата",
+            "code_block": "Блок кода",
+            "table": "Таблица",
+            "horizontal_rule": "Разделитель"
+        },
+        "mark": {
+            "strong": "Полужирный",
+            "em": "Курсив",
+            "strike": "Зачёркнутый",
+            "code": "Код",
+            "highlight": "Выделение"
+        },
+        "slash": {
+            "title": "Блоки",
+            "empty": "Ничего не найдено"
+        },
+        "block_menu": {
+            "aria": "Действия с блоком",
+            "duplicate": "Дублировать",
+            "delete": "Удалить",
+            "turn_paragraph": "Превратить в текст",
+            "turn_heading_1": "Превратить в заголовок 1",
+            "turn_heading_2": "Превратить в заголовок 2",
+            "turn_bullet_list": "Превратить в список",
+            "turn_blockquote": "Превратить в цитату",
+            "turn_code_block": "Превратить в блок кода"
+        },
+        "mention": {
+            "title": "Упоминания",
+            "empty": "Ничего не найдено",
+            "kind": {
+                "user": "Человек",
+                "crm_entity": "Сущность",
+                "wiki_page": "Страница",
+                "file": "Документ"
+            }
+        },
+        "table": {
+            "addRowBefore": "Строка выше",
+            "addRowAfter": "Строка ниже",
+            "deleteRow": "Удалить строку",
+            "addColumnBefore": "Колонка слева",
+            "addColumnAfter": "Колонка справа",
+            "deleteColumn": "Удалить колонку",
+            "deleteTable": "Удалить таблицу",
+            "toolbar": "Таблица"
+        }
+    },
+    "command_palette": {
+        "placeholder": "Поиск и команды",
+        "loading": "Ищем…",
+        "empty": "Ничего не найдено"
+    },
+    "emoji_picker": {
+        "search_placeholder": "Поиск эмодзи",
+        "search_aria": "Поиск эмодзи",
+        "clear": "Убрать",
+        "empty": "Ничего не найдено",
+        "category": {
+            "documents": "Документы",
+            "work": "Работа",
+            "people": "Люди",
+            "signals": "Акценты"
+        }
+    },
+    "resizable_split": {
+        "handle_aria": "Изменить ширину панели"
     }
 }

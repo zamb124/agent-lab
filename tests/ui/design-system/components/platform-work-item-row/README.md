@@ -1,4 +1,4 @@
-# platform-work-item-row
+# Work Item Row
 
 Платформенный компонент `platform-work-item-row`.
 

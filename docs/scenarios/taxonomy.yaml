@@ -10,6 +10,7 @@ service_order:
   - rag
   - frontend
   - office
+  - wiki
 
 learning_paths:
   - id: new-user
@@ -479,3 +480,26 @@ services:
         label_ru: Мобильная версия
         label_en: Mobile
         order: 11
+  wiki:
+    label_ru: Wiki
+    label_en: Wiki
+    intro_ru: >-
+      База знаний на маршруте /wiki: дерево страниц пространства, блочный
+      редактор, поиск по тексту и по смыслу, доступ и публичные ссылки.
+    intro_en: >-
+      Knowledge base at /wiki: the workspace page tree, block editor,
+      text and semantic search, access control, and public links.
+    featured_slug: create-and-edit-page
+    tags:
+      pages:
+        label_ru: Страницы
+        label_en: Pages
+        order: 1
+      search:
+        label_ru: Поиск
+        label_en: Search
+        order: 2
+      access:
+        label_ru: Доступ
+        label_en: Access
+        order: 3

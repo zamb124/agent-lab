@@ -1,8 +1,10 @@
-# platform-mail-calendar-rail
+# Mail Calendar Rail
 
-Shared left rail for mail and calendar: mailbox avatars, Mail/Calendar switcher, settings.
+Platform component `platform-mail-calendar-rail`.
 
-## Run
+Documentation status: **backlog**.
+
+## Run tests
 
 ```bash
 npm run test:ui-kit -- tests/ui/design-system/components/platform-mail-calendar-rail/contract.spec.js

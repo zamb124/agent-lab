@@ -1,0 +1,13 @@
+component: platform-resizable-split
+doc_slug: platform-resizable-split
+tier: T0
+title_ru: Resizable Split
+title_en: Resizable Split
+import: "@platform/lib/components/platform-resizable-split.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

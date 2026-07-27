@@ -1,0 +1,425 @@
+/**
+ * Плавающий слой, привязанный к якорю.
+ *
+ * Показывается в top layer через нативный Popover API, поэтому не обрезается
+ * `overflow` предков и всегда выше остального интерфейса без гонки z-index.
+ * В отличие от переноса узла в `document.body`, элемент остаётся на своём месте
+ * в DOM: связи `aria-controls`, наследование CSS-переменных темы и поиск по
+ * поддереву владельца продолжают работать.
+ *
+ * Позиционирование считает `floating-position.js`; здесь только жизненный цикл:
+ * подписки на прокрутку и изменение размеров, закрытие по клику мимо и Escape,
+ * доступность и режимы открытия.
+ *
+ * @example
+ * <platform-popover trigger="manual" .anchor=${this._buttonEl} ?open=${this._open}
+ *                   placement="bottom-start" role="menu"
+ *                   @popover-dismiss=${() => { this._open = false; }}>
+ *     ...содержимое...
+ * </platform-popover>
+ */
+
+import { css, html } from '../lit-shim.js';
+
+import { PlatformElement } from '../platform-element/index.js';
+import {
+    DEFAULT_OFFSET,
+    DEFAULT_VIEWPORT_PADDING,
+    computeFloatingPosition,
+    readViewportSize,
+    resolveAnchorRect,
+} from '../utils/floating-position.js';
+import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
+
+const HOVER_OPEN_DELAY_MS = 120;
+const HOVER_CLOSE_DELAY_MS = 160;
+
+export class PlatformPopover extends PlatformElement {
+    static properties = {
+        /** Элемент, точка `{x, y}` или прямоугольник, к которому привязан слой. */
+        anchor: { attribute: false },
+        open: { type: Boolean, reflect: true },
+        placement: { type: String },
+        offset: { type: Number },
+        trigger: { type: String },
+        role: { type: String, reflect: true },
+        matchWidth: { type: Boolean, attribute: 'match-width' },
+        flip: { type: Boolean },
+        shift: { type: Boolean },
+        closeOnScroll: { type: Boolean, attribute: 'close-on-scroll' },
+        dismissOnOutside: { type: Boolean, attribute: 'dismiss-on-outside' },
+        constrainHeight: { type: Boolean, attribute: 'constrain-height' },
+        viewportPadding: { type: Number, attribute: 'viewport-padding' },
+        _placement: { state: true },
+    };
+
+    static styles = [
+        PlatformElement.styles,
+        css`
+            /* Сброс браузерных стилей top layer: рамка, фон и авто-центрирование
+               мешают позиционировать слой самостоятельно. */
+            :host {
+                position: fixed;
+                inset: auto;
+                margin: 0;
+                padding: 0;
+                border: none;
+                background: transparent;
+                overflow: visible;
+                width: max-content;
+                max-width: 100vw;
+                will-change: transform;
+            }
+
+            :host(:not(:popover-open)) {
+                display: none;
+            }
+
+            :host::backdrop {
+                background: transparent;
+            }
+
+            .surface {
+                box-sizing: border-box;
+                overflow: auto;
+                overscroll-behavior: contain;
+                border-radius: var(--radius-lg, 12px);
+                border: 1px solid var(--glass-border-medium, rgba(120, 120, 140, 0.28));
+                background: var(--glass-solid-strong, rgba(20, 20, 28, 0.96));
+                box-shadow: var(--glass-shadow-strong, 0 16px 48px rgba(0, 0, 0, 0.32));
+                backdrop-filter: blur(var(--glass-blur-subtle, 20px));
+                color: var(--text-primary);
+                animation: platform-popover-in var(--motion-duration-enter, 140ms)
+                    var(--motion-ease-decelerate, cubic-bezier(0.2, 0.8, 0.2, 1));
+            }
+
+            :host([role='tooltip']) .surface {
+                padding: var(--space-2, 8px) var(--space-3, 12px);
+                font-size: var(--text-sm, 0.8125rem);
+                max-width: 320px;
+            }
+
+            @keyframes platform-popover-in {
+                from {
+                    opacity: 0;
+                    transform: translateY(calc(-1 * var(--motion-enter-offset-y, 4px)));
+                }
+                to {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .surface {
+                    animation: none;
+                }
+            }
+        `,
+    ];
+
+    constructor() {
+        super();
+        this.anchor = null;
+        this.open = false;
+        this.placement = 'bottom-start';
+        this.offset = DEFAULT_OFFSET;
+        this.trigger = 'manual';
+        this.role = 'dialog';
+        this.matchWidth = false;
+        this.flip = true;
+        this.shift = true;
+        this.closeOnScroll = false;
+        this.dismissOnOutside = true;
+        this.constrainHeight = true;
+        this.viewportPadding = DEFAULT_VIEWPORT_PADDING;
+        this._placement = this.placement;
+
+        this._resizeObserver = null;
+        this._hoverTimer = null;
+
+        this._onReposition = this._onReposition.bind(this);
+        this._onDocumentPointerDown = this._onDocumentPointerDown.bind(this);
+        this._onDocumentKeyDown = this._onDocumentKeyDown.bind(this);
+        this._onAnchorClick = this._onAnchorClick.bind(this);
+        this._onAnchorContextMenu = this._onAnchorContextMenu.bind(this);
+        this._onAnchorPointerEnter = this._onAnchorPointerEnter.bind(this);
+        this._onAnchorPointerLeave = this._onAnchorPointerLeave.bind(this);
+        this._onSelfPointerEnter = this._onSelfPointerEnter.bind(this);
+        this._onSelfPointerLeave = this._onSelfPointerLeave.bind(this);
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        // Ручной режим: закрытие по клику мимо и Escape обрабатывается здесь,
+        // чтобы сообщить причину и не гасить Escape, нужный вложенным слоям.
+        this.setAttribute('popover', 'manual');
+        this.addEventListener('pointerenter', this._onSelfPointerEnter);
+        this.addEventListener('pointerleave', this._onSelfPointerLeave);
+        this._attachAnchorListeners(this.anchor);
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        this.removeEventListener('pointerenter', this._onSelfPointerEnter);
+        this.removeEventListener('pointerleave', this._onSelfPointerLeave);
+        this._detachAnchorListeners(this.anchor);
+        this._stopTracking();
+        this._clearHoverTimer();
+    }
+
+    willUpdate(changed) {
+        if (changed.has('anchor')) {
+            this._detachAnchorListeners(changed.get('anchor'));
+            this._attachAnchorListeners(this.anchor);
+        }
+    }
+
+    updated(changed) {
+        if (changed.has('open')) {
+            if (this.open) {
+                this._showInTopLayer();
+                this._startTracking();
+                this.reposition();
+                this.emit('popover-open');
+            } else {
+                this._stopTracking();
+                this._hideFromTopLayer();
+                this.emit('popover-close');
+            }
+        } else if (this.open && (changed.has('placement') || changed.has('anchor'))) {
+            this.reposition();
+        }
+    }
+
+    /** Пересчитать положение — вызывается при прокрутке, ресайзе и смене содержимого. */
+    reposition() {
+        if (!this.open) {
+            return;
+        }
+        const anchorRect = resolveAnchorRect(this.anchor);
+        if (!anchorRect) {
+            return;
+        }
+        const surface = this.renderRoot?.querySelector('.surface');
+        if (!surface) {
+            return;
+        }
+
+        // Ограничение высоты снимается перед замером: иначе слой «запоминает»
+        // прошлый лимит и не может вырасти, когда места стало больше.
+        surface.style.maxHeight = '';
+        const rect = surface.getBoundingClientRect();
+
+        const position = computeFloatingPosition({
+            anchorRect,
+            floatingRect: { width: rect.width, height: rect.height },
+            placement: this.placement,
+            offset: this.offset,
+            flip: this.flip,
+            shift: this.shift,
+            matchWidth: this.matchWidth,
+            viewport: readViewportSize(),
+            viewportPadding: this.viewportPadding,
+        });
+
+        this.style.transform = `translate3d(${position.x}px, ${position.y}px, 0)`;
+        this._placement = position.placement;
+        this.setAttribute('data-placement', position.placement);
+        if (position.width !== null) {
+            surface.style.width = `${position.width}px`;
+        }
+        if (this.constrainHeight) {
+            surface.style.maxHeight = `${position.maxHeight}px`;
+        }
+    }
+
+    /** Программное открытие; для `trigger="contextmenu"` якорем может быть точка. */
+    show(anchor) {
+        if (anchor !== undefined) {
+            this.anchor = anchor;
+        }
+        this.open = true;
+    }
+
+    hide() {
+        this.open = false;
+    }
+
+    toggle(anchor) {
+        if (this.open) {
+            this.hide();
+        } else {
+            this.show(anchor);
+        }
+    }
+
+    // --- top layer ---
+
+    _showInTopLayer() {
+        if (!this.isConnected || this.matches(':popover-open')) {
+            return;
+        }
+        this.showPopover();
+        // Внутри модалки уже есть свой top layer, и порядок между слоями там
+        // определяется z-index, а не порядком показа.
+        this.style.zIndex = String(nextModalLayerZIndex());
+    }
+
+    _hideFromTopLayer() {
+        if (!this.isConnected || !this.matches(':popover-open')) {
+            return;
+        }
+        this.hidePopover();
+        this.style.transform = '';
+    }
+
+    // --- подписки ---
+
+    _startTracking() {
+        window.addEventListener('scroll', this._onReposition, true);
+        window.addEventListener('resize', this._onReposition);
+        window.visualViewport?.addEventListener('resize', this._onReposition);
+        window.visualViewport?.addEventListener('scroll', this._onReposition);
+        if (this.dismissOnOutside) {
+            document.addEventListener('pointerdown', this._onDocumentPointerDown, true);
+        }
+        document.addEventListener('keydown', this._onDocumentKeyDown, true);
+
+        if (typeof ResizeObserver !== 'undefined') {
+            this._resizeObserver = new ResizeObserver(() => this.reposition());
+            const surface = this.renderRoot?.querySelector('.surface');
+            if (surface) {
+                this._resizeObserver.observe(surface);
+            }
+            if (this.anchor instanceof Element) {
+                this._resizeObserver.observe(this.anchor);
+            }
+        }
+    }
+
+    _stopTracking() {
+        window.removeEventListener('scroll', this._onReposition, true);
+        window.removeEventListener('resize', this._onReposition);
+        window.visualViewport?.removeEventListener('resize', this._onReposition);
+        window.visualViewport?.removeEventListener('scroll', this._onReposition);
+        document.removeEventListener('pointerdown', this._onDocumentPointerDown, true);
+        document.removeEventListener('keydown', this._onDocumentKeyDown, true);
+        this._resizeObserver?.disconnect();
+        this._resizeObserver = null;
+    }
+
+    _onReposition() {
+        if (this.closeOnScroll) {
+            this._dismiss('scroll');
+            return;
+        }
+        this.reposition();
+    }
+
+    _onDocumentPointerDown(event) {
+        const path = event.composedPath();
+        if (path.includes(this)) {
+            return;
+        }
+        if (this.anchor instanceof Element && path.includes(this.anchor)) {
+            return;
+        }
+        this._dismiss('outside');
+    }
+
+    _onDocumentKeyDown(event) {
+        if (event.key !== 'Escape' || !this.open) {
+            return;
+        }
+        event.stopPropagation();
+        this._dismiss('escape');
+    }
+
+    _dismiss(reason) {
+        this.open = false;
+        this.emit('popover-dismiss', { reason });
+    }
+
+    // --- режимы открытия ---
+
+    _attachAnchorListeners(anchor) {
+        if (!(anchor instanceof Element)) {
+            return;
+        }
+        if (this.trigger === 'click') {
+            anchor.addEventListener('click', this._onAnchorClick);
+        } else if (this.trigger === 'contextmenu') {
+            anchor.addEventListener('contextmenu', this._onAnchorContextMenu);
+        } else if (this.trigger === 'hover') {
+            anchor.addEventListener('pointerenter', this._onAnchorPointerEnter);
+            anchor.addEventListener('pointerleave', this._onAnchorPointerLeave);
+            anchor.addEventListener('focusin', this._onAnchorPointerEnter);
+            anchor.addEventListener('focusout', this._onAnchorPointerLeave);
+        }
+    }
+
+    _detachAnchorListeners(anchor) {
+        if (!(anchor instanceof Element)) {
+            return;
+        }
+        anchor.removeEventListener('click', this._onAnchorClick);
+        anchor.removeEventListener('contextmenu', this._onAnchorContextMenu);
+        anchor.removeEventListener('pointerenter', this._onAnchorPointerEnter);
+        anchor.removeEventListener('pointerleave', this._onAnchorPointerLeave);
+        anchor.removeEventListener('focusin', this._onAnchorPointerEnter);
+        anchor.removeEventListener('focusout', this._onAnchorPointerLeave);
+    }
+
+    _onAnchorClick() {
+        this.toggle();
+    }
+
+    _onAnchorContextMenu(event) {
+        event.preventDefault();
+        this.show({ x: event.clientX, y: event.clientY });
+    }
+
+    _onAnchorPointerEnter() {
+        this._clearHoverTimer();
+        this._hoverTimer = window.setTimeout(() => {
+            this.open = true;
+        }, HOVER_OPEN_DELAY_MS);
+    }
+
+    _onAnchorPointerLeave() {
+        this._clearHoverTimer();
+        this._hoverTimer = window.setTimeout(() => {
+            this.open = false;
+        }, HOVER_CLOSE_DELAY_MS);
+    }
+
+    _onSelfPointerEnter() {
+        if (this.trigger === 'hover') {
+            this._clearHoverTimer();
+        }
+    }
+
+    _onSelfPointerLeave() {
+        if (this.trigger === 'hover') {
+            this._onAnchorPointerLeave();
+        }
+    }
+
+    _clearHoverTimer() {
+        if (this._hoverTimer !== null) {
+            clearTimeout(this._hoverTimer);
+            this._hoverTimer = null;
+        }
+    }
+
+    render() {
+        return html`
+            <div class="surface" part="surface">
+                <slot></slot>
+            </div>
+        `;
+    }
+}
+
+customElements.define('platform-popover', PlatformPopover);

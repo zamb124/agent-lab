@@ -1,12 +1,17 @@
 /**
  * office-catalog-context-menu — контекстное меню каталога в explorer tree.
  *
+ * Пункты и клавиатура — платформенный `platform-menu`, слой — `platform-popover`
+ * с якорем по координатам курсора, поэтому меню не обрезается деревом и не
+ * уезжает за край экрана.
+ *
  * Шлёт DOM-событие `ctx-action` с detail = { action, catalog }.
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-menu.js';
+import '@platform/lib/components/platform-popover.js';
 
 export class OfficeCatalogContextMenu extends PlatformElement {
     static i18nNamespace = 'documents';
@@ -23,55 +28,7 @@ export class OfficeCatalogContextMenu extends PlatformElement {
         PlatformElement.styles,
         css`
             :host {
-                position: absolute;
-                z-index: 30;
-                display: none;
-                min-width: 200px;
-                background: var(--glass-solid-strong);
-                border: 1px solid var(--glass-border-medium);
-                border-radius: 10px;
-                backdrop-filter: blur(12px);
-                padding: 4px;
-                box-shadow: var(--glass-shadow-medium);
-                pointer-events: auto;
-            }
-
-            :host([visible]) {
-                display: block;
-            }
-
-            .ctx-item {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                width: 100%;
-                padding: 7px 12px;
-                border: none;
-                border-radius: 7px;
-                background: none;
-                color: var(--text-primary);
-                font-size: 13px;
-                cursor: pointer;
-                text-align: left;
-            }
-
-            .ctx-item:hover {
-                background: var(--glass-solid-medium);
-            }
-
-            .ctx-item.danger {
-                color: var(--danger);
-            }
-
-            .ctx-item:disabled {
-                opacity: 0.45;
-                cursor: not-allowed;
-            }
-
-            .separator {
-                height: 1px;
-                background: var(--glass-border-subtle);
-                margin: 3px 8px;
+                display: contents;
             }
         `,
     ];
@@ -85,18 +42,11 @@ export class OfficeCatalogContextMenu extends PlatformElement {
         this.visible = false;
     }
 
-    updated(changed) {
-        if (changed.has('x') || changed.has('y')) {
-            this.style.left = `${this.x}px`;
-            this.style.top = `${this.y}px`;
-        }
-    }
-
-    _onAction(action) {
+    _onSelect(event) {
         if (!this.catalog || typeof this.catalog !== 'object') {
             return;
         }
-        this.emit('ctx-action', { action, catalog: this.catalog });
+        this.emit('ctx-action', { action: event.detail.id, catalog: this.catalog });
     }
 
     _canDelete() {
@@ -108,45 +58,46 @@ export class OfficeCatalogContextMenu extends PlatformElement {
         return fileCount === 0 && this.hasChildCatalogs !== true;
     }
 
-    render() {
+    _items() {
         const catalog = this.catalog;
-        if (!catalog || typeof catalog !== 'object') {
-            return html``;
+        if (!catalog || typeof catalog !== 'object' || catalog.is_owner !== true) {
+            return [];
         }
-        if (catalog.is_owner !== true) {
-            return html``;
+        const items = [
+            { id: 'edit', label: this.t('catalog_context_menu.edit'), icon: 'edit' },
+            { id: 'access', label: this.t('catalog_context_menu.access'), icon: 'link' },
+        ];
+        if (catalog.is_public !== true) {
+            items.push({ id: 'members', label: this.t('catalog_context_menu.members'), icon: 'users' });
         }
-        const isPublic = catalog.is_public === true;
-        const canDelete = this._canDelete();
+        items.push(
+            { id: 'rag', label: this.t('catalog_context_menu.rag'), icon: 'search' },
+            { id: 'sep', kind: 'separator' },
+            {
+                id: 'delete',
+                label: this.t('catalog_context_menu.delete'),
+                icon: 'trash',
+                danger: true,
+                disabled: !this._canDelete(),
+            },
+        );
+        return items;
+    }
+
+    render() {
+        const items = this._items();
         return html`
-            <button class="ctx-item" type="button" @click=${() => this._onAction('edit')}>
-                <platform-icon name="edit" size="16"></platform-icon>
-                ${this.t('catalog_context_menu.edit')}
-            </button>
-            <button class="ctx-item" type="button" @click=${() => this._onAction('access')}>
-                <platform-icon name="link" size="16"></platform-icon>
-                ${this.t('catalog_context_menu.access')}
-            </button>
-            ${!isPublic ? html`
-                <button class="ctx-item" type="button" @click=${() => this._onAction('members')}>
-                    <platform-icon name="users" size="16"></platform-icon>
-                    ${this.t('catalog_context_menu.members')}
-                </button>
-            ` : null}
-            <button class="ctx-item" type="button" @click=${() => this._onAction('rag')}>
-                <platform-icon name="search" size="16"></platform-icon>
-                ${this.t('catalog_context_menu.rag')}
-            </button>
-            <div class="separator"></div>
-            <button
-                class="ctx-item danger"
-                type="button"
-                ?disabled=${!canDelete}
-                @click=${() => this._onAction('delete')}
+            <platform-popover
+                trigger="manual"
+                role="menu"
+                placement="bottom-start"
+                offset="2"
+                .anchor=${{ x: this.x, y: this.y }}
+                ?open=${this.visible && items.length > 0}
+                @popover-dismiss=${() => this.emit('ctx-dismiss')}
             >
-                <platform-icon name="trash" size="16"></platform-icon>
-                ${this.t('catalog_context_menu.delete')}
-            </button>
+                <platform-menu compact .items=${items} @menu-select=${this._onSelect}></platform-menu>
+            </platform-popover>
         `;
     }
 }

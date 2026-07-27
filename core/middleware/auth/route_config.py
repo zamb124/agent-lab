@@ -533,6 +533,17 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/voice/api/v1/*", context_type="api", auth_required=True),
     RouteRule("/voice/api/*", context_type="api", auth_required=True),
     RouteRule("/voice/*", context_type="api", auth_required=True),
+
+    # Wiki (apps/wiki): BFF + Lit shell; публичные страницы открываются по токену ссылки
+    RouteRule("/wiki/ui/static/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/wiki/api/v1/public/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/wiki/api/v1/*", context_type="session", auth_required=True),
+    RouteRule("/wiki/api/auth/*", context_type="api", auth_required=True),
+    RouteRule("/wiki/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
+    RouteRule("/wiki/api/push/*", context_type="api", auth_required=True),
+    RouteRule("/wiki", auth_required=False, context_type="anonymous"),
+    RouteRule("/wiki/", auth_required=False, context_type="anonymous"),
+    RouteRule("/wiki/*", auth_required=False, context_type="anonymous"),
 ]
 
 # Страницы где разрешен доступ без субдомена

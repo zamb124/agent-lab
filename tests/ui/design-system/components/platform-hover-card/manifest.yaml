@@ -1,0 +1,13 @@
+component: platform-hover-card
+doc_slug: platform-hover-card
+tier: T0
+title_ru: Hover Card
+title_en: Hover Card
+import: "@platform/lib/components/platform-hover-card.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

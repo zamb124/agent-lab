@@ -435,6 +435,7 @@ def _skip_autouse_test_context(request: pytest.FixtureRequest) -> bool:
         "crm_container",
         "flows_container",
         "worktracker_container",
+        "wiki_container",
     )
     if any(name in request.fixturenames for name in direct_container_fixtures):
         return False
@@ -447,6 +448,7 @@ def _skip_autouse_test_context(request: pytest.FixtureRequest) -> bool:
         "sync_client",
         "rag_client",
         "voice_client",
+        "wiki_client",
     )
     if not any(name in request.fixturenames for name in asgi_client_fixtures):
         return False

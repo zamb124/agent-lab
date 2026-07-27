@@ -1,8 +1,8 @@
 component: platform-work-item-row
 doc_slug: platform-work-item-row
 tier: T0
-title_ru: Work Item row
-title_en: Work Item row
+title_ru: Work Item Row
+title_en: Work Item Row
 import: "@platform/lib/components/platform-work-item-row.js"
 variants:
   - id: default

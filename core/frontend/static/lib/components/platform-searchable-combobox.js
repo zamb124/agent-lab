@@ -10,6 +10,7 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
+import './platform-popover.js';
 
 /**
  * @param {unknown} o
@@ -55,6 +56,7 @@ export class PlatformSearchableCombobox extends PlatformElement {
         _open: { type: Boolean, state: true },
         _input: { type: String, state: true },
         _editing: { type: Boolean, state: true },
+        _anchor: { state: true },
     };
 
     static styles = [
@@ -159,20 +161,9 @@ export class PlatformSearchableCombobox extends PlatformElement {
                 box-shadow: var(--focus-ring);
             }
             .list {
-                position: absolute;
-                top: 100%;
-                left: 0;
-                right: 0;
-                margin: var(--space-1) 0 0;
+                margin: 0;
                 padding: var(--space-1) 0;
                 list-style: none;
-                max-height: 12rem;
-                overflow-y: auto;
-                z-index: 50;
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
-                box-shadow: var(--glass-shadow-medium);
             }
             .item {
                 padding: var(--space-2) var(--space-3);
@@ -211,8 +202,14 @@ export class PlatformSearchableCombobox extends PlatformElement {
         this._open = false;
         this._input = '';
         this._editing = false;
+        /** @type {HTMLElement | null} */
+        this._anchor = null;
         /** @type {number | null} */
         this._blurHandle = null;
+    }
+
+    _onPopoverDismiss() {
+        this._open = false;
     }
 
     _opts() {
@@ -464,6 +461,19 @@ export class PlatformSearchableCombobox extends PlatformElement {
         `;
     }
 
+    updated(changed) {
+        super.updated?.(changed);
+        if (this._anchor === null) {
+            const field = this.renderRoot?.querySelector?.('.field-pill');
+            if (field instanceof HTMLElement) {
+                this._anchor = field;
+            }
+        }
+        if (this._open) {
+            this.renderRoot?.querySelector?.('platform-popover')?.reposition();
+        }
+    }
+
     render() {
         const hasLabel = typeof this.label === 'string' && this.label.length > 0;
         const aria = typeof this.ariaLabel === 'string' && this.ariaLabel.length > 0
@@ -490,7 +500,18 @@ export class PlatformSearchableCombobox extends PlatformElement {
                         @blur=${this._onBlur}
                     />
                 </div>
-                ${this._listItems()}
+                <platform-popover
+                    trigger="manual"
+                    role="listbox"
+                    placement="bottom-start"
+                    match-width
+                    offset="4"
+                    .anchor=${this._anchor}
+                    ?open=${this._open}
+                    @popover-dismiss=${this._onPopoverDismiss}
+                >
+                    ${this._listItems()}
+                </platform-popover>
             </div>
         `;
     }

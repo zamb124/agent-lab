@@ -281,6 +281,39 @@ applications:
       limits:
         cpu: "1"
         memory: 1Gi
+  wiki:
+    nodeName: master
+    enabled: true
+    port: 8023
+    replicas: 1
+    serviceName: wiki
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.wiki.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8023"
+      - --http
+      - auto
+      - --ws
+      - --static-path-route
+      - /static/core
+      - --static-path-mount
+      - core/frontend/static
+      - --static-path-route
+      - /wiki/ui/static
+      - --static-path-mount
+      - apps/wiki/ui
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
   scheduler-api:
     nodeName: master
     enabled: true

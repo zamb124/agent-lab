@@ -53,7 +53,7 @@ fi
 # При отключении компонента через Helm (*.enabled: false) уберите имя отсюда (см. deploy/README.md
 # «Состав приложений: Helm и cluster-health»).
 EXPECTED_DEPLOYMENTS=(
-  flows frontend crm rag sync worktracker office scheduler-api voice browser search capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
+  flows frontend crm rag sync worktracker office wiki scheduler-api voice browser search capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
   flows-worker scheduler rag-worker sync-worker crm-worker idle-worker
   livekit livekit-egress onlyoffice grafana provider-litserve
 )
@@ -229,7 +229,7 @@ fi
 if [ "$CHECK_PUBLIC" = "1" ]; then
   log_section "13) Public health endpoints (через Ingress)"
   for apex in $PLATFORM_APEX_HOSTS; do
-    for path in "/flows/health" "/crm/health" "/sync/health" "/worktracker/health" "/secrets/health"; do
+    for path in "/flows/health" "/crm/health" "/sync/health" "/worktracker/health" "/secrets/health" "/wiki/health"; do
       check_step \
         "https://${apex}${path}" \
         "curl -fsS --max-time 10 https://${apex}${path} >/dev/null"

@@ -15,13 +15,14 @@
  *   - flows/branch_remove — удаление ветки.
  */
 
-import { html, css, nothing, render } from 'lit';
+import { html, css, nothing, unsafeCSS } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-popover.js';
 import '@platform/lib/components/fields/platform-field.js';
 import {
     asArray,
@@ -32,33 +33,18 @@ import {
 } from '../../_helpers/flows-resolvers.js';
 import { openPlatformLaraAssistant } from '@platform/lib/chat/chat-window-toggle.js';
 
-const MENU_PORTAL_STYLE_ID = 'flows-editor-header-menu-portal-styles-v1';
 const MENU_PORTAL_GAP_PX = 4;
 const MENU_PORTAL_VIEWPORT_INSET_PX = 16;
 
-function ensureMenuPortalStyles() {
-    if (typeof document === 'undefined' || document.getElementById(MENU_PORTAL_STYLE_ID)) {
-        return;
-    }
-    const style = document.createElement('style');
-    style.id = MENU_PORTAL_STYLE_ID;
-    style.textContent = `
+const HEADER_MENU_CSS = `
         .flows-editor-header-menu-portal {
-            position: fixed;
-            z-index: var(--z-dropdown);
             width: min(320px, calc(100vw - 2 * var(--space-4, 16px)));
             max-width: calc(100vw - 2 * var(--space-4, 16px));
             box-sizing: border-box;
-            background: var(--glass-solid-strong);
-            border: 1px solid var(--glass-border, var(--border-subtle));
-            border-radius: var(--radius-md, 12px);
-            box-shadow: var(--glass-shadow-strong);
             display: flex;
             flex-direction: column;
             gap: var(--space-1, 4px);
             padding: var(--space-1, 4px);
-            overflow: hidden;
-            pointer-events: auto;
         }
         .flows-editor-header-menu-portal.problems-flyout {
             max-height: min(60vh, 420px);
@@ -109,9 +95,8 @@ function ensureMenuPortalStyles() {
             font-size: var(--text-xs, 12px);
             color: var(--text-secondary);
         }
-    `;
-    document.head.appendChild(style);
-}
+`;
+
 
 export class FlowsEditorHeader extends PlatformElement {
     static properties = {
@@ -124,6 +109,7 @@ export class FlowsEditorHeader extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        unsafeCSS(HEADER_MENU_CSS),
         css`
             :host {
                 display: flex;
@@ -407,21 +393,14 @@ export class FlowsEditorHeader extends PlatformElement {
             window.matchMedia('(max-width: 767px)').matches;
         this._overflowOpen = false;
         this._problemsOpen = false;
-        this._overflowPortalHost = null;
-        this._problemsPortalHost = null;
-        this._problemsPortalIssuesKey = '';
+        /** @type {HTMLElement | null} */
+        this._overflowAnchor = null;
+        /** @type {HTMLElement | null} */
+        this._problemsAnchor = null;
         this._outsideCloseArmed = false;
         this._outsideCloseFrame = null;
         this._editorMql = null;
         this._onEditorMobileMql = null;
-        this._onScrollResize = () => {
-            if (this._overflowOpen) {
-                this._positionOverflowPortal();
-            }
-            if (this._problemsOpen) {
-                this._positionProblemsPortal();
-            }
-        };
         this._onDocPointer = (e) => {
             if (!this._overflowOpen && !this._problemsOpen) {
                 return;
@@ -470,8 +449,6 @@ export class FlowsEditorHeader extends PlatformElement {
         super.connectedCallback();
         document.addEventListener('pointerdown', this._onDocPointer);
         if (typeof window !== 'undefined') {
-            window.addEventListener('scroll', this._onScrollResize, true);
-            window.addEventListener('resize', this._onScrollResize);
         }
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
             return;
@@ -496,117 +473,33 @@ export class FlowsEditorHeader extends PlatformElement {
         }
         document.removeEventListener('pointerdown', this._onDocPointer);
         if (typeof window !== 'undefined') {
-            window.removeEventListener('scroll', this._onScrollResize, true);
-            window.removeEventListener('resize', this._onScrollResize);
         }
         if (this._outsideCloseFrame !== null) {
             cancelAnimationFrame(this._outsideCloseFrame);
             this._outsideCloseFrame = null;
         }
         this._outsideCloseArmed = false;
-        this._teardownOverflowPortal();
-        this._teardownProblemsPortal();
         super.disconnectedCallback();
     }
 
     updated(changed) {
         super.updated?.(changed);
-        if (changed.has('_overflowOpen') || changed.has('_isMobile')) {
-            this._syncOverflowPortal();
+        if (this._overflowAnchor === null) {
+            const anchor = this.renderRoot?.querySelector('.overflow-anchor');
+            if (anchor instanceof HTMLElement) {
+                this._overflowAnchor = anchor;
+            }
         }
-        if (changed.has('_problemsOpen')) {
-            this._syncProblemsPortal();
+        if (this._problemsAnchor === null) {
+            const anchor = this.renderRoot?.querySelector('.problems-anchor');
+            if (anchor instanceof HTMLElement) {
+                this._problemsAnchor = anchor;
+            }
         }
-        if (this._problemsOpen && (changed.has('flowId') || changed.has('branchId'))) {
-            this._syncProblemsPortal();
-        }
-    }
-
-    _positionMenuPortal(panel, anchorSelector) {
-        if (!panel) {
-            return;
-        }
-        const anchor = this.renderRoot?.querySelector(anchorSelector);
-        if (!anchor) {
-            return;
-        }
-        const anchorRect = anchor.getBoundingClientRect();
-        panel.style.top = `${anchorRect.bottom + MENU_PORTAL_GAP_PX}px`;
-        panel.style.right = `${window.innerWidth - anchorRect.right}px`;
-        panel.style.left = 'auto';
-
-        const portalRect = panel.getBoundingClientRect();
-        const overflowLeft = portalRect.left < MENU_PORTAL_VIEWPORT_INSET_PX;
-        if (overflowLeft) {
-            panel.style.left = `${MENU_PORTAL_VIEWPORT_INSET_PX}px`;
-            panel.style.right = 'auto';
-        }
-    }
-
-    _createMenuPortalHost(extraClass = '') {
-        ensureMenuPortalStyles();
-        const host = document.createElement('div');
-        host.className = extraClass
-            ? `flows-editor-header-menu-portal ${extraClass}`
-            : 'flows-editor-header-menu-portal';
-        host.addEventListener('click', (e) => e.stopPropagation());
-        document.body.appendChild(host);
-        return host;
-    }
-
-    _positionOverflowPortal() {
-        this._positionMenuPortal(this._overflowPortalHost, '.overflow-anchor');
-    }
-
-    _positionProblemsPortal() {
-        this._positionMenuPortal(this._problemsPortalHost, '.problems-anchor');
-    }
-
-    _schedulePortalPositionSync(positionFn) {
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => positionFn.call(this));
-        });
-    }
-
-    _armOutsideCloseListener() {
-        this._outsideCloseArmed = false;
-        if (this._outsideCloseFrame !== null) {
-            cancelAnimationFrame(this._outsideCloseFrame);
-        }
-        this._outsideCloseFrame = requestAnimationFrame(() => {
-            this._outsideCloseFrame = null;
-            this._outsideCloseArmed = true;
-        });
-    }
-
-    _disarmOutsideCloseListener() {
-        this._outsideCloseArmed = false;
-        if (this._outsideCloseFrame !== null) {
-            cancelAnimationFrame(this._outsideCloseFrame);
-            this._outsideCloseFrame = null;
-        }
-    }
-
-    _teardownOverflowPortal() {
-        if (this._overflowPortalHost) {
-            render(nothing, this._overflowPortalHost);
-            this._overflowPortalHost.remove();
-            this._overflowPortalHost = null;
-        }
-        if (!this._problemsOpen) {
-            this._disarmOutsideCloseListener();
-        }
-    }
-
-    _teardownProblemsPortal() {
-        if (this._problemsPortalHost) {
-            render(nothing, this._problemsPortalHost);
-            this._problemsPortalHost.remove();
-            this._problemsPortalHost = null;
-            this._problemsPortalIssuesKey = '';
-        }
-        if (!this._overflowOpen) {
-            this._disarmOutsideCloseListener();
+        if (this._overflowOpen || this._problemsOpen) {
+            for (const popover of this.renderRoot?.querySelectorAll('platform-popover') ?? []) {
+                popover.reposition();
+            }
         }
     }
 
@@ -686,45 +579,6 @@ export class FlowsEditorHeader extends PlatformElement {
                 </article>
             `)}
         `;
-    }
-
-    _syncOverflowPortal() {
-        if (!this._overflowOpen) {
-            this._teardownOverflowPortal();
-            return;
-        }
-        if (!this._overflowPortalHost) {
-            this._overflowPortalHost = this._createMenuPortalHost();
-        }
-        render(this._renderOverflowPortalContent(), this._overflowPortalHost);
-        this._positionOverflowPortal();
-        this._schedulePortalPositionSync(this._positionOverflowPortal);
-        this._armOutsideCloseListener();
-    }
-
-    _syncProblemsPortal() {
-        if (!this._problemsOpen) {
-            this._teardownProblemsPortal();
-            return;
-        }
-        const state = asObject(this._editor.state);
-        const issues = this._dataflowIssues(state);
-        if (issues.length === 0) {
-            this._problemsOpen = false;
-            this._teardownProblemsPortal();
-            return;
-        }
-        const issuesKey = issues.map((item) => `${item.nodeId}:${item.severity}:${item.message}`).join('|');
-        if (!this._problemsPortalHost) {
-            this._problemsPortalHost = this._createMenuPortalHost('problems-flyout');
-        }
-        if (issuesKey !== this._problemsPortalIssuesKey) {
-            this._problemsPortalIssuesKey = issuesKey;
-            render(this._renderProblemsPortalContent(issues), this._problemsPortalHost);
-        }
-        this._positionProblemsPortal();
-        this._schedulePortalPositionSync(this._positionProblemsPortal);
-        this._armOutsideCloseListener();
     }
 
     _resolveStatusBadge(state) {
@@ -1033,6 +887,22 @@ export class FlowsEditorHeader extends PlatformElement {
                     <platform-icon name="alert-triangle" size="14"></platform-icon>
                     <span class="problems-count">${count > 99 ? '99+' : count}</span>
                 </article>
+                <platform-popover
+                    trigger="manual"
+                    role="dialog"
+                    placement="bottom-end"
+                    offset=${MENU_PORTAL_GAP_PX}
+                    viewport-padding=${MENU_PORTAL_VIEWPORT_INSET_PX}
+                    .anchor=${this._problemsAnchor}
+                    ?open=${this._problemsOpen}
+                    @popover-dismiss=${() => { this._problemsOpen = false; }}
+                >
+                    ${this._problemsOpen
+                        ? html`<div class="flows-editor-header-menu-portal problems-flyout">
+                              ${this._renderProblemsPortalContent(issues)}
+                          </div>`
+                        : nothing}
+                </platform-popover>
             </div>
         `;
     }
@@ -1049,6 +919,22 @@ export class FlowsEditorHeader extends PlatformElement {
                     })}
                     ${hasBundleUpdate ? html`<span class="reload-dot"></span>` : nothing}
                 </span>
+                <platform-popover
+                    trigger="manual"
+                    role="menu"
+                    placement="bottom-end"
+                    offset=${MENU_PORTAL_GAP_PX}
+                    viewport-padding=${MENU_PORTAL_VIEWPORT_INSET_PX}
+                    .anchor=${this._overflowAnchor}
+                    ?open=${this._overflowOpen}
+                    @popover-dismiss=${() => { this._overflowOpen = false; }}
+                >
+                    ${this._overflowOpen
+                        ? html`<div class="flows-editor-header-menu-portal">
+                              ${this._renderOverflowPortalContent()}
+                          </div>`
+                        : nothing}
+                </platform-popover>
             </div>
         `;
     }
@@ -1208,8 +1094,9 @@ export class FlowsEditorHeader extends PlatformElement {
         const issues = this._dataflowIssues(state);
         const employeeActive = this._isEmployeeEnabled(state, flow);
 
-        if (this._problemsOpen) {
-            queueMicrotask(() => this._syncProblemsPortal());
+        // Проблемы могли уйти, пока список открыт: держать пустой флайаут нечем.
+        if (this._problemsOpen && issues.length === 0) {
+            this._problemsOpen = false;
         }
 
         return html`

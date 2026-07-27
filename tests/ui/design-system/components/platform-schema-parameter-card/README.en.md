@@ -1,6 +1,6 @@
 # Schema Parameter Card
 
-Platform component `platform-schema-parameter-card` — parameter card inside `platform-schema-editor`.
+Platform component `platform-schema-parameter-card`.
 
 Documentation status: **backlog**.
 

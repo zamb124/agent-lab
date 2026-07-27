@@ -117,7 +117,7 @@ describe('flows-editor-header flow settings entry', () => {
         await elementUpdated(el);
 
         expect(el._overflowOpen).to.equal(false);
-        expect(document.body.querySelector('.flows-editor-header-menu-portal')).to.equal(null);
+        expect(el.shadowRoot.querySelector('.flows-editor-header-menu-portal')).to.equal(null);
     });
 
     it('mobile overflow menu uses block ghost buttons at 390px', async () => {
@@ -134,7 +134,7 @@ describe('flows-editor-header flow settings entry', () => {
         el._overflowOpen = true;
         await elementUpdated(el);
 
-        const flyout = document.body.querySelector('.flows-editor-header-menu-portal');
+        const flyout = el.shadowRoot.querySelector('.flows-editor-header-menu-portal');
         expect(flyout).to.not.equal(null);
 
         const menuButtons = flyout.querySelectorAll('platform-button[block]');
@@ -156,7 +156,7 @@ describe('flows-editor-header flow settings entry', () => {
 
         el._overflowOpen = true;
         await elementUpdated(el);
-        const flyoutAgain = document.body.querySelector('.flows-editor-header-menu-portal');
+        const flyoutAgain = el.shadowRoot.querySelector('.flows-editor-header-menu-portal');
         expect(flyoutAgain).to.not.equal(null);
         const settingsBtnAgain = flyoutAgain.querySelectorAll('platform-button[block]')[1];
         opened = null;
@@ -180,7 +180,7 @@ describe('flows-editor-header flow settings entry', () => {
         el._overflowOpen = true;
         await elementUpdated(el);
 
-        const flyout = document.body.querySelector('.flows-editor-header-menu-portal');
+        const flyout = el.shadowRoot.querySelector('.flows-editor-header-menu-portal');
         expect(flyout).to.not.equal(null);
 
         let opened = null;
@@ -214,7 +214,7 @@ describe('flows-editor-header flow settings entry', () => {
         el._overflowOpen = true;
         await elementUpdated(el);
 
-        const flyout = document.body.querySelector('.flows-editor-header-menu-portal');
+        const flyout = el.shadowRoot.querySelector('.flows-editor-header-menu-portal');
         expect(flyout).to.not.equal(null);
 
         let opened = null;

@@ -49,6 +49,7 @@ FACTORY_CANON_SERVICES = {
     "provider_litserve",
     "sync",
     "flows",
+    "wiki",
 }
 # Все мигрированные на event-канон сервисы. Парсер `_resolve_external_prefixes`
 # умеет резолвить вложенные `include_router(child, prefix='/...')`-цепочки

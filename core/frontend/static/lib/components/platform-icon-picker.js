@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
+import './platform-popover.js';
 
 export class PlatformIconPicker extends PlatformElement {
     static properties = {
@@ -9,6 +10,7 @@ export class PlatformIconPicker extends PlatformElement {
         placeholder: { type: String },
         disabled: { type: Boolean, reflect: true },
         _open: { state: true },
+        _anchor: { state: true },
     };
 
     static styles = [
@@ -67,17 +69,7 @@ export class PlatformIconPicker extends PlatformElement {
             }
 
             .panel {
-                position: absolute;
-                top: calc(100% + var(--space-2));
-                left: 0;
-                z-index: 1000;
-                width: min(560px, 100%);
-                max-height: 280px;
-                overflow: auto;
-                border: 1px solid var(--crm-stroke, var(--border-subtle));
-                border-radius: var(--radius-xl, 14px);
-                background: var(--crm-surface, var(--glass-solid));
-                box-shadow: var(--shadow-lg);
+                width: min(560px, 90vw);
                 padding: var(--space-2);
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
@@ -123,27 +115,22 @@ export class PlatformIconPicker extends PlatformElement {
         this.placeholder = 'Выберите иконку';
         this.disabled = false;
         this._open = false;
-        this._onWindowPointerDown = this._handleWindowPointerDown.bind(this);
+        /** @type {HTMLElement | null} */
+        this._anchor = null;
     }
 
-    connectedCallback() {
-        super.connectedCallback();
-        window.addEventListener('pointerdown', this._onWindowPointerDown);
-    }
-
-    disconnectedCallback() {
-        window.removeEventListener('pointerdown', this._onWindowPointerDown);
-        super.disconnectedCallback();
-    }
-
-    _handleWindowPointerDown(event) {
-        if (!this._open) {
-            return;
+    updated(changed) {
+        super.updated?.(changed);
+        if (this._anchor === null) {
+            const trigger = this.renderRoot?.querySelector?.('.trigger');
+            if (trigger instanceof HTMLElement) {
+                this._anchor = trigger;
+            }
         }
-        const path = event.composedPath();
-        if (!path.includes(this)) {
-            this._open = false;
-        }
+    }
+
+    _onPopoverDismiss() {
+        this._open = false;
     }
 
     _toggleOpen() {
@@ -202,20 +189,30 @@ export class PlatformIconPicker extends PlatformElement {
                 <platform-icon class="chevron" name="chevron-down" size="16"></platform-icon>
             </button>
 
-            ${this._open ? html`
-                <div class="panel">
-                    ${options.map((iconName) => html`
-                        <button
-                            type="button"
-                            class="option ${this.value === iconName ? 'active' : ''}"
-                            @click=${() => this._selectIcon(iconName)}
-                        >
-                            <platform-icon name=${iconName} size="16"></platform-icon>
-                            <span class="option-label">${iconName}</span>
-                        </button>
-                    `)}
-                </div>
-            ` : ''}
+            <platform-popover
+                trigger="manual"
+                role="listbox"
+                placement="bottom-start"
+                offset="8"
+                .anchor=${this._anchor}
+                ?open=${this._open && !this.disabled}
+                @popover-dismiss=${this._onPopoverDismiss}
+            >
+                ${this._open ? html`
+                    <div class="panel">
+                        ${options.map((iconName) => html`
+                            <button
+                                type="button"
+                                class="option ${this.value === iconName ? 'active' : ''}"
+                                @click=${() => this._selectIcon(iconName)}
+                            >
+                                <platform-icon name=${iconName} size="16"></platform-icon>
+                                <span class="option-label">${iconName}</span>
+                            </button>
+                        `)}
+                    </div>
+                ` : ''}
+            </platform-popover>
         `;
     }
 }

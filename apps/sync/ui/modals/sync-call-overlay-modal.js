@@ -605,7 +605,6 @@ export class SyncCallOverlayModal extends PlatformModal {
                 --glass-solid-subtle: rgba(255, 255, 255, 0.1);
                 --glass-border-subtle: rgba(255, 255, 255, 0.18);
                 --accent-subtle: rgba(99, 102, 241, 0.28);
-                --field-pill-enum-list-z: 110;
             }
 
             .error-bar {

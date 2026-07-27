@@ -5,7 +5,8 @@
  *   `platform:<scope>:<key>`
  *
  * `<scope>` — `frontend`, `crm`, `sync`, `office`, `rag`, `flows`, `voice`,
- * `litserve`, `worktracker` или `core`. Для общеплатформенных вещей (тема, локаль) — `core`.
+ * `litserve`, `worktracker`, `wiki` или `core`. Для общеплатформенных вещей
+ * (тема, локаль) — `core`.
  *
  * Запрещены свободные префиксы вроде `humanitec.sync.*`, `crm:*`,
  * `sync.chat.*` — это устаревший канон и должен быть удалён.
@@ -22,6 +23,7 @@ const _ALLOWED_SCOPES = Object.freeze(new Set([
     'voice',
     'litserve',
     'worktracker',
+    'wiki',
 ]));
 
 const _KEY_RE = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;

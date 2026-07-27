@@ -134,6 +134,15 @@ SERVICES = {
         "app": "apps.secrets.main:app",
         "port": "8022",
     },
+    "wiki": {
+        "type": "granian",
+        "app": "apps.wiki.main:app",
+        "port": "8023",
+        "static": [
+            CORE_FRONTEND_STATIC,
+            ("/wiki/ui/static", "apps/wiki/ui"),
+        ],
+    },
     "browser": {
         "type": "granian",
         "app": "apps.browser.main:app",

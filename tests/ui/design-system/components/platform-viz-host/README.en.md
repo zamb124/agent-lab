@@ -2,9 +2,7 @@
 
 Platform component `platform-viz-host`.
 
-Switch ECharts / Mermaid by document/openConfig. Inputs: `.document` (VizDocument JSON), `.openConfig` with handler=viz, `.compact` for chat inline.
-
-Documentation status: **backfill**.
+Documentation status: **backlog**.
 
 ## Run tests
 

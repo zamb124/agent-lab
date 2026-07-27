@@ -1,10 +1,8 @@
-# ECharts Host
+# Echarts Host
 
 Platform component `platform-echarts-host`.
 
-Apache ECharts in Lit: lazy script loading, ResizeObserver, dispose.
-
-Documentation status: **backfill**.
+Documentation status: **backlog**.
 
 ## Run tests
 

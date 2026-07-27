@@ -100,6 +100,11 @@
             "menu_description": "Collaborative Office editing",
             "description": "Collaborative Office editing: binding list, editor in iframe, namespace isolation, secrets only on the BFF"
         },
+        "wiki": {
+            "name": "Wiki",
+            "menu_description": "Company knowledge base: pages, links, search",
+            "description": "A knowledge base with a page tree inside each workspace: write documentation, link it to NetWorkle entities and documents, and find it by meaning rather than exact wording"
+        },
         "litserve": {
             "name": "{modelsProductName}",
             "menu_description": "Local embeddings and rerank",
@@ -658,5 +663,86 @@
             "unavailable_https": "Microphone needs a secure context (HTTPS)",
             "unavailable_recorder": "Voice recording is not supported in this browser"
         }
+    },
+    "editor": {
+        "load_failed": "Failed to load the editor",
+        "format_toolbar": "Formatting",
+        "placeholder": "Press / for commands",
+        "block": {
+            "heading_1": "Heading 1",
+            "heading_2": "Heading 2",
+            "heading_3": "Heading 3",
+            "bullet_list": "Bulleted list",
+            "ordered_list": "Numbered list",
+            "task_list": "To-do list",
+            "toggle": "Toggle",
+            "callout": "Callout",
+            "blockquote": "Quote",
+            "code_block": "Code block",
+            "table": "Table",
+            "horizontal_rule": "Divider"
+        },
+        "mark": {
+            "strong": "Bold",
+            "em": "Italic",
+            "strike": "Strikethrough",
+            "code": "Code",
+            "highlight": "Highlight"
+        },
+        "slash": {
+            "title": "Blocks",
+            "empty": "Nothing found"
+        },
+        "block_menu": {
+            "aria": "Block actions",
+            "duplicate": "Duplicate",
+            "delete": "Delete",
+            "turn_paragraph": "Turn into text",
+            "turn_heading_1": "Turn into heading 1",
+            "turn_heading_2": "Turn into heading 2",
+            "turn_bullet_list": "Turn into list",
+            "turn_blockquote": "Turn into quote",
+            "turn_code_block": "Turn into code block"
+        },
+        "mention": {
+            "title": "Mentions",
+            "empty": "Nothing found",
+            "kind": {
+                "user": "Person",
+                "crm_entity": "Entity",
+                "wiki_page": "Page",
+                "file": "Document"
+            }
+        },
+        "table": {
+            "addRowBefore": "Row above",
+            "addRowAfter": "Row below",
+            "deleteRow": "Delete row",
+            "addColumnBefore": "Column left",
+            "addColumnAfter": "Column right",
+            "deleteColumn": "Delete column",
+            "deleteTable": "Delete table",
+            "toolbar": "Table"
+        }
+    },
+    "command_palette": {
+        "placeholder": "Search and commands",
+        "loading": "Searching…",
+        "empty": "Nothing found"
+    },
+    "emoji_picker": {
+        "search_placeholder": "Search emoji",
+        "search_aria": "Search emoji",
+        "clear": "Remove",
+        "empty": "Nothing found",
+        "category": {
+            "documents": "Documents",
+            "work": "Work",
+            "people": "People",
+            "signals": "Highlights"
+        }
+    },
+    "resizable_split": {
+        "handle_aria": "Resize panel"
     }
 }

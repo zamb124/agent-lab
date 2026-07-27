@@ -2,8 +2,6 @@
 
 Platform component `platform-schema-editor`.
 
-Dual-mode Form/JSON editor for JSON Schema objects (`parameters_schema` / `output_schema`).
-
 Documentation status: **backlog**.
 
 ## Run tests

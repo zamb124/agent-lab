@@ -170,7 +170,7 @@ fi
 #     Canon: единственная точка входа — helpers PlatformElement (useResource/useOp/useForm/useCursorList/useFacets/useSlice,
 #     openModal/closeModal/toast/copyToClipboard/navigate). I18nNs не нужен — namespace резолвится через
 #     static i18nNamespace или PlatformApp.defaultI18nNamespace.
-FACTORY_CANON_SERVICES=( frontend crm rag sync office flows provider_litserve voice )
+FACTORY_CANON_SERVICES=( frontend crm rag sync office flows provider_litserve voice wiki )
 for svc in "${FACTORY_CANON_SERVICES[@]}"; do
     # rg падает с error если ни одной из переданных директорий нет; игнорируем
     # отсутствующие (например, у provider_litserve нет модалок).

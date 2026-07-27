@@ -1,4 +1,4 @@
-# platform-work-item-detail
+# Work Item Detail
 
 Платформенный компонент `platform-work-item-detail`.
 

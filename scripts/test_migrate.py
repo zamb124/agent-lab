@@ -34,7 +34,12 @@ from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
-_EXTRA_DATABASES = ("platform_tracing", "platform_worktracker", "platform_secrets")
+_EXTRA_DATABASES = (
+    "platform_tracing",
+    "platform_worktracker",
+    "platform_secrets",
+    "platform_wiki",
+)
 
 
 def _alembic_head_revision(script_location: str) -> str | None:

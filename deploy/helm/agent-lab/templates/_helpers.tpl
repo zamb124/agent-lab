@@ -74,6 +74,8 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_tracing
 - name: DATABASE__SEARCH_URL
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_search
+- name: DATABASE__WIKI_URL
+  value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_wiki
 - name: DATABASE__REDIS_URL
   value: redis://{{ .Values.appCommonEnv.redisService }}:{{ .Values.appCommonEnv.redisPort }}/0
 - name: DATABASE__AUTO_MIGRATE
@@ -107,6 +109,11 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
 {{- if and $secrets $secrets.enabled }}
 - name: SERVER__SECRETS_SERVICE_URL
   value: http://{{ $secrets.serviceName }}:{{ $secrets.port }}
+{{- end }}
+{{- $wiki := index .Values.applications "wiki" }}
+{{- if and $wiki $wiki.enabled }}
+- name: SERVER__WIKI_SERVICE_URL
+  value: http://{{ $wiki.serviceName }}:{{ $wiki.port }}
 {{- end }}
 - name: SERVER__OFFICE_SERVICE_URL
   value: http://{{ .Values.applications.office.serviceName }}:{{ .Values.applications.office.port }}

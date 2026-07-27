@@ -1,8 +1,8 @@
 component: platform-work-item-detail
 doc_slug: platform-work-item-detail
 tier: T0
-title_ru: Work Item detail
-title_en: Work Item detail
+title_ru: Work Item Detail
+title_en: Work Item Detail
 import: "@platform/lib/components/platform-work-item-detail.js"
 variants:
   - id: default

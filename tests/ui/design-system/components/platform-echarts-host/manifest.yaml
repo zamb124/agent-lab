@@ -1,8 +1,8 @@
 component: platform-echarts-host
 doc_slug: platform-echarts-host
-tier: T2
-title_ru: ECharts Host
-title_en: ECharts Host
+tier: T0
+title_ru: Echarts Host
+title_en: Echarts Host
 import: "@platform/lib/components/platform-echarts-host.js"
 variants:
   - id: default

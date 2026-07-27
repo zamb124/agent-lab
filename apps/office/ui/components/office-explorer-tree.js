@@ -411,6 +411,7 @@ export class OfficeExplorerTree extends PlatformElement {
                 ?has-child-catalogs=${menu ? menu.hasChildCatalogs : false}
                 .visible=${menu !== null}
                 @ctx-action=${this._onContextAction}
+                @ctx-dismiss=${() => this._hideContextMenu()}
             ></office-catalog-context-menu>
         `;
     }

@@ -74,6 +74,7 @@ _SERVICE_PREFIXES: tuple[str, ...] = (
     "code-runner-csharp",
     "worktracker",
     "secrets",
+    "wiki",
 )
 
 # Где публичный первый сегмент пути не совпадает с ключом get_service_url / SERVER__*_SERVICE_URL.

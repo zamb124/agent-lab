@@ -1,31 +1,23 @@
 /**
  * Подсказка по hover / focus. По умолчанию — кнопка «?»; опционально слот-контент
- * (кастомный триггер). Пузырёк в document.body (z-index из nextModalLayerZIndex).
+ * (кастомный триггер). Пузырёк живёт в `platform-popover` (top layer).
  * Свойство strategy для совместимости; `wide` — широкий моноширинный режим (JSON).
  * Для сложных подсказок доступны `summary`, `details`, `docHref`, `docLabel`.
  * `fill` растягивает кастомный slotted trigger на всю область хоста.
  * `placement`: `auto` — не вылезать за верх вьюпорта (снизу от якоря), `top` / `bottom` — жёстко.
  * `size`: `md` — кнопка 32×32 (как `flows-node-run-control`).
  */
-import { html, css } from '../../assets/js/lit/lit.min.js';
+import { html, css, nothing, unsafeCSS } from '../../assets/js/lit/lit.min.js';
 import { PlatformElement } from '../platform-element/index.js';
-import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { resolveDocumentationHref } from '../utils/documentation-url.js';
+import './platform-popover.js';
 
-const PORTAL_STYLE_ID = 'platform-help-hint-portal-styles-v2';
 const PORTAL_GAP_PX = 8;
-const VIEWPORT_TOP_INSET_PX = 4;
 const VIEWPORT_SIDE_INSET_PX = 8;
+const CLOSE_DELAY_MS = 200;
 
-function ensurePortalBubbleStyles() {
-    if (typeof document === 'undefined' || document.getElementById(PORTAL_STYLE_ID)) {
-        return;
-    }
-    const style = document.createElement('style');
-    style.id = PORTAL_STYLE_ID;
-    style.textContent = `
+const HINT_BUBBLE_CSS = `
         .platform-help-hint-portal-bubble {
-            position: fixed;
             min-width: 200px;
             max-width: min(280px, 70vw);
             padding: 10px 12px;
@@ -35,18 +27,7 @@ function ensurePortalBubbleStyles() {
             text-align: left;
             white-space: normal;
             color: var(--text-primary, rgba(255, 255, 255, 0.95));
-            background: var(--glass-solid-strong, rgba(40, 40, 64, 0.98));
-            border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
-            border-radius: var(--radius-md, 10px);
-            box-shadow: var(--glass-shadow-strong, 0 8px 28px rgba(0, 0, 0, 0.35));
-            pointer-events: auto;
             box-sizing: border-box;
-        }
-        .platform-help-hint-portal-bubble--above {
-            transform: translate(-50%, calc(-100% - ${PORTAL_GAP_PX}px));
-        }
-        .platform-help-hint-portal-bubble--below {
-            transform: translate(-50%, 0);
         }
         .platform-help-hint-portal-bubble--wide {
             min-width: 200px;
@@ -83,12 +64,11 @@ function ensurePortalBubbleStyles() {
             outline: none;
         }
     `;
-    document.head.appendChild(style);
-}
 
 export class PlatformHelpHint extends PlatformElement {
     static styles = [
         PlatformElement.styles,
+        unsafeCSS(HINT_BUBBLE_CSS),
         css`
             :host {
                 display: inline-flex;
@@ -189,96 +169,31 @@ export class PlatformHelpHint extends PlatformElement {
         this._open = false;
         this._bubbleId = `platform-help-hint-${Math.random().toString(36).slice(2, 10)}`;
         this._closeTimer = null;
-        this._portalBubble = null;
-        this._bubbleZ = 0;
-        this._onGlobalScroll = this._onGlobalScroll.bind(this);
-        this._onGlobalKeydown = this._onGlobalKeydown.bind(this);
-        this._onGlobalPointerDown = this._onGlobalPointerDown.bind(this);
-        this._onPortalBubbleEnter = () => this._cancelClose();
-        this._onPortalBubbleLeave = () => this._scheduleClose();
-        this._onPortalBubbleFocusIn = () => this._cancelClose();
-        this._onPortalBubbleFocusOut = (e) => this._onPortalFocusOut(e);
+        /** @type {HTMLElement | null} */
+        this._anchor = null;
+        this._cancelClose = this._cancelClose.bind(this);
+        this._scheduleClose = this._scheduleClose.bind(this);
+        this._closeNow = this._closeNow.bind(this);
+        this._onPortalFocusOut = this._onPortalFocusOut.bind(this);
         this._localeSelect = this.select((s) => s.i18n.locale);
     }
 
     disconnectedCallback() {
         this._clearCloseTimer();
-        this._detachGlobalListeners();
-        this._teardownPortal();
         super.disconnectedCallback();
     }
 
     updated(changed) {
         super.updated(changed);
-        if (changed.has('_open')) {
-            if (this._open) {
-                queueMicrotask(() => this._mountPortal());
-                window.addEventListener('scroll', this._onGlobalScroll, true);
-                window.addEventListener('resize', this._onGlobalScroll, true);
-                window.addEventListener('keydown', this._onGlobalKeydown, true);
-                window.addEventListener('pointerdown', this._onGlobalPointerDown, true);
-            } else {
-                this._teardownPortal();
-                this._detachGlobalListeners();
+        if (this._anchor === null) {
+            const root = this.renderRoot?.querySelector('.hint-root');
+            if (root instanceof HTMLElement) {
+                this._anchor = root;
             }
-        } else if (
-            this._open
-            && this._portalBubble
-            && (
-                changed.has('text')
-                || changed.has('summary')
-                || changed.has('details')
-                || changed.has('docHref')
-                || changed.has('docLabel')
-                || changed.has('label')
-            )
-        ) {
-            this._updatePortalContent();
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => this._syncPortalPosition());
-            });
         }
-        if (this._open && this._portalBubble && changed.has('wide')) {
-            this._applyWideClass();
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => this._syncPortalPosition());
-            });
+        if (this._open) {
+            this.renderRoot?.querySelector('platform-popover')?.reposition();
         }
-        if (this._open && this._portalBubble && changed.has('placement')) {
-            this._syncPortalPosition();
-        }
-    }
-
-    _detachGlobalListeners() {
-        window.removeEventListener('scroll', this._onGlobalScroll, true);
-        window.removeEventListener('resize', this._onGlobalScroll, true);
-        window.removeEventListener('keydown', this._onGlobalKeydown, true);
-        window.removeEventListener('pointerdown', this._onGlobalPointerDown, true);
-    }
-
-    _onGlobalScroll() {
-        if (!this._open) {
-            return;
-        }
-        this._syncPortalPosition();
-    }
-
-    _onGlobalKeydown(e) {
-        if (e.key === 'Escape' && this._open) {
-            this._closeNow();
-        }
-    }
-
-    _onGlobalPointerDown(e) {
-        if (!this._open) {
-            return;
-        }
-        const target = e.target;
-        const root = this.renderRoot?.querySelector('.hint-root');
-        if ((root && root.contains(target)) || (this._portalBubble && this._portalBubble.contains(target))) {
-            return;
-        }
-        this._closeNow();
     }
 
     _clearCloseTimer() {
@@ -293,7 +208,7 @@ export class PlatformHelpHint extends PlatformElement {
         this._closeTimer = window.setTimeout(() => {
             this._closeTimer = null;
             this._open = false;
-        }, 200);
+        }, CLOSE_DELAY_MS);
     }
 
     _cancelClose() {
@@ -305,17 +220,6 @@ export class PlatformHelpHint extends PlatformElement {
         this._open = false;
     }
 
-    _applyWideClass() {
-        if (!this._portalBubble) {
-            return;
-        }
-        if (this.wide) {
-            this._portalBubble.classList.add('platform-help-hint-portal-bubble--wide');
-        } else {
-            this._portalBubble.classList.remove('platform-help-hint-portal-bubble--wide');
-        }
-    }
-
     _hasDocLink() {
         return typeof this.docHref === 'string' && this.docHref.trim() !== '';
     }
@@ -324,147 +228,53 @@ export class PlatformHelpHint extends PlatformElement {
         return typeof value === 'string' ? value.trim() : '';
     }
 
-    _appendPortalText(className, text) {
-        const value = this._textValue(text);
-        if (value === '' || !this._portalBubble) {
-            return;
-        }
-        const node = document.createElement('div');
-        node.className = className;
-        node.textContent = value;
-        this._portalBubble.appendChild(node);
-    }
-
-    _updatePortalContent() {
-        if (!this._portalBubble) {
-            return;
+    _renderBubble() {
+        if (!this._open) {
+            return nothing;
         }
         const summary = this._textValue(this.summary);
         const details = this._textValue(this.details);
         const text = this._textValue(this.text);
-        this._portalBubble.textContent = '';
-        this._portalBubble.setAttribute('role', this._hasDocLink() ? 'dialog' : 'tooltip');
-        if (this._hasDocLink()) {
-            this._portalBubble.setAttribute('aria-label', summary || this.label);
-            this._portalBubble.setAttribute('aria-modal', 'false');
-        } else {
-            this._portalBubble.removeAttribute('aria-label');
-            this._portalBubble.removeAttribute('aria-modal');
-        }
-        if (this.wide && summary === '' && details === '' && !this._hasDocLink()) {
-            this._portalBubble.textContent = text;
-            return;
-        }
-        this._appendPortalText('platform-help-hint-portal-summary', summary);
-        this._appendPortalText('platform-help-hint-portal-body', details || text);
-        if (this._hasDocLink()) {
-            const link = document.createElement('a');
-            link.className = 'platform-help-hint-portal-link';
-            link.href = resolveDocumentationHref(this.docHref.trim(), {
-                locale: this._localeSelect.value,
-            });
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            link.textContent = this._textValue(this.docLabel) || 'Open documentation';
-            this._portalBubble.appendChild(link);
-        }
-    }
+        const classes = this.wide
+            ? 'platform-help-hint-portal-bubble platform-help-hint-portal-bubble--wide'
+            : 'platform-help-hint-portal-bubble';
 
-    /**
-     * @param {DOMRect} anchor
-     * @param {number} bubbleH
-     * @returns {boolean}
-     */
-    _shouldPlaceAbove(anchor, bubbleH) {
-        if (this.placement === 'top') {
-            return true;
-        }
-        if (this.placement === 'bottom') {
-            return false;
-        }
-        if (bubbleH <= 0) {
-            return anchor.top >= 100;
-        }
-        const topEdgeIfAbove = anchor.top - PORTAL_GAP_PX - bubbleH;
-        return topEdgeIfAbove >= VIEWPORT_TOP_INSET_PX;
-    }
+        // Широкая подсказка без структуры — это моноширинный дамп (JSON),
+        // его нельзя резать на summary/body.
+        const isRawWide = this.wide && summary === '' && details === '' && !this._hasDocLink();
 
-    _syncPortalPosition() {
-        if (!this._portalBubble) {
-            return;
-        }
-        const root = this.renderRoot?.querySelector('.hint-root');
-        if (!root) {
-            return;
-        }
-        const r = root.getBoundingClientRect();
-        const bubbleH = this._portalBubble.getBoundingClientRect().height;
-        const above = this._shouldPlaceAbove(r, bubbleH);
-        this._portalBubble.classList.remove('platform-help-hint-portal-bubble--above', 'platform-help-hint-portal-bubble--below');
-        if (above) {
-            this._portalBubble.classList.add('platform-help-hint-portal-bubble--above');
-            this._portalBubble.style.top = `${r.top}px`;
-        } else {
-            this._portalBubble.classList.add('platform-help-hint-portal-bubble--below');
-            this._portalBubble.style.top = `${r.bottom + PORTAL_GAP_PX}px`;
-        }
-        const anchorCenterX = r.left + r.width / 2;
-        this._portalBubble.style.left = `${anchorCenterX}px`;
-
-        const br = this._portalBubble.getBoundingClientRect();
-        const vw = window.innerWidth;
-        const bubbleW = br.width;
-        const idealLeft = anchorCenterX - bubbleW / 2;
-        const maxLeft = vw - VIEWPORT_SIDE_INSET_PX - bubbleW;
-        const clampedLeft = Math.max(
-            VIEWPORT_SIDE_INSET_PX,
-            Math.min(idealLeft, Math.max(VIEWPORT_SIDE_INSET_PX, maxLeft)),
-        );
-        const clampedCenterX = clampedLeft + bubbleW / 2;
-        if (Math.abs(clampedCenterX - anchorCenterX) > 0.5) {
-            this._portalBubble.style.left = `${clampedCenterX}px`;
-        }
-    }
-
-    _mountPortal() {
-        if (!this._open) {
-            return;
-        }
-        this._teardownPortal();
-        const root = this.renderRoot?.querySelector('.hint-root');
-        if (!root) {
-            return;
-        }
-        ensurePortalBubbleStyles();
-        this._bubbleZ = nextModalLayerZIndex();
-        const bubble = document.createElement('div');
-        bubble.id = this._bubbleId;
-        bubble.className = 'platform-help-hint-portal-bubble';
-        bubble.tabIndex = -1;
-        bubble.style.zIndex = String(this._bubbleZ);
-        bubble.addEventListener('mouseenter', this._onPortalBubbleEnter);
-        bubble.addEventListener('mouseleave', this._onPortalBubbleLeave);
-        bubble.addEventListener('focusin', this._onPortalBubbleFocusIn);
-        bubble.addEventListener('focusout', this._onPortalBubbleFocusOut);
-        document.body.appendChild(bubble);
-        this._portalBubble = bubble;
-        this._updatePortalContent();
-        this._applyWideClass();
-        this._syncPortalPosition();
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => this._syncPortalPosition());
-        });
-    }
-
-    _teardownPortal() {
-        if (this._portalBubble) {
-            this._portalBubble.removeEventListener('mouseenter', this._onPortalBubbleEnter);
-            this._portalBubble.removeEventListener('mouseleave', this._onPortalBubbleLeave);
-            this._portalBubble.removeEventListener('focusin', this._onPortalBubbleFocusIn);
-            this._portalBubble.removeEventListener('focusout', this._onPortalBubbleFocusOut);
-            this._portalBubble.remove();
-            this._portalBubble = null;
-        }
+        return html`
+            <div
+                id=${this._bubbleId}
+                class=${classes}
+                tabindex="-1"
+                aria-label=${this._hasDocLink() ? (summary || this.label) : nothing}
+                aria-modal=${this._hasDocLink() ? 'false' : nothing}
+                @mouseenter=${this._cancelClose}
+                @mouseleave=${this._scheduleClose}
+                @focusin=${this._cancelClose}
+                @focusout=${this._onPortalFocusOut}
+            >
+                ${isRawWide ? text : html`
+                    ${summary !== ''
+                        ? html`<div class="platform-help-hint-portal-summary">${summary}</div>`
+                        : nothing}
+                    ${(details || text) !== ''
+                        ? html`<div class="platform-help-hint-portal-body">${details || text}</div>`
+                        : nothing}
+                    ${this._hasDocLink()
+                        ? html`<a
+                              class="platform-help-hint-portal-link"
+                              href=${resolveDocumentationHref(this.docHref.trim(), {
+                                  locale: this._localeSelect.value,
+                              })}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                          >${this._textValue(this.docLabel) || 'Open documentation'}</a>`
+                        : nothing}
+                `}
+            </div>
+        `;
     }
 
     _openBubble() {
@@ -486,9 +296,13 @@ export class PlatformHelpHint extends PlatformElement {
         this._openBubble();
     }
 
+    _bubbleNode() {
+        return this.renderRoot?.querySelector('.platform-help-hint-portal-bubble');
+    }
+
     _onRootFocusOut(e) {
         const related = e.relatedTarget;
-        if (related && this._portalBubble?.contains(related)) {
+        if (related && this._bubbleNode()?.contains(related)) {
             return;
         }
         this._closeNow();
@@ -497,7 +311,7 @@ export class PlatformHelpHint extends PlatformElement {
     _onPortalFocusOut(e) {
         const related = e.relatedTarget;
         const root = this.renderRoot?.querySelector('.hint-root');
-        if ((related && this._portalBubble?.contains(related)) || (root && related && root.contains(related))) {
+        if ((related && this._bubbleNode()?.contains(related)) || (root && related && root.contains(related))) {
             return;
         }
         this._scheduleClose();
@@ -525,6 +339,19 @@ export class PlatformHelpHint extends PlatformElement {
                     <button type="button" class="hint-btn" aria-label=${this.label}>?</button>
                 </slot>
             </span>
+            <platform-popover
+                trigger="manual"
+                role=${this._hasDocLink() ? 'dialog' : 'tooltip'}
+                placement=${this.placement === 'top' ? 'top' : 'bottom'}
+                offset=${PORTAL_GAP_PX}
+                viewport-padding=${VIEWPORT_SIDE_INSET_PX}
+                ?flip=${this.placement === 'auto'}
+                .anchor=${this._anchor}
+                ?open=${this._open}
+                @popover-dismiss=${this._closeNow}
+            >
+                ${this._renderBubble()}
+            </platform-popover>
         `;
     }
 }

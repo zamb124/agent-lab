@@ -13,10 +13,8 @@
  *     Компания (если есть хотя бы одна в списке; «Создать компанию» — только
  *     при роли owner текущей компании), Календарь, Документация, язык (en|ru),
  *     переключатель темы, Выйти.
- *   - в свернутом sidebar: `platform-service-sidebar[collapsed]` или
- *     `platform-sidebar[collapsed]` (вторая недоступна из slot=footer без вложения);
- *     меню в `position: fixed` через `--user-menu-fixed-*` (`_syncCollapsedMenuPosition`).
- *   - z-index панели при открытии: `nextModalLayerZIndex()` (modal-z-stack.js), inline-стилем на `.user-menu`.
+ *   - меню живёт в `platform-popover` (top layer), поэтому одинаково работает
+ *     в развёрнутом и свёрнутом sidebar и не обрезается его `overflow`.
  *
  * i18n namespace: 'platform' (см. core/i18n/translations/{ru,en}/platform.json).
  */
@@ -29,8 +27,8 @@ import { COMPANIES_EVENTS } from '../events/reducers/companies.js';
 import { buildCompanySubdomainUrl } from '../utils/company-url.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
-import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import './platform-icon.js';
+import './platform-popover.js';
 import './platform-calendar-modal.js';
 import './platform-mail-modal.js';
 const COMPANY_SWITCH_STORAGE_KEY = 'platform:company-switch';
@@ -42,7 +40,7 @@ export class PlatformUser extends PlatformElement {
         block: { type: Boolean, reflect: true },
         documentationTag: { type: String, attribute: 'documentation-tag' },
         _menuOpen: { state: true },
-        _menuZIndex: { state: true },
+        _anchor: { state: true },
         _companySelectorOpen: { state: true },
         _avatarFallbackLevel: { state: true },
     };
@@ -52,7 +50,6 @@ export class PlatformUser extends PlatformElement {
         this.block = false;
         this.documentationTag = null;
         this._menuOpen = false;
-        this._menuZIndex = 0;
         this._companySelectorOpen = false;
         this._avatarFallbackLevel = 0;
         this._menuAvatarSig = '';
@@ -68,9 +65,10 @@ export class PlatformUser extends PlatformElement {
 
         this._companiesLoaded = false;
 
+        /** @type {HTMLElement | null} */
+        this._anchor = null;
         this._onDocumentClick = this._onDocumentClick.bind(this);
         this._onStorage = this._onStorage.bind(this);
-        this._onResize = this._syncCollapsedMenuPosition.bind(this);
     }
 
     connectedCallback() {
@@ -82,8 +80,6 @@ export class PlatformUser extends PlatformElement {
     disconnectedCallback() {
         document.removeEventListener('click', this._onDocumentClick);
         window.removeEventListener('storage', this._onStorage);
-        this._detachCollapsedListeners();
-        this._clearCollapsedMenuPosition();
         super.disconnectedCallback();
     }
 
@@ -108,14 +104,14 @@ export class PlatformUser extends PlatformElement {
             }
         }
 
-        if (changedProperties.has('_menuOpen')) {
-            if (this._menuOpen) {
-                this._attachCollapsedListeners();
-                this.updateComplete.then(() => this._syncCollapsedMenuPosition());
-            } else {
-                this._detachCollapsedListeners();
-                this._clearCollapsedMenuPosition();
+        if (this._anchor === null) {
+            const button = this.renderRoot?.querySelector('.user-button');
+            if (button instanceof HTMLElement) {
+                this._anchor = button;
             }
+        }
+        if (this._menuOpen) {
+            this.renderRoot?.querySelector('platform-popover')?.reposition();
         }
     }
 
@@ -132,12 +128,14 @@ export class PlatformUser extends PlatformElement {
         e.stopPropagation();
         const next = !this._menuOpen;
         this._menuOpen = next;
-        if (next) {
-            this._menuZIndex = nextModalLayerZIndex();
-        }
         if (!next) {
             this._companySelectorOpen = false;
         }
+    }
+
+    _closeMenu() {
+        this._menuOpen = false;
+        this._companySelectorOpen = false;
     }
 
     _toggleCompanySelector(e) {
@@ -298,51 +296,6 @@ export class PlatformUser extends PlatformElement {
         }
     }
 
-    _attachCollapsedListeners() {
-        window.addEventListener('resize', this._onResize);
-        window.addEventListener('scroll', this._onResize, true);
-    }
-
-    _detachCollapsedListeners() {
-        window.removeEventListener('resize', this._onResize);
-        window.removeEventListener('scroll', this._onResize, true);
-    }
-
-    _clearCollapsedMenuPosition() {
-        this.style.removeProperty('--user-menu-fixed-left');
-        this.style.removeProperty('--user-menu-fixed-bottom');
-        this.style.removeProperty('--user-menu-fixed-width');
-    }
-
-    _collapsedInServiceShell() {
-        const service = this.closest('platform-service-sidebar');
-        return service instanceof HTMLElement && service.hasAttribute('collapsed');
-    }
-
-    _syncCollapsedMenuPosition() {
-        if (!this._menuOpen) return;
-        const innerSidebar = this.closest('platform-sidebar');
-        const collapsed =
-            this._collapsedInServiceShell() ||
-            (innerSidebar instanceof HTMLElement && innerSidebar.hasAttribute('collapsed'));
-        if (!collapsed) {
-            this._clearCollapsedMenuPosition();
-            return;
-        }
-        const button = this.renderRoot.querySelector('.user-button');
-        if (!button) return;
-        const rect = button.getBoundingClientRect();
-        const margin = 8;
-        const maxW = Math.min(280, window.innerWidth - 2 * margin);
-        let left = rect.left;
-        if (left + maxW > window.innerWidth - margin) left = window.innerWidth - maxW - margin;
-        if (left < margin) left = margin;
-        const bottom = window.innerHeight - rect.top + margin;
-        this.style.setProperty('--user-menu-fixed-left', `${left}px`);
-        this.style.setProperty('--user-menu-fixed-bottom', `${bottom}px`);
-        this.style.setProperty('--user-menu-fixed-width', `${maxW}px`);
-    }
-
     render() {
         const auth = this._authSelect.value;
         const user = auth.user;
@@ -396,10 +349,18 @@ export class PlatformUser extends PlatformElement {
                 ></platform-icon>
             </button>
 
+            <platform-popover
+                trigger="manual"
+                role="menu"
+                placement="top-start"
+                offset="8"
+                .anchor=${this._anchor}
+                ?open=${this._menuOpen}
+                @popover-dismiss=${this._closeMenu}
+            >
             ${this._menuOpen ? html`
                 <div
                     class="user-menu"
-                    style=${`z-index:${this._menuZIndex}`}
                     @click=${(e) => e.stopPropagation()}
                 >
                     <button class="menu-item" type="button" data-menu-action="apps" @click=${this._openServicesHub}>
@@ -508,6 +469,7 @@ export class PlatformUser extends PlatformElement {
                     </button>
                 </div>
             ` : ''}
+            </platform-popover>
         `;
     }
 
@@ -553,16 +515,6 @@ export class PlatformUser extends PlatformElement {
             :host-context(platform-service-sidebar[collapsed]) .user-button:hover {
                 background: var(--glass-solid-subtle);
                 box-shadow: none;
-            }
-
-            :host-context(platform-sidebar[collapsed]) .user-menu,
-            :host-context(platform-service-sidebar[collapsed]) .user-menu {
-                position: fixed;
-                left: var(--user-menu-fixed-left, 0px);
-                bottom: var(--user-menu-fixed-bottom, auto);
-                right: auto;
-                top: auto;
-                width: var(--user-menu-fixed-width, min(280px, calc(100vw - 16px)));
             }
 
             .user-button {
@@ -645,26 +597,8 @@ export class PlatformUser extends PlatformElement {
             .chevron.open { transform: rotate(180deg); }
 
             .user-menu {
-                position: absolute;
-                bottom: calc(100% + 8px);
-                left: 0;
-                right: 0;
-                background: var(--glass-solid-strong);
-                backdrop-filter: blur(var(--glass-blur-strong));
-                -webkit-backdrop-filter: blur(var(--glass-blur-strong));
-                border: 1px solid var(--glass-border-medium);
-                border-radius: var(--radius-xl);
-                box-shadow: var(--glass-shadow-medium), 0 8px 32px rgba(0, 0, 0, 0.2);
                 padding: var(--space-1) 0;
                 min-width: min(280px, calc(100vw - 16px));
-                max-height: min(70vh, calc(var(--app-vh, 100vh) - 24px));
-                overflow-y: auto;
-                animation: pmu-slide-up 0.18s ease;
-            }
-
-            @keyframes pmu-slide-up {
-                from { opacity: 0; transform: translateY(8px); }
-                to   { opacity: 1; transform: translateY(0); }
             }
 
             .menu-item {

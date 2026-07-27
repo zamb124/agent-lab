@@ -16,9 +16,10 @@
  *   - thread → useResource('sync/threads').create(...)
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-menu.js';
+import '@platform/lib/components/platform-popover.js';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😄', '🎉', '🤔', '👀'];
 
@@ -28,35 +29,11 @@ export class SyncMessageContextMenu extends PlatformElement {
     };
 
     static styles = css`
-        :host {
-            position: fixed;
-            display: none;
-            z-index: 1000;
-            top: 0;
-            left: 0;
-        }
-        :host([open]) { display: block; }
+        :host { display: contents; }
         .menu {
-            background: var(--glass-solid-strong);
-            border: 1px solid var(--glass-border-subtle, var(--glass-border));
-            border-radius: var(--radius-xl, 16px);
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
             min-width: 200px;
             max-width: 280px;
-            padding: var(--space-1) 0;
-            overflow: hidden;
         }
-        .item {
-            display: flex;
-            align-items: center;
-            gap: var(--space-2);
-            padding: var(--space-2) var(--space-3);
-            cursor: pointer;
-            font-size: var(--text-sm);
-            color: var(--text-primary);
-        }
-        .item:hover { background: var(--glass-tint-medium); }
-        .item.danger { color: var(--color-error, #ef4444); }
         .reactions {
             display: flex;
             flex-wrap: nowrap;
@@ -84,29 +61,6 @@ export class SyncMessageContextMenu extends PlatformElement {
         this._threads = this.useResource('sync/threads');
         this._messagesStoreSel = this.select((s) => s.syncMessagesStore);
         this._authSel = this.select((s) => s.auth && s.auth.user);
-        this._boundOnDocClick = (e) => this._onDocumentClick(e);
-        this._boundOnKey = (e) => this._onKey(e);
-    }
-
-    connectedCallback() {
-        super.connectedCallback();
-        document.addEventListener('pointerdown', this._boundOnDocClick, true);
-        document.addEventListener('keydown', this._boundOnKey);
-        // Portal в body: fixed от viewport. Lit при каждом render channel-page
-        // создаёт новый хост, если предыдущий уже вынесен — чистим дубликаты,
-        // иначе open-меню с пустым channelId прячет Edit/Delete.
-        if (this.parentNode !== document.body) {
-            for (const orphan of document.body.querySelectorAll('sync-message-context-menu')) {
-                if (orphan !== this) orphan.remove();
-            }
-            document.body.appendChild(this);
-        }
-    }
-
-    disconnectedCallback() {
-        document.removeEventListener('pointerdown', this._boundOnDocClick, true);
-        document.removeEventListener('keydown', this._boundOnKey);
-        super.disconnectedCallback();
     }
 
     _currentTarget() {
@@ -147,17 +101,6 @@ export class SyncMessageContextMenu extends PlatformElement {
 
     _dismiss() {
         this._messagesStore.dismissContextMenu(null);
-    }
-
-    _onDocumentClick(e) {
-        if (!this.hasAttribute('open')) return;
-        const path = e.composedPath();
-        if (path.includes(this)) return;
-        this._dismiss();
-    }
-
-    _onKey(e) {
-        if (e.key === 'Escape' && this.hasAttribute('open')) this._dismiss();
     }
 
     _onReply() {
@@ -254,38 +197,52 @@ export class SyncMessageContextMenu extends PlatformElement {
         this._dismiss();
     }
 
-    updated() {
-        const target = this._currentTarget();
-        if (target) {
-            this.setAttribute('open', '');
-            const requestedX = typeof target.x === 'number' ? target.x : 0;
-            const requestedY = typeof target.y === 'number' ? target.y : 0;
-            this.style.left = `${requestedX}px`;
-            this.style.top = `${requestedY}px`;
-            requestAnimationFrame(() => {
-                if (!this.hasAttribute('open')) return;
-                const rect = this.getBoundingClientRect();
-                if (rect.width === 0 || rect.height === 0) return;
-                const margin = 8;
-                const vw = window.innerWidth;
-                const vh = window.innerHeight;
-                let x = requestedX;
-                let y = requestedY;
-                if (x + rect.width > vw - margin) x = Math.max(margin, vw - rect.width - margin);
-                if (y + rect.height > vh - margin) y = Math.max(margin, vh - rect.height - margin);
-                if (x < margin) x = margin;
-                if (y < margin) y = margin;
-                this.style.left = `${x}px`;
-                this.style.top = `${y}px`;
-            });
-        } else {
-            this.removeAttribute('open');
+    _actionItems(isOwn, hasText) {
+        const items = [
+            { id: 'reply', label: this.t('context_menu.action_reply'), icon: 'reply' },
+            { id: 'thread', label: this.t('context_menu.action_open_thread'), icon: 'message-square' },
+        ];
+        if (isOwn && hasText) {
+            items.push({ id: 'edit', label: this.t('context_menu.action_edit'), icon: 'edit' });
         }
+        if (hasText) {
+            items.push({ id: 'copy', label: this.t('context_menu.action_copy'), icon: 'copy' });
+        }
+        items.push(
+            { id: 'forward', label: this.t('context_menu.forward'), icon: 'forward' },
+            { id: 'pin', label: this.t('context_menu.action_pin'), icon: 'pin' },
+        );
+        if (isOwn) {
+            items.push({
+                id: 'delete',
+                label: this.t('context_menu.action_delete'),
+                icon: 'trash',
+                danger: true,
+            });
+        }
+        return items;
+    }
+
+    _onActionSelect(event) {
+        const handlers = {
+            reply: () => this._onReply(),
+            thread: () => this._onOpenThread(),
+            edit: () => this._onEdit(),
+            copy: () => this._onCopy(),
+            forward: () => this._onForward(),
+            pin: () => this._onPin(),
+            delete: () => this._onDelete(),
+        };
+        const handler = handlers[event.detail.id];
+        if (handler === undefined) {
+            throw new Error(`sync-message-context-menu: неизвестное действие ${event.detail.id}`);
+        }
+        handler();
     }
 
     render() {
         const target = this._currentTarget();
-        if (!target) return html``;
+        if (!target) return nothing;
         const message = this._currentMessage();
         const me = this._authSel.value;
         const myId = (me && typeof me.user_id === 'string') ? me.user_id : '';
@@ -293,48 +250,33 @@ export class SyncMessageContextMenu extends PlatformElement {
         const hasText = Boolean(
             message && Array.isArray(message.contents) && message.contents.some((c) => c.type === 'text/plain')
         );
+        const anchor = {
+            x: typeof target.x === 'number' ? target.x : 0,
+            y: typeof target.y === 'number' ? target.y : 0,
+        };
         return html`
+            <platform-popover
+                trigger="manual"
+                role="menu"
+                placement="bottom-start"
+                offset="2"
+                .anchor=${anchor}
+                open
+                @popover-dismiss=${() => this._dismiss()}
+            >
             <div class="menu">
                 <div class="reactions">
                     ${QUICK_REACTIONS.map((emoji) => html`
                         <span @click=${() => this._onReact(emoji)}>${emoji}</span>
                     `)}
                 </div>
-                <div class="item" @click=${this._onReply}>
-                    <platform-icon name="reply" size="14"></platform-icon>
-                    ${this.t('context_menu.action_reply')}
-                </div>
-                <div class="item" @click=${this._onOpenThread}>
-                    <platform-icon name="message-square" size="14"></platform-icon>
-                    ${this.t('context_menu.action_open_thread')}
-                </div>
-                ${isOwn && hasText ? html`
-                    <div class="item" @click=${this._onEdit}>
-                        <platform-icon name="edit" size="14"></platform-icon>
-                        ${this.t('context_menu.action_edit')}
-                    </div>
-                ` : ''}
-                ${hasText ? html`
-                    <div class="item" @click=${this._onCopy}>
-                        <platform-icon name="copy" size="14"></platform-icon>
-                        ${this.t('context_menu.action_copy')}
-                    </div>
-                ` : ''}
-                <div class="item" @click=${this._onForward}>
-                    <platform-icon name="forward" size="14"></platform-icon>
-                    ${this.t('context_menu.forward')}
-                </div>
-                <div class="item" @click=${this._onPin}>
-                    <platform-icon name="pin" size="14"></platform-icon>
-                    ${this.t('context_menu.action_pin')}
-                </div>
-                ${isOwn ? html`
-                    <div class="item danger" @click=${this._onDelete}>
-                        <platform-icon name="trash" size="14"></platform-icon>
-                        ${this.t('context_menu.action_delete')}
-                    </div>
-                ` : ''}
+                <platform-menu
+                    compact
+                    .items=${this._actionItems(isOwn, hasText)}
+                    @menu-select=${this._onActionSelect}
+                ></platform-menu>
             </div>
+            </platform-popover>
         `;
     }
 }

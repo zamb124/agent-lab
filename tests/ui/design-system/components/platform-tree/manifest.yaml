@@ -1,0 +1,13 @@
+component: platform-tree
+doc_slug: platform-tree
+tier: T0
+title_ru: Tree
+title_en: Tree
+import: "@platform/lib/components/platform-tree.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

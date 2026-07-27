@@ -1,0 +1,13 @@
+component: platform-popover
+doc_slug: platform-popover
+tier: T0
+title_ru: Popover
+title_en: Popover
+import: "@platform/lib/components/platform-popover.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

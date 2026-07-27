@@ -10,6 +10,7 @@ const SERVICE_DEV_PORTS = Object.freeze({
     sync: '8005',
     worktracker: '8021',
     documents: '8008',
+    wiki: '8023',
     litserve: '8014',
     grafana: '3000',
 });

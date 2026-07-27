@@ -133,6 +133,10 @@ class DatabaseConfig(BaseModel):
         default=None,
         description="PostgreSQL platform_search (search_indexes, crawl state)",
     )
+    wiki_url: str | None = Field(
+        default=None,
+        description="PostgreSQL platform_wiki (страницы базы знаний, ревизии, ссылки)",
+    )
     redis_url: str = "redis://localhost:8099"
     redis_inventory_interval_seconds: int = Field(
         default=900,
@@ -306,6 +310,7 @@ class ServerConfig(BaseModel):
     secrets_service_url: str | None = None
     browser_service_url: str | None = None
     search_service_url: str | None = None
+    wiki_service_url: str | None = None
     provider_litserve_service_url: str | None = None
     voice_service_url: str | None = None
     capability_gateway_service_url: str | None = None
@@ -346,6 +351,7 @@ class ServerConfig(BaseModel):
         "code_runner_csharp": 8020,
         "worktracker": 8021,
         "secrets": 8022,
+        "wiki": 8023,
     }
 
     def get_service_url(self, service: str | None = None) -> str:
@@ -391,6 +397,8 @@ class ServerConfig(BaseModel):
                 return self.browser_service_url
             case "search":
                 return self.search_service_url
+            case "wiki":
+                return self.wiki_service_url
             case "provider_litserve":
                 return self.provider_litserve_service_url
             case "voice":

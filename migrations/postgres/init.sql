@@ -11,6 +11,7 @@ CREATE DATABASE platform_worktracker;
 CREATE DATABASE platform_tracing;
 CREATE DATABASE platform_search;
 CREATE DATABASE platform_secrets;
+CREATE DATABASE platform_wiki;
 
 GRANT ALL PRIVILEGES ON DATABASE platform_shared TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_agents TO platform_user;
@@ -22,6 +23,7 @@ GRANT ALL PRIVILEGES ON DATABASE platform_worktracker TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_tracing TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_search TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_secrets TO platform_user;
+GRANT ALL PRIVILEGES ON DATABASE platform_wiki TO platform_user;
 
 \connect platform_shared
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
@@ -54,4 +56,7 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 \connect platform_secrets
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+\connect platform_wiki
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;

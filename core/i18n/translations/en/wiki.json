@@ -1,0 +1,153 @@
+{
+    "routes": {
+        "wiki_home": "Knowledge base",
+        "wiki_page": "Page",
+        "wiki_page_history": "Version history",
+        "wiki_search": "Search",
+        "wiki_public_preview": "Public page"
+    },
+    "bottom_nav": {
+        "home": "Base",
+        "search": "Search",
+        "tree": "Tree",
+        "profile": "Profile"
+    },
+    "palette": {
+        "recent": "Recent",
+        "pages": "Pages"
+    },
+    "sidebar": {
+        "title": "Knowledge base",
+        "namespace_label": "Workspace",
+        "create_page": "New page",
+        "create_child": "New nested page",
+        "search_placeholder": "Search the tree",
+        "favorites": "Favorites",
+        "recent": "Recent",
+        "pages": "Pages",
+        "empty": "No pages yet",
+        "empty_hint": "Create the first page of this workspace",
+        "no_matches": "Nothing found"
+    },
+    "tree_menu": {
+        "open": "Open",
+        "create_child": "New nested page",
+        "rename": "Rename",
+        "move": "Move",
+        "access": "Access",
+        "history": "Version history",
+        "delete": "Delete"
+    },
+    "page": {
+        "untitled": "Untitled",
+        "title_placeholder": "Page title",
+        "add_icon": "Add icon",
+        "change_icon": "Change icon",
+        "add_cover": "Add cover",
+        "remove_cover": "Remove cover",
+        "cover_url_prompt": "Cover image URL",
+        "saving": "Saving…",
+        "saved": "All changes saved",
+        "save_failed": "Could not save",
+        "outline": "Outline",
+        "outline_empty": "No headings yet",
+        "backlinks": "Linked from",
+        "backlinks_empty": "No pages link here yet",
+        "comments": "Comments",
+        "comments_empty": "No comments yet",
+        "comment_placeholder": "Leave a comment",
+        "comment_send": "Send",
+        "comment_resolve": "Mark as resolved",
+        "comment_resolved": "Resolved",
+        "not_found": "Page not found",
+        "loading": "Opening the page…",
+        "history_link": "Version history",
+        "delete_confirm_title": "Delete the page?",
+        "delete_confirm_body": "The page and its children will move to the trash.",
+        "published": "Published",
+        "draft": "Draft",
+        "restricted": "Restricted access"
+    },
+    "home": {
+        "title": "Knowledge base",
+        "subtitle": "Workspace pages and recent edits",
+        "create_page": "New page",
+        "recent_title": "Recently updated",
+        "empty": "This workspace has no pages yet",
+        "empty_hint": "Create the first page — it will appear in the tree on the left"
+    },
+    "search": {
+        "title": "Search the knowledge base",
+        "placeholder": "What are you looking for?",
+        "mode_lexical": "Pages",
+        "mode_semantic": "Meaning",
+        "empty": "Nothing found",
+        "hint": "Type a query: “Pages” searches the text, “Meaning” searches by sense",
+        "results_count": "Found: {{count}}"
+    },
+    "history": {
+        "title": "Version history",
+        "empty": "No revisions yet",
+        "current": "Current version",
+        "restore": "Restore",
+        "restore_confirm_title": "Restore this version?",
+        "restore_confirm_body": "The current content will be replaced with the selected version.",
+        "diff_added": "Added",
+        "diff_removed": "Removed",
+        "back_to_page": "Back to page"
+    },
+    "public": {
+        "loading": "Opening the page…",
+        "not_found": "Page unavailable",
+        "not_found_hint": "The link may be disabled or expired"
+    },
+    "move": {
+        "title": "Move page",
+        "namespace_label": "Workspace",
+        "parent_label": "Parent page",
+        "parent_root": "To workspace root",
+        "submit": "Move"
+    },
+    "access": {
+        "title": "Page access",
+        "visibility_label": "Who can see the page",
+        "visibility_company": "Whole company",
+        "visibility_restricted": "Only members",
+        "members_title": "Members",
+        "members_empty": "Only the owner has access",
+        "member_add": "Add member",
+        "member_remove": "Remove",
+        "permission_view": "View",
+        "permission_comment": "Comment",
+        "permission_edit": "Edit",
+        "link_title": "Public link",
+        "link_enable": "Share via link",
+        "link_copy": "Copy link",
+        "link_copied": "Link copied",
+        "link_disabled": "Link is off"
+    },
+    "toast": {
+        "page": {
+            "created": "Page created",
+            "create_failed": "Could not create the page",
+            "deleted": "Page deleted",
+            "delete_failed": "Could not delete the page",
+            "restored": "Page restored",
+            "restore_failed": "Could not restore the page",
+            "namespace_changed": "Page moved to another workspace",
+            "namespace_change_failed": "Could not move the page"
+        },
+        "revision": {
+            "restored": "Revision restored",
+            "restore_failed": "Could not restore the revision"
+        },
+        "access": {
+            "link_updated": "Public link updated",
+            "link_failed": "Could not update the public link",
+            "member_added": "Access granted",
+            "member_add_failed": "Could not grant access",
+            "member_removed": "Access revoked",
+            "member_remove_failed": "Could not revoke access"
+        }
+    }
+}

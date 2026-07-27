@@ -145,6 +145,17 @@ spec:
                   number: {{ $.Values.applications.office.port }}
           {{- end }}
 
+          {{- $wiki := index $.Values.applications "wiki" }}
+          {{- if and $wiki $wiki.enabled }}
+          - path: /wiki
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $wiki.serviceName }}
+                port:
+                  number: {{ $wiki.port }}
+          {{- end }}
+
           {{- $sched := index $.Values.applications "scheduler-api" }}
           {{- if $sched.enabled }}
           - path: /scheduler

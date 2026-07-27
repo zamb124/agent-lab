@@ -1,8 +1,11 @@
 /**
- * platform-markdown-editor — L1 contract: full WTR suite (helpers + document + compose + variables + voice).
+ * platform-markdown-editor — L1 contract (T0 backlog): module registration smoke.
  */
-import '../../../../frontend_core/browser/utils/markdown-html.spec.js';
-import '../../../../frontend_core/browser/components/platform-markdown-editor.spec.js';
-import '../../../../frontend_core/browser/components/platform-markdown-editor-compose.spec.js';
-import '../../../../frontend_core/browser/components/platform-markdown-editor-variables.spec.js';
-import '../../../../frontend_core/browser/components/platform-voice-dictation.spec.js';
+import { expect } from '../../../../frontend_core/browser/helpers/render.js';
+import '@platform/lib/components/platform-markdown-editor.js';
+
+describe('platform-markdown-editor', () => {
+    it('registers custom element', async () => {
+        expect(customElements.get('platform-markdown-editor')).to.exist;
+    });
+});

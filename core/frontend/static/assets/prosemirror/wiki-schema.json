@@ -1,0 +1,500 @@
+{
+  "nodes": {
+    "doc": {
+      "group": null,
+      "content": "block+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    },
+    "paragraph": {
+      "group": "block",
+      "content": "inline*",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    },
+    "heading": {
+      "group": "block",
+      "content": "inline*",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": true,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {
+        "level": {
+          "kind": "int",
+          "default": 1,
+          "required": false
+        }
+      }
+    },
+    "blockquote": {
+      "group": "block",
+      "content": "block+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": true,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    },
+    "code_block": {
+      "group": "block",
+      "content": "text*",
+      "marks": "",
+      "inline": false,
+      "atom": false,
+      "defining": true,
+      "isolating": false,
+      "code": true,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {
+        "language": {
+          "kind": "string",
+          "default": "",
+          "required": false
+        }
+      }
+    },
+    "bullet_list": {
+      "group": "block",
+      "content": "list_item+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    },
+    "ordered_list": {
+      "group": "block",
+      "content": "list_item+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {
+        "start": {
+          "kind": "int",
+          "default": 1,
+          "required": false
+        }
+      }
+    },
+    "list_item": {
+      "group": null,
+      "content": "paragraph block*",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": true,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    },
+    "task_list": {
+      "group": "block",
+      "content": "task_item+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    },
+    "task_item": {
+      "group": null,
+      "content": "paragraph block*",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": true,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {
+        "checked": {
+          "kind": "bool",
+          "default": false,
+          "required": false
+        }
+      }
+    },
+    "toggle": {
+      "group": "block",
+      "content": "toggle_summary block+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    },
+    "toggle_summary": {
+      "group": null,
+      "content": "inline*",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": true,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    },
+    "callout": {
+      "group": "block",
+      "content": "block+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": true,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {
+        "tone": {
+          "kind": "string",
+          "default": "info",
+          "required": false
+        },
+        "icon": {
+          "kind": "string",
+          "default": "",
+          "required": false
+        }
+      }
+    },
+    "horizontal_rule": {
+      "group": "block",
+      "content": null,
+      "marks": null,
+      "inline": false,
+      "atom": true,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    },
+    "image": {
+      "group": "block",
+      "content": null,
+      "marks": null,
+      "inline": false,
+      "atom": true,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": true,
+      "selectable": true,
+      "attrs": {
+        "src": {
+          "kind": "string",
+          "default": null,
+          "required": true
+        },
+        "alt": {
+          "kind": "string",
+          "default": "",
+          "required": false
+        },
+        "title": {
+          "kind": "string",
+          "default": "",
+          "required": false
+        },
+        "file_id": {
+          "kind": "string",
+          "default": "",
+          "required": false
+        }
+      }
+    },
+    "table": {
+      "group": "block",
+      "content": "table_row+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": false,
+      "isolating": true,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    },
+    "table_row": {
+      "group": null,
+      "content": "(table_cell | table_header)+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    },
+    "table_cell": {
+      "group": null,
+      "content": "block+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": false,
+      "isolating": true,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {
+        "colspan": {
+          "kind": "int",
+          "default": 1,
+          "required": false
+        },
+        "rowspan": {
+          "kind": "int",
+          "default": 1,
+          "required": false
+        },
+        "colwidth": {
+          "kind": "int",
+          "default": null,
+          "required": false
+        }
+      }
+    },
+    "table_header": {
+      "group": null,
+      "content": "block+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": false,
+      "isolating": true,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {
+        "colspan": {
+          "kind": "int",
+          "default": 1,
+          "required": false
+        },
+        "rowspan": {
+          "kind": "int",
+          "default": 1,
+          "required": false
+        },
+        "colwidth": {
+          "kind": "int",
+          "default": null,
+          "required": false
+        }
+      }
+    },
+    "platform_file": {
+      "group": "block",
+      "content": null,
+      "marks": null,
+      "inline": false,
+      "atom": true,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": true,
+      "selectable": true,
+      "attrs": {
+        "file_id": {
+          "kind": "string",
+          "default": null,
+          "required": true
+        },
+        "original_name": {
+          "kind": "string",
+          "default": "",
+          "required": false
+        },
+        "content_type": {
+          "kind": "string",
+          "default": "",
+          "required": false
+        }
+      }
+    },
+    "platform_mention": {
+      "group": "inline",
+      "content": null,
+      "marks": null,
+      "inline": true,
+      "atom": true,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": true,
+      "selectable": true,
+      "attrs": {
+        "mention_kind": {
+          "kind": "string",
+          "default": null,
+          "required": true
+        },
+        "target_id": {
+          "kind": "string",
+          "default": null,
+          "required": true
+        },
+        "label": {
+          "kind": "string",
+          "default": "",
+          "required": false
+        }
+      }
+    },
+    "hard_break": {
+      "group": "inline",
+      "content": null,
+      "marks": null,
+      "inline": true,
+      "atom": false,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": false,
+      "attrs": {}
+    },
+    "text": {
+      "group": "inline",
+      "content": null,
+      "marks": null,
+      "inline": true,
+      "atom": false,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {}
+    }
+  },
+  "marks": {
+    "link": {
+      "inclusive": false,
+      "spanning": true,
+      "excludes": null,
+      "attrs": {
+        "href": {
+          "kind": "string",
+          "default": null,
+          "required": true
+        },
+        "title": {
+          "kind": "string",
+          "default": "",
+          "required": false
+        }
+      }
+    },
+    "strong": {
+      "inclusive": true,
+      "spanning": true,
+      "excludes": null,
+      "attrs": {}
+    },
+    "em": {
+      "inclusive": true,
+      "spanning": true,
+      "excludes": null,
+      "attrs": {}
+    },
+    "strike": {
+      "inclusive": true,
+      "spanning": true,
+      "excludes": null,
+      "attrs": {}
+    },
+    "highlight": {
+      "inclusive": true,
+      "spanning": true,
+      "excludes": null,
+      "attrs": {
+        "color": {
+          "kind": "string",
+          "default": "yellow",
+          "required": false
+        }
+      }
+    },
+    "code": {
+      "inclusive": true,
+      "spanning": true,
+      "excludes": "_",
+      "attrs": {}
+    }
+  },
+  "mark_order": [
+    "link",
+    "strong",
+    "em",
+    "strike",
+    "highlight",
+    "code"
+  ],
+  "mention_kinds": [
+    "user",
+    "crm_entity",
+    "wiki_page",
+    "file"
+  ],
+  "callout_tones": [
+    "info",
+    "success",
+    "warning",
+    "danger"
+  ],
+  "max_heading_level": 4,
+  "_note": "Сгенерировано scripts/generate_wiki_prosemirror_schema.py из apps/wiki/content/schema.py. Не редактировать вручную."
+}

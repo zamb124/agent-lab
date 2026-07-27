@@ -67,6 +67,16 @@ export const PLATFORM_SERVICES = Object.freeze([
         metricKey: 'console_home.stat_files_count',
     }),
     Object.freeze({
+        id: 'wiki',
+        nameKey: 'apps.wiki.name',
+        logoSrc: `${SERVICE_LOGO_BASE}/wiki_logo.svg`,
+        brandFrom: '#8b5cf6',
+        brandTo: '#22d3ee',
+        healthName: 'wiki',
+        countOp: null,
+        metricKey: null,
+    }),
+    Object.freeze({
         id: 'frontend',
         nameKey: 'apps.frontend.name',
         logoSrc: `${SERVICE_LOGO_BASE}/frontend_logo.svg`,

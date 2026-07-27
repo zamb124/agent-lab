@@ -1,6 +1,6 @@
 component: platform-spinner
 doc_slug: platform-spinner
-tier: T1
+tier: T0
 title_ru: Spinner
 title_en: Spinner
 import: "@platform/lib/components/platform-spinner.js"

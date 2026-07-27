@@ -763,6 +763,24 @@
         rgba(255, 255, 255, 0.04) 100%
     );
 
+    /* ========== WIKI (dark defaults) ========== */
+    --wiki-gradient: linear-gradient(105deg, #8b5cf6 0%, #22d3ee 100%);
+    --wiki-accent: #a78bfa;
+    --wiki-accent-soft: rgba(139, 92, 246, 0.18);
+    --wiki-stroke: rgba(139, 92, 246, 0.28);
+    --wiki-surface-muted: rgba(255, 255, 255, 0.03);
+    --wiki-highlight-bg: rgba(250, 204, 21, 0.35);
+    --wiki-code-bg: rgba(120, 120, 140, 0.16);
+    --wiki-callout-bg: rgba(120, 120, 140, 0.1);
+    --wiki-callout-accent: rgba(139, 92, 246, 0.6);
+    --wiki-table-header-bg: rgba(120, 120, 140, 0.12);
+    --wiki-block-handle-color: rgba(255, 255, 255, 0.32);
+    --wiki-checkbox-check: #ffffff;
+    --wiki-tree-width: 17rem;
+    --wiki-outline-width: 15rem;
+    --wiki-page-max-width: 46rem;
+    --wiki-cover-height: 12rem;
+
     /* Shimmer эффект для загрузки */
     --shimmer-gradient: linear-gradient(
         90deg,
@@ -1237,6 +1255,18 @@
         rgba(60, 64, 67, 0.1) 50%,
         rgba(60, 64, 67, 0.04) 100%
     );
+
+    /* ========== WIKI (light) ========== */
+    --wiki-accent: #7c3aed;
+    --wiki-accent-soft: rgba(124, 58, 237, 0.12);
+    --wiki-stroke: rgba(124, 58, 237, 0.22);
+    --wiki-surface-muted: rgba(60, 64, 67, 0.03);
+    --wiki-highlight-bg: rgba(250, 204, 21, 0.45);
+    --wiki-code-bg: rgba(60, 64, 67, 0.08);
+    --wiki-callout-bg: rgba(60, 64, 67, 0.05);
+    --wiki-callout-accent: rgba(124, 58, 237, 0.5);
+    --wiki-table-header-bg: rgba(60, 64, 67, 0.06);
+    --wiki-block-handle-color: rgba(60, 64, 67, 0.4);
 }
 
 /* ========== Палитра сервиса Office / Documents (layout-only, theme-agnostic) ========== */

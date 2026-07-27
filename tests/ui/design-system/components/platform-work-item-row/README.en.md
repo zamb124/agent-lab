@@ -1,10 +1,10 @@
-# platform-work-item-row
+# Work Item Row
 
 Platform component `platform-work-item-row`.
 
 Documentation status: **backlog**.
 
-## Running tests
+## Run tests
 
 ```bash
 npm run test:ui-kit -- tests/ui/design-system/components/platform-work-item-row/contract.spec.js

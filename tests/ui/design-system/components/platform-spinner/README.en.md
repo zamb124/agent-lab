@@ -2,9 +2,7 @@
 
 Platform component `platform-spinner`.
 
-Single platform spinner: rotating Linnex logo. Replaces `glass-spinner` and `app-loader`.
-
-Documentation status: **backfill**.
+Documentation status: **backlog**.
 
 ## Run tests
 

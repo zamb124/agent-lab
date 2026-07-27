@@ -13,7 +13,7 @@
  * к смене viewport через `window resize` и capture-`scroll`.
  */
 
-import { html, css, render as litRender } from 'lit';
+import { html, css, unsafeCSS } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { CoreEvents } from '../events/contract.js';
 import { NOTIFICATIONS_EVENTS } from '../events/reducers/notifications.js';
@@ -22,32 +22,17 @@ import { PWA_EVENTS } from '../events/effects/pwa.effect.js';
 import { translate } from '../events/effects/i18n.effect.js';
 import { mergePlatformI18nVars } from '../utils/platform-i18n-vars.js';
 import './platform-icon.js';
+import './platform-popover.js';
 import './platform-work-item-badge.js';
 
 const PANEL_WIDTH = 360;
 const PANEL_GAP = 8;
 const PANEL_VIEWPORT_PADDING = 8;
 
-let _panelStylesInjected = false;
-
-function _ensurePanelStyles() {
-    if (_panelStylesInjected) return;
-    _panelStylesInjected = true;
-    const style = document.createElement('style');
-    style.id = 'platform-notification-portal-styles';
-    style.textContent = `
+const NOTIF_PANEL_CSS = `
         .platform-notif-portal {
-            position: fixed;
             width: ${PANEL_WIDTH}px;
-            max-height: 480px;
-            overflow: auto;
-            background: var(--glass-solid-strong);
-            backdrop-filter: blur(var(--glass-blur-strong));
-            -webkit-backdrop-filter: blur(var(--glass-blur-strong));
-            border: 1px solid var(--glass-border-medium);
-            border-radius: var(--radius-lg);
-            box-shadow: var(--glass-shadow-strong);
-            z-index: var(--z-popover, 1100);
+            max-width: 90vw;
         }
         .platform-notif-portal__header {
             display: flex; align-items: center; justify-content: space-between;
@@ -124,18 +109,18 @@ function _ensurePanelStyles() {
             font-size: var(--text-sm);
         }
     `;
-    document.head.appendChild(style);
-}
 
 export class PlatformNotificationManager extends PlatformElement {
     static i18nNamespace = 'platform';
 
     static properties = {
         _panelOpen: { state: true },
+        _anchor: { state: true },
     };
 
     static styles = [
         PlatformElement.styles,
+        unsafeCSS(NOTIF_PANEL_CSS),
         css`
             :host { display: inline-block; position: relative; }
 
@@ -175,43 +160,29 @@ export class PlatformNotificationManager extends PlatformElement {
             registered: s.pwa.pushRegistered,
         }));
         this._i18nSelect = this.select((s) => s.i18n);
-        this._portal = null;
-        this._onClickOutside = this._onClickOutside.bind(this);
-        this._onReposition = this._onReposition.bind(this);
+        /** @type {HTMLElement | null} */
+        this._anchor = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
-        _ensurePanelStyles();
-        document.addEventListener('click', this._onClickOutside);
         const push = this._pushSelect.value;
         if (push && push.permission === 'default') {
             this.dispatch(PWA_EVENTS.PUSH_PERMISSION_REQUEST_REQUESTED, null);
         }
     }
 
-    disconnectedCallback() {
-        super.disconnectedCallback();
-        document.removeEventListener('click', this._onClickOutside);
-        this._closePanel();
-    }
-
     updated(changed) {
         super.updated && super.updated(changed);
-        if (changed.has('_panelOpen')) {
-            if (this._panelOpen) this._openPanel();
-            else this._closePanel();
-        } else if (this._panelOpen && this._portal) {
-            this._renderPortal();
+        if (this._anchor === null) {
+            const bell = this.renderRoot?.querySelector?.('.bell');
+            if (bell instanceof HTMLElement) {
+                this._anchor = bell;
+            }
         }
-    }
-
-    _onClickOutside(e) {
-        if (!this._panelOpen) return;
-        const path = e.composedPath ? e.composedPath() : [e.target];
-        if (path.includes(this)) return;
-        if (this._portal && path.includes(this._portal)) return;
-        this._panelOpen = false;
+        if (this._panelOpen) {
+            this.renderRoot?.querySelector?.('platform-popover')?.reposition();
+        }
     }
 
     _togglePanel(e) {
@@ -219,50 +190,8 @@ export class PlatformNotificationManager extends PlatformElement {
         this._panelOpen = !this._panelOpen;
     }
 
-    _openPanel() {
-        if (this._portal) return;
-        const node = document.createElement('div');
-        node.className = 'platform-notif-portal';
-        node.addEventListener('click', (e) => e.stopPropagation());
-        document.body.appendChild(node);
-        this._portal = node;
-        this._renderPortal();
-        this._reposition();
-        window.addEventListener('resize', this._onReposition);
-        document.addEventListener('scroll', this._onReposition, true);
-    }
-
-    _closePanel() {
-        window.removeEventListener('resize', this._onReposition);
-        document.removeEventListener('scroll', this._onReposition, true);
-        if (this._portal && this._portal.parentNode) {
-            litRender(null, this._portal);
-            this._portal.remove();
-        }
-        this._portal = null;
-    }
-
-    _onReposition() {
-        if (!this._portal) return;
-        requestAnimationFrame(() => this._reposition());
-    }
-
-    _reposition() {
-        if (!this._portal) return;
-        const bell = this.renderRoot && this.renderRoot.querySelector('.bell');
-        if (!bell) return;
-        const rect = bell.getBoundingClientRect();
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        let left = rect.left;
-        if (left + PANEL_WIDTH > vw - PANEL_VIEWPORT_PADDING) {
-            left = Math.max(PANEL_VIEWPORT_PADDING, vw - PANEL_WIDTH - PANEL_VIEWPORT_PADDING);
-        }
-        const bottom = vh - rect.top + PANEL_GAP;
-        this._portal.style.left = `${Math.round(left)}px`;
-        this._portal.style.bottom = `${Math.round(bottom)}px`;
-        this._portal.style.top = '';
-        this._portal.style.right = '';
+    _onPopoverDismiss() {
+        this._panelOpen = false;
     }
 
     _onItemClick(item) {
@@ -411,13 +340,13 @@ export class PlatformNotificationManager extends PlatformElement {
         return out;
     }
 
-    _renderPortal() {
-        if (!this._portal) return;
+    _renderPanel() {
         const { list = [], unread: _unread = 0 } = this._notifSelect.value || {};
         const title = this.t('notifications.title');
         const dismissAll = this.t('notifications.dismiss_all');
         const empty = this.t('notifications.empty');
-        const tpl = html`
+        return html`
+            <div class="platform-notif-portal">
             <div class="platform-notif-portal__header">
                 <span class="platform-notif-portal__title">${title}</span>
                 ${list.length > 0 ? html`
@@ -464,8 +393,8 @@ export class PlatformNotificationManager extends PlatformElement {
                         </div>
                     `;
                 })}
+            </div>
         `;
-        litRender(tpl, this._portal);
     }
 
     render() {
@@ -477,6 +406,18 @@ export class PlatformNotificationManager extends PlatformElement {
                 <platform-icon name="bell" size="18"></platform-icon>
                 ${unread > 0 ? html`<span class="badge">${unread > 99 ? '99+' : unread}</span>` : ''}
             </button>
+            <platform-popover
+                trigger="manual"
+                role="dialog"
+                placement="top-start"
+                offset=${PANEL_GAP}
+                viewport-padding=${PANEL_VIEWPORT_PADDING}
+                .anchor=${this._anchor}
+                ?open=${this._panelOpen}
+                @popover-dismiss=${this._onPopoverDismiss}
+            >
+                ${this._panelOpen ? this._renderPanel() : ''}
+            </platform-popover>
         `;
     }
 }

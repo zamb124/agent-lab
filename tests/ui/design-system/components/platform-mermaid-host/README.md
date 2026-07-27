@@ -2,9 +2,7 @@
 
 Платформенный компонент `platform-mermaid-host`.
 
-Mermaid SVG в Lit: lazy script loading, antiscript, platform theme.
-
-Статус документации: **backfill**.
+Статус документации: **backlog**.
 
 ## Запуск тестов
 

@@ -23,6 +23,8 @@ procs:
     shell: "uv run python scripts/run.py scheduler-api"
   secrets:
     shell: "uv run python scripts/run.py secrets"
+  wiki:
+    shell: "uv run python scripts/run.py wiki"
   browser:
     shell: "uv run python scripts/run.py browser"
   search:

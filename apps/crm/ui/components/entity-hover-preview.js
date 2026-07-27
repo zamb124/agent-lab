@@ -1,46 +1,17 @@
-import { html, render as litRender } from 'lit';
+import { html, css, nothing, unsafeCSS } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
-import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
+import '@platform/lib/components/platform-hover-card.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 
 const PREVIEW_WIDTH = 320;
-const PREVIEW_GAP = 10;
-const PREVIEW_VIEWPORT_PADDING = 12;
-const PREVIEW_EXPECTED_HEIGHT = 180;
 
-let _previewStylesInjected = false;
-
-function _ensurePreviewStyles() {
-    if (_previewStylesInjected) return;
-    _previewStylesInjected = true;
-    const style = document.createElement('style');
-    style.id = 'crm-entity-hover-preview-portal-styles';
-    style.textContent = `
+const ENTITY_PREVIEW_CSS = `
         .crm-entity-preview-portal {
-            position: fixed;
-            width: ${PREVIEW_WIDTH}px;
-            max-width: min(${PREVIEW_WIDTH}px, calc(100vw - 24px));
-            border: 1px solid var(--glass-border-medium);
-            background: var(--glass-solid-strong);
-            backdrop-filter: blur(var(--glass-blur-strong, 16px));
-            -webkit-backdrop-filter: blur(var(--glass-blur-strong, 16px));
-            border-radius: var(--radius-lg);
-            padding: var(--space-3);
-            box-shadow: var(--glass-shadow-strong, 0 16px 40px rgba(0, 0, 0, 0.35));
             display: flex;
             flex-direction: column;
             gap: var(--space-2);
-            opacity: 0;
-            transform: translateY(4px);
-            transition: opacity 140ms ease, transform 140ms ease;
-            color: var(--text-primary);
-            font-family: var(--font-sans);
-        }
-        .crm-entity-preview-portal[data-open="true"] {
-            opacity: 1;
-            transform: translateY(0);
         }
         .crm-entity-preview-portal__header {
             display: flex;
@@ -113,13 +84,6 @@ function _ensurePreviewStyles() {
             font-size: var(--text-xs);
         }
     `;
-    document.head.appendChild(style);
-}
-
-function _isIsoDateLike(value) {
-    return typeof value === 'string' && value.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(value);
-}
-
 
 export class CRMEntityHoverPreview extends PlatformElement {
     static i18nNamespace = 'crm';
@@ -141,8 +105,6 @@ export class CRMEntityHoverPreview extends PlatformElement {
         this.anchorRect = null;
         this._entities = this.useResource('crm/entities');
         this._locale = this.select((s) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
-        this._portal = null;
-        this._onReposition = this._onReposition.bind(this);
     }
 
     _formatDate(value) {
@@ -156,92 +118,17 @@ export class CRMEntityHoverPreview extends PlatformElement {
         return formatPlatformDate(parsed, this._locale.value, { day: '2-digit', month: '2-digit', year: 'numeric' });
     }
 
-    connectedCallback() {
-        super.connectedCallback();
-        _ensurePreviewStyles();
-    }
-
-    disconnectedCallback() {
-        super.disconnectedCallback();
-        this._closePortal();
-    }
-
     updated(changed) {
         super.updated && super.updated(changed);
-        if (changed.has('previewOpen')) {
-            if (this.previewOpen) {
-                this._openPortal();
-            } else {
-                this._closePortal();
-                return;
-            }
+        if (!this.previewOpen) {
+            return;
         }
-        if (this.previewOpen) {
-            if ((changed.has('previewOpen') || changed.has('entityId'))
-                && typeof this.entityId === 'string'
-                && this.entityId.length > 0
-                && this._entities.byId[this.entityId] === undefined) {
-                this._entities.get(this.entityId);
-            }
-            this._renderPortal();
-            this._reposition();
+        if ((changed.has('previewOpen') || changed.has('entityId'))
+            && typeof this.entityId === 'string'
+            && this.entityId.length > 0
+            && this._entities.byId[this.entityId] === undefined) {
+            this._entities.get(this.entityId);
         }
-    }
-
-    _openPortal() {
-        if (this._portal) return;
-        const node = document.createElement('div');
-        node.className = 'crm-entity-preview-portal';
-        node.style.zIndex = String(nextModalLayerZIndex());
-        node.addEventListener('mouseenter', () => this.emit('preview-enter'));
-        node.addEventListener('mouseleave', () => this.emit('preview-leave'));
-        document.body.appendChild(node);
-        this._portal = node;
-        this._resizeObserver = new ResizeObserver(this._onReposition);
-        this._resizeObserver.observe(document.documentElement);
-        document.addEventListener('scroll', this._onReposition, true);
-        requestAnimationFrame(() => {
-            if (this._portal) {
-                this._portal.dataset.open = 'true';
-            }
-        });
-    }
-
-    _closePortal() {
-        if (this._resizeObserver) {
-            this._resizeObserver.disconnect();
-            this._resizeObserver = null;
-        }
-        document.removeEventListener('scroll', this._onReposition, true);
-        if (this._portal && this._portal.parentNode) {
-            litRender(null, this._portal);
-            this._portal.remove();
-        }
-        this._portal = null;
-    }
-
-    _onReposition() {
-        if (!this._portal) return;
-        requestAnimationFrame(() => this._reposition());
-    }
-
-    _reposition() {
-        if (!this._portal) return;
-        if (this.anchorRect === null || typeof this.anchorRect !== 'object') return;
-        const leftSource = typeof this.anchorRect.left === 'number' ? this.anchorRect.left : 0;
-        const topSource = typeof this.anchorRect.top === 'number' ? this.anchorRect.top : 0;
-        const heightSource = typeof this.anchorRect.height === 'number' ? this.anchorRect.height : 0;
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const maxLeft = Math.max(PREVIEW_VIEWPORT_PADDING, viewportWidth - PREVIEW_WIDTH - PREVIEW_VIEWPORT_PADDING);
-        const left = Math.min(Math.max(PREVIEW_VIEWPORT_PADDING, leftSource), maxLeft);
-        const belowTop = topSource + heightSource + PREVIEW_GAP;
-        const aboveTop = topSource - PREVIEW_GAP - PREVIEW_EXPECTED_HEIGHT;
-        const top = belowTop + PREVIEW_EXPECTED_HEIGHT <= viewportHeight
-            ? belowTop
-            : Math.max(PREVIEW_VIEWPORT_PADDING, aboveTop);
-        this._portal.style.left = `${Math.round(left)}px`;
-        this._portal.style.top = `${Math.round(top)}px`;
     }
 
     _iconByType(entity) {
@@ -276,15 +163,14 @@ export class CRMEntityHoverPreview extends PlatformElement {
         this.emit('open', { entityId: this.entityId });
     }
 
-    _renderPortal() {
-        if (!this._portal) return;
+    _renderCardBody() {
         const entity = typeof this.entityId === 'string' && this.entityId.length > 0
             ? this._entities.byId[this.entityId]
             : null;
         const hasEntity = entity !== undefined && entity !== null;
         const createdAt = hasEntity && typeof entity.created_at === 'string' ? this._formatDate(entity.created_at) : '';
         const description = hasEntity ? this._description(entity) : '';
-        const tpl = hasEntity
+        return hasEntity
             ? html`
                 <div class="crm-entity-preview-portal__header">
                     <platform-icon name=${this._iconByType(entity)} size="18"></platform-icon>
@@ -316,12 +202,33 @@ export class CRMEntityHoverPreview extends PlatformElement {
                         : this.t('note_page.not_found_title')}
                 </div>
             `;
-        litRender(tpl, this._portal);
     }
 
     render() {
-        return html``;
+        return html`
+            <platform-hover-card
+                ?open=${this.previewOpen}
+                .anchor=${this.anchorRect}
+                width=${PREVIEW_WIDTH}
+                @hover-card-enter=${() => this.emit('preview-enter')}
+                @hover-card-leave=${() => this.emit('preview-leave')}
+            >
+                ${this.previewOpen
+                    ? html`<div class="crm-entity-preview-portal">${this._renderCardBody()}</div>`
+                    : nothing}
+            </platform-hover-card>
+        `;
     }
+
+    static styles = [
+        PlatformElement.styles,
+        unsafeCSS(ENTITY_PREVIEW_CSS),
+        css`
+            :host {
+                display: contents;
+            }
+        `,
+    ];
 }
 
 customElements.define('crm-entity-hover-preview', CRMEntityHoverPreview);

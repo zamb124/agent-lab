@@ -49,6 +49,11 @@
       "name": "search",
       "models_module": "apps.search.db.models",
       "database_url_key": "search_url"
+    },
+    {
+      "name": "wiki",
+      "models_module": "apps.wiki.db.models",
+      "database_url_key": "wiki_url"
     }
   ],
   "postgres": {
@@ -62,7 +67,8 @@
       "platform_worktracker",
       "platform_tracing",
       "platform_search",
-      "platform_secrets"
+      "platform_secrets",
+      "platform_wiki"
     ],
     "vector_extensions": ["platform_shared", "platform_crm", "platform_rag"]
   }

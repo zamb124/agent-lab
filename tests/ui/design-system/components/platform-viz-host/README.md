@@ -2,9 +2,7 @@
 
 Платформенный компонент `platform-viz-host`.
 
-Переключатель ECharts / Mermaid по document/openConfig. Входы: `.document` (VizDocument JSON), `.openConfig` с handler=viz, `.compact` для chat inline.
-
-Статус документации: **backfill**.
+Статус документации: **backlog**.
 
 ## Запуск тестов
 

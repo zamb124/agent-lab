@@ -1,5 +1,5 @@
 /**
- * platform-mail-calendar-rail — L1 contract: module registration smoke.
+ * platform-mail-calendar-rail — L1 contract (T0 backlog): module registration smoke.
  */
 import { expect } from '../../../../frontend_core/browser/helpers/render.js';
 import '@platform/lib/components/platform-mail-calendar-rail.js';

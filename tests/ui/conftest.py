@@ -333,6 +333,16 @@ async def worktracker_ui(
 
 
 @pytest_asyncio.fixture
+async def wiki_ui(
+    wiki_service_http,
+    _ui_subdomain_mappings,
+    _ui_e2e_company_resources,
+) -> AppUI:
+    _ = wiki_service_http, _ui_subdomain_mappings, _ui_e2e_company_resources
+    return AppUI(SERVICE_UI_REGISTRY["wiki"])
+
+
+@pytest_asyncio.fixture
 async def litserve_ui(provider_litserve_service) -> AppUI:
     _ = provider_litserve_service
     return AppUI(SERVICE_UI_REGISTRY["litserve"])

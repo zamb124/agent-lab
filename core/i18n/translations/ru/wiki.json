@@ -1,0 +1,153 @@
+{
+    "routes": {
+        "wiki_home": "База знаний",
+        "wiki_page": "Страница",
+        "wiki_page_history": "История версий",
+        "wiki_search": "Поиск",
+        "wiki_public_preview": "Публичная страница"
+    },
+    "bottom_nav": {
+        "home": "База",
+        "search": "Поиск",
+        "tree": "Дерево",
+        "profile": "Профиль"
+    },
+    "palette": {
+        "recent": "Недавние",
+        "pages": "Страницы"
+    },
+    "sidebar": {
+        "title": "База знаний",
+        "namespace_label": "Пространство",
+        "create_page": "Создать страницу",
+        "create_child": "Создать вложенную",
+        "search_placeholder": "Поиск по дереву",
+        "favorites": "Избранное",
+        "recent": "Недавние",
+        "pages": "Страницы",
+        "empty": "Здесь пока нет страниц",
+        "empty_hint": "Создайте первую страницу пространства",
+        "no_matches": "Ничего не найдено"
+    },
+    "tree_menu": {
+        "open": "Открыть",
+        "create_child": "Создать вложенную",
+        "rename": "Переименовать",
+        "move": "Переместить",
+        "access": "Доступ",
+        "history": "История версий",
+        "delete": "Удалить"
+    },
+    "page": {
+        "untitled": "Без названия",
+        "title_placeholder": "Заголовок страницы",
+        "add_icon": "Добавить иконку",
+        "change_icon": "Сменить иконку",
+        "add_cover": "Добавить обложку",
+        "remove_cover": "Убрать обложку",
+        "cover_url_prompt": "Ссылка на изображение обложки",
+        "saving": "Сохраняем…",
+        "saved": "Все изменения сохранены",
+        "save_failed": "Не удалось сохранить",
+        "outline": "Оглавление",
+        "outline_empty": "Заголовков пока нет",
+        "backlinks": "Ссылаются сюда",
+        "backlinks_empty": "На страницу пока никто не ссылается",
+        "comments": "Комментарии",
+        "comments_empty": "Комментариев пока нет",
+        "comment_placeholder": "Оставить комментарий",
+        "comment_send": "Отправить",
+        "comment_resolve": "Пометить решённым",
+        "comment_resolved": "Решён",
+        "not_found": "Страница не найдена",
+        "loading": "Открываем страницу…",
+        "history_link": "История версий",
+        "delete_confirm_title": "Удалить страницу?",
+        "delete_confirm_body": "Страница и вложенные в неё попадут в корзину.",
+        "published": "Опубликована",
+        "draft": "Черновик",
+        "restricted": "Ограниченный доступ"
+    },
+    "home": {
+        "title": "База знаний",
+        "subtitle": "Страницы пространства и недавние правки",
+        "create_page": "Создать страницу",
+        "recent_title": "Недавно изменённые",
+        "empty": "В этом пространстве ещё нет страниц",
+        "empty_hint": "Создайте первую страницу — она появится в дереве слева"
+    },
+    "search": {
+        "title": "Поиск по базе знаний",
+        "placeholder": "Что ищем?",
+        "mode_lexical": "Страницы",
+        "mode_semantic": "Смысл",
+        "empty": "Ничего не найдено",
+        "hint": "Введите запрос: «Страницы» ищут по тексту, «Смысл» — по значению",
+        "results_count": "Найдено: {{count}}"
+    },
+    "history": {
+        "title": "История версий",
+        "empty": "Версий пока нет",
+        "current": "Текущая версия",
+        "restore": "Восстановить",
+        "restore_confirm_title": "Восстановить версию?",
+        "restore_confirm_body": "Текущее содержимое будет заменено выбранной версией.",
+        "diff_added": "Добавлено",
+        "diff_removed": "Удалено",
+        "back_to_page": "К странице"
+    },
+    "public": {
+        "loading": "Открываем страницу…",
+        "not_found": "Страница недоступна",
+        "not_found_hint": "Ссылку могли отключить или срок её действия истёк"
+    },
+    "move": {
+        "title": "Переместить страницу",
+        "namespace_label": "Пространство",
+        "parent_label": "Родительская страница",
+        "parent_root": "В корень пространства",
+        "submit": "Переместить"
+    },
+    "access": {
+        "title": "Доступ к странице",
+        "visibility_label": "Кто видит страницу",
+        "visibility_company": "Вся компания",
+        "visibility_restricted": "Только участники",
+        "members_title": "Участники",
+        "members_empty": "Доступ выдан только владельцу",
+        "member_add": "Добавить участника",
+        "member_remove": "Убрать",
+        "permission_view": "Чтение",
+        "permission_comment": "Комментирование",
+        "permission_edit": "Редактирование",
+        "link_title": "Публичная ссылка",
+        "link_enable": "Открыть доступ по ссылке",
+        "link_copy": "Скопировать ссылку",
+        "link_copied": "Ссылка скопирована",
+        "link_disabled": "Ссылка выключена"
+    },
+    "toast": {
+        "page": {
+            "created": "Страница создана",
+            "create_failed": "Не удалось создать страницу",
+            "deleted": "Страница удалена",
+            "delete_failed": "Не удалось удалить страницу",
+            "restored": "Страница восстановлена",
+            "restore_failed": "Не удалось восстановить страницу",
+            "namespace_changed": "Страница перенесена в другое пространство",
+            "namespace_change_failed": "Не удалось перенести страницу"
+        },
+        "revision": {
+            "restored": "Версия восстановлена",
+            "restore_failed": "Не удалось восстановить версию"
+        },
+        "access": {
+            "link_updated": "Публичная ссылка обновлена",
+            "link_failed": "Не удалось обновить публичную ссылку",
+            "member_added": "Доступ выдан",
+            "member_add_failed": "Не удалось выдать доступ",
+            "member_removed": "Доступ отозван",
+            "member_remove_failed": "Не удалось отозвать доступ"
+        }
+    }
+}

@@ -1,6 +1,6 @@
-import { html, css, nothing, render } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
-import { nextModalLayerZIndex } from '../../utils/modal-z-stack.js';
+import '../platform-popover.js';
 
 /**
  * Перечисление — type `enum` у `platform-field`.
@@ -11,9 +11,10 @@ import { nextModalLayerZIndex } from '../../utils/modal-z-stack.js';
  * Edit: выпадающий список в стиле field-pill с **инлайн-поиском** (одно поле
  * фильтрует label/value). Нативный `<select>` не используется.
  *
- * Список порталится в `document.body` (`position: fixed`), чтобы не клипиться
- * `overflow` предков (floating panel, node editor scroll и т.п.) и быть выше
- * панелей с z-index > `--z-dropdown`.
+ * Список живёт в `platform-popover`: он уносит слой в `document.body`, поэтому
+ * список не обрезается `overflow` предков (floating panel, скролл редактора
+ * ноды) и лежит выше панелей с большим z-index. Позиционирование, закрытие по
+ * клику мимо и по Escape — тоже на попапе.
  *
  * Если в `values` нет option с `value: ''`, в начало списка добавляется
  * синтетическая строка «пустое значение» (подпись — i18n `enum_blank_fallback`),
@@ -52,66 +53,6 @@ function normalizedQuery(raw) {
     return raw == null ? '' : String(raw).trim().toLowerCase();
 }
 
-const ENUM_PORTAL_STYLE_ID = 'platform-field-enum-portal-styles';
-
-const ENUM_PORTAL_CSS = `
-.platform-field-enum-portal {
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: 0;
-    height: 0;
-    overflow: visible;
-    pointer-events: none;
-}
-.platform-field-enum-portal-list {
-    position: fixed;
-    margin: 0;
-    padding: var(--space-1, 4px) 0;
-    list-style: none;
-    max-height: min(280px, 46vh);
-    overflow-x: hidden;
-    overflow-y: auto;
-    box-sizing: border-box;
-    pointer-events: auto;
-    background: var(--glass-solid-medium);
-    border: 1px solid var(--glass-border-subtle);
-    border-radius: var(--radius-md, 12px);
-    box-shadow: var(--shadow-md, 0 10px 30px rgba(0, 0, 0, 0.2));
-    backdrop-filter: blur(var(--glass-blur-subtle, 8px));
-    -webkit-backdrop-filter: blur(var(--glass-blur-subtle, 8px));
-    font-family: var(--font-sans);
-}
-.platform-field-enum-portal-opt {
-    margin: 0;
-    padding: var(--space-2, 8px) var(--space-3, 12px);
-    cursor: pointer;
-    font-size: var(--field-pill-readonly-muted-size, var(--text-sm, 14px));
-    font-weight: var(--font-medium, 500);
-    line-height: var(--leading-tight, 1.25);
-    color: var(--text-primary);
-}
-.platform-field-enum-portal-opt:hover,
-.platform-field-enum-portal-opt:focus {
-    outline: none;
-    background: var(--accent-subtle);
-}
-.platform-field-enum-portal-opt--selected {
-    background: var(--glass-solid-subtle);
-    font-weight: var(--font-semibold, 600);
-}
-.platform-field-enum-portal-opt--selected:hover {
-    background: var(--accent-subtle);
-}
-.platform-field-enum-portal-empty {
-    margin: 0;
-    padding: var(--space-2, 8px) var(--space-3, 12px);
-    font-size: var(--field-pill-readonly-muted-size, var(--text-sm, 14px));
-    color: var(--text-tertiary);
-    list-style: none;
-}
-`;
-
 export class PlatformFieldEnum extends PlatformElement {
     static i18nNamespace = 'platform';
 
@@ -123,6 +64,7 @@ export class PlatformFieldEnum extends PlatformElement {
         placeholder: { type: String },
         _filterQuery: { type: String, state: true },
         _listOpen: { type: Boolean, state: true },
+        _anchor: { state: true },
     };
 
     static styles = [
@@ -145,6 +87,45 @@ export class PlatformFieldEnum extends PlatformElement {
                 color: var(--text-primary);
                 border-radius: var(--radius-full);
             }
+
+            .enum-list {
+                margin: 0;
+                padding: var(--space-1, 4px) 0;
+                list-style: none;
+            }
+
+            .enum-option {
+                margin: 0;
+                padding: var(--space-2, 8px) var(--space-3, 12px);
+                cursor: pointer;
+                font-size: var(--field-pill-readonly-muted-size, var(--text-sm, 14px));
+                font-weight: var(--font-medium, 500);
+                line-height: var(--leading-tight, 1.25);
+                color: var(--text-primary);
+            }
+
+            .enum-option:hover,
+            .enum-option:focus {
+                outline: none;
+                background: var(--accent-subtle);
+            }
+
+            .enum-option--selected {
+                background: var(--glass-solid-subtle);
+                font-weight: var(--font-semibold, 600);
+            }
+
+            .enum-option--selected:hover {
+                background: var(--accent-subtle);
+            }
+
+            .enum-empty {
+                margin: 0;
+                padding: var(--space-2, 8px) var(--space-3, 12px);
+                font-size: var(--field-pill-readonly-muted-size, var(--text-sm, 14px));
+                color: var(--text-tertiary);
+                list-style: none;
+            }
         `,
     ];
 
@@ -157,30 +138,26 @@ export class PlatformFieldEnum extends PlatformElement {
         this.placeholder = '';
         this._filterQuery = '';
         this._listOpen = false;
-        this._openUpward = false;
         this._skipBlurSync = false;
         this._deferOptionFilter = false;
         this._listDomId = `pf-enum-${Math.random().toString(36).slice(2, 11)}`;
-        /** @type {HTMLDivElement | null} */
-        this._portalHost = null;
-        this._boundReposition = () => this._positionPortalList();
-        this._boundDocPointerDown = (e) => this._onDocumentPointerDown(e);
-    }
-
-    disconnectedCallback() {
-        this._teardownPortal();
-        super.disconnectedCallback();
+        /** @type {HTMLElement | null} */
+        this._anchor = null;
     }
 
     updated(changed) {
         super.updated?.(changed);
-        if (this._listOpen && !this.disabled) {
-            this._ensurePortal();
-            this._renderPortalList();
-            this._positionPortalList();
-            return;
+        if (this._anchor === null) {
+            const wrap = this.renderRoot?.querySelector?.('.field-pill-enum-wrap');
+            if (wrap instanceof HTMLElement) {
+                this._anchor = wrap;
+            }
         }
-        this._teardownPortal();
+        if (this._listOpen && !this.disabled) {
+            // Список меняет высоту при фильтрации, поэтому попап пересчитывается
+            // после каждого обновления содержимого.
+            this.renderRoot?.querySelector?.('platform-popover')?.reposition();
+        }
     }
 
     willUpdate(changed) {
@@ -258,111 +235,14 @@ export class PlatformFieldEnum extends PlatformElement {
         return this._labelForValue(typeof v === 'string' ? v : String(v));
     }
 
-    static _ensurePortalStyleSheet() {
-        if (typeof document === 'undefined') {
-            return;
-        }
-        if (document.getElementById(ENUM_PORTAL_STYLE_ID)) {
-            return;
-        }
-        const style = document.createElement('style');
-        style.id = ENUM_PORTAL_STYLE_ID;
-        style.textContent = ENUM_PORTAL_CSS;
-        document.head.appendChild(style);
-    }
-
-    _ensurePortal() {
-        if (this._portalHost || typeof document === 'undefined') {
-            return;
-        }
-        PlatformFieldEnum._ensurePortalStyleSheet();
-        const host = document.createElement('div');
-        host.className = 'platform-field-enum-portal';
-        host.style.zIndex = String(nextModalLayerZIndex());
-        document.body.appendChild(host);
-        this._portalHost = host;
-        window.addEventListener('scroll', this._boundReposition, true);
-        window.addEventListener('resize', this._boundReposition);
-        document.addEventListener('pointerdown', this._boundDocPointerDown, true);
-    }
-
-    _teardownPortal() {
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('scroll', this._boundReposition, true);
-            window.removeEventListener('resize', this._boundReposition);
-        }
-        if (typeof document !== 'undefined') {
-            document.removeEventListener('pointerdown', this._boundDocPointerDown, true);
-        }
-        if (this._portalHost) {
-            render(nothing, this._portalHost);
-            this._portalHost.remove();
-            this._portalHost = null;
-        }
-    }
-
-    _estimateListHeight() {
-        const count = this._filteredDisplayOptions.length;
-        const rowPx = 36;
-        const chromePx = 8;
-        const estimated = chromePx + Math.max(1, count) * rowPx;
-        const maxPx = Math.min(280, Math.round(window.innerHeight * 0.46));
-        return Math.min(estimated, maxPx);
-    }
-
-    _syncListPlacement() {
-        if (!this._listOpen || this.disabled) {
-            this._openUpward = false;
-            return;
-        }
-        const wrap = this.renderRoot?.querySelector?.('.field-pill-enum-wrap');
-        if (!(wrap instanceof HTMLElement)) {
-            this._openUpward = false;
-            return;
-        }
-        const rect = wrap.getBoundingClientRect();
-        const gap = 4;
-        const listHeight = this._estimateListHeight();
-        const spaceBelow = window.innerHeight - rect.bottom - gap;
-        const spaceAbove = rect.top - gap;
-        this._openUpward = spaceBelow < listHeight && spaceAbove > spaceBelow;
-    }
-
-    _positionPortalList() {
-        if (!this._portalHost || !this._listOpen) {
-            return;
-        }
-        const wrap = this.renderRoot?.querySelector?.('.field-pill-enum-wrap');
-        const list = this._portalHost.querySelector('.platform-field-enum-portal-list');
-        if (!(wrap instanceof HTMLElement) || !(list instanceof HTMLElement)) {
-            return;
-        }
-        this._syncListPlacement();
-        const rect = wrap.getBoundingClientRect();
-        const gap = 4;
-        const width = Math.max(rect.width, 120);
-        list.style.width = `${Math.round(width)}px`;
-        list.style.left = `${Math.round(rect.left)}px`;
-        if (this._openUpward) {
-            list.style.top = 'auto';
-            list.style.bottom = `${Math.round(window.innerHeight - rect.top + gap)}px`;
-        } else {
-            list.style.bottom = 'auto';
-            list.style.top = `${Math.round(rect.bottom + gap)}px`;
-        }
-    }
-
-    _renderPortalList() {
-        if (!this._portalHost) {
-            return;
-        }
+    _renderList() {
         const ariaList = this.t('platform_field.enum_list_aria') ?? 'platform_field.enum_list_aria';
         const list = this._filteredDisplayOptions;
         const listBody = list.length === 0
-            ? html`<li class="platform-field-enum-portal-empty" role="option" aria-disabled="true">${this.t('platform_field.enum_no_matches') ?? 'platform_field.enum_no_matches'}</li>`
+            ? html`<li class="enum-empty" role="option" aria-disabled="true">${this.t('platform_field.enum_no_matches') ?? 'platform_field.enum_no_matches'}</li>`
             : list.map((opt) => html`
                   <li
-                      class=${`platform-field-enum-portal-opt${(this.value ?? '') === opt.value ? ' platform-field-enum-portal-opt--selected' : ''}`}
+                      class=${`enum-option${(this.value ?? '') === opt.value ? ' enum-option--selected' : ''}`}
                       role="option"
                       aria-selected=${(this.value ?? '') === opt.value ? 'true' : 'false'}
                       data-enum-value=${opt.value}
@@ -373,32 +253,20 @@ export class PlatformFieldEnum extends PlatformElement {
                   </li>
               `);
 
-        render(html`
+        return html`
             <ul
                 id=${this._listDomId}
-                class="platform-field-enum-portal-list"
+                class="enum-list"
                 role="listbox"
                 aria-label=${ariaList}
             >
                 ${listBody}
             </ul>
-        `, this._portalHost);
+        `;
     }
 
-    /** @param {PointerEvent} e */
-    _onDocumentPointerDown(e) {
-        if (!this._listOpen) {
-            return;
-        }
-        const path = e.composedPath();
-        if (path.includes(this)) {
-            return;
-        }
-        if (this._portalHost && path.includes(this._portalHost)) {
-            return;
-        }
+    _onPopoverDismiss() {
         this._listOpen = false;
-        this._openUpward = false;
         this._deferOptionFilter = false;
         this._filterQuery = this._displayTextSyncedToValue();
         this.requestUpdate();
@@ -414,7 +282,6 @@ export class PlatformFieldEnum extends PlatformElement {
         if (this.disabled) return;
         this._skipBlurSync = true;
         this._listOpen = false;
-        this._openUpward = false;
         this._deferOptionFilter = false;
         this._filterQuery = opt.label;
         const nextDetail = typeof opt.value === 'string' ? opt.value : String(opt.value);
@@ -430,10 +297,6 @@ export class PlatformFieldEnum extends PlatformElement {
         if (this.disabled) return;
         this._listOpen = true;
         this._deferOptionFilter = true;
-        this.updateComplete.then(() => {
-            this._syncListPlacement();
-            this.requestUpdate();
-        });
     }
 
     _onFocus() {
@@ -466,12 +329,12 @@ export class PlatformFieldEnum extends PlatformElement {
                 this.requestUpdate();
                 return;
             }
-            if (this._portalHost && document.activeElement && this._portalHost.contains(document.activeElement)) {
+            const popover = this.renderRoot?.querySelector?.('platform-popover');
+            if (popover && document.activeElement && popover.contains(document.activeElement)) {
                 return;
             }
             this._deferOptionFilter = false;
             this._listOpen = false;
-            this._openUpward = false;
             const q = normalizedQuery(this._filterQuery);
             if (q.length > 0) {
                 const exact = this._displayOptions.filter(
@@ -500,10 +363,6 @@ export class PlatformFieldEnum extends PlatformElement {
         this._deferOptionFilter = false;
         this._filterQuery = t.value;
         this._listOpen = true;
-        this.updateComplete.then(() => {
-            this._syncListPlacement();
-            this.requestUpdate();
-        });
     }
 
     /** @param {KeyboardEvent} e */
@@ -513,7 +372,6 @@ export class PlatformFieldEnum extends PlatformElement {
             e.stopPropagation();
             this._filterQuery = this._displayTextSyncedToValue();
             this._listOpen = false;
-            this._openUpward = false;
             this._deferOptionFilter = false;
             const t = e.target;
             if (t instanceof HTMLElement) t.blur();
@@ -584,6 +442,18 @@ export class PlatformFieldEnum extends PlatformElement {
                     @click=${this._onChevronClick}
                 ></button>
             </div>
+            <platform-popover
+                trigger="manual"
+                role="listbox"
+                placement="bottom-start"
+                match-width
+                offset="4"
+                .anchor=${this._anchor}
+                ?open=${this._listOpen && !this.disabled}
+                @popover-dismiss=${this._onPopoverDismiss}
+            >
+                ${this._listOpen && !this.disabled ? this._renderList() : nothing}
+            </platform-popover>
         `;
     }
 }

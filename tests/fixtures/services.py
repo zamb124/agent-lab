@@ -9,7 +9,8 @@
 Порты сервисов:
 - flows 9001, rag 9002, crm 9003, frontend 9004, sync 9005, office 9008,
   search 9010, provider_litserve 9014, voice 9015, capability_gateway 9016,
-  code_runner_{python,node,go,csharp} 9017-9020, worktracker 9021, secrets 9022.
+  code_runner_{python,node,go,csharp} 9017-9020, worktracker 9021, secrets 9022,
+  wiki 9023.
 """
 
 import time
@@ -116,6 +117,17 @@ def rag_service(provider_litserve_service):
     """RAG API на 9002 (pgvector, документы, namespace)."""
     _ = provider_litserve_service
     require_http_service("rag", 9002)
+
+
+@pytest.fixture(scope="session")
+def wiki_service_http(rag_service):
+    """Wiki API на 9023 (страницы, доступ, поиск).
+
+    Зависит от RAG: страница индексируется при каждом сохранении, без
+    поднятого RAG запись не проходит.
+    """
+    _ = rag_service
+    require_http_service("wiki", 9023)
 
 
 @pytest.fixture(scope="session")

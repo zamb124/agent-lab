@@ -1,0 +1,73 @@
+---
+description: Wiki — база знаний платформы (apps/wiki, порт 8023, БД platform_wiki). Дерево страниц внутри namespace, блочный редактор ProseMirror, лексический и смысловой поиск, доступ и публичные ссылки
+globs:
+alwaysApply: false
+---
+# Wiki — база знаний платформы
+
+Сервис **wiki** (порт 8023, БД `platform_wiki`, префикс REST `/wiki/api/v1/`, SPA `/wiki`). Страницы живут внутри рабочего пространства компании и связаны в дерево.
+
+Каноническое имя сущности — **`WikiPage` / `wiki_page_id`**. `document_id` занят RAG, `file_id` — платформенным файлом; страница базы знаний ими не называется.
+
+## Границы запроса
+
+`apps/wiki/api/_scope.py::require_scope` — единственная точка, где определяются компания, пользователь и пространство:
+
+- namespace приходит **только** из платформенного контекста (`X-Platform-Namespace`), как в Documents и Networkle;
+- имя проверяется на существование и принадлежность активной компании — несуществующее пространство это ошибка, а не молчаливый уход в `default`;
+- анонимный контекст (`user_id == "anonymous"`) для страниц не читатель, а отсутствие сессии → 403. Исключение — публичные маршруты `/public/*`.
+
+UI обязан слать заголовок сам: фабрики используют `platformNamespaceHeader(ctx)` из `@platform/lib/utils/platform-namespace-header.js`.
+
+## Модель
+
+| Сущность | Каноническое имя | Заметки |
+|---|---|---|
+| Страница | `wiki_page_id`, `WikiPage` | `content` (ProseMirror) — источник правды; `text_markdown` производный, его пишет только `WikiService`. `root_page_id` и `depth` денормализованы для дешёвых запросов по разделу и фильтров RAG, пересчитываются при перемещении |
+| Узел дерева | `WikiPageSummary` | Без содержимого: дерево пространства может быть большим |
+| Версия | `wiki_revision_id`, `WikiRevisionSummary` | Список истории — без содержимого |
+| Комментарий | `wiki_comment_id`, `WikiComment` | `anchor_text` — процитированный фрагмент: позиции ProseMirror смещаются при правках |
+| Пространство | `namespace` | Только `kind=company_workspace` попадает в продуктовый список |
+
+## Схема содержимого
+
+Источник правды — Python (`apps/wiki/content/schema.py`, `WIKI_NODES`). Браузерная схема генерируется в `core/frontend/static/assets/prosemirror/wiki-schema.json` скриптом `scripts/generate_wiki_prosemirror_schema.py` (гейт `--check`).
+
+**Порядок узлов значим и не сортируется.** ProseMirror берёт первый узел группы как заполнитель пустого контейнера: при алфавитной сортировке первым блоком становится `blockquote` (`content: block+`), и авто-заполнение ячейки таблицы уходит в бесконечную рекурсию. `paragraph` идёт сразу после `doc`.
+
+Enum-поля моделей наследуют `WikiBaseModel` (`use_enum_values=False`) — иначе перечисления превращались бы в строки и ломали сравнения по типу.
+
+## Доступ
+
+- `visibility`: `company` (вся компания) или `restricted` (только участники). Персональные гранты имеют смысл только вместе с ограничением, поэтому список участников в UI появляется вместе с ним.
+- Ограничение наследуется вниз по дереву — резолвер `apps/wiki/services/access.py` поднимается по родителям.
+- Публичная ссылка (`link_token`) даёт анонимное чтение через `/wiki/api/v1/public/pages/{link_token}` и страницу `/wiki/s/:token`.
+
+## RAG
+
+Страницы индексируются в общий RAG с богатыми метаданными (`apps/wiki/services/rag_metadata.py`): пространство, раздел, глубина, автор, публикация, ограниченность. Приватность обеспечивается **фильтрами и раздельными namespace**, а не постфильтрацией результатов:
+
+- общие страницы — namespace пространства;
+- ограниченные — отдельный `wiki-restricted-{namespace}`, который создаётся лениво перед первой записью;
+- смысловой поиск обращается к ограниченному namespace только когда у пользователя есть на это право.
+
+Удаление индекса идемпотентно: отсутствие записи (404 от RAG) — нормальный исход при переносе между пространствами.
+
+## UI
+
+SPA `/wiki`, `defaultI18nNamespace = 'wiki'`, ассистент `serviceId/branchId = wiki`.
+
+- Раскладка — `platform-resizable-split` (ширина дерева в `platform:wiki:split.tree`), на мобиле дерево уезжает в bottom-sheet `wiki.tree`, оглавление — в `wiki.outline`.
+- Дерево страниц — общий `platform-tree` (перетаскивание, контекстное меню, клавиатура). Отдельного дерева у сервиса нет.
+- Страница — `wiki-page-view`: обложка, иконка через `platform-emoji-picker`, заголовок как первый элемент документа, `platform-rich-editor`, справа оглавление, обратные ссылки и комментарии.
+- Сохранение отложенное (900 мс) с досохранением при уходе со страницы; состояние показывает строка `.save-state`.
+- Cmd+K — `platform-command-palette` с провайдером поверх `wiki/search`.
+- Маршруты: `wiki_home` (`''`), `wiki_page` (`p/:pageId`), `wiki_page_history` (`p/:pageId/history`), `wiki_search` (`search`), `wiki_public_preview` (`s/:token`).
+
+Wiki входит в `FACTORY_CANON_SERVICES` (`scripts/check_ui_canon.sh`, `scripts/check_command_rest_mirror.py`) — pages и modals ходят в состояние только через helpers `PlatformElement`, у каждой операции есть REST-зеркало.
+
+## Тесты
+
+- Backend: `tests/wiki/**` — реальная БД, реальный RAG, без моков (`pytest.mark.no_test_doubles`).
+- Схема: `tests/wiki/test_wiki_schema_parity.py` держит Python и сгенерированный JSON в согласии.
+- UI: `tests/frontend_core/browser/wiki/**`, e2e — `tests/ui/e2e/test_wiki_workspace.py` (порт 9023, фикстура `wiki_ui`, helpers `tests/ui/e2e/wiki_e2e_helpers.py`).

@@ -1,0 +1,13 @@
+component: platform-rich-editor
+doc_slug: platform-rich-editor
+tier: T0
+title_ru: Rich Editor
+title_en: Rich Editor
+import: "@platform/lib/components/platform-rich-editor.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

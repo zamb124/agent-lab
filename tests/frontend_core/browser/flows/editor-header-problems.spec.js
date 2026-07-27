@@ -68,9 +68,9 @@ describe('flows-editor-header problems flyout', () => {
 
         el.shadowRoot.querySelector('.problems-btn').click();
         await elementUpdated(el);
-        expect(document.body.querySelector('.problems-flyout')).to.not.equal(null);
+        expect(el.shadowRoot.querySelector('.problems-flyout')).to.not.equal(null);
 
-        const item = document.body.querySelector('.problem-item');
+        const item = el.shadowRoot.querySelector('.problem-item');
         item.click();
         await elementUpdated(el);
         expect(el._problemsOpen).to.equal(false);

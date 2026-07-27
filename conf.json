@@ -8,6 +8,7 @@
     "sync_service_url": "http://localhost:8005",
     "worktracker_service_url": "http://localhost:8021",
     "secrets_service_url": "http://localhost:8022",
+    "wiki_service_url": "http://localhost:8023",
     "office_service_url": "http://localhost:8008",
     "browser_service_url": "http://localhost:8009",
     "search_service_url": "http://localhost:8010",
@@ -32,6 +33,7 @@
     "tracing_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_tracing",
     "search_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_search",
     "secrets_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_secrets",
+    "wiki_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_wiki",
     "redis_url": "redis://localhost:63791/0"
   },
   "tasks": {

@@ -1,0 +1,13 @@
+component: platform-command-palette
+doc_slug: platform-command-palette
+tier: T0
+title_ru: Command Palette
+title_en: Command Palette
+import: "@platform/lib/components/platform-command-palette.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -1,8 +1,8 @@
 component: platform-work-item-board
 doc_slug: platform-work-item-board
 tier: T0
-title_ru: Work Item board
-title_en: Work Item board
+title_ru: Work Item Board
+title_en: Work Item Board
 import: "@platform/lib/components/platform-work-item-board.js"
 variants:
   - id: default

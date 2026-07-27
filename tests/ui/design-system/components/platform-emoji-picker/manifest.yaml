@@ -1,0 +1,13 @@
+component: platform-emoji-picker
+doc_slug: platform-emoji-picker
+tier: T0
+title_ru: Emoji Picker
+title_en: Emoji Picker
+import: "@platform/lib/components/platform-emoji-picker.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -3,16 +3,17 @@
   "private": true,
   "license": "Elastic-2.0",
   "scripts": {
+    "build:codemirror": "node scripts/build_codemirror_bundle.mjs",
+    "build:prosemirror": "node scripts/build_prosemirror_bundle.mjs",
+    "test:core": "npm run test:core-unit && npm run test:core-browser",
+    "test:core-browser": "web-test-runner --config web-test-runner.config.mjs",
+    "test:core-browser:watch": "web-test-runner --config web-test-runner.config.mjs --watch",
     "test:core-unit": "vitest run --config vitest.config.mjs --coverage",
     "test:core-unit:fast": "vitest run --config vitest.config.mjs",
     "test:core-unit:watch": "vitest --config vitest.config.mjs",
-    "test:ui-kit": "web-test-runner --config web-test-runner.config.mjs --files tests/ui/design-system/components/**/contract.spec.js",
-    "test:core-browser": "web-test-runner --config web-test-runner.config.mjs",
-    "test:core-browser:watch": "web-test-runner --config web-test-runner.config.mjs --watch",
-    "test:core": "npm run test:core-unit && npm run test:core-browser",
     "test:ui-components": "web-test-runner --config web-test-runner.config.mjs",
     "test:ui-components:watch": "web-test-runner --config web-test-runner.config.mjs --watch",
-    "build:codemirror": "node scripts/build_codemirror_bundle.mjs"
+    "test:ui-kit": "web-test-runner --config web-test-runner.config.mjs --files tests/ui/design-system/components/**/contract.spec.js"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "^6.20.2",
@@ -33,6 +34,18 @@
     "@web/test-runner-playwright": "^0.11.0",
     "esbuild": "^0.28.0",
     "lit": "^3.2.1",
+    "prosemirror-commands": "^1.7.1",
+    "prosemirror-dropcursor": "^1.8.3",
+    "prosemirror-gapcursor": "^1.4.1",
+    "prosemirror-history": "^1.5.0",
+    "prosemirror-inputrules": "^1.5.1",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-model": "^1.25.11",
+    "prosemirror-schema-list": "^1.5.1",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-tables": "^1.8.5",
+    "prosemirror-transform": "^1.12.0",
+    "prosemirror-view": "^1.42.2",
     "vitest": "^2.1.8"
   },
   "dependencies": {

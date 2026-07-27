@@ -71,6 +71,7 @@ alwaysApply: true
 | code_runner_go | 8019 | Isolated Go user-code runner |
 | code_runner_csharp | 8020 | Isolated C# user-code runner |
 | worktracker | 8021 | Платформенное ядро задач WorkItem (канбан, очереди, HITL, агентские задачи) |
+| wiki | 8023 | База знаний: дерево страниц внутри namespace, блочный редактор (`apps/wiki`) |
 | scheduler | 8006 | Scheduler control-plane API + TaskIQ scheduler |
 | flows_worker, crm_worker, rag_worker, sync_worker, idle_worker | — | TaskIQ воркеры |
 
@@ -169,6 +170,7 @@ alwaysApply: true
 | WorkItem (ядро задач) | `work_item_id`, `WorkItem` | `kind`, `state`, `board_id`, `board_column_id`, `assignment`, `created_by`, `blocking`, `hooks` (`assigned`/`comment`/`completed`), `resolution`, `links`, `variables: VariableMap`, `attachments: list[FileRef]`; не `task_id`, не `operator_task_id`. Детали → **`worktracker.mdc`**. |
 | Work queue | `work_queue_id`, `WorkQueue`, `work_queue_slug` | `WorkQueueMember(work_queue_id, user_id, role)`; полная замена `OperatorQueues`; не `queue_id`. |
 | Board / column | `board_id`, `Board`, `board_column_id`, `BoardColumn` | `label`, `state`, `position`; единая доска для людей/операторов/CRM. |
+| Wiki page | `wiki_page_id`, `WikiPage` | `namespace`, `parent_page_id`, `root_page_id`, `depth`, `position`, `title`, `icon`, `cover_url`, `content` (ProseMirror — источник правды), `text_markdown` (производный), `visibility`; узел дерева — `WikiPageSummary` без содержимого; версия — `wiki_revision_id`, комментарий — `wiki_comment_id`. Не `document_id` и не `file_id`. Детали → **`wiki.mdc`**. |
 | CRM entity | `entity_id`, `CRMEntity`, `entity_type`, `entity_subtype` | `attributes` — доменные кастомные поля; `type_id` только для каталога `EntityType`/`RelationshipType`. Задача (`entity_type=task`) — чистый граф-узел: work-семантика (priority/due/assignee/state/доска) живёт в парном `WorkItem(crm_activity)`, не на CRM-узле (→ `worktracker.mdc`, `crm.mdc`). |
 | CRM relationship | `relationship_id`, `relationship_type` | `source_entity_id`, `target_entity_id`, `weight`, `confidence`, `attributes`; не `edge_id` вне graph DTO. |
 | CRM namespace template | `template_id`, `template_key` | `template_key` — DB primary key, `template_id` — продуктовый slug шаблона; не смешивать. |
@@ -379,6 +381,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | AgentPlan (execution checklist) | `agent_plan.mdc` |
 | WebRTC звонки (LiveKit) | `calls.mdc` |
 | Office (OnlyOffice) | `office.mdc` |
+| Wiki (база знаний, страницы, блочный редактор) | `wiki.mdc` |
 | Voice gateway + Speech providers | `voice.mdc` |
 | Frontend: Lit 3, helpers, i18n, design system | `frontend.mdc` |
 | Единая шина событий платформы (core/events, platform:events, каталог, consumer groups) | `events.mdc` |

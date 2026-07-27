@@ -1,50 +1,20 @@
-import { html, render as litRender } from '../lit-shim.js';
+import { html, css, nothing, unsafeCSS } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './glass-spinner.js';
+import './platform-hover-card.js';
 import './platform-user-chip.js';
-import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { formatPlatformDate } from '../utils/format-platform-date.js';
 
 const PREVIEW_WIDTH = 360;
-const PREVIEW_GAP = 10;
-const PREVIEW_VIEWPORT_PADDING = 12;
-const PREVIEW_EXPECTED_HEIGHT = 220;
 
-let _previewStylesInjected = false;
-
-function _ensurePreviewStyles() {
-    if (_previewStylesInjected) {
-        return;
-    }
-    _previewStylesInjected = true;
-    const style = document.createElement('style');
-    style.id = 'platform-work-item-preview-portal-styles';
-    style.textContent = `
+const WORK_ITEM_PREVIEW_CSS = `
         .platform-work-item-preview-portal {
-            position: fixed;
-            width: ${PREVIEW_WIDTH}px;
-            max-width: min(${PREVIEW_WIDTH}px, calc(100vw - 24px));
-            border: 1px solid var(--glass-border-medium);
-            border-left: 3px solid var(--work-item-state-open);
-            background: var(--glass-solid-strong);
-            backdrop-filter: blur(var(--glass-blur-strong, 16px));
-            -webkit-backdrop-filter: blur(var(--glass-blur-strong, 16px));
-            border-radius: var(--radius-lg);
-            padding: var(--space-3);
-            box-shadow: var(--glass-shadow-strong, 0 16px 40px rgba(0, 0, 0, 0.35));
             display: flex;
             flex-direction: column;
             gap: var(--space-2);
-            opacity: 0;
-            transform: translateY(4px);
-            transition: opacity 140ms ease, transform 140ms ease;
-            color: var(--text-primary);
-            font-family: var(--font-sans);
-        }
-        .platform-work-item-preview-portal[data-open="true"] {
-            opacity: 1;
-            transform: translateY(0);
+            border-left: 3px solid var(--work-item-state-open);
+            padding-left: var(--space-3);
         }
         .platform-work-item-preview-portal[data-state="open"] {
             border-left-color: var(--work-item-state-open);
@@ -192,31 +162,6 @@ function _ensurePreviewStyles() {
             font-size: var(--text-xs);
         }
     `;
-    document.head.appendChild(style);
-}
-
-function _isIsoDateLike(value) {
-    return typeof value === 'string' && value.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(value);
-}
-
-function _assigneeUserId(item) {
-    const assignment = item && item.assignment;
-    if (!assignment || typeof assignment !== 'object') {
-        return '';
-    }
-    if (assignment.assignee_kind === 'users') {
-        if (!Array.isArray(assignment.user_ids) || assignment.user_ids.length === 0) {
-            return '';
-        }
-        const userId = assignment.user_ids[0];
-        return typeof userId === 'string' ? userId : '';
-    }
-    if (assignment.assignee_kind === 'queue') {
-        const claimed = assignment.claimed_by_user_id;
-        return typeof claimed === 'string' ? claimed : '';
-    }
-    return '';
-}
 
 export class PlatformWorkItemPreview extends PlatformElement {
     static i18nNamespace = 'platform';
@@ -238,37 +183,16 @@ export class PlatformWorkItemPreview extends PlatformElement {
         this._locale = this.select((s) => (
             typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en'
         ));
-        this._portal = null;
-        this._onReposition = this._onReposition.bind(this);
-    }
-
-    connectedCallback() {
-        super.connectedCallback();
-        _ensurePreviewStyles();
-    }
-
-    disconnectedCallback() {
-        super.disconnectedCallback();
-        this._closePortal();
     }
 
     updated(changed) {
         super.updated(changed);
-        if (changed.has('previewOpen')) {
-            if (this.previewOpen) {
-                this._openPortal();
-            } else {
-                this._closePortal();
-                return;
-            }
+        if (!this.previewOpen) {
+            return;
         }
-        if (this.previewOpen) {
-            if ((changed.has('previewOpen') || changed.has('workItemId') || changed.has('item'))
-                && this._resolvedItem() === null) {
-                this._ensureLoaded();
-            }
-            this._renderPortal();
-            this._reposition();
+        if ((changed.has('previewOpen') || changed.has('workItemId') || changed.has('item'))
+            && this._resolvedItem() === null) {
+            this._ensureLoaded();
         }
     }
 
@@ -316,70 +240,6 @@ export class PlatformWorkItemPreview extends PlatformElement {
         return `${text.slice(0, 180)}...`;
     }
 
-    _openPortal() {
-        if (this._portal) {
-            return;
-        }
-        const node = document.createElement('div');
-        node.className = 'platform-work-item-preview-portal';
-        node.style.zIndex = String(nextModalLayerZIndex());
-        node.addEventListener('mouseenter', () => this.emit('preview-enter'));
-        node.addEventListener('mouseleave', () => this.emit('preview-leave'));
-        document.body.appendChild(node);
-        this._portal = node;
-        this._resizeObserver = new ResizeObserver(this._onReposition);
-        this._resizeObserver.observe(document.documentElement);
-        document.addEventListener('scroll', this._onReposition, true);
-        requestAnimationFrame(() => {
-            if (this._portal) {
-                this._portal.dataset.open = 'true';
-            }
-        });
-    }
-
-    _closePortal() {
-        if (this._resizeObserver) {
-            this._resizeObserver.disconnect();
-            this._resizeObserver = null;
-        }
-        document.removeEventListener('scroll', this._onReposition, true);
-        if (this._portal && this._portal.parentNode) {
-            litRender(null, this._portal);
-            this._portal.remove();
-        }
-        this._portal = null;
-    }
-
-    _onReposition() {
-        if (!this._portal) {
-            return;
-        }
-        requestAnimationFrame(() => this._reposition());
-    }
-
-    _reposition() {
-        if (!this._portal) {
-            return;
-        }
-        if (this.anchorRect === null || typeof this.anchorRect !== 'object') {
-            return;
-        }
-        const leftSource = typeof this.anchorRect.left === 'number' ? this.anchorRect.left : 0;
-        const topSource = typeof this.anchorRect.top === 'number' ? this.anchorRect.top : 0;
-        const heightSource = typeof this.anchorRect.height === 'number' ? this.anchorRect.height : 0;
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const maxLeft = Math.max(PREVIEW_VIEWPORT_PADDING, viewportWidth - PREVIEW_WIDTH - PREVIEW_VIEWPORT_PADDING);
-        const left = Math.min(Math.max(PREVIEW_VIEWPORT_PADDING, leftSource), maxLeft);
-        const belowTop = topSource + heightSource + PREVIEW_GAP;
-        const aboveTop = topSource - PREVIEW_GAP - PREVIEW_EXPECTED_HEIGHT;
-        const top = belowTop + PREVIEW_EXPECTED_HEIGHT <= viewportHeight
-            ? belowTop
-            : Math.max(PREVIEW_VIEWPORT_PADDING, aboveTop);
-        this._portal.style.left = `${Math.round(left)}px`;
-        this._portal.style.top = `${Math.round(top)}px`;
-    }
-
     _emitOpen() {
         if (typeof this.workItemId !== 'string' || this.workItemId.length === 0) {
             return;
@@ -387,18 +247,10 @@ export class PlatformWorkItemPreview extends PlatformElement {
         this.emit('open', { workItemId: this.workItemId });
     }
 
-    _renderPortal() {
-        if (!this._portal) {
-            return;
-        }
+    _renderCardBody() {
         const item = this._resolvedItem();
         const loading = item === null && this._getOp.busy;
-        if (item && typeof item.state === 'string') {
-            this._portal.dataset.state = item.state;
-        } else {
-            delete this._portal.dataset.state;
-        }
-        const tpl = item
+        return item
             ? html`
                 <div class="platform-work-item-preview-portal__header">
                     <span class="platform-work-item-preview-portal__state-dot"></span>
@@ -440,12 +292,37 @@ export class PlatformWorkItemPreview extends PlatformElement {
                         : this.t('work_item_preview.not_found')}
                 </div>
             `;
-        litRender(tpl, this._portal);
     }
 
     render() {
-        return html``;
+        const item = this._resolvedItem();
+        return html`
+            <platform-hover-card
+                ?open=${this.previewOpen}
+                .anchor=${this.anchorRect}
+                width=${PREVIEW_WIDTH}
+                @hover-card-enter=${() => this.emit('preview-enter')}
+                @hover-card-leave=${() => this.emit('preview-leave')}
+            >
+                ${this.previewOpen
+                    ? html`<div
+                          class="platform-work-item-preview-portal"
+                          data-state=${item && typeof item.state === 'string' ? item.state : nothing}
+                      >${this._renderCardBody()}</div>`
+                    : nothing}
+            </platform-hover-card>
+        `;
     }
+
+    static styles = [
+        PlatformElement.styles,
+        unsafeCSS(WORK_ITEM_PREVIEW_CSS),
+        css`
+            :host {
+                display: contents;
+            }
+        `,
+    ];
 }
 
 customElements.define('platform-work-item-preview', PlatformWorkItemPreview);

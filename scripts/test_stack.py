@@ -303,6 +303,12 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         port=9021,
         readiness_timeout=90.0,
     ),
+    GranianService(
+        name="wiki",
+        app_path="apps.wiki.main:app",
+        port=9023,
+        readiness_timeout=90.0,
+    ),
     )
 
 

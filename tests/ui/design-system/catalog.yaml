@@ -52,6 +52,11 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
+- component: platform-command-palette
+  doc_slug: platform-command-palette
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-company-variable-editor-modal
   doc_slug: platform-company-variable-editor-modal
   status: backlog
@@ -108,8 +113,14 @@ components:
   deadline: 2026-Q3
 - component: platform-echarts-host
   doc_slug: platform-echarts-host
-  status: backfill
-  tier: T2
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
+- component: platform-emoji-picker
+  doc_slug: platform-emoji-picker
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-field
   doc_slug: platform-field
   status: production
@@ -187,6 +198,11 @@ components:
   doc_slug: platform-help-hint
   status: backfill
   tier: T0
+- component: platform-hover-card
+  doc_slug: platform-hover-card
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-icon
   doc_slug: platform-icon
   status: backfill
@@ -220,15 +236,6 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
-- component: platform-metric-card
-  doc_slug: platform-metric-card
-  status: backfill
-  tier: T0
-- component: platform-mini-bar-chart
-  doc_slug: platform-mini-bar-chart
-  status: backlog
-  tier: T0
-  deadline: 2026-Q3
 - component: platform-mail-calendar-rail
   doc_slug: platform-mail-calendar-rail
   status: backlog
@@ -244,6 +251,25 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
+- component: platform-menu
+  doc_slug: platform-menu
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
+- component: platform-mermaid-host
+  doc_slug: platform-mermaid-host
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
+- component: platform-metric-card
+  doc_slug: platform-metric-card
+  status: backfill
+  tier: T0
+- component: platform-mini-bar-chart
+  doc_slug: platform-mini-bar-chart
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-modal-search-field
   doc_slug: platform-modal-search-field
   status: backlog
@@ -253,10 +279,6 @@ components:
   doc_slug: platform-modal-stack
   status: backfill
   tier: T0
-- component: platform-mermaid-host
-  doc_slug: platform-mermaid-host
-  status: backfill
-  tier: T2
 - component: platform-notification-manager
   doc_slug: platform-notification-manager
   status: backlog
@@ -276,15 +298,26 @@ components:
   doc_slug: platform-picker-card
   status: production
   tier: T1
+- component: platform-popover
+  doc_slug: platform-popover
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-rag-retrieval-panel
   doc_slug: platform-rag-retrieval-panel
   status: backlog
   tier: T0
   deadline: 2026-Q3
-- component: platform-searchable-combobox
-  doc_slug: platform-searchable-combobox
-  status: backfill
+- component: platform-resizable-split
+  doc_slug: platform-resizable-split
+  status: backlog
   tier: T0
+  deadline: 2026-Q3
+- component: platform-rich-editor
+  doc_slug: platform-rich-editor
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-schema-editor
   doc_slug: platform-schema-editor
   status: backlog
@@ -295,6 +328,10 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
+- component: platform-searchable-combobox
+  doc_slug: platform-searchable-combobox
+  status: backfill
+  tier: T0
 - component: platform-segmented-control
   doc_slug: platform-segmented-control
   status: production
@@ -351,8 +388,9 @@ components:
   deadline: 2026-Q3
 - component: platform-spinner
   doc_slug: platform-spinner
-  status: backfill
-  tier: T1
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-switch
   doc_slug: platform-switch
   status: backfill
@@ -369,6 +407,11 @@ components:
   deadline: 2026-Q3
 - component: platform-trace-viewer
   doc_slug: platform-trace-viewer
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
+- component: platform-tree
+  doc_slug: platform-tree
   status: backlog
   tier: T0
   deadline: 2026-Q3
@@ -406,10 +449,6 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
-- component: platform-viz-host
-  doc_slug: platform-viz-host
-  status: backfill
-  tier: T2
 - component: platform-variable-value-editor
   doc_slug: platform-variable-value-editor
   status: backlog
@@ -417,6 +456,11 @@ components:
   deadline: 2026-Q3
 - component: platform-variables-panel
   doc_slug: platform-variables-panel
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
+- component: platform-viz-host
+  doc_slug: platform-viz-host
   status: backlog
   tier: T0
   deadline: 2026-Q3
@@ -430,11 +474,6 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
-- component: platform-work-item-preview
-  doc_slug: platform-work-item-preview
-  status: backlog
-  tier: T0
-  deadline: 2026-Q3
 - component: platform-work-item-board
   doc_slug: platform-work-item-board
   status: backlog
@@ -442,6 +481,11 @@ components:
   deadline: 2026-Q3
 - component: platform-work-item-detail
   doc_slug: platform-work-item-detail
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
+- component: platform-work-item-preview
+  doc_slug: platform-work-item-preview
   status: backlog
   tier: T0
   deadline: 2026-Q3

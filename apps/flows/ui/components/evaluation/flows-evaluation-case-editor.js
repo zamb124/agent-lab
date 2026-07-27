@@ -206,8 +206,6 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                 flex-direction: column;
                 gap: 12px;
                 overscroll-behavior: contain;
-                /* enum dropdown (absolute) должен быть выше соседних секций внутри скролла */
-                --field-pill-enum-list-z: var(--z-tooltip);
             }
 
             .body > * {

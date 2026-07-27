@@ -405,6 +405,27 @@ Doc output: `docs/scenarios/platform/ui-kit/<doc_slug>/`. Taxonomy tag: `platfor
 - `<platform-cron-field>` — выбор расписания: пресеты или «Свой cron» (5 полей). Помощники: `utils/cron-field.js` (`findMatchingPresetId`, `normalizeCronString`, `validateCronFiveField`). События `input`/`change` с `detail.value`. i18n `cron_field.*`.
 - `<platform-palette-color-picker>` — палитра (круглые свотчи в одну строку, при нехватке ширины — горизонтальный скролл). `allow-clear` — кнопка сброса. Значение вне палитры (валидный hex) — дополнительный активный свотч. События `input`/`change` с `detail.value` (hex или пустая строка). Палитра: `utils/color-palette.js` (`COLOR_PALETTE`). i18n `palette_color_picker.*`.
 
+## Плавающие слои (anchored layer canon)
+
+Единственный владелец плавающего слоя — **`<platform-popover>`**. Он показывает содержимое в top layer через нативный Popover API (`popover="manual"` + `showPopover()`), поэтому слой не обрезается `overflow`/`backdrop-filter` предков, не воюет за `z-index` и **остаётся в DOM-дереве владельца** — `aria-controls`, наследование CSS-переменных темы и поиск по поддереву продолжают работать.
+
+- Позиционирование считает чистая функция `utils/floating-position.js` (`computeFloatingPosition`, `resolveAnchorRect`, `readViewportSize`): flip на противоположную сторону, clamp вдоль поперечной оси, `matchWidth`, `maxHeight` по свободному месту. Тестируется юнитом, без DOM.
+- Якорь (`.anchor`) — элемент, готовый прямоугольник или точка `{x, y}` (контекстное меню, координаты выделения в редакторе).
+- Режимы `trigger`: `manual` (владелец сам держит `open`), `click`, `hover` (с задержкой), `contextmenu`.
+- `role` отражается в атрибут: `menu` / `listbox` / `dialog` / `tooltip` / `toolbar`.
+- Закрытие: клик мимо, `Escape`, опционально `close-on-scroll`; причина приходит в `popover-dismiss` detail (`outside` / `escape` / `scroll`).
+- Поверх popover строятся: **`<platform-menu>`** (пункты данными, roving tabindex, стрелки, `Home`/`End`, typeahead, разделители и секции, `danger`, галочка выбранного) и **`<platform-hover-card>`** (карточка предпросмотра по наведению; удержание, пока курсор внутри).
+
+**Запрещено** в `core/**` и `apps/**`: свой портал в `document.body`, `position: fixed` + ручной расчёт координат, локальный `z-index` для dropdown, дубли hover-preview. Существующие компоненты уже переведены: `platform-field-enum`, `platform-searchable-combobox`, `platform-date-picker`, `platform-timezone-picker`, `platform-icon-picker`, `platform-help-hint`, `platform-notification-manager`, `platform-user`, `platform-work-item-preview`, контекстные меню Office/Sync и меню шапки редактора Flows.
+
+## Дерево, палитра, эмодзи, разделитель
+
+- **`<platform-tree>`** — плоский список узлов с `parent_id` → дерево. Раскрытие с сохранением состояния (`revealNode`, `isExpanded`, `setExpanded`), клавиатура (стрелки, `Enter`), `role="tree"` + `aria-level`/`aria-expanded`/`aria-selected`. Перетаскивание (`draggable-nodes`) различает «внутрь» и «между» по зоне строки, подсвечивает линию вставки и не даёт положить узел в собственное поддерево. Контекстное меню — через `.menuItems(node)` и `platform-menu`. События: `tree-select`, `tree-toggle`, `tree-action`, `tree-move`.
+- **`<platform-command-palette>`** — Cmd/Ctrl+K. Результаты даёт `.provider(query)`; ответы на устаревшие префиксы отбрасываются. Секции через `item.group`, клавиатура по кругу, `palette-select`. Без provider — ошибка, а не пустой список.
+- **`<platform-emoji-picker>`** — иконка страницы или сущности. Курируемый набор рабочих категорий с поиском по ключевым словам ru+en; события `emoji-select` / `emoji-clear`.
+- **`<platform-resizable-split>`** — две панели с перетаскиваемой границей: `storage-key` + `storage-scope` сохраняют ширину, стрелки двигают границу с клавиатуры, `role="separator"` с `aria-valuenow`.
+- **`<platform-rich-editor>`** — блочный редактор ProseMirror. Область правки в light DOM (IME в shadow root ломается), стили — глобальный `assets/css/prosemirror.css` на токенах `--wiki-*`. Панель форматирования, меню команд по `/`, упоминания по `@` (`.mentionProvider`), меню блока у ручки перетаскивания и контролы таблиц — всё на `platform-popover` с якорем по координатам выделения (`view.coordsAtPos`). Значение — документ ProseMirror; markdown считает бэкенд.
+
 ## Витрина сервисов (launcher + модалка)
 
 Файлы: `utils/platform-services-catalog.js` (список продуктов, бренд, ключи `apps.*.name`), `utils/build-service-entry-url.js`, `components/platform-services-launcher.js`, `components/platform-services-modal.js` (`modalKind: 'platform.services'`), `base/platform-services-page.js` (страница `platform_services`).

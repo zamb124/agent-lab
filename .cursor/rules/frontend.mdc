@@ -312,6 +312,8 @@ Composer / mention / inline-edit / search-as-you-type / combobox: `data-canon="c
 | `@platform/lib/utils/hash-string.js` | `hashString31(seed)`, `hueFromString(seed)`, `initialsFromName(name)`, `indexFromSeed(seed, modulo)` |
 | `@platform/lib/utils/validators.js` | `EMAIL_RE`, `isValidEmail(value)`, `digitsOnly(value)`, `isValidPhone(value)`, `PHONE_DIGITS_MIN` |
 | `@platform/lib/utils/storage-keys.js` | `platformStorageKey(scope, key)` — единый префикс `platform:<scope>:<key>` |
+| `@platform/lib/utils/platform-namespace-header.js` | `platformNamespaceHeader(ctx, explicit?)` — заголовок `X-Platform-Namespace` для сервисов с жёсткой привязкой к пространству (Documents, Wiki) |
+| `@platform/lib/utils/floating-position.js` | `computeFloatingPosition(...)`, `resolveAnchorRect(anchor)`, `readViewportSize()` — расчёт положения плавающего слоя |
 | `@platform/lib/events/factories/_multipart-upload.js` | `createMultipartFileUploadOp({ name, url, extraFields?, restMirror? })` |
 
 ### Локаль для форматтеров

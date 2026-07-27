@@ -152,6 +152,23 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Run: wiki",
+            "consoleTitle": "run.py: wiki 📖",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "wiki"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Run: office",
             "consoleTitle": "run.py: office 📄",
             "type": "debugpy",
@@ -489,6 +506,37 @@
             "justMyCode": false
         },
         {
+            "name": "Debug: wiki :8023",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "granian",
+            "args": [
+                "--interface",
+                "asgi",
+                "apps.wiki.main:app",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8023",
+                "--http",
+                "auto",
+                "--ws",
+                "--reload",
+                "--reload-paths",
+                "apps",
+                "--reload-paths",
+                "core",
+                "--no-access-log"
+            ],
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "justMyCode": false
+        },
+        {
             "name": "Debug: flows :8001",
             "type": "debugpy",
             "request": "launch",
@@ -550,6 +598,20 @@
             }
         },
         {
+            "name": "Run: wiki (with RAG)",
+            "configurations": [
+                "Run: wiki",
+                "Run: rag",
+                "Run: rag_worker",
+                "Run: provider_litserve"
+            ],
+            "stopAll": true,
+            "presentation": {
+                "group": "wiki",
+                "order": 1
+            }
+        },
+        {
             "name": "Run: each service (compound)",
             "configurations": [
                 "Run: flows",
@@ -559,6 +621,7 @@
                 "Run: sync",
                 "Run: worktracker",
                 "Run: secrets",
+                "Run: wiki",
                 "Run: office",
                 "Run: scheduler-api",
                 "Run: browser",

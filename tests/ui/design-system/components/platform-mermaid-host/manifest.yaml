@@ -1,6 +1,6 @@
 component: platform-mermaid-host
 doc_slug: platform-mermaid-host
-tier: T2
+tier: T0
 title_ru: Mermaid Host
 title_en: Mermaid Host
 import: "@platform/lib/components/platform-mermaid-host.js"

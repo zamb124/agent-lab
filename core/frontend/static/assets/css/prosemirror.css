@@ -1,0 +1,400 @@
+/*
+ * Стили блочного редактора платформы.
+ *
+ * Область редактирования живёт в light DOM (см. platform-rich-editor.js),
+ * поэтому стили глобальные. Все значения — из tokens.css: редактор должен
+ * выглядеть частью сервиса, а не вставленным виджетом.
+ */
+
+.pm-shell {
+    position: relative;
+    display: block;
+}
+
+.pm-host {
+    display: block;
+}
+
+.pm-editor {
+    outline: none;
+    min-height: 120px;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.7;
+    caret-color: var(--accent);
+}
+
+.pm-editor:focus {
+    outline: none;
+}
+
+.pm-editor > * + * {
+    margin-top: var(--space-3);
+}
+
+.pm-editor p.is-empty-first::before,
+.pm-editor > p:only-child:empty::before {
+    content: attr(data-placeholder);
+    color: var(--text-tertiary);
+    pointer-events: none;
+    float: left;
+    height: 0;
+}
+
+.pm-editor h1,
+.pm-editor h2,
+.pm-editor h3,
+.pm-editor h4 {
+    font-weight: 650;
+    line-height: 1.3;
+    color: var(--text-primary);
+    margin-top: var(--space-6);
+}
+
+.pm-editor h1 { font-size: 30px; }
+.pm-editor h2 { font-size: 24px; }
+.pm-editor h3 { font-size: 20px; }
+.pm-editor h4 { font-size: 17px; }
+
+.pm-editor blockquote {
+    margin: 0;
+    padding-left: var(--space-4);
+    border-left: 3px solid var(--glass-border-subtle);
+    color: var(--text-secondary);
+}
+
+.pm-editor pre {
+    background: var(--wiki-surface-muted);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 14px;
+}
+
+.pm-editor code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    background: var(--wiki-code-bg);
+    border-radius: var(--radius-sm, 6px);
+    padding: 1px 5px;
+}
+
+.pm-editor pre code {
+    background: none;
+    padding: 0;
+}
+
+.pm-editor mark {
+    background: var(--wiki-highlight-bg);
+    border-radius: var(--radius-sm, 6px);
+    padding: 0 2px;
+    color: inherit;
+}
+
+.pm-editor ul,
+.pm-editor ol {
+    padding-left: var(--space-6);
+}
+
+.pm-editor ul.pm-task-list {
+    list-style: none;
+    padding-left: var(--space-2);
+}
+
+.pm-editor li.pm-task-item {
+    position: relative;
+    padding-left: var(--space-6);
+}
+
+.pm-editor li.pm-task-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.45em;
+    width: 15px;
+    height: 15px;
+    border: 1.5px solid var(--glass-border-medium);
+    border-radius: var(--radius-sm);
+}
+
+.pm-editor li.pm-task-item[data-checked='true']::before {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.pm-editor li.pm-task-item[data-checked='true']::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: calc(0.45em + 3px);
+    width: 4px;
+    height: 8px;
+    border: solid var(--wiki-checkbox-check);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.pm-editor li.pm-task-item[data-checked='true'] {
+    color: var(--text-secondary);
+}
+
+.pm-editor .pm-callout {
+    display: block;
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    border-left: 3px solid var(--wiki-callout-accent, var(--accent));
+    background: var(--wiki-callout-bg);
+}
+
+.pm-editor .pm-callout--success { --wiki-callout-accent: var(--success); }
+.pm-editor .pm-callout--warning { --wiki-callout-accent: var(--warning); }
+.pm-editor .pm-callout--danger { --wiki-callout-accent: var(--danger); }
+
+.pm-editor .pm-toggle {
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    background: var(--wiki-surface-muted);
+}
+
+.pm-editor .pm-toggle-summary {
+    font-weight: 600;
+    cursor: default;
+}
+
+.pm-editor hr {
+    border: none;
+    border-top: 1px solid var(--glass-border-subtle);
+    margin: var(--space-6) 0;
+}
+
+.pm-editor table {
+    border-collapse: collapse;
+    width: 100%;
+    table-layout: fixed;
+    overflow: hidden;
+}
+
+.pm-editor th,
+.pm-editor td {
+    border: 1px solid var(--glass-border-subtle);
+    padding: var(--space-2) var(--space-3);
+    vertical-align: top;
+    position: relative;
+}
+
+.pm-editor th {
+    background: var(--wiki-surface-muted);
+    font-weight: 600;
+    text-align: left;
+}
+
+.pm-editor .column-resize-handle {
+    position: absolute;
+    right: -2px;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--accent);
+    pointer-events: none;
+}
+
+.pm-editor .selectedCell::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    pointer-events: none;
+}
+
+.pm-editor .pm-image {
+    max-width: 100%;
+    border-radius: var(--radius-md);
+    display: block;
+}
+
+.pm-editor .pm-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border-subtle);
+    background: var(--wiki-surface-muted);
+    cursor: pointer;
+    user-select: none;
+}
+
+.pm-editor .pm-mention {
+    display: inline;
+    padding: 0 3px;
+    border-radius: var(--radius-sm, 5px);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.pm-editor a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.pm-editor .ProseMirror-gapcursor::after {
+    border-top-color: var(--text-primary);
+}
+
+.pm-editor-drop-cursor {
+    background: var(--accent);
+}
+
+/* Плавающая панель форматирования и slash-меню */
+
+/* Рамку, фон и положение даёт platform-popover — здесь только наполнение. */
+.pm-bubble {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px;
+}
+
+.pm-bubble-sep {
+    width: 1px;
+    align-self: stretch;
+    margin: 2px;
+    background: var(--glass-border-subtle);
+}
+
+.pm-bubble-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.pm-bubble-btn:hover {
+    background: var(--wiki-code-bg);
+    color: var(--text-primary);
+}
+
+.pm-bubble-btn.is-active {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+}
+
+.pm-bubble-btn:focus-visible,
+.pm-slash-item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.pm-slash,
+.pm-mention {
+    display: flex;
+    flex-direction: column;
+    min-width: 236px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 6px;
+    gap: 2px;
+}
+
+.pm-mention-kind {
+    flex-shrink: 0;
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-full);
+    background: var(--wiki-accent-soft);
+    color: var(--wiki-accent);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.pm-slash-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.pm-slash-item:hover {
+    background: var(--wiki-code-bg);
+}
+
+.pm-slash-empty {
+    padding: var(--space-3);
+    color: var(--text-tertiary);
+    font-size: 14px;
+}
+
+.pm-error {
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+    font-size: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pm-editor * {
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Ручка блока: появляется в поле слева при наведении на строку. */
+.pm-block-handle {
+    position: absolute;
+    left: 0;
+    display: flex;
+    align-items: center;
+    height: 1.6em;
+    pointer-events: auto;
+}
+
+.pm-block-handle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--wiki-block-handle-color);
+    cursor: grab;
+    opacity: 0;
+    transition: var(--motion-transition-interactive, opacity 120ms ease);
+}
+
+.pm-shell:hover .pm-block-handle-btn {
+    opacity: 1;
+}
+
+.pm-block-handle-btn:hover {
+    background: var(--wiki-code-bg);
+    color: var(--text-primary);
+}
+
+.pm-block-handle-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    opacity: 1;
+}
+
+.pm-block-handle-btn:active {
+    cursor: grabbing;
+}

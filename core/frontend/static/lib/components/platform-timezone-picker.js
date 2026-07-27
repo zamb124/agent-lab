@@ -2,6 +2,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { getCachedSortedIanaTimeZones } from '../utils/iana-timezones.js';
+import './platform-popover.js';
 
 const LIST_MAX = 200;
 
@@ -42,20 +43,9 @@ export class PlatformTimezonePicker extends PlatformElement {
                 position: relative;
             }
             .list {
-                position: absolute;
-                z-index: 30;
-                left: 0;
-                right: 0;
-                top: 100%;
                 margin: 0;
                 padding: var(--space-1) 0;
                 list-style: none;
-                max-height: min(320px, 50vh);
-                overflow: auto;
-                background: var(--glass-solid-elevated, var(--glass-solid-subtle));
-                border: 1px solid var(--glass-border-subtle, var(--border-default));
-                border-radius: var(--radius-md);
-                box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.15));
             }
             .opt {
                 padding: var(--space-2) var(--space-3);
@@ -83,6 +73,7 @@ export class PlatformTimezonePicker extends PlatformElement {
         name: { type: String },
         _inputText: { type: String, state: true },
         _listOpen: { type: Boolean, state: true },
+        _anchor: { state: true },
     };
 
     constructor() {
@@ -95,6 +86,8 @@ export class PlatformTimezonePicker extends PlatformElement {
         this._inputText = '';
         this._listOpen = false;
         this._skipNextBlurChange = false;
+        /** @type {HTMLElement | null} */
+        this._anchor = null;
     }
 
     willUpdate(changed) {
@@ -102,6 +95,23 @@ export class PlatformTimezonePicker extends PlatformElement {
         if (changed.has('value')) {
             this._inputText = this.value;
         }
+    }
+
+    updated(changed) {
+        super.updated?.(changed);
+        if (this._anchor === null) {
+            const input = this.renderRoot?.querySelector?.('input.form-input');
+            if (input instanceof HTMLElement) {
+                this._anchor = input;
+            }
+        }
+        if (this._listOpen && !this.disabled) {
+            this.renderRoot?.querySelector?.('platform-popover')?.reposition();
+        }
+    }
+
+    _onPopoverDismiss() {
+        this._listOpen = false;
     }
 
     get _visibleOptions() {
@@ -173,31 +183,42 @@ export class PlatformTimezonePicker extends PlatformElement {
                     @focus=${this._onFocus}
                     @blur=${this._onBlur}
                 />
-                ${this._listOpen && !this.disabled
-                    ? html`
-                          <ul
-                              id=${listId}
-                              class="list"
-                              role="listbox"
-                              aria-label=${this.t('timezone_picker.aria_list')}
-                          >
-                              ${opts.length === 0
-                                  ? html`<li class="empty">${this.t('timezone_picker.empty')}</li>`
-                                  : opts.map(
-                                        (z) => html`
-                                            <li
-                                                class="opt"
-                                                role="option"
-                                                @mousedown=${this._onOptionMouseDown}
-                                                @click=${() => this._onPick(z)}
-                                            >
-                                                ${z}
-                                            </li>
-                                        `,
-                                    )}
-                          </ul>
-                      `
-                    : nothing}
+                <platform-popover
+                    trigger="manual"
+                    role="listbox"
+                    placement="bottom-start"
+                    match-width
+                    offset="4"
+                    .anchor=${this._anchor}
+                    ?open=${this._listOpen && !this.disabled}
+                    @popover-dismiss=${this._onPopoverDismiss}
+                >
+                    ${this._listOpen && !this.disabled
+                        ? html`
+                              <ul
+                                  id=${listId}
+                                  class="list"
+                                  role="listbox"
+                                  aria-label=${this.t('timezone_picker.aria_list')}
+                              >
+                                  ${opts.length === 0
+                                      ? html`<li class="empty">${this.t('timezone_picker.empty')}</li>`
+                                      : opts.map(
+                                            (z) => html`
+                                                <li
+                                                    class="opt"
+                                                    role="option"
+                                                    @mousedown=${this._onOptionMouseDown}
+                                                    @click=${() => this._onPick(z)}
+                                                >
+                                                    ${z}
+                                                </li>
+                                            `,
+                                        )}
+                              </ul>
+                          `
+                        : nothing}
+                </platform-popover>
             </div>
         `;
     }

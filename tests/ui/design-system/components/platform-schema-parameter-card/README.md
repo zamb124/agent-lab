@@ -1,6 +1,6 @@
 # Schema Parameter Card
 
-Платформенный компонент `platform-schema-parameter-card` — карточка параметра внутри `platform-schema-editor`.
+Платформенный компонент `platform-schema-parameter-card`.
 
 Статус документации: **backlog**.
 
