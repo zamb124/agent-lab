@@ -26,6 +26,7 @@ DocsPlacementSourceKind = Literal[
     "rag_document",
     "rag_namespace",
     "mail_message",
+    "wiki_page",
     "office_manual",
     "manual",
 ]
@@ -55,6 +56,7 @@ class DocsPlacementAnchor(StrictBaseModel):
     mail_uid: str | None = None
     mailbox_email: str | None = None
     mail_subject: str | None = None
+    wiki_page_id: str | None = None
 
 
 class DocsPlacement(StrictBaseModel):

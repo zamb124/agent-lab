@@ -148,6 +148,22 @@
         "remove": "Remove",
         "empty": "No attachments"
     },
+    "file_picker": {
+        "title": "Choose a file",
+        "catalogs": "Folders",
+        "no_catalogs": "No folders yet",
+        "search_label": "Search",
+        "search_placeholder": "Search files…",
+        "upload": "Upload",
+        "drop_title": "Drop a file here or click to upload",
+        "drop_hint": "The file will appear in Documents under this wiki page",
+        "uploading": "Uploading…",
+        "loading": "Loading files…",
+        "empty": "No files in this folder",
+        "cancel": "Cancel",
+        "error_not_image": "Only images can be used here",
+        "error_type_mismatch": "This file type is not allowed"
+    },
     "variables_panel": {
         "add": "Add variable",
         "remove": "Remove",

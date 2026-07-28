@@ -19,8 +19,10 @@ import { CoreEvents } from '@platform/lib/events/contract.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { buildWikiPageFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-emoji-picker.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-menu.js';
@@ -32,6 +34,7 @@ import { WIKI_PANEL_TABS } from '../components/wiki-page-panel.js';
 import '../components/wiki-page-panel.js';
 
 const SAVE_DEBOUNCE_MS = 900;
+const PLATFORM_DOWNLOAD_PREFIX = '/frontend/api/v1/files/download/';
 
 const PANEL_STORAGE_KEY = platformStorageKey('wiki', 'page.panel');
 const PANEL_DEFAULT_TAB = 'outline';
@@ -90,6 +93,13 @@ export class WikiPageView extends PlatformPage {
                 bottom: var(--space-3);
                 display: flex;
                 gap: var(--space-2);
+                opacity: 0;
+                transition: var(--motion-transition-interactive, opacity 120ms ease);
+            }
+
+            .cover:hover .cover-actions,
+            .cover:focus-within .cover-actions {
+                opacity: 1;
             }
 
             /* Боковое поле равно --wiki-block-gutter: в левом живут кнопки блока
@@ -535,17 +545,11 @@ export class WikiPageView extends PlatformPage {
             return;
         }
         if (action === 'add_cover') {
-            const url = window.prompt(this.t('page.cover_url_prompt'));
-            if (url === null || url.trim() === '') {
-                return;
-            }
-            await this._properties.run({ wiki_page_id: this.pageId, cover_url: url.trim() });
-            this._page = { ...this._page, cover_url: url.trim() };
+            this._openCoverPicker();
             return;
         }
         if (action === 'remove_cover') {
-            await this._properties.run({ wiki_page_id: this.pageId, cover_url: '' });
-            this._page = { ...this._page, cover_url: '' };
+            await this._removeCover();
             return;
         }
         if (action === 'delete') {
@@ -563,6 +567,90 @@ export class WikiPageView extends PlatformPage {
             return;
         }
         throw new Error(`wiki-page-view: неизвестное действие страницы ${action}`);
+    }
+
+    _wikiFileCreateSpec(metadata) {
+        if (!this._page || typeof this._page.namespace !== 'string' || this._page.namespace.length === 0) {
+            throw new Error('wiki-page-view: page.namespace required for file create');
+        }
+        if (typeof this.pageId !== 'string' || this.pageId.length === 0) {
+            throw new Error('wiki-page-view: pageId required for file create');
+        }
+        return buildWikiPageFileCreateSpecJson({
+            wikiPageId: this.pageId,
+            namespaceId: this._page.namespace,
+            metadata,
+        });
+    }
+
+    _openFilePicker({ acceptMimePrefix, metadata, onSelect }) {
+        this.openModal('platform.file_picker', {
+            acceptMimePrefix,
+            uploadOpName: 'platform/file_create',
+            uploadSpec: this._wikiFileCreateSpec(metadata),
+            catalogsOpName: 'wiki/catalogs',
+            documentsOpName: 'wiki/documents',
+            searchOpName: 'wiki/documents_search',
+            onSelect,
+        });
+    }
+
+    _openCoverPicker() {
+        this._openFilePicker({
+            acceptMimePrefix: 'image/',
+            metadata: { purpose: 'wiki_cover' },
+            onSelect: (file) => {
+                void this._applyCover(file);
+            },
+        });
+    }
+
+    async _applyCover(file) {
+        if (!file || typeof file.file_id !== 'string' || file.file_id.length === 0) {
+            throw new Error('wiki-page-view: cover file_id required');
+        }
+        const coverUrl = `${PLATFORM_DOWNLOAD_PREFIX}${file.file_id}`;
+        await this._properties.run({ wiki_page_id: this.pageId, cover_url: coverUrl });
+        this._page = { ...this._page, cover_url: coverUrl };
+    }
+
+    async _removeCover() {
+        await this._properties.run({ wiki_page_id: this.pageId, cover_url: '' });
+        this._page = { ...this._page, cover_url: '' };
+    }
+
+    _onEditorFilePickRequested(event) {
+        const kind = event.detail && event.detail.kind;
+        if (kind !== 'image' && kind !== 'file') {
+            throw new Error(`wiki-page-view: unknown file pick kind ${String(kind)}`);
+        }
+        this._openFilePicker({
+            acceptMimePrefix: kind === 'image' ? 'image/' : '',
+            metadata: { purpose: kind === 'image' ? 'wiki_image' : 'wiki_file' },
+            onSelect: (file) => {
+                this._insertPickedEditorFile(kind, file);
+            },
+        });
+    }
+
+    _insertPickedEditorFile(kind, file) {
+        const editor = this.renderRoot.querySelector('platform-rich-editor');
+        if (!editor) {
+            throw new Error('wiki-page-view: rich editor missing');
+        }
+        if (kind === 'image') {
+            editor.insertImage({
+                fileId: file.file_id,
+                src: `${PLATFORM_DOWNLOAD_PREFIX}${file.file_id}`,
+                alt: file.original_name,
+            });
+            return;
+        }
+        editor.insertPlatformFile({
+            fileId: file.file_id,
+            originalName: file.original_name,
+            contentType: file.content_type,
+        });
     }
 
     // --- упоминания ---
@@ -697,7 +785,30 @@ export class WikiPageView extends PlatformPage {
                 <div class="scroll" data-wiki-page-scroll>
                     ${this._renderTopbar()}
                     ${this._page.cover_url !== ''
-                        ? html`<div class="cover" style=${`background-image:url(${this._page.cover_url})`}></div>`
+                        ? html`<div class="cover" style=${`background-image:url(${this._page.cover_url})`}>
+                            <div class="cover-actions">
+                                <platform-button
+                                    variant="secondary"
+                                    size="sm"
+                                    icon-only
+                                    title=${this.t('page.change_cover')}
+                                    aria-label=${this.t('page.change_cover')}
+                                    @click=${() => this._openCoverPicker()}
+                                >
+                                    <platform-icon name="image" size="16"></platform-icon>
+                                </platform-button>
+                                <platform-button
+                                    variant="secondary"
+                                    size="sm"
+                                    icon-only
+                                    title=${this.t('page.remove_cover')}
+                                    aria-label=${this.t('page.remove_cover')}
+                                    @click=${() => void this._removeCover()}
+                                >
+                                    <platform-icon name="trash" size="16"></platform-icon>
+                                </platform-button>
+                            </div>
+                        </div>`
                         : nothing}
                     <div class="paper" ?data-full-width=${this._page.is_full_width}>
                         <div class="title-row">
@@ -721,6 +832,7 @@ export class WikiPageView extends PlatformPage {
                             placeholder=${this.t('editor.placeholder', null, 'platform')}
                             @change=${this._onEditorChange}
                             @markdown-file-drop=${this._onMarkdownFileDrop}
+                            @file-pick-requested=${this._onEditorFilePickRequested}
                         ></platform-rich-editor>
                         <input
                             type="file"

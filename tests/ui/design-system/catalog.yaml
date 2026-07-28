@@ -179,6 +179,11 @@ components:
   doc_slug: platform-file-card
   status: backfill
   tier: T0
+- component: platform-file-picker-modal
+  doc_slug: platform-file-picker-modal
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-file-row
   doc_slug: platform-file-row
   status: backlog

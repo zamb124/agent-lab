@@ -26,6 +26,7 @@ class FileRetentionKind(StrEnum):
     GENERATED_EPHEMERAL = "generated_ephemeral"
     RAG_DOCUMENT = "rag_document"
     OFFICE_DOCUMENT = "office_document"
+    WIKI_PAGE = "wiki_page"
     PLATFORM_DEFAULT = "platform_default"
 
 
@@ -69,6 +70,7 @@ def resolve_retention_ttl_seconds(spec: FileRetentionSpec) -> int:
         FileRetentionKind.CALENDAR_EVENT_ATTACHMENT,
         FileRetentionKind.MAIL_ATTACHMENT,
         FileRetentionKind.OFFICE_DOCUMENT,
+        FileRetentionKind.WIKI_PAGE,
     }:
         return 0
     if kind == FileRetentionKind.RAG_DOCUMENT:

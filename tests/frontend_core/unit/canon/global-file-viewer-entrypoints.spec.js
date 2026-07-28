@@ -14,6 +14,7 @@ const ENTRYPOINT_FILES = [
     'apps/crm/ui/components/note-card-view.js',
     'apps/flows/ui/components/nodes/flows-base-node-editor.js',
     'core/frontend/static/lib/components/platform-calendar-modal.js',
+    'core/frontend/static/lib/components/platform-rich-editor.js',
 ];
 
 const FILE_ICON_SURFACE_FILES = [
@@ -27,6 +28,7 @@ const FILE_ICON_SURFACE_FILES = [
     'apps/flows/ui/components/nodes/flows-base-node-editor.js',
     'core/frontend/static/lib/components/platform-calendar-modal.js',
     'apps/crm/ui/modals/knowledge-import-modal.js',
+    'core/frontend/static/lib/editor/wiki-editor-nodeviews.js',
 ];
 
 function readRepoFile(relPath) {

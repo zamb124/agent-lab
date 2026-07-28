@@ -108,6 +108,14 @@ def test_all_file_source_kinds_have_placement_policy() -> None:
             DocsPlacementAnchor(source_kind="rag_document", namespace_id="ns1"),
             ["RAG", "ns1"],
         ),
+        (
+            DocsPlacementAnchor(
+                source_kind="wiki_page",
+                namespace_id="knowledge",
+                wiki_page_id="page-1",
+            ),
+            ["Wiki", "knowledge", "page-1"],
+        ),
     ],
 )
 def test_build_path_segments(anchor: DocsPlacementAnchor, expected: list[str]) -> None:

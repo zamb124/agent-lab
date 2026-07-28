@@ -26,6 +26,7 @@ class FileSourceKind(StrEnum):
     OFFICE_DOCUMENT = "office_document"
     CALENDAR_EVENT = "calendar_event"
     MAIL_MESSAGE = "mail_message"
+    WIKI_PAGE = "wiki_page"
     PLATFORM_AUXILIARY = "platform_auxiliary"
     GENERATED_EPHEMERAL = "generated_ephemeral"
 
@@ -52,6 +53,7 @@ class FileSourceRef(StrictBaseModel):
     mail_subject: str | None = None
     browser_session_id: str | None = None
     import_id: str | None = None
+    wiki_page_id: str | None = None
 
 
 class FilePostCreate(StrictBaseModel):
@@ -115,4 +117,9 @@ class FileCreateSpec(StrictBaseModel):
                 )
             if not ref.mailbox_email or not ref.mailbox_email.strip():
                 raise ValueError("source_ref.mailbox_email required for mail_message")
+        if kind == FileSourceKind.WIKI_PAGE:
+            if not ref.wiki_page_id or not ref.wiki_page_id.strip():
+                raise ValueError("source_ref.wiki_page_id required for wiki_page")
+            if not ref.namespace_id or not ref.namespace_id.strip():
+                raise ValueError("source_ref.namespace_id required for wiki_page")
         return self

@@ -7,7 +7,7 @@ RAG — это делает сервис, роутер лишь передаёт
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from apps.wiki.api._scope import require_scope
 from apps.wiki.dependencies import ContainerDep
@@ -19,7 +19,7 @@ from apps.wiki.models.api import (
 )
 from apps.wiki.models.domain import WikiPageAccess
 from apps.wiki.services.wiki_service import WikiAccessDeniedError, WikiPageNotFoundError
-from core.config import get_settings
+from core.middleware.auth.company_resolver import build_service_base_url
 
 router = APIRouter(prefix="/pages", tags=["wiki-access"])
 
@@ -97,7 +97,10 @@ async def remove_member(
 
 @router.post("/{wiki_page_id}/access/link", response_model=WikiPublicLinkResponse)
 async def rotate_public_link(
-    container: ContainerDep, wiki_page_id: str, request: WikiPublicLinkRequest
+    container: ContainerDep,
+    wiki_page_id: str,
+    http_request: Request,
+    body: WikiPublicLinkRequest,
 ) -> WikiPublicLinkResponse:
     """Включить, перевыпустить или отключить публичную ссылку."""
     scope = await require_scope(container)
@@ -107,8 +110,8 @@ async def rotate_public_link(
             namespace=scope.namespace,
             user_id=scope.user_id,
             wiki_page_id=wiki_page_id,
-            enabled=request.enabled,
-            permission=request.permission,
+            enabled=body.enabled,
+            permission=body.permission,
         )
     except WikiPageNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Страница не найдена") from exc
@@ -116,11 +119,12 @@ async def rotate_public_link(
         raise HTTPException(status_code=403, detail="Нет прав на публикацию ссылки") from exc
 
     if raw_token is None:
-        return WikiPublicLinkResponse(enabled=False, permission=request.permission, url=None)
+        return WikiPublicLinkResponse(enabled=False, permission=body.permission, url=None)
 
-    origin = get_settings().server.get_service_url("frontend").rstrip("/")
+    # Публичный origin из запроса (Host / X-Forwarded-*), не из internal service URL.
+    origin = build_service_base_url(http_request).rstrip("/")
     return WikiPublicLinkResponse(
         enabled=True,
-        permission=request.permission,
+        permission=body.permission,
         url=f"{origin}/wiki/s/{raw_token}",
     )

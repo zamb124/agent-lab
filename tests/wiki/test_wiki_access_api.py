@@ -192,6 +192,32 @@ async def test_restricted_page_disappears_from_colleague_tree(
     assert page_id not in {item["wiki_page_id"] for item in visible_after.json()["items"]}
 
 
+async def test_public_link_url_uses_request_origin_not_internal_service(
+    wiki_client, wiki_page
+):
+    """Публичный URL строится из Host запроса, не из SERVER__FRONTEND_SERVICE_URL."""
+    page_id = wiki_page["wiki_page_id"]
+    public_host = "jfj-designs.linnex.io"
+
+    response = await wiki_client.post(
+        f"{PAGES_URL}/{page_id}/access/link",
+        json={"enabled": True, "permission": "view"},
+        headers={
+            "Host": public_host,
+            "X-Forwarded-Host": public_host,
+            "X-Forwarded-Proto": "https",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["enabled"] is True
+    assert isinstance(body["url"], str)
+    assert body["url"].startswith(f"https://{public_host}/wiki/s/")
+    assert "frontend" not in body["url"]
+    assert ":8002" not in body["url"]
+
+
 async def test_public_link_opens_page_for_anonymous(
     wiki_client, wiki_client_anonymous, wiki_page
 ):

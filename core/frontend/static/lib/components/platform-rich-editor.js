@@ -36,7 +36,6 @@ import {
     setLinkCommand,
 } from '../editor/wiki-editor-plugins.js';
 import { loadWikiEditorRuntime } from '../editor/wiki-schema-builder.js';
-import { buildPlatformAuxiliaryFileCreateSpecJson } from '../utils/file-create-spec.js';
 import './fields/platform-field.js';
 import './platform-icon.js';
 import './platform-menu.js';
@@ -49,8 +48,6 @@ const EMPTY_DOCUMENT = Object.freeze({
 
 /** Стили области правки: light DOM не покрывается стилями самого компонента. */
 const EDITOR_STYLESHEET_URL = '/static/core/assets/css/prosemirror.css';
-
-const PLATFORM_DOWNLOAD_PREFIX = '/frontend/api/v1/files/download/';
 
 /** Отступ от левого края, по которому ищется блок под курсором мыши. */
 const BLOCK_PROBE_INSET_PX = 24;
@@ -304,6 +301,14 @@ export class PlatformRichEditor extends PlatformElement {
                 return this.fileUrlBase;
             },
             isEditable: () => !this.readonly,
+            onOpenFile: this.readonly
+                ? undefined
+                : (fileId) => {
+                    if (typeof fileId !== 'string' || fileId.length === 0) {
+                        throw new Error('platform-rich-editor: onOpenFile fileId required');
+                    }
+                    this.openFile(fileId, { source: 'wiki_editor' });
+                },
         });
     }
 
@@ -575,11 +580,11 @@ export class PlatformRichEditor extends PlatformElement {
         this._slashQuery = '';
 
         if (commandName === 'image') {
-            this._pickUploadFile('image');
+            this._requestFilePick('image');
             return;
         }
         if (commandName === 'platform_file') {
-            this._pickUploadFile('file');
+            this._requestFilePick('file');
             return;
         }
 
@@ -591,50 +596,15 @@ export class PlatformRichEditor extends PlatformElement {
         this._view.focus();
     }
 
-    _pickUploadFile(kind) {
-        const selector = kind === 'image'
-            ? 'input[data-editor-image-input]'
-            : 'input[data-editor-file-input]';
-        const input = this.querySelector(selector);
-        if (!(input instanceof HTMLInputElement)) {
-            throw new Error(`platform-rich-editor: missing upload input for ${kind}`);
+    /**
+     * Загрузка/выбор файла — доменный шаг (wiki → Documents). Редактор только
+     * просит наружу; insertImage / insertPlatformFile вызываются после выбора.
+     */
+    _requestFilePick(kind) {
+        if (kind !== 'image' && kind !== 'file') {
+            throw new Error(`platform-rich-editor: unknown file pick kind ${kind}`);
         }
-        input.click();
-    }
-
-    async _onUploadSelected(event, kind) {
-        const input = event.target;
-        const selected = input.files && input.files[0];
-        input.value = '';
-        if (!selected) {
-            return;
-        }
-        const uploadOp = this.useOp('platform/file_create');
-        const result = await uploadOp.run({
-            file: selected,
-            spec: buildPlatformAuxiliaryFileCreateSpecJson({
-                metadata: { purpose: kind === 'image' ? 'wiki_image' : 'wiki_file' },
-            }),
-        });
-        if (!result || typeof result !== 'object') {
-            throw new Error('platform-rich-editor: upload result required');
-        }
-        if (typeof result.file_id !== 'string' || result.file_id.length === 0) {
-            throw new Error('platform-rich-editor: upload result.file_id required');
-        }
-        if (kind === 'image') {
-            this.insertImage({
-                fileId: result.file_id,
-                src: `${PLATFORM_DOWNLOAD_PREFIX}${result.file_id}`,
-                alt: typeof result.original_name === 'string' ? result.original_name : '',
-            });
-            return;
-        }
-        this.insertPlatformFile({
-            fileId: result.file_id,
-            originalName: typeof result.original_name === 'string' ? result.original_name : '',
-            contentType: typeof result.content_type === 'string' ? result.content_type : '',
-        });
+        this.emit('file-pick-requested', { kind });
     }
 
     /** Убрать из документа текст-триггер вместе с набранным фильтром. */
@@ -868,8 +838,9 @@ export class PlatformRichEditor extends PlatformElement {
         // Ручка лежит вне contenteditable, поэтому встроенный dragstart ProseMirror
         // не срабатывает. Собираем тот же контракт: NodeSelection + clipboard slice
         // + view.dragging — drop и dropcursor подхватят его сами.
+        // Selection в документ не пишем: иначе bubble/handle обновят Lit-state и
+        // кнопка пересоздастся — браузер оборвёт drag.
         const selection = this._pm.NodeSelection.create(this._view.state.doc, this._handleBlockPos);
-        this._view.dispatch(this._view.state.tr.setSelection(selection));
         const { dom, text, slice } = this._view.serializeForClipboard(selection.content());
         event.dataTransfer.clearData();
         event.dataTransfer.setData('text/html', dom.innerHTML);
@@ -879,6 +850,7 @@ export class PlatformRichEditor extends PlatformElement {
 
         const blockDom = this._view.nodeDOM(this._handleBlockPos);
         if (blockDom instanceof HTMLElement) {
+            blockDom.classList.add('ProseMirror-selectednode');
             event.dataTransfer.setDragImage(blockDom, 0, 0);
         }
     }
@@ -889,6 +861,12 @@ export class PlatformRichEditor extends PlatformElement {
         this._suppressBlockMenuClick = true;
         const view = this._view;
         const dragging = view === null ? null : view.dragging;
+        if (view !== null && dragging && dragging.node) {
+            const blockDom = view.nodeDOM(dragging.node.from);
+            if (blockDom instanceof HTMLElement) {
+                blockDom.classList.remove('ProseMirror-selectednode');
+            }
+        }
         window.setTimeout(() => {
             this._suppressBlockMenuClick = false;
             if (view !== null && view.dragging === dragging) {
@@ -1045,25 +1023,6 @@ export class PlatformRichEditor extends PlatformElement {
                 ${this._renderSlashPopover()}
                 ${this._renderMentionPopover()}
                 ${this._renderBlockMenuPopover()}
-                <input
-                    type="file"
-                    hidden
-                    data-editor-image-input
-                    accept="image/*"
-                    @change=${(event) => {
-                        event.stopPropagation();
-                        void this._onUploadSelected(event, 'image');
-                    }}
-                />
-                <input
-                    type="file"
-                    hidden
-                    data-editor-file-input
-                    @change=${(event) => {
-                        event.stopPropagation();
-                        void this._onUploadSelected(event, 'file');
-                    }}
-                />
             </div>
         `;
     }

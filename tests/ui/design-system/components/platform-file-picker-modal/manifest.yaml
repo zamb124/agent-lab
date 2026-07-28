@@ -1,0 +1,13 @@
+component: platform-file-picker-modal
+doc_slug: platform-file-picker-modal
+tier: T0
+title_ru: File Picker Modal
+title_en: File Picker Modal
+import: "@platform/lib/components/platform-file-picker-modal.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -46,6 +46,11 @@ import {
 } from '../events/resources/page-extras.resource.js';
 import { wikiNamespacesResource } from '../events/resources/namespaces.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
+import {
+    wikiCatalogsOp,
+    wikiDocumentsOp,
+    wikiDocumentsSearchOp,
+} from '../events/resources/documents-browse.resource.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/platform-command-palette.js';
@@ -97,6 +102,9 @@ export class WikiApp extends PlatformApp {
 
     static factories = [
         wikiNamespacesResource,
+        wikiCatalogsOp,
+        wikiDocumentsOp,
+        wikiDocumentsSearchOp,
         wikiPagesResource,
         wikiPageReadOp,
         wikiPageCreateOp,

@@ -80,6 +80,12 @@ def build_path_segments(anchor: DocsPlacementAnchor) -> list[str]:
         if not anchor.mailbox_email or not anchor.mailbox_email.strip():
             raise ValueError("mailbox_email required for mail_message placement")
         return ["Mail", anchor.mailbox_email.strip(), _mail_title_segment(anchor)]
+    if kind == "wiki_page":
+        if not anchor.wiki_page_id or not anchor.wiki_page_id.strip():
+            raise ValueError("wiki_page_id required for wiki_page placement")
+        if not anchor.namespace_id or not anchor.namespace_id.strip():
+            raise ValueError("namespace_id required for wiki_page placement")
+        return ["Wiki", anchor.namespace_id.strip(), anchor.wiki_page_id.strip()]
     if kind == "crm_knowledge_import":
         if not anchor.import_id:
             raise ValueError("import_id required for crm_knowledge_import placement")

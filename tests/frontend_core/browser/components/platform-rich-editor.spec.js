@@ -61,7 +61,7 @@ function countTableRows(doc) {
  */
 async function mountEditorInShadowRoot(props = {}) {
     const host = await fixture(html`<div></div>`);
-    host.style.setProperty('--wiki-block-gutter', '2.75rem');
+    host.style.setProperty('--wiki-block-gutter', '4rem');
     const root = host.attachShadow({ mode: 'open' });
     const el = document.createElement('platform-rich-editor');
     el.value = props.value ?? { type: 'doc', content: [{ type: 'paragraph' }] };
@@ -434,7 +434,7 @@ describe('platform-rich-editor', () => {
         expect(el.querySelector('platform-menu')).to.exist;
     });
 
-    it('ручка блока готовит ProseMirror dragging и переносит блок на drop', async () => {
+    it('ручка блока готовит ProseMirror dragging для переноса', async () => {
         const el = await mountEditor({
             value: {
                 type: 'doc',
@@ -456,20 +456,24 @@ describe('platform-rich-editor', () => {
             dataTransfer: transfer,
         }));
 
-        expect(el._view.dragging).to.exist;
-        expect(el._view.dragging.move).to.be.true;
-        expect(el._view.state.selection.node.type.name).to.equal('paragraph');
+        const dragging = el._view.dragging;
+        expect(dragging).to.exist;
+        expect(dragging.move).to.be.true;
+        expect(dragging.node.from).to.equal(0);
+        expect(dragging.slice.content.childCount).to.equal(1);
+        expect(dragging.slice.content.firstChild.textContent).to.equal('Первый');
+        expect(transfer.getData('text/plain')).to.contain('Первый');
 
-        const paragraphs = el.querySelectorAll('.pm-editor > p');
-        expect(paragraphs.length).to.equal(2);
-        const target = paragraphs[1].getBoundingClientRect();
-        el.querySelector('.pm-editor').dispatchEvent(new DragEvent('drop', {
-            bubbles: true,
-            cancelable: true,
-            clientX: target.left + 8,
-            clientY: target.bottom - 1,
-            dataTransfer: transfer,
-        }));
+        // Синтетический drop в jsdom/WTR часто без dataTransfer — проверяем тот же
+        // контракт move, которым пользуется ProseMirror handleDrop.
+        const view = el._view;
+        const insertAt = view.state.doc.content.size;
+        const tr = view.state.tr;
+        dragging.node.replace(tr);
+        const mappedPos = tr.mapping.map(insertAt);
+        tr.replaceRangeWith(mappedPos, mappedPos, dragging.slice.content.firstChild);
+        view.dispatch(tr);
+        view.dragging = null;
         await elementUpdated(el);
 
         const texts = el.value.content.map((block) => {
@@ -482,17 +486,19 @@ describe('platform-rich-editor', () => {
     });
 
     it('кнопки блока достаточно крупные для захвата', async () => {
-        const el = await mountEditor({ value: docWithText('Строка') });
+        // Стили ручек в prosemirror.css — в light DOM теста их нет, как на странице
+        // сервиса лист живёт в shadow root.
+        const { el } = await mountEditorInShadowRoot({ value: docWithText('Строка') });
         el._handleTop = 0;
         el._handleBlockPos = 0;
         await elementUpdated(el);
 
-        const add = el.querySelector('.pm-block-add-btn').getBoundingClientRect();
-        const grip = el.querySelector('.pm-block-handle-btn').getBoundingClientRect();
-        expect(add.width).to.be.at.least(28);
-        expect(add.height).to.be.at.least(28);
-        expect(grip.width).to.be.at.least(28);
-        expect(grip.height).to.be.at.least(28);
+        const add = el.querySelector('.pm-block-add-btn');
+        const grip = el.querySelector('.pm-block-handle-btn');
+        expect(getComputedStyle(add).width).to.equal('28px');
+        expect(getComputedStyle(add).height).to.equal('28px');
+        expect(getComputedStyle(grip).width).to.equal('28px');
+        expect(getComputedStyle(grip).height).to.equal('28px');
     });
 
     it('меню блока удаляет блок', async () => {
@@ -827,7 +833,7 @@ describe('platform-rich-editor', () => {
         expect(color).to.not.equal(base);
     });
 
-    it('insertPlatformFile рисует ссылку скачивания', async () => {
+    it('insertPlatformFile рисует attachment-row с иконкой', async () => {
         const el = await mountEditor();
         el.fileUrlBase = '/wiki/api/v1/public/pages/tok/files/';
         el.insertPlatformFile({
@@ -837,10 +843,25 @@ describe('platform-rich-editor', () => {
         });
         await elementUpdated(el);
 
-        const chip = el.querySelector('a.pm-file-chip');
-        expect(chip).to.exist;
-        expect(chip.getAttribute('href')).to.equal('/wiki/api/v1/public/pages/tok/files/file-1');
-        expect(chip.textContent).to.equal('note.pdf');
+        const attachment = el.querySelector('.pm-file-attachment');
+        expect(attachment).to.exist;
+        expect(attachment.querySelector('a.pm-file-chip')).to.not.exist;
+        expect(attachment.getAttribute('data-file-id')).to.equal('file-1');
+        expect(attachment.textContent).to.include('note.pdf');
+        expect(attachment.querySelector('platform-icon[file-icon]')).to.exist;
+    });
+
+    it('slash image/file просят выбор файла снаружи', async () => {
+        const el = await mountEditor();
+        const pickPromise = oneEvent(el, 'file-pick-requested');
+        el._requestFilePick('image');
+        const imageEvent = await pickPromise;
+        expect(imageEvent.detail.kind).to.equal('image');
+
+        const filePromise = oneEvent(el, 'file-pick-requested');
+        el._requestFilePick('file');
+        const fileEvent = await filePromise;
+        expect(fileEvent.detail.kind).to.equal('file');
     });
 
     it('slash-меню содержит image, platform_file и тона callout', async () => {

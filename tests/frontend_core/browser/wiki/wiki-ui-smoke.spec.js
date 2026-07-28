@@ -87,6 +87,15 @@ describe('wiki ui', () => {
             'wiki/markdown_parse',
         ]);
     });
+
+    it('browse Documents для picker зарегистрирован как wiki/*', () => {
+        const names = WikiApp.factories.map((factory) => factory.name);
+        expect(names).to.include.members([
+            'wiki/catalogs',
+            'wiki/documents',
+            'wiki/documents_search',
+        ]);
+    });
 });
 
 describe('wiki page panel state', () => {
@@ -145,6 +154,15 @@ describe('wiki page panel state', () => {
     it('вкладки панели объявлены единым списком без дублей', () => {
         expect(WIKI_PANEL_TABS).to.deep.equal(['outline', 'backlinks', 'comments', 'history']);
         expect(new Set(WIKI_PANEL_TABS).size).to.equal(WIKI_PANEL_TABS.length);
+    });
+
+    it('wiki-page-view открывает обложку через file picker helper', () => {
+        const view = createPageView();
+        expect(typeof view._openCoverPicker).to.equal('function');
+        expect(typeof view._openFilePicker).to.equal('function');
+        expect(typeof view._wikiFileCreateSpec).to.equal('function');
+        expect(view._openCoverPicker.toString()).to.include('_openFilePicker');
+        expect(view._openCoverPicker.toString()).to.not.include('prompt');
     });
 });
 

@@ -16,6 +16,7 @@ const DEFAULT_RETENTION_BY_SOURCE = Object.freeze({
     office_document: 'office_document',
     calendar_event: 'calendar_event_attachment',
     mail_message: 'mail_attachment',
+    wiki_page: 'wiki_page',
     platform_auxiliary: 'platform_default',
     generated_ephemeral: 'generated_ephemeral',
 });
@@ -152,6 +153,23 @@ export function buildPlatformAuxiliaryFileCreateSpecJson({ retentionKind, metada
         retentionKind: typeof retentionKind === 'string' && retentionKind.length > 0
             ? retentionKind
             : 'platform_default',
+        metadata: metadata && typeof metadata === 'object' ? metadata : undefined,
+    });
+}
+
+export function buildWikiPageFileCreateSpecJson({ wikiPageId, namespaceId, metadata }) {
+    if (typeof wikiPageId !== 'string' || wikiPageId.length === 0) {
+        throw new Error('buildWikiPageFileCreateSpecJson: wikiPageId required');
+    }
+    if (typeof namespaceId !== 'string' || namespaceId.length === 0) {
+        throw new Error('buildWikiPageFileCreateSpecJson: namespaceId required');
+    }
+    return buildFileCreateSpecJson({
+        sourceKind: 'wiki_page',
+        sourceRef: {
+            wiki_page_id: wikiPageId,
+            namespace_id: namespaceId,
+        },
         metadata: metadata && typeof metadata === 'object' ? metadata : undefined,
     });
 }

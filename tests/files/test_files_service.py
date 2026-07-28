@@ -124,6 +124,24 @@ def test_file_create_spec_requires_rag_namespace():
         )
 
 
+def test_file_create_spec_requires_wiki_page_id():
+    with pytest.raises(ValueError, match="wiki_page_id"):
+        FileCreateSpec(
+            source_kind=FileSourceKind.WIKI_PAGE,
+            source_ref=FileSourceRef(namespace_id="knowledge"),
+            retention=FileRetentionSpec(kind=FileRetentionKind.WIKI_PAGE),
+        )
+
+
+def test_file_create_spec_requires_wiki_namespace():
+    with pytest.raises(ValueError, match="namespace_id"):
+        FileCreateSpec(
+            source_kind=FileSourceKind.WIKI_PAGE,
+            source_ref=FileSourceRef(wiki_page_id="page-1"),
+            retention=FileRetentionSpec(kind=FileRetentionKind.WIKI_PAGE),
+        )
+
+
 def test_file_create_spec_json_roundtrip():
     spec = _flow_session_spec(session_id="sess-1")
     restored = FileCreateSpec.model_validate_json(spec.model_dump_json())

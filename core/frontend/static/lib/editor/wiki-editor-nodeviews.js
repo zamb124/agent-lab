@@ -6,6 +6,9 @@
  * собранного бандла платформы.
  */
 
+import { resolveFileIconKey } from '../utils/file-icons.js';
+import '../components/platform-icon.js';
+
 export const CODEMIRROR_BUNDLE_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
 
 export const DEFAULT_FILE_URL_BASE = '/frontend/api/v1/files/download/';
@@ -52,6 +55,7 @@ function fileHref(fileUrlBase, fileId) {
  *   cm: object | null,
  *   getFileUrlBase: () => string,
  *   isEditable: () => boolean,
+ *   onOpenFile?: (fileId: string) => void,
  * }} options
  */
 export function buildWikiNodeViews(options) {
@@ -394,22 +398,60 @@ class PlatformFileNodeView {
         this.getPos = getPos;
         this.options = options;
 
-        this.dom = document.createElement('a');
-        this.dom.className = 'pm-file-chip';
+        this.dom = document.createElement('div');
+        this.dom.className = 'pm-file-attachment';
         this.dom.dataset.platformFile = 'true';
-        this.dom.rel = 'noopener noreferrer';
+        this.dom.setAttribute('role', 'button');
+        this.dom.tabIndex = 0;
+
+        this._icon = document.createElement('platform-icon');
+        this._icon.setAttribute('file-icon', '');
+        this._icon.setAttribute('size', '20');
+
+        this._meta = document.createElement('span');
+        this._meta.className = 'pm-file-attachment-meta';
+
+        this._name = document.createElement('span');
+        this._name.className = 'pm-file-attachment-name';
+
+        this._meta.appendChild(this._name);
+        this.dom.appendChild(this._icon);
+        this.dom.appendChild(this._meta);
+
+        this._onActivate = (event) => {
+            event.preventDefault();
+            this._open();
+        };
+        this.dom.addEventListener('click', this._onActivate);
+        this.dom.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                this._open();
+            }
+        });
+
         this._sync();
+    }
+
+    _open() {
+        const fileId = this.node.attrs.file_id;
+        if (typeof this.options.onOpenFile === 'function') {
+            this.options.onOpenFile(fileId);
+            return;
+        }
+        window.location.assign(fileHref(this.options.getFileUrlBase(), fileId));
     }
 
     _sync() {
         const fileId = this.node.attrs.file_id;
         const name = this.node.attrs.original_name || fileId;
+        const contentType = this.node.attrs.content_type || '';
         this.dom.dataset.fileId = fileId;
         this.dom.dataset.name = this.node.attrs.original_name || '';
-        this.dom.dataset.contentType = this.node.attrs.content_type || '';
-        this.dom.href = fileHref(this.options.getFileUrlBase(), fileId);
-        this.dom.textContent = name;
-        this.dom.download = name;
+        this.dom.dataset.contentType = contentType;
+        this.dom.setAttribute('aria-label', name);
+        this._name.textContent = name;
+        this._icon.setAttribute('name', resolveFileIconKey(name, contentType));
     }
 
     update(node) {
@@ -422,10 +464,14 @@ class PlatformFileNodeView {
     }
 
     stopEvent(event) {
-        return event.type === 'mousedown' || event.type === 'click';
+        return event.type === 'mousedown' || event.type === 'click' || event.type === 'keydown';
     }
 
     ignoreMutation() {
         return true;
+    }
+
+    destroy() {
+        this.dom.removeEventListener('click', this._onActivate);
     }
 }
