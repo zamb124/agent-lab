@@ -71,6 +71,7 @@ def _row_to_page(row: WikiPageRow) -> WikiPage:
         is_published=row.is_published,
         published_at=row.published_at,
         is_template=row.is_template,
+        is_full_width=row.is_full_width,
         link_enabled=row.link_enabled,
         link_permission=WikiLinkPermission(row.link_permission),
         created_by_user_id=row.created_by_user_id,
@@ -188,6 +189,7 @@ class WikiRepository:
                 is_published=page.is_published,
                 published_at=page.published_at,
                 is_template=page.is_template,
+                is_full_width=page.is_full_width,
                 link_enabled=page.link_enabled,
                 link_permission=page.link_permission.value,
                 created_by_user_id=page.created_by_user_id,
@@ -211,17 +213,21 @@ class WikiRepository:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return _row_to_page(row) if row is not None else None
 
-    async def get_page_by_link_token(self, link_token_hash: str) -> WikiPage | None:
+    async def get_public_page_by_link_token(self, link_token_hash: str) -> WikiPage | None:
         """Страница по хешу публичной ссылки.
 
         Единственный доступ без namespace: анонимный посетитель его не знает.
         Namespace страницы возвращается вызывающему и дальше используется как
         граница для всех связанных запросов.
+
+        Условия публичной выдачи собраны здесь: включённая ссылка, живая
+        страница и `is_published`. Черновик по ссылке не отдаётся.
         """
         async with self._db.session() as session:
             stmt = select(WikiPageRow).where(
                 WikiPageRow.link_token_hash == link_token_hash,
                 WikiPageRow.link_enabled.is_(True),
+                WikiPageRow.is_published.is_(True),
                 WikiPageRow.deleted_at.is_(None),
             )
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -294,6 +300,48 @@ class WikiRepository:
                 queue.append(child.wiki_page_id)
         return [_row_to_page(row) for row in collected]
 
+    async def list_public_subtree(
+        self, company_id: str, namespace: str, root_page_id: str
+    ) -> list[WikiPageSummary]:
+        """Опубликованное поддерево — состав публичного сайта.
+
+        Отличие от `list_subtree`: ветка обрывается на первом черновике, поэтому
+        снять страницу с публикации значит спрятать и всех её потомков. Сам
+        `list_subtree` черновики сохраняет — он обслуживает перемещение,
+        удаление и переиндексацию.
+        """
+        async with self._db.session() as session:
+            stmt = self._alive_pages(company_id, namespace).order_by(
+                WikiPageRow.depth, WikiPageRow.position, WikiPageRow.title
+            )
+            rows = list((await session.execute(stmt)).scalars().all())
+
+        by_parent: dict[str | None, list[WikiPageRow]] = {}
+        for row in rows:
+            by_parent.setdefault(row.parent_page_id, []).append(row)
+
+        root = next((row for row in rows if row.wiki_page_id == root_page_id), None)
+        if root is None or not root.is_published:
+            return []
+
+        collected: list[WikiPageRow] = [root]
+        queue: list[str] = [root_page_id]
+        while queue:
+            current = queue.pop(0)
+            for child in by_parent.get(current, []):
+                if not child.is_published:
+                    continue
+                collected.append(child)
+                queue.append(child.wiki_page_id)
+
+        parents_with_published_child = {
+            row.parent_page_id for row in collected if row.parent_page_id is not None
+        }
+        return [
+            _row_to_summary(row, row.wiki_page_id in parents_with_published_child)
+            for row in collected
+        ]
+
     async def list_ancestors(
         self, company_id: str, namespace: str, wiki_page_id: str
     ) -> list[WikiPage]:
@@ -343,6 +391,7 @@ class WikiRepository:
             row.is_published = page.is_published
             row.published_at = page.published_at
             row.is_template = page.is_template
+            row.is_full_width = page.is_full_width
             row.link_enabled = page.link_enabled
             row.link_permission = page.link_permission.value
             row.last_edited_by_user_id = page.last_edited_by_user_id

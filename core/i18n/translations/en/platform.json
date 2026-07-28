@@ -665,7 +665,8 @@
         }
     },
     "tree": {
-        "row_menu": "Actions"
+        "row_menu": "Actions",
+        "expand": "Expand or collapse"
     },
     "editor": {
         "load_failed": "Failed to load the editor",
@@ -681,8 +682,14 @@
             "task_list": "To-do list",
             "toggle": "Toggle",
             "callout": "Callout",
+            "callout_info": "Callout — info",
+            "callout_success": "Callout — success",
+            "callout_warning": "Callout — warning",
+            "callout_danger": "Callout — danger",
             "blockquote": "Quote",
             "code_block": "Code block",
+            "image": "Image",
+            "platform_file": "File",
             "table": "Table",
             "horizontal_rule": "Divider",
             "math_block": "Formula",
@@ -693,7 +700,20 @@
             "em": "Italic",
             "strike": "Strikethrough",
             "code": "Code",
-            "highlight": "Highlight"
+            "highlight": "Highlight",
+            "link": "Link"
+        },
+        "link": {
+            "href": "Link URL",
+            "apply": "Apply",
+            "remove": "Remove"
+        },
+        "highlight": {
+            "yellow": "Yellow",
+            "green": "Green",
+            "blue": "Blue",
+            "pink": "Pink",
+            "orange": "Orange"
         },
         "slash": {
             "title": "Blocks",

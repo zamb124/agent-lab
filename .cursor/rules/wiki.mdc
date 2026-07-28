@@ -35,6 +35,8 @@ UI обязан слать заголовок сам: фабрики испол�
 
 **Порядок узлов значим и не сортируется.** ProseMirror берёт первый узел группы как заполнитель пустого контейнера: при алфавитной сортировке первым блоком становится `blockquote` (`content: block+`), и авто-заполнение ячейки таблицы уходит в бесконечную рекурсию. `paragraph` идёт сразу после `doc`.
 
+Атрибуты — скаляры (`string`/`int`/`float`/`bool`), кроме `colwidth` у `table_cell`/`table_header`: в prosemirror-tables это `number[] | null` (`WikiAttrKind.INT_LIST`). Табличные узлы в браузере собирает `pm.tableNodes(...)`, а не ручной JSON attrs.
+
 Enum-поля моделей наследуют `WikiBaseModel` (`use_enum_values=False`) — иначе перечисления превращались бы в строки и ломали сравнения по типу.
 
 Добавление узла или марки — цепочка целиком, иначе редактор не поднимется или упадёт первое же сохранение: `schema.py` → регенерация JSON → `DOM_SPECS`/`MARK_DOM_SPECS` в `wiki-schema-builder.js` → ветка в `markdown_serializer` → разбор в `markdown_parser` → команда и slash-пункт в `wiki-editor-plugins.js` → стили в `prosemirror.css` → ключи `platform.editor.block.*` в ru+en. Полноту сериализации держит `tests/wiki/test_wiki_markdown_coverage.py`: каждый узел схемы, кроме `BLOCK_NODES_WITHOUT_MARKDOWN`, обязан иметь ветку.
@@ -56,9 +58,16 @@ Enum-поля моделей наследуют `WikiBaseModel` (`use_enum_value
 
 ## Доступ
 
-- `visibility`: `company` (вся компания) или `restricted` (только участники). Персональные гранты имеют смысл только вместе с ограничением, поэтому список участников в UI появляется вместе с ним.
-- Ограничение наследуется вниз по дереву — резолвер `apps/wiki/services/access.py` поднимается по родителям.
-- Публичная ссылка (`link_token`) даёт анонимное чтение через `/wiki/api/v1/public/pages/{link_token}` и страницу `/wiki/s/:token`.
+- `visibility`: `company` (вся компания) или `restricted` (только участники). Значение **выводится из участников**, а не задаётся полем: непустой `WikiPageMember` = `restricted`. Поэтому `PATCH /pages/{id}` (свойства) `visibility` не принимает, а UI включает ограничение, добавляя текущего пользователя как `admin`, и снимает его, удаляя всех участников.
+- Права участника — `read | write | admin` (`WikiPagePermission`). Права публичной ссылки — отдельная ось `WikiLinkPermission` (`view | comment`).
+- Ограничение наследуется вниз по дереву — резолвер `apps/wiki/services/access.py` поднимается по родителям; `GET /pages/{id}/access` отдаёт `inherited_from_page_id`, и UI обязан показывать унаследованное ограничение.
+- Публичная ссылка (`link_token`) живёт на корне сайта: анонимное чтение всего опубликованного поддерева через `/wiki/api/v1/public/pages/{link_token}` и SPA `/wiki/s/:token` (+ `/wiki/s/:token/p/:pageId` для потомка). В БД лежит только SHA-256 хеш, поэтому сырой URL известен ровно один раз — сразу после выпуска. Позже ссылку можно только перевыпустить, и прежняя перестаёт работать; это свойство модели, а не пробел в UI. В модалке `wiki.page_access` действия Copy link / Open site — `platform-button icon-only` (`copy`, `external-link`) рядом с URL, не крупные текстовые кнопки.
+- Публичный корень отдаётся только при `link_enabled` **и** `is_published`: включённая ссылка на черновик → 404. Условие собрано одним запросом в `WikiRepository.get_public_page_by_link_token`, сервисная точка входа — `WikiService.get_public_page`.
+- Поддерево: `list_public_subtree` / `get_public_site_tree` / `get_public_site_page` — обход как у `list_subtree`, но ветка обрезается на первом `is_published=False`. Страница вне опубликованного поддерева → 404. Роуты: `GET .../tree`, `GET .../pages/{wiki_page_id}`, `GET .../pages/{wiki_page_id}/markdown`, `GET .../files/{file_id}`.
+- Медиа: файлы платформы приватны, поэтому публичный ответ переписывает `image.src` (и обложку) на `/wiki/api/v1/public/pages/{token}/files/{file_id}` через `apps/wiki/content/public_media.py`. Роут файла проверяет, что `file_id` встречается в контенте страницы опубликованного поддерева, и стримит через `files_service`. Чип `platform_file` не переписывается в JSON — базу ссылки подставляет редактор (`file-url-base`).
+- `comment` у ссылки шире `view` только по замыслу: публичных операций записи в `/public/*` нет, поэтому обе роли дают одно и то же чтение.
+- Публичная страница ставит `document.title` из заголовка. OG-разметки и индексации нет намеренно: ссылка секретная, wiki отдаётся под `noindex`, а без SSR краулер увидит пустой каркас.
+- Оси «только участники пространства» в модели нет: namespace — граница данных, а не уровень доступа.
 
 ## RAG
 
@@ -74,15 +83,22 @@ Enum-поля моделей наследуют `WikiBaseModel` (`use_enum_value
 
 SPA `/wiki`, `defaultI18nNamespace = 'wiki'`, ассистент `serviceId/branchId = wiki`.
 
-- Раскладка — `platform-resizable-split` (ширина дерева в `platform:wiki:split.tree`), на мобиле дерево уезжает в bottom-sheet `wiki.tree`, оглавление — в `wiki.outline`.
+- Раскладка — `platform-resizable-split` (ширина дерева в `platform:wiki:split.tree`), на мобиле дерево уезжает в bottom-sheet `wiki.tree`, правая панель — в `wiki.outline`.
+- Сворачивание дерева: `wiki-sidebar` читает `readShellSidebarCollapsed()` в конструкторе и переизлучает `collapse-change`; `wiki-app` переводит split в `collapsed`, и тот берёт ширину из `collapsed-size` (72px), не затирая сохранённую пользовательскую ширину и убирая ручку. Свёрнутое состояние переживает перезагрузку, как в остальных сервисах.
 - Контент справа лежит в `platform-island` (`padding="none"`, `content-no-scroll`) как в остальных сервисах: скролл держат сами страницы. Публичный маршрут `wiki_public_preview` — без острова и без сайдбара.
-- Дерево страниц — общий `platform-tree` (перетаскивание, контекстное меню, клавиатура). Отдельного дерева у сервиса нет.
-- Страница — `wiki-page-view`: обложка, иконка через `platform-emoji-picker`, заголовок как первый элемент документа, `platform-rich-editor` с подсказкой `platform:editor.placeholder`, справа оглавление, обратные ссылки и комментарии.
+- Дерево страниц — общий `platform-tree` (перетаскивание, контекстное меню, клавиатура). Отдельного дерева у сервиса нет. У узла с детьми шеврон (twisty) всегда видим и контрастный: клик по шеврону раскрывает/сворачивает, клик по строке открывает страницу.
+- Страница — `wiki-page-view`: обложка, иконка через `platform-emoji-picker`, заголовок как первый элемент документа (`:host input.title-input` — иначе `:host input { font: inherit }` из baseStyles съедает font-size), `platform-rich-editor` с подсказкой `platform:editor.placeholder`.
+- Крошки страницы получают полный путь вложенности: `wiki-page-view` собирает `.trail` для `platform-breadcrumbs` из `wiki/pages` по `parent_page_id` от текущей страницы к корню.
+- В шапке вместо голого статуса — «Изменено ‹кто› ‹когда›» (`platform-user-chip` по `last_edited_by_user_id`); клик открывает вкладку истории.
+- Шапка (`.topbar`) — по всей ширине рабочей области и `position: sticky`, а не внутри колонки текста: путь начинается от левого края области, действия прижаты к правому. В `.paper` шапки нет.
+- Правая панель — `wiki-page-panel`, по умолчанию закрыта: она же даёт основной запас ширины текста. Вкладки (`WIKI_PANEL_TABS`) — оглавление, обратные ссылки, комментарии, история; переключение через `platform-segmented-control`, состояние `{ open, tab }` живёт в `platform:wiki:page.panel`. Данные вкладки грузятся лениво, по её открытию. На узком экране тот же компонент рендерится с атрибутом `embedded` внутри bottom-sheet `wiki.outline` — второго набора листов на каждую вкладку нет. Переход по оглавлению — `platform-rich-editor.scrollToPosition` через `nodeDOM(pos)` и scroll-контейнер `[data-wiki-page-scroll]` (не `domAtPos` + голый `scrollIntoView`).
+- История версий видна из панели: timeline с автором и временем, просмотр текста ревизии, «Восстановить», переход к полному сравнению на `wiki_page_history`.
 - Импорт и экспорт markdown — в меню страницы. Импорт заменяет содержимое, поэтому у непустой страницы спрашивает подтверждение; заметки о том, что не перенеслось, показывает модалка `wiki.import_report` (только когда они есть). Экспорт — обычная ссылка на файловый роут: выгрузка не состояние. Редактор принимает `.markdownParser` (разбор на сервере) и отдаёт наверх `markdown-file-drop` для брошенного `.md`; `Mod-Shift-v` вставляет буфер как markdown.
-- Боковые отступы `.paper` шире на `--wiki-block-gutter`: в левой полосе стоят кнопки блока редактора, правая держит колонку текста по центру. Заголовок, иконка и текст выровнены по одному краю.
+- Боковые отступы `.paper` — ровно `--wiki-block-gutter` (4rem под кнопки 28px): в левой полосе стоят plus и grip редактора, правая держит колонку текста по центру. Второго отступа сверх него нет. Перестановка блоков — ручка вне contenteditable: `dragstart` выставляет `NodeSelection` + `view.dragging` (как встроенный DnD ProseMirror), drop/dropcursor работают штатно. Ширина колонки — `--wiki-page-max-width`, ширина панели — `--wiki-outline-width` (оба в `tokens.css`). Полноширинный режим — свойство страницы `is_full_width` (PATCH `wiki/page_properties`); переключатель — `platform-switch` в sticky-topbar страницы (`data-wiki-full-width`), не в меню «⋯»; в верстке `.paper[data-full-width]` снимает `max-width`.
+- Публичный сайт — `wiki-public-preview-page`: слева readonly `platform-tree` по `wiki/public_tree`, сверху sticky-шапка с крошками (`trail` → `wiki_public_page`), контент уважает `is_full_width`, на `≤767px` дерево в bottom-sheet `wiki.public_tree`.
 - Сохранение отложенное (900 мс) с досохранением при уходе со страницы; состояние показывает строка `.save-state`. Неудача сохранения резолвится в `null` (контракт `OpController`) — правки остаются в pending, `_page` не затирается.
 - Cmd+K — `platform-command-palette` с провайдером поверх `wiki/search`.
-- Маршруты: `wiki_home` (`''`), `wiki_page` (`p/:pageId`), `wiki_page_history` (`p/:pageId/history`), `wiki_search` (`search`), `wiki_public_preview` (`s/:token`).
+- Маршруты: `wiki_home` (`''`), `wiki_page` (`p/:pageId`), `wiki_page_history` (`p/:pageId/history`), `wiki_search` (`search`), `wiki_public_preview` (`s/:token`), `wiki_public_page` (`s/:token/p/:pageId`, parent `wiki_public_preview`).
 
 Wiki входит в `FACTORY_CANON_SERVICES` (`scripts/check_ui_canon.sh`, `scripts/check_command_rest_mirror.py`) — pages и modals ходят в состояние только через helpers `PlatformElement`, у каждой операции есть REST-зеркало.
 

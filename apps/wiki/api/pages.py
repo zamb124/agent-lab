@@ -275,6 +275,7 @@ async def update_properties(
             cover_url=request.cover_url,
             is_published=request.is_published,
             is_template=request.is_template,
+            is_full_width=request.is_full_width,
         )
     except WikiPageNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Страница не найдена") from exc

@@ -272,7 +272,7 @@ async def test_public_link_token_is_stored_hashed(
     )
 
     assert raw_token is not None
-    found = await wiki_service.get_page_by_link_token(raw_token)
+    found = await wiki_service.get_public_page(raw_token)
     assert found is not None
     assert found.wiki_page_id == page.wiki_page_id
 

@@ -195,6 +195,7 @@ ctx = get_context()  # ctx.user, ctx.active_company.id, ctx.trace_id
 - Цепочка — поднятие по `parent` от текущего `routeKey` к корню. Подпись — `this.t('routes.<routeKey>')` (`defaultI18nNamespace`).
 - Импорт: `import '@platform/lib/components/platform-breadcrumbs.js'`.
 - Использование: `<platform-breadcrumbs></platform-breadcrumbs>` в начале контента; динамический хвост — `current-label="..."` или `.currentLabel=${...}`.
+- Вложенность внутри одного маршрута (дерево страниц wiki, папки) — prop `.trail` из `{ label, routeKey, params }`; вставляется между цепочкой маршрутов и текущей подписью.
 - Клик неактивной крошки → `CoreEvents.ROUTER_NAVIGATE_REQUESTED` с `params` текущего маршрута или `{}`.
 - i18n: каждый сервисный бандл обязан содержать секцию `"routes": {"<routeKey>": "<подпись>"}` в RU+EN.
 - Запрещено: `window.__PLATFORM_ROUTER__`, `setupRouter()`. Только bus + select.

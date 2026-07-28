@@ -171,6 +171,23 @@ async def test_patch_properties_updates_icon_and_publication(wiki_client, wiki_p
     assert saved.revision_count == 0
 
 
+async def test_patch_properties_switches_full_width(wiki_client, wiki_page, stored_page):
+    page_id = wiki_page["wiki_page_id"]
+
+    response = await wiki_client.patch(f"{PAGES_URL}/{page_id}", json={"is_full_width": True})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["page"]["is_full_width"] is True
+    saved = await stored_page(page_id)
+    assert saved.is_full_width is True
+
+    back = await wiki_client.patch(f"{PAGES_URL}/{page_id}", json={"is_full_width": False})
+
+    assert back.status_code == 200, back.text
+    restored = await stored_page(page_id)
+    assert restored.is_full_width is False
+
+
 async def test_markdown_endpoint_returns_derived_text(wiki_client, wiki_page):
     response = await wiki_client.get(f"{PAGES_URL}/{wiki_page['wiki_page_id']}/markdown")
 

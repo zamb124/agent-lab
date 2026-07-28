@@ -72,6 +72,11 @@ export class PlatformSwitch extends PlatformElement {
                 font-size: var(--text-sm);
                 color: var(--text-primary);
                 user-select: none;
+                cursor: pointer;
+            }
+
+            :host([disabled]) .label {
+                cursor: not-allowed;
             }
 
             :host([disabled]) .switch {
@@ -116,7 +121,9 @@ export class PlatformSwitch extends PlatformElement {
                 ?disabled=${this.disabled}
                 @click=${this._toggle}
             ></button>
-            ${this.label ? html`<span class="label">${this.label}</span>` : ''}
+            ${this.label
+                ? html`<span class="label" @click=${this._toggle}>${this.label}</span>`
+                : ''}
         `;
     }
 }

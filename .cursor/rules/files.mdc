@@ -49,9 +49,13 @@ Mail inbound: `FileSourceKind.MAIL_MESSAGE` (`mailbox_binding_id` + `mail_uid` +
 
 Загрузка байтов — только через Files API. Индексация — `POST /rag/api/v1/namespaces/{id}/documents/index-file` или `post_create.rag_index_namespace` в `FileCreateSpec` (hook на `BaseContainer.files_service`).
 
+## Исключение: гостевая выдача wiki
+
+Анонимный публичный сайт wiki не ходит в `/frontend/api/v1/files/download/*` (там нужна компания). Файлы из контента опубликованного поддерева отдаёт только `GET /wiki/api/v1/public/pages/{link_token}/files/{file_id}`: токен сайта + проверка, что `file_id` есть в контенте страницы поддерева (`apps/wiki/content/public_media.py`). Помечать wiki-файлы `is_public=True` нельзя — это открыло бы их вне публикации страницы.
+
 ## Запрещено
 
-`FileProcessor`, `build_file_api_router`, per-service `/api/v1/files/`, `*/file_upload` factory names, `upload_namespace_document`, `persist_uploaded*`.
+`FileProcessor`, `build_file_api_router`, per-service `/api/v1/files/` (кроме wiki public guest route выше), `*/file_upload` factory names, `upload_namespace_document`, `persist_uploaded*`.
 
 Orphan durable `FileRecord` без Documents bind (кроме exempt).
 

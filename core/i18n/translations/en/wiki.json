@@ -4,7 +4,8 @@
         "wiki_page": "Page",
         "wiki_page_history": "Version history",
         "wiki_search": "Search",
-        "wiki_public_preview": "Public page"
+        "wiki_public_preview": "Public page",
+        "wiki_public_page": "Section page"
     },
     "bottom_nav": {
         "home": "Base",
@@ -46,11 +47,13 @@
         "add_cover": "Add cover",
         "remove_cover": "Remove cover",
         "cover_url_prompt": "Cover image URL",
+        "full_width": "Full width",
         "saving": "Saving…",
         "saved": "All changes saved",
         "save_failed": "Could not save",
         "outline": "Outline",
         "outline_empty": "No headings yet",
+        "edited_label": "Edited",
         "backlinks": "Linked from",
         "backlinks_empty": "No pages link here yet",
         "comments": "Comments",
@@ -89,11 +92,18 @@
         "hint": "Type a query: “Pages” searches the text, “Meaning” searches by sense",
         "results_count": "Found: {{count}}"
     },
+    "panel": {
+        "title": "Page panel",
+        "tabs": "Panel tabs",
+        "open": "Open panel",
+        "close": "Close panel"
+    },
     "history": {
         "title": "Version history",
         "empty": "No revisions yet",
         "current": "Current version",
         "restore": "Restore",
+        "compare": "Open comparison",
         "restore_confirm_title": "Restore this version?",
         "restore_confirm_body": "The current content will be replaced with the selected version.",
         "diff_added": "Added",
@@ -103,7 +113,8 @@
     "public": {
         "loading": "Opening the page…",
         "not_found": "Page unavailable",
-        "not_found_hint": "The link may be disabled or expired"
+        "not_found_hint": "The link may be disabled or the page unpublished",
+        "site_nav": "Section contents"
     },
     "move": {
         "title": "Move page",
@@ -114,21 +125,40 @@
     },
     "access": {
         "title": "Page access",
+        "loading": "Reading access settings…",
+        "publish_title": "Publishing",
+        "publish_label": "Page is published",
+        "publish_hint": "A draft is not served over the public link and stays out of published-only search.",
         "visibility_label": "Who can see the page",
         "visibility_company": "Whole company",
         "visibility_restricted": "Only members",
+        "visibility_company_hint": "Everyone with access to the workspace can see the page",
+        "visibility_restricted_hint": "Only the listed members see the page and its children",
+        "inherited": "The restriction is set on a page above and can only be lifted there.",
+        "inherited_open": "Open it",
         "members_title": "Members",
         "members_empty": "Only the owner has access",
         "member_add": "Add member",
         "member_remove": "Remove",
-        "permission_view": "View",
-        "permission_comment": "Comment",
-        "permission_edit": "Edit",
+        "permission_label": "Permission",
+        "permission_read": "Read",
+        "permission_write": "Edit",
+        "permission_admin": "Manage access",
         "link_title": "Public link",
         "link_enable": "Share via link",
+        "link_permission_label": "What the link allows",
+        "link_permission_view": "Read only",
+        "link_permission_comment": "Read and comment",
         "link_copy": "Copy link",
         "link_copied": "Link copied",
-        "link_disabled": "Link is off"
+        "link_disabled": "Link is off",
+        "link_hidden": "The address is stored as a hash, so the previous link cannot be shown again.",
+        "link_rotate": "Reissue link",
+        "link_rotate_confirm_title": "Reissue the link?",
+        "link_rotate_confirm_body": "The previous address stops working right after reissue.",
+        "link_draft_warning": "The page is not published — the link will not open it.",
+        "link_subtree_hint": "The link opens the whole section: this page and every published subpage under it. Unpublishing a page hides it together with its branch.",
+        "link_open_site": "Open site"
     },
     "toast": {
         "page": {

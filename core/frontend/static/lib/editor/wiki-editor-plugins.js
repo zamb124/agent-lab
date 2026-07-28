@@ -65,6 +65,13 @@ export function buildKeymap(pm, schema, handlers = {}) {
         'Mod-e': pm.toggleMark(schema.marks.code),
         'Mod-Shift-x': pm.toggleMark(schema.marks.strike),
         'Mod-Shift-h': pm.toggleMark(schema.marks.highlight),
+        'Mod-k': () => {
+            if (typeof handlers.onLink !== 'function') {
+                return false;
+            }
+            handlers.onLink();
+            return true;
+        },
         'Mod-z': pm.undo,
         'Mod-y': pm.redo,
         'Mod-Shift-z': pm.redo,
@@ -123,6 +130,10 @@ export function buildBlockCommands(pm, schema) {
         blockquote: pm.wrapIn(schema.nodes.blockquote),
         code_block: pm.setBlockType(schema.nodes.code_block),
         callout: pm.wrapIn(schema.nodes.callout, { tone: 'info', icon: '' }),
+        callout_info: pm.wrapIn(schema.nodes.callout, { tone: 'info', icon: '' }),
+        callout_success: pm.wrapIn(schema.nodes.callout, { tone: 'success', icon: '' }),
+        callout_warning: pm.wrapIn(schema.nodes.callout, { tone: 'warning', icon: '' }),
+        callout_danger: pm.wrapIn(schema.nodes.callout, { tone: 'danger', icon: '' }),
         toggle: (state, dispatch) => {
             const { toggle, toggle_summary: summary, paragraph } = schema.nodes;
             const node = toggle.create(null, [
@@ -222,6 +233,93 @@ export function insertPlatformFileCommand(schema, file) {
     };
 }
 
+/**
+ * Вставка картинки: `src` — платформенный download URL, `file_id` — связь с Files.
+ * @param {object} schema
+ * @param {{fileId: string, src: string, alt?: string, title?: string}} image
+ * @returns {(state: object, dispatch: Function) => boolean}
+ */
+export function insertImageCommand(schema, image) {
+    return (state, dispatch) => {
+        if (typeof image.fileId !== 'string' || image.fileId.length === 0) {
+            throw new Error('insertImageCommand: fileId required');
+        }
+        if (typeof image.src !== 'string' || image.src.length === 0) {
+            throw new Error('insertImageCommand: src required');
+        }
+        const node = schema.nodes.image.create({
+            src: image.src,
+            alt: image.alt || '',
+            title: image.title || '',
+            file_id: image.fileId,
+        });
+        if (dispatch) dispatch(state.tr.replaceSelectionWith(node).scrollIntoView());
+        return true;
+    };
+}
+
+/**
+ * Проставить или снять ссылку на выделении.
+ * @param {object} schema
+ * @param {string} href
+ * @returns {(state: object, dispatch: Function) => boolean}
+ */
+export function setLinkCommand(schema, href) {
+    return (state, dispatch) => {
+        const markType = schema.marks.link;
+        if (!markType) {
+            throw new Error('setLinkCommand: link mark missing from schema');
+        }
+        const { from, to, empty } = state.selection;
+        if (empty) {
+            return false;
+        }
+        if (href === '') {
+            if (dispatch) {
+                dispatch(state.tr.removeMark(from, to, markType));
+            }
+            return true;
+        }
+        if (dispatch) {
+            dispatch(state.tr.addMark(from, to, markType.create({ href, title: '' })));
+        }
+        return true;
+    };
+}
+
+/**
+ * Выделение цветом: mark highlight с attrs.color.
+ * @param {object} schema
+ * @param {string} color
+ * @returns {(state: object, dispatch: Function) => boolean}
+ */
+export function setHighlightColorCommand(schema, color) {
+    return (state, dispatch) => {
+        const markType = schema.marks.highlight;
+        if (!markType) {
+            throw new Error('setHighlightColorCommand: highlight mark missing from schema');
+        }
+        const { from, to, empty } = state.selection;
+        if (empty) {
+            return false;
+        }
+        if (dispatch) {
+            const tr = state.tr.removeMark(from, to, markType);
+            tr.addMark(from, to, markType.create({ color }));
+            dispatch(tr);
+        }
+        return true;
+    };
+}
+
+export const HIGHLIGHT_COLORS = Object.freeze([
+    'yellow',
+    'green',
+    'blue',
+    'pink',
+    'orange',
+]);
+
 export const SLASH_MENU_ITEMS = Object.freeze([
     { command: 'heading_1', icon: 'heading-1', labelKey: 'editor.block.heading_1' },
     { command: 'heading_2', icon: 'heading-2', labelKey: 'editor.block.heading_2' },
@@ -230,9 +328,14 @@ export const SLASH_MENU_ITEMS = Object.freeze([
     { command: 'ordered_list', icon: 'list', labelKey: 'editor.block.ordered_list' },
     { command: 'task_list', icon: 'check', labelKey: 'editor.block.task_list' },
     { command: 'toggle', icon: 'chevron-right', labelKey: 'editor.block.toggle' },
-    { command: 'callout', icon: 'info', labelKey: 'editor.block.callout' },
+    { command: 'callout_info', icon: 'info', labelKey: 'editor.block.callout_info' },
+    { command: 'callout_success', icon: 'check', labelKey: 'editor.block.callout_success' },
+    { command: 'callout_warning', icon: 'alert-triangle', labelKey: 'editor.block.callout_warning' },
+    { command: 'callout_danger', icon: 'alert-circle', labelKey: 'editor.block.callout_danger' },
     { command: 'blockquote', icon: 'quote', labelKey: 'editor.block.blockquote' },
     { command: 'code_block', icon: 'code', labelKey: 'editor.block.code_block' },
+    { command: 'image', icon: 'image', labelKey: 'editor.block.image' },
+    { command: 'platform_file', icon: 'file', labelKey: 'editor.block.platform_file' },
     { command: 'table', icon: 'table', labelKey: 'editor.block.table' },
     { command: 'math_block', icon: 'code', labelKey: 'editor.block.math_block' },
     { command: 'footnote', icon: 'scroll-text', labelKey: 'editor.block.footnote' },

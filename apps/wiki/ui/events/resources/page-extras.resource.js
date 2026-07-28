@@ -176,7 +176,7 @@ export const wikiBacklinksOp = createAsyncOp({
     }),
 });
 
-/** Публичная страница читается без пространства и без сессии. */
+/** Корень публичного сайта читается без пространства и без сессии. */
 export const wikiPublicPageOp = createAsyncOp({
     name: 'wiki/public_page',
     silent: true,
@@ -184,5 +184,30 @@ export const wikiPublicPageOp = createAsyncOp({
     request: ({ payload }) => httpRequest({
         method: 'GET',
         url: `${API_URL}/public/pages/${payload.link_token}`,
+    }),
+});
+
+/** Навигация публичного сайта: корень ссылки и его опубликованное поддерево. */
+export const wikiPublicTreeOp = createAsyncOp({
+    name: 'wiki/public_tree',
+    silent: true,
+    restMirror: { method: 'GET', path: '/wiki/api/v1/public/pages/:link_token/tree' },
+    request: ({ payload }) => httpRequest({
+        method: 'GET',
+        url: `${API_URL}/public/pages/${payload.link_token}/tree`,
+    }),
+});
+
+/** Подстраница публичного сайта по тому же токену. */
+export const wikiPublicSitePageOp = createAsyncOp({
+    name: 'wiki/public_site_page',
+    silent: true,
+    restMirror: {
+        method: 'GET',
+        path: '/wiki/api/v1/public/pages/:link_token/pages/:wiki_page_id',
+    },
+    request: ({ payload }) => httpRequest({
+        method: 'GET',
+        url: `${API_URL}/public/pages/${payload.link_token}/pages/${payload.wiki_page_id}`,
     }),
 });

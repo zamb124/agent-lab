@@ -19,14 +19,25 @@ import { html, nothing } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { StyleCache } from '../utils/style-cache.js';
 import {
+    DEFAULT_FILE_URL_BASE,
+    buildWikiNodeViews,
+    loadCodeMirrorBundle,
+} from '../editor/wiki-editor-nodeviews.js';
+import {
+    HIGHLIGHT_COLORS,
     SLASH_MENU_ITEMS,
     buildBlockCommands,
     buildInputRules,
     buildKeymap,
+    insertImageCommand,
     insertMentionCommand,
     insertPlatformFileCommand,
+    setHighlightColorCommand,
+    setLinkCommand,
 } from '../editor/wiki-editor-plugins.js';
 import { loadWikiEditorRuntime } from '../editor/wiki-schema-builder.js';
+import { buildPlatformAuxiliaryFileCreateSpecJson } from '../utils/file-create-spec.js';
+import './fields/platform-field.js';
 import './platform-icon.js';
 import './platform-menu.js';
 import './platform-popover.js';
@@ -38,6 +49,8 @@ const EMPTY_DOCUMENT = Object.freeze({
 
 /** Стили области правки: light DOM не покрывается стилями самого компонента. */
 const EDITOR_STYLESHEET_URL = '/static/core/assets/css/prosemirror.css';
+
+const PLATFORM_DOWNLOAD_PREFIX = '/frontend/api/v1/files/download/';
 
 /** Отступ от левого края, по которому ищется блок под курсором мыши. */
 const BLOCK_PROBE_INSET_PX = 24;
@@ -72,6 +85,11 @@ export class PlatformRichEditor extends PlatformElement {
         readonly: { type: Boolean, reflect: true },
         placeholder: { type: String },
         autofocus: { type: Boolean },
+        /**
+         * База URL для чипа `platform_file`. На публичном сайте — роут с
+         * токеном; внутри приложения — обычный download Files API.
+         */
+        fileUrlBase: { type: String, attribute: 'file-url-base' },
         /** `(query: string) => Promise<MentionItem[]>` для меню по `@`. */
         mentionProvider: { attribute: false },
         /**
@@ -87,6 +105,9 @@ export class PlatformRichEditor extends PlatformElement {
         _slashAnchor: { state: true },
         _bubble: { state: true },
         _bubbleAnchor: { state: true },
+        _linkOpen: { state: true },
+        _linkHref: { state: true },
+        _highlightOpen: { state: true },
         _mentionOpen: { state: true },
         _mentionItems: { state: true },
         _mentionAnchor: { state: true },
@@ -109,6 +130,7 @@ export class PlatformRichEditor extends PlatformElement {
         this.readonly = false;
         this.placeholder = '';
         this.autofocus = false;
+        this.fileUrlBase = DEFAULT_FILE_URL_BASE;
         this.mentionProvider = null;
         this.markdownParser = null;
         this._ready = false;
@@ -117,6 +139,9 @@ export class PlatformRichEditor extends PlatformElement {
         this._slashAnchor = null;
         this._bubble = null;
         this._bubbleAnchor = null;
+        this._linkOpen = false;
+        this._linkHref = '';
+        this._highlightOpen = false;
         this._mentionOpen = false;
         this._mentionItems = [];
         this._mentionAnchor = null;
@@ -125,6 +150,7 @@ export class PlatformRichEditor extends PlatformElement {
         this._handleTop = -1;
         this._handleBlockPos = -1;
         this._blockMenuAnchor = null;
+        this._suppressBlockMenuClick = false;
         this._inTable = false;
         this._tableAnchor = null;
         this._error = '';
@@ -132,7 +158,16 @@ export class PlatformRichEditor extends PlatformElement {
         this._pm = null;
         this._schema = null;
         this._commands = null;
-        this._applyingExternalValue = false;
+        /**
+         * Документ, который редактор сам отдал наружу последним изменением.
+         *
+         * Хозяин обычно связывает `.value` со своим состоянием и перерисовывается
+         * по другим причинам — индикатор сохранения, оглавление. Если он при этом
+         * пришлёт то же значение, применять его нельзя: `updated()` у Lit
+         * асинхронный, к его вызову набранный символ уже в документе, и повторная
+         * установка состояния стёрла бы ввод.
+         */
+        this._emittedValue = null;
         this._onHostPointerMove = this._onHostPointerMove.bind(this);
         this._onShellPointerLeave = this._onShellPointerLeave.bind(this);
     }
@@ -168,11 +203,15 @@ export class PlatformRichEditor extends PlatformElement {
     }
 
     updated(changed) {
-        if (changed.has('value') && this._view && !this._applyingExternalValue) {
+        if (changed.has('value') && this._view && this.value !== this._emittedValue) {
             this._applyExternalValue();
         }
-        if (changed.has('readonly') && this._view) {
-            this._view.setProps({ editable: () => !this.readonly });
+        if ((changed.has('readonly') || changed.has('fileUrlBase')) && this._view) {
+            this._view.setProps({
+                editable: () => !this.readonly,
+                nodeViews: this._nodeViews(),
+            });
+            this._view.dispatch(this._view.state.tr);
         }
         // Подсказка живёт в decoration, а не в атрибуте: пустая транзакция
         // пересчитывает её при смене локали.
@@ -186,8 +225,9 @@ export class PlatformRichEditor extends PlatformElement {
         if (!host) return;
 
         let runtime;
+        let cm;
         try {
-            runtime = await loadWikiEditorRuntime();
+            [runtime, cm] = await Promise.all([loadWikiEditorRuntime(), loadCodeMirrorBundle()]);
         } catch (error) {
             this._error = String(error);
             return;
@@ -196,6 +236,7 @@ export class PlatformRichEditor extends PlatformElement {
         const { pm, schema } = runtime;
         this._pm = pm;
         this._schema = schema;
+        this._cm = cm;
         this._commands = buildBlockCommands(pm, schema);
 
         const plugins = [
@@ -204,10 +245,13 @@ export class PlatformRichEditor extends PlatformElement {
                 onPasteMarkdown: () => {
                     void this._pasteAsMarkdown();
                 },
+                onLink: () => {
+                    this._openLinkEditor();
+                },
             }),
             pm.keymap(pm.baseKeymap),
             pm.history(),
-            pm.dropCursor(),
+            pm.dropCursor({ color: 'var(--accent)', width: 2, class: 'pm-dropcursor' }),
             pm.gapCursor(),
             pm.tableEditing(),
             pm.columnResizing(),
@@ -225,6 +269,7 @@ export class PlatformRichEditor extends PlatformElement {
             state,
             editable: () => !this.readonly,
             attributes: { class: 'pm-editor' },
+            nodeViews: this._nodeViews(),
             // Клик по уже стоящей каретке транзакции не даёт, поэтому кнопки
             // блока подтягиваются к строке ещё и на фокусе.
             handleDOMEvents: {
@@ -247,6 +292,19 @@ export class PlatformRichEditor extends PlatformElement {
             this._view.focus();
             this._syncHandleToSelection();
         }
+    }
+
+    _nodeViews() {
+        return buildWikiNodeViews({
+            cm: this._cm,
+            getFileUrlBase: () => {
+                if (typeof this.fileUrlBase !== 'string' || this.fileUrlBase.length === 0) {
+                    throw new Error('platform-rich-editor: fileUrlBase required');
+                }
+                return this.fileUrlBase;
+            },
+            isEditable: () => !this.readonly,
+        });
     }
 
     // --- плагины ---
@@ -394,10 +452,9 @@ export class PlatformRichEditor extends PlatformElement {
         this._tableAnchor = this._inTable ? this._selectionAnchor(nextState) : null;
 
         if (!transaction.docChanged) return;
-        this._applyingExternalValue = true;
-        this.value = nextState.doc.toJSON();
-        this._applyingExternalValue = false;
-        this.emit('change', { content: this.value });
+        this._emittedValue = nextState.doc.toJSON();
+        this.value = this._emittedValue;
+        this.emit('change', { content: this._emittedValue });
     }
 
     /** Прямоугольник текущего выделения в координатах viewport — якорь для popover. */
@@ -431,12 +488,43 @@ export class PlatformRichEditor extends PlatformElement {
                 ? Boolean(markType.isInSet(state.storedMarks || $from.marks()))
                 : state.doc.rangeHasMark(from, to, markType);
         };
+        let highlightColor = '';
+        if (marks.highlight && isActive(marks.highlight)) {
+            const { from, to } = state.selection;
+            state.doc.nodesBetween(from, to, (node) => {
+                if (highlightColor !== '') return false;
+                for (const mark of node.marks) {
+                    if (mark.type === marks.highlight) {
+                        highlightColor = mark.attrs.color || 'yellow';
+                        return false;
+                    }
+                }
+                return true;
+            });
+        }
+        let linkHref = '';
+        if (marks.link && isActive(marks.link)) {
+            const { from, to } = state.selection;
+            state.doc.nodesBetween(from, to, (node) => {
+                if (linkHref !== '') return false;
+                for (const mark of node.marks) {
+                    if (mark.type === marks.link) {
+                        linkHref = mark.attrs.href || '';
+                        return false;
+                    }
+                }
+                return true;
+            });
+        }
         return {
             strong: isActive(marks.strong),
             em: isActive(marks.em),
             code: isActive(marks.code),
             strike: isActive(marks.strike),
             highlight: isActive(marks.highlight),
+            highlightColor,
+            link: isActive(marks.link),
+            linkHref,
         };
     }
 
@@ -479,15 +567,74 @@ export class PlatformRichEditor extends PlatformElement {
     }
 
     _runSlashCommand(commandName) {
-        const command = this._commands[commandName];
-        if (!command || !this._view) return;
+        if (!this._view) return;
 
         // Слэш и набранный после него фильтр — часть команды, а не текста.
         this._dropTriggerText('/');
-        command(this._view.state, this._view.dispatch);
         this._slashOpen = false;
         this._slashQuery = '';
+
+        if (commandName === 'image') {
+            this._pickUploadFile('image');
+            return;
+        }
+        if (commandName === 'platform_file') {
+            this._pickUploadFile('file');
+            return;
+        }
+
+        const command = this._commands[commandName];
+        if (!command) {
+            throw new Error(`platform-rich-editor: unknown slash command ${commandName}`);
+        }
+        command(this._view.state, this._view.dispatch);
         this._view.focus();
+    }
+
+    _pickUploadFile(kind) {
+        const selector = kind === 'image'
+            ? 'input[data-editor-image-input]'
+            : 'input[data-editor-file-input]';
+        const input = this.querySelector(selector);
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error(`platform-rich-editor: missing upload input for ${kind}`);
+        }
+        input.click();
+    }
+
+    async _onUploadSelected(event, kind) {
+        const input = event.target;
+        const selected = input.files && input.files[0];
+        input.value = '';
+        if (!selected) {
+            return;
+        }
+        const uploadOp = this.useOp('platform/file_create');
+        const result = await uploadOp.run({
+            file: selected,
+            spec: buildPlatformAuxiliaryFileCreateSpecJson({
+                metadata: { purpose: kind === 'image' ? 'wiki_image' : 'wiki_file' },
+            }),
+        });
+        if (!result || typeof result !== 'object') {
+            throw new Error('platform-rich-editor: upload result required');
+        }
+        if (typeof result.file_id !== 'string' || result.file_id.length === 0) {
+            throw new Error('platform-rich-editor: upload result.file_id required');
+        }
+        if (kind === 'image') {
+            this.insertImage({
+                fileId: result.file_id,
+                src: `${PLATFORM_DOWNLOAD_PREFIX}${result.file_id}`,
+                alt: typeof result.original_name === 'string' ? result.original_name : '',
+            });
+            return;
+        }
+        this.insertPlatformFile({
+            fileId: result.file_id,
+            originalName: typeof result.original_name === 'string' ? result.original_name : '',
+            contentType: typeof result.content_type === 'string' ? result.content_type : '',
+        });
     }
 
     /** Убрать из документа текст-триггер вместе с набранным фильтром. */
@@ -533,6 +680,48 @@ export class PlatformRichEditor extends PlatformElement {
         const markType = this._schema.marks[markName];
         if (!markType) return;
         this._pm.toggleMark(markType)(this._view.state, this._view.dispatch);
+        this._view.focus();
+    }
+
+    _openLinkEditor() {
+        if (this.readonly || this._view === null) {
+            return;
+        }
+        if (this._view.state.selection.empty) {
+            return;
+        }
+        const bubble = this._bubbleState(this._view.state);
+        this._linkHref = bubble && typeof bubble.linkHref === 'string' ? bubble.linkHref : '';
+        this._linkOpen = true;
+        this._highlightOpen = false;
+    }
+
+    _applyLink() {
+        if (!this._view || !this._schema) {
+            return;
+        }
+        const href = typeof this._linkHref === 'string' ? this._linkHref.trim() : '';
+        setLinkCommand(this._schema, href)(this._view.state, this._view.dispatch);
+        this._linkOpen = false;
+        this._view.focus();
+    }
+
+    _removeLink() {
+        if (!this._view || !this._schema) {
+            return;
+        }
+        setLinkCommand(this._schema, '')(this._view.state, this._view.dispatch);
+        this._linkOpen = false;
+        this._linkHref = '';
+        this._view.focus();
+    }
+
+    _applyHighlightColor(color) {
+        if (!this._view || !this._schema) {
+            return;
+        }
+        setHighlightColorCommand(this._schema, color)(this._view.state, this._view.dispatch);
+        this._highlightOpen = false;
         this._view.focus();
     }
 
@@ -590,6 +779,12 @@ export class PlatformRichEditor extends PlatformElement {
     }
 
     _openBlockMenu(event) {
+        // После drag браузер иногда шлёт click на ту же кнопку — меню не открываем.
+        if (this._suppressBlockMenuClick) {
+            this._suppressBlockMenuClick = false;
+            event.preventDefault();
+            return;
+        }
         event.preventDefault();
         this._blockMenuAnchor = event.currentTarget;
     }
@@ -665,13 +860,41 @@ export class PlatformRichEditor extends PlatformElement {
 
     _onHandleDragStart(event) {
         if (!this._view || this._handleBlockPos < 0) return;
+        if (!(event.dataTransfer instanceof DataTransfer)) {
+            throw new Error('platform-rich-editor: dragstart without dataTransfer');
+        }
         const node = this._view.state.doc.nodeAt(this._handleBlockPos);
         if (!node) return;
-        // NodeSelection даёт ProseMirror переместить блок целиком его же
-        // механикой drag-and-drop, вместе с дочерним содержимым.
+        // Ручка лежит вне contenteditable, поэтому встроенный dragstart ProseMirror
+        // не срабатывает. Собираем тот же контракт: NodeSelection + clipboard slice
+        // + view.dragging — drop и dropcursor подхватят его сами.
         const selection = this._pm.NodeSelection.create(this._view.state.doc, this._handleBlockPos);
         this._view.dispatch(this._view.state.tr.setSelection(selection));
-        event.dataTransfer.effectAllowed = 'move';
+        const { dom, text, slice } = this._view.serializeForClipboard(selection.content());
+        event.dataTransfer.clearData();
+        event.dataTransfer.setData('text/html', dom.innerHTML);
+        event.dataTransfer.setData('text/plain', text);
+        event.dataTransfer.effectAllowed = 'copyMove';
+        this._view.dragging = { slice, move: true, node: selection };
+
+        const blockDom = this._view.nodeDOM(this._handleBlockPos);
+        if (blockDom instanceof HTMLElement) {
+            event.dataTransfer.setDragImage(blockDom, 0, 0);
+        }
+    }
+
+    _onHandleDragEnd() {
+        // После drag браузер иногда шлёт click на ту же кнопку — меню глушим
+        // только на этот тик; иначе следующий осознанный клик тоже пропадёт.
+        this._suppressBlockMenuClick = true;
+        const view = this._view;
+        const dragging = view === null ? null : view.dragging;
+        window.setTimeout(() => {
+            this._suppressBlockMenuClick = false;
+            if (view !== null && view.dragging === dragging) {
+                view.dragging = null;
+            }
+        }, 50);
     }
 
     // --- таблицы ---
@@ -763,6 +986,13 @@ export class PlatformRichEditor extends PlatformElement {
         this._view.focus();
     }
 
+    /** Вставить картинку с платформенным `file_id`. */
+    insertImage(image) {
+        if (!this._view || !this._schema) return;
+        insertImageCommand(this._schema, image)(this._view.state, this._view.dispatch);
+        this._view.focus();
+    }
+
     /** Оглавление страницы: заголовки в порядке документа. */
     getOutline() {
         if (!this._view) return [];
@@ -779,9 +1009,25 @@ export class PlatformRichEditor extends PlatformElement {
     /** Прокрутить к заголовку из оглавления. */
     scrollToPosition(pos) {
         if (!this._view) return;
-        const { node } = this._view.domAtPos(pos);
-        const element = node instanceof Element ? node : node.parentElement;
-        if (element) element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Outline отдаёт позицию перед узлом — outer DOM heading берём через nodeDOM.
+        const node = this._view.nodeDOM(pos);
+        const element = node instanceof Element ? node : null;
+        if (element === null) {
+            throw new Error(`platform-rich-editor: no DOM node at outline position ${pos}`);
+        }
+        const scroller = this.closest('[data-wiki-page-scroll]');
+        if (scroller instanceof HTMLElement) {
+            const topbar = scroller.querySelector('.topbar');
+            const stickyOffset = topbar instanceof HTMLElement ? topbar.getBoundingClientRect().height : 0;
+            const scrollerRect = scroller.getBoundingClientRect();
+            const targetRect = element.getBoundingClientRect();
+            scroller.scrollTop = scroller.scrollTop
+                + (targetRect.top - scrollerRect.top)
+                - stickyOffset
+                - 8;
+            return;
+        }
+        element.scrollIntoView({ behavior: 'auto', block: 'start' });
     }
 
     render() {
@@ -793,10 +1039,31 @@ export class PlatformRichEditor extends PlatformElement {
                 ${this._renderBlockHandle()}
                 <div class="pm-host"></div>
                 ${this._renderBubblePopover()}
+                ${this._renderLinkPopover()}
+                ${this._renderHighlightPopover()}
                 ${this._renderTablePopover()}
                 ${this._renderSlashPopover()}
                 ${this._renderMentionPopover()}
                 ${this._renderBlockMenuPopover()}
+                <input
+                    type="file"
+                    hidden
+                    data-editor-image-input
+                    accept="image/*"
+                    @change=${(event) => {
+                        event.stopPropagation();
+                        void this._onUploadSelected(event, 'image');
+                    }}
+                />
+                <input
+                    type="file"
+                    hidden
+                    data-editor-file-input
+                    @change=${(event) => {
+                        event.stopPropagation();
+                        void this._onUploadSelected(event, 'file');
+                    }}
+                />
             </div>
         `;
     }
@@ -814,7 +1081,7 @@ export class PlatformRichEditor extends PlatformElement {
                     title=${this.t('editor.add_block')}
                     @click=${this._onHandleAdd}
                 >
-                    <platform-icon name="plus" size="14"></platform-icon>
+                    <platform-icon name="plus" size="18"></platform-icon>
                 </button>
                 <button
                     type="button"
@@ -822,9 +1089,10 @@ export class PlatformRichEditor extends PlatformElement {
                     draggable="true"
                     aria-label=${this.t('editor.block_menu.aria')}
                     @dragstart=${this._onHandleDragStart}
+                    @dragend=${this._onHandleDragEnd}
                     @click=${this._openBlockMenu}
                 >
-                    <platform-icon name="drag-handle" size="14"></platform-icon>
+                    <platform-icon name="drag-handle" size="18"></platform-icon>
                 </button>
             </div>
         `;
@@ -858,7 +1126,6 @@ export class PlatformRichEditor extends PlatformElement {
             { name: 'em', icon: 'italic' },
             { name: 'strike', icon: 'strikethrough' },
             { name: 'code', icon: 'code' },
-            { name: 'highlight', icon: 'highlighter' },
         ];
         return html`
             <platform-popover
@@ -868,7 +1135,7 @@ export class PlatformRichEditor extends PlatformElement {
                 offset="8"
                 dismiss-on-outside="false"
                 .anchor=${this._bubbleAnchor}
-                ?open=${this._bubble !== null}
+                ?open=${this._bubble !== null && !this._linkOpen && !this._highlightOpen}
             >
                 ${this._bubble !== null
                     ? html`
@@ -885,6 +1152,112 @@ export class PlatformRichEditor extends PlatformElement {
                                     >
                                         <platform-icon name=${mark.icon} size="16"></platform-icon>
                                     </button>
+                                `,
+                            )}
+                            <span class="pm-bubble-sep"></span>
+                            <button
+                                type="button"
+                                class="pm-bubble-btn ${this._bubble.link ? 'is-active' : ''}"
+                                data-editor-link
+                                aria-pressed=${this._bubble.link ? 'true' : 'false'}
+                                title=${this.t('editor.mark.link')}
+                                @mousedown=${(event) => event.preventDefault()}
+                                @click=${() => this._openLinkEditor()}
+                            >
+                                <platform-icon name="link" size="16"></platform-icon>
+                            </button>
+                            <button
+                                type="button"
+                                class="pm-bubble-btn ${this._bubble.highlight ? 'is-active' : ''}"
+                                data-editor-highlight
+                                aria-pressed=${this._bubble.highlight ? 'true' : 'false'}
+                                title=${this.t('editor.mark.highlight')}
+                                @mousedown=${(event) => event.preventDefault()}
+                                @click=${() => { this._highlightOpen = true; this._linkOpen = false; }}
+                            >
+                                <platform-icon name="highlighter" size="16"></platform-icon>
+                            </button>
+                        </div>
+                    `
+                    : nothing}
+            </platform-popover>
+        `;
+    }
+
+    _renderLinkPopover() {
+        return html`
+            <platform-popover
+                trigger="manual"
+                role="dialog"
+                placement="top"
+                offset="8"
+                .anchor=${this._bubbleAnchor}
+                ?open=${this._linkOpen}
+                @popover-dismiss=${() => { this._linkOpen = false; }}
+            >
+                ${this._linkOpen
+                    ? html`
+                        <div class="pm-link-editor" data-editor-link-form>
+                            <platform-field
+                                input-type="url"
+                                label=${this.t('editor.link.href')}
+                                .value=${this._linkHref}
+                                @change=${(event) => {
+                                    this._linkHref = String(event.detail.value ?? '');
+                                }}
+                            ></platform-field>
+                            <div class="pm-link-actions">
+                                <button
+                                    type="button"
+                                    class="pm-bubble-btn"
+                                    data-editor-link-apply
+                                    @mousedown=${(event) => event.preventDefault()}
+                                    @click=${() => this._applyLink()}
+                                >
+                                    ${this.t('editor.link.apply')}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="pm-bubble-btn"
+                                    data-editor-link-remove
+                                    @mousedown=${(event) => event.preventDefault()}
+                                    @click=${() => this._removeLink()}
+                                >
+                                    ${this.t('editor.link.remove')}
+                                </button>
+                            </div>
+                        </div>
+                    `
+                    : nothing}
+            </platform-popover>
+        `;
+    }
+
+    _renderHighlightPopover() {
+        return html`
+            <platform-popover
+                trigger="manual"
+                role="dialog"
+                placement="top"
+                offset="8"
+                .anchor=${this._bubbleAnchor}
+                ?open=${this._highlightOpen}
+                @popover-dismiss=${() => { this._highlightOpen = false; }}
+            >
+                ${this._highlightOpen
+                    ? html`
+                        <div class="pm-highlight-swatches" role="listbox" aria-label=${this.t('editor.mark.highlight')}>
+                            ${HIGHLIGHT_COLORS.map(
+                                (color) => html`
+                                    <button
+                                        type="button"
+                                        class="pm-highlight-swatch ${this._bubble?.highlightColor === color ? 'is-active' : ''}"
+                                        data-highlight-color=${color}
+                                        title=${this.t(`editor.highlight.${color}`)}
+                                        style=${`--swatch: var(--wiki-highlight-${color})`}
+                                        @mousedown=${(event) => event.preventDefault()}
+                                        @click=${() => this._applyHighlightColor(color)}
+                                    ></button>
                                 `,
                             )}
                         </div>

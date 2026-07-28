@@ -28,11 +28,28 @@ const DOM_SPECS = Object.freeze({
         toDOM: () => ['blockquote', 0],
     },
     code_block: {
-        parseDOM: [{ tag: 'pre', preserveWhitespace: 'full' }],
+        parseDOM: [
+            {
+                tag: 'pre',
+                preserveWhitespace: 'full',
+                getAttrs: (dom) => {
+                    const dataLanguage = dom.getAttribute('data-language');
+                    if (typeof dataLanguage === 'string' && dataLanguage !== '') {
+                        return { language: dataLanguage };
+                    }
+                    const code = dom.querySelector('code');
+                    const className = code instanceof Element
+                        ? (code.getAttribute('class') || '')
+                        : (dom.getAttribute('class') || '');
+                    const match = className.match(/(?:^|\s)language-([a-zA-Z0-9_+-]+)/);
+                    return { language: match ? match[1] : '' };
+                },
+            },
+        ],
         toDOM: (node) => [
             'pre',
             { 'data-language': node.attrs.language || '' },
-            ['code', 0],
+            ['code', node.attrs.language ? { class: `language-${node.attrs.language}` } : {}, 0],
         ],
     },
     bullet_list: {

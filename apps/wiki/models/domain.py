@@ -107,6 +107,7 @@ class WikiPage(WikiBaseModel):
     is_published: bool = True
     published_at: datetime | None = None
     is_template: bool = False
+    is_full_width: bool = False
     link_enabled: bool = False
     link_permission: WikiLinkPermission = WikiLinkPermission.VIEW
     created_by_user_id: str = Field(..., min_length=1)

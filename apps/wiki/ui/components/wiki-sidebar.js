@@ -20,6 +20,7 @@ import {
     getPlatformNamespaceSidebarSelection,
     setPlatformNamespaceSelection,
 } from '@platform/lib/utils/platform-namespace.js';
+import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/layout/platform-sidebar-namespace-select.js';
@@ -148,13 +149,25 @@ export class WikiSidebar extends PlatformElement {
                 color: var(--text-disabled);
                 font-size: var(--text-xs);
             }
+
+            /* В свёрнутой полосе 72px дерево и селектор пространства не читаются:
+               оставляем только логотип, пользователя и кнопку разворота. */
+            platform-service-sidebar[collapsed] platform-sidebar-namespace-select,
+            platform-service-sidebar[collapsed] .tools,
+            platform-service-sidebar[collapsed] .section-title,
+            platform-service-sidebar[collapsed] .recent,
+            platform-service-sidebar[collapsed] .tree-wrap,
+            platform-service-sidebar[collapsed] .empty,
+            platform-service-sidebar[collapsed] platform-deployment-version {
+                display: none;
+            }
         `,
     ];
 
     constructor() {
         super();
         this.activePageId = '';
-        this.collapsed = false;
+        this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this._filter = '';
         this._pages = this.useResource('wiki/pages', { autoload: true });

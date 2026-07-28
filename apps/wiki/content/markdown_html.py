@@ -76,6 +76,14 @@ _HEADING_TAGS: Final[dict[str, int]] = {
 _VOID_TAGS: Final[frozenset[str]] = frozenset({"br", "img", "hr", "input"})
 
 _WHITESPACE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")
+_LANGUAGE_CLASS_RE: Final[re.Pattern[str]] = re.compile(r"(?:^|\s)language-([a-zA-Z0-9_+-]+)")
+
+_LANGUAGE_ALIASES: Final[dict[str, str]] = {
+    "js": "javascript",
+    "py": "python",
+    "c#": "csharp",
+    "cs": "csharp",
+}
 
 INLINE_NODE_TYPES: Final[frozenset[str]] = frozenset(
     {
@@ -125,6 +133,22 @@ def _attrs_to_dict(attrs: list[tuple[str, str | None]]) -> dict[str, str]:
     return {name: value for name, value in attrs if value is not None}
 
 
+def normalize_code_language(raw: str) -> str:
+    """Имя языка fence/class → канон редактора (`js` → `javascript`)."""
+    language = raw.strip().lower()
+    if language == "":
+        return ""
+    return _LANGUAGE_ALIASES.get(language, language)
+
+
+def language_from_class_attr(class_name: str) -> str:
+    """`class="language-json"` → `json`."""
+    match = _LANGUAGE_CLASS_RE.search(class_name)
+    if match is None:
+        return ""
+    return normalize_code_language(match.group(1))
+
+
 def parse_tag(raw: str) -> HtmlTag | None:
     """Разобрать одиночный тег inline-HTML; `None`, если тега там нет."""
     reader = _TagReader()
@@ -159,6 +183,7 @@ class _FragmentBuilder(HTMLParser):
 
     _notices: WikiMarkdownNoticeCollector
     _discard_depth: int
+    _code_block_language: str
 
     def __init__(self, notices: WikiMarkdownNoticeCollector) -> None:
         super().__init__(convert_charrefs=True)
@@ -167,6 +192,7 @@ class _FragmentBuilder(HTMLParser):
         self._stack: list[tuple[str, list[ProseMirrorNode]]] = []
         self._marks: list[ProseMirrorMark] = []
         self._discard_depth = 0
+        self._code_block_language = ""
 
     # --- стек ---
 
@@ -211,6 +237,13 @@ class _FragmentBuilder(HTMLParser):
                 return
             self._notices.add(WikiMarkdownNoticeKind.DROPPED_HTML, "<a> без href")
             return
+        if tag == "code" and "pre" in self._open_tags():
+            language = language_from_class_attr(attr_map.get("class", ""))
+            if language == "":
+                language = normalize_code_language(attr_map.get("data-language", ""))
+            if language != "":
+                self._code_block_language = language
+            return
         if tag in INLINE_MARK_BY_TAG and "pre" not in self._open_tags():
             self._marks.append(ProseMirrorMark(type=INLINE_MARK_BY_TAG[tag]))
             return
@@ -218,6 +251,11 @@ class _FragmentBuilder(HTMLParser):
             self._stack.append((tag, []))
             return
         if tag in BLOCK_NODE_BY_TAG:
+            if tag == "pre":
+                language = normalize_code_language(attr_map.get("data-language", ""))
+                if language == "":
+                    language = language_from_class_attr(attr_map.get("class", ""))
+                self._code_block_language = language
             self._stack.append((tag, []))
             return
         if tag in TRANSPARENT_TAGS:
@@ -237,6 +275,8 @@ class _FragmentBuilder(HTMLParser):
             self._discard_depth -= 1
             return
         if tag in _VOID_TAGS:
+            return
+        if tag == "code" and "pre" in self._open_tags():
             return
         if tag == "a" or (tag in INLINE_MARK_BY_TAG and "pre" not in self._open_tags()):
             if self._marks:
@@ -260,7 +300,11 @@ class _FragmentBuilder(HTMLParser):
         if node_type == "code_block":
             code = "".join(child.text or "" for child in children)
             content = [ProseMirrorNode(type="text", text=code)] if code else []
-            return ProseMirrorNode(type="code_block", attrs={"language": ""}, content=content)
+            language = self._code_block_language
+            self._code_block_language = ""
+            return ProseMirrorNode(
+                type="code_block", attrs={"language": language}, content=content
+            )
         if node_type == "paragraph":
             return ProseMirrorNode(type="paragraph", content=children)
         if not children:
@@ -356,6 +400,8 @@ __all__ = [
     "HtmlTag",
     "html_fragment_to_blocks",
     "image_node_from_attrs",
+    "language_from_class_attr",
     "normalize_align",
+    "normalize_code_language",
     "parse_tag",
 ]

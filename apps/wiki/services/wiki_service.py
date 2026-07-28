@@ -27,6 +27,7 @@ from apps.wiki.content.markdown_notices import WikiMarkdownNotice
 from apps.wiki.content.markdown_parser import parse_markdown
 from apps.wiki.content.markdown_serializer import document_to_markdown
 from apps.wiki.content.prosemirror import ProseMirrorNode, empty_document
+from apps.wiki.content.public_media import collect_file_ids, platform_file_id_from_url
 from apps.wiki.content.schema import normalize_document
 from apps.wiki.db.repositories.wiki_repository import WikiRepository
 from apps.wiki.events import (
@@ -178,8 +179,73 @@ class WikiService:
         resolver = await self.build_access_resolver(company_id, namespace, user_id)
         return [item for item in deleted if resolver.can_view(item.wiki_page_id)]
 
-    async def get_page_by_link_token(self, raw_token: str) -> WikiPage | None:
-        return await self._repo.get_page_by_link_token(_hash_link_token(raw_token))
+    async def get_public_page(self, raw_token: str) -> WikiPage | None:
+        """Корень публичного сайта — страница, на которой включена ссылка.
+
+        Черновик по ссылке не отдаётся: включённая ссылка — намерение поделиться
+        готовым текстом, а `is_published=False` говорит обратное. Проверка живёт
+        в запросе репозитория, поэтому обойти её другим вызовом нельзя.
+        """
+        return await self._repo.get_public_page_by_link_token(_hash_link_token(raw_token))
+
+    async def get_public_site_tree(self, raw_token: str) -> list[WikiPageSummary]:
+        """Навигация публичного сайта.
+
+        Токен живёт на корне, а сайт — это его опубликованное поддерево. Пустой
+        список значит, что сайта по такому токену нет: корень всегда входит в
+        свою же навигацию.
+        """
+        root = await self.get_public_page(raw_token)
+        if root is None:
+            return []
+        return await self._repo.list_public_subtree(
+            root.company_id, root.namespace, root.wiki_page_id
+        )
+
+    async def get_public_site_page(self, raw_token: str, wiki_page_id: str) -> WikiPage | None:
+        """Страница сайта по её id.
+
+        Доступна только страница из опубликованного поддерева корня: снятая с
+        публикации ветка не отдаётся даже по прямому id.
+        """
+        root = await self.get_public_page(raw_token)
+        if root is None:
+            return None
+        if wiki_page_id == root.wiki_page_id:
+            return root
+        published = await self._repo.list_public_subtree(
+            root.company_id, root.namespace, root.wiki_page_id
+        )
+        if all(item.wiki_page_id != wiki_page_id for item in published):
+            return None
+        return await self._repo.get_page(root.company_id, root.namespace, wiki_page_id)
+
+    async def public_site_has_file(self, raw_token: str, file_id: str) -> bool:
+        """Встречается ли файл в содержимом страниц сайта.
+
+        Это вся авторизация гостевой выдачи файла: посторонний `file_id`, даже
+        принадлежащий той же компании, по ссылке сайта не отдаётся.
+        """
+        root = await self.get_public_page(raw_token)
+        if root is None:
+            return False
+        published_ids = {
+            item.wiki_page_id
+            for item in await self._repo.list_public_subtree(
+                root.company_id, root.namespace, root.wiki_page_id
+            )
+        }
+        pages = await self._repo.list_subtree(
+            root.company_id, root.namespace, root.wiki_page_id
+        )
+        for page in pages:
+            if page.wiki_page_id not in published_ids:
+                continue
+            if file_id in collect_file_ids(page.content):
+                return True
+            if platform_file_id_from_url(page.cover_url) == file_id:
+                return True
+        return False
 
     # --- запись ---
 
@@ -283,6 +349,7 @@ class WikiService:
         cover_url: str | None = None,
         is_published: bool | None = None,
         is_template: bool | None = None,
+        is_full_width: bool | None = None,
     ) -> WikiPage:
         page = await self.require_editable_page(company_id, namespace, wiki_page_id, user_id)
 
@@ -298,6 +365,8 @@ class WikiService:
                 page.published_at = _utcnow()
         if is_template is not None:
             page.is_template = is_template
+        if is_full_width is not None:
+            page.is_full_width = is_full_width
         page.last_edited_by_user_id = user_id
 
         stored = await self._repo.update_page(page)

@@ -9,6 +9,7 @@
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
+import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 
 import {
     wikiPagesResource,
@@ -31,6 +32,9 @@ import {
     wikiMemberAddOp,
     wikiMemberRemoveOp,
     wikiPublicLinkOp,
+    wikiPublicPageOp,
+    wikiPublicTreeOp,
+    wikiPublicSitePageOp,
     wikiRevisionsOp,
     wikiRevisionReadOp,
     wikiRevisionRestoreOp,
@@ -49,6 +53,7 @@ import '@platform/lib/components/platform-resizable-split.js';
 import '../components/wiki-sidebar.js';
 import '../components/sheets/wiki-outline-sheet.js';
 import '../components/sheets/wiki-tree-sheet.js';
+import '../components/sheets/wiki-public-tree-sheet.js';
 import '../pages/wiki-home-page.js';
 import '../pages/wiki-page-view.js';
 import '../pages/wiki-search-page.js';
@@ -64,6 +69,7 @@ const WIKI_ROUTES = [
     { key: 'wiki_page_history', path: 'p/:pageId/history',    parent: 'wiki_page', titleKey: 'routes.wiki_page_history' },
     { key: 'wiki_search',       path: 'search',               parent: 'wiki_home', titleKey: 'routes.wiki_search' },
     { key: 'wiki_public_preview', path: 's/:token',           titleKey: 'routes.wiki_public_preview' },
+    { key: 'wiki_public_page',  path: 's/:token/p/:pageId',   parent: 'wiki_public_preview', titleKey: 'routes.wiki_public_page' },
 ];
 
 const WIKI_BOTTOM_NAV_ITEMS = [
@@ -73,14 +79,16 @@ const WIKI_BOTTOM_NAV_ITEMS = [
     { key: 'profile', sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
 ];
 
-/** На публичной странице нет ни сайдбара, ни нижней навигации. */
+/** На публичном сайте нет ни сайдбара приложения, ни нижней навигации. */
 const PUBLIC_ROUTE_KEY = 'wiki_public_preview';
+const PUBLIC_PAGE_ROUTE_KEY = 'wiki_public_page';
+const PUBLIC_ROUTE_KEYS = [PUBLIC_ROUTE_KEY, PUBLIC_PAGE_ROUTE_KEY];
 
 export class WikiApp extends PlatformApp {
     static defaultI18nNamespace = 'wiki';
     static topBarEnabled = true;
     static bottomNavItems = WIKI_BOTTOM_NAV_ITEMS;
-    static bottomNavHideOnRoutes = [PUBLIC_ROUTE_KEY];
+    static bottomNavHideOnRoutes = PUBLIC_ROUTE_KEYS;
     static platformAssistant = {
         branchId: 'wiki',
         serviceId: 'wiki',
@@ -107,6 +115,9 @@ export class WikiApp extends PlatformApp {
         wikiMemberAddOp,
         wikiMemberRemoveOp,
         wikiPublicLinkOp,
+        wikiPublicPageOp,
+        wikiPublicTreeOp,
+        wikiPublicSitePageOp,
         wikiRevisionsOp,
         wikiRevisionReadOp,
         wikiRevisionRestoreOp,
@@ -117,6 +128,10 @@ export class WikiApp extends PlatformApp {
         wikiBacklinksOp,
         platformFileCreateOp,
     ];
+
+    static properties = {
+        _treeCollapsed: { state: true },
+    };
 
     static styles = [
         PlatformApp.styles,
@@ -155,9 +170,11 @@ export class WikiApp extends PlatformApp {
                 min-width: 0;
             }
 
+            /* Прокрутку внутри сайта держит колонка чтения, чтобы навигация и
+               путь оставались на месте. */
             .public {
                 height: var(--app-vh, 100vh);
-                overflow: auto;
+                overflow: hidden;
             }
 
             /* На мобиле дерево уезжает в bottom-sheet: две колонки на узком
@@ -180,8 +197,10 @@ export class WikiApp extends PlatformApp {
         super();
         this._search = this.useOp('wiki/search');
         this._pages = this.useResource('wiki/pages');
+        this._treeCollapsed = readShellSidebarCollapsed();
         this._onPaletteSelect = this._onPaletteSelect.bind(this);
         this._paletteProvider = this._paletteProvider.bind(this);
+        this._onSidebarCollapseChange = this._onSidebarCollapseChange.bind(this);
     }
 
     getBaseUrl() { return '/wiki'; }
@@ -193,7 +212,7 @@ export class WikiApp extends PlatformApp {
     }
 
     shouldRenderPlatformAssistant(routeKey) {
-        return routeKey !== PUBLIC_ROUTE_KEY;
+        return !PUBLIC_ROUTE_KEYS.includes(routeKey);
     }
 
     getPlatformAssistantContextVariables(routeKey, params) {
@@ -229,11 +248,25 @@ export class WikiApp extends PlatformApp {
         this.navigate('wiki_page', { pageId: event.detail.id });
     }
 
+    /** Свёрнутое дерево отдаёт свою ширину странице: split сжимается до полосы с логотипом. */
+    _onSidebarCollapseChange(event) {
+        const collapsed = event.detail.collapsed;
+        if (typeof collapsed !== 'boolean') {
+            throw new Error('wiki-app: collapse-change ожидает detail.collapsed boolean');
+        }
+        this._treeCollapsed = collapsed;
+    }
+
     renderRoute(routeKey, params) {
-        if (routeKey === PUBLIC_ROUTE_KEY) {
+        if (PUBLIC_ROUTE_KEYS.includes(routeKey)) {
+            const publicPageId = typeof params.pageId === 'string' ? params.pageId : '';
             return html`
                 <div class="public">
-                    <wiki-public-preview-page token=${params.token}></wiki-public-preview-page>
+                    <wiki-public-preview-page
+                        token=${params.token}
+                        page-id=${publicPageId}
+                    ></wiki-public-preview-page>
+                    <wiki-public-tree-sheet></wiki-public-tree-sheet>
                 </div>
             `;
         }
@@ -245,10 +278,12 @@ export class WikiApp extends PlatformApp {
                 storage-scope="wiki"
                 min-size="200"
                 max-size="480"
+                ?collapsed=${this._treeCollapsed}
             >
                 <div class="sidebar" slot="side">
                     <wiki-sidebar
                         active-page-id=${pageId}
+                        @collapse-change=${this._onSidebarCollapseChange}
                     ></wiki-sidebar>
                 </div>
                 <div class="main">

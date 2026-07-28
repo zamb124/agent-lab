@@ -63,6 +63,7 @@ class WikiPageRow(Base):
     is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_template: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_full_width: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     link_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     link_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
     link_permission: Mapped[str] = mapped_column(String(16), nullable=False, default="view")

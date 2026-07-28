@@ -151,6 +151,43 @@ describe('platform-resizable-split', () => {
         expect(window.localStorage.getItem(STORAGE_KEY)).to.equal(null);
     });
 
+    it('свёрнутое состояние сжимает панель до collapsed-size', async () => {
+        const el = await mountSplit({ minSize: 200 });
+        el.size = 300;
+        el.collapsedSize = 72;
+        el.collapsed = true;
+        await elementUpdated(el);
+
+        expect(Math.round(sideWidth(el))).to.equal(72);
+    });
+
+    it('разворачивание возвращает прежнюю ширину', async () => {
+        const el = await mountSplit();
+        el.size = 320;
+        el.collapsed = true;
+        await elementUpdated(el);
+
+        el.collapsed = false;
+        await elementUpdated(el);
+
+        expect(el.size).to.equal(320);
+        expect(Math.round(sideWidth(el))).to.equal(320);
+    });
+
+    it('в свёрнутом виде границу не перетащить', async () => {
+        const el = await mountSplit();
+        el.size = 300;
+        el.collapsed = true;
+        await elementUpdated(el);
+
+        handleOf(el).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 72 }));
+        window.dispatchEvent(new PointerEvent('pointermove', { clientX: 400 }));
+        handleOf(el).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+        await elementUpdated(el);
+
+        expect(el.size).to.equal(300);
+    });
+
     it('значения доступности отражают текущую ширину', async () => {
         const el = await mountSplit({ minSize: 200, maxSize: 400 });
         el.size = 240;

@@ -665,7 +665,8 @@
         }
     },
     "tree": {
-        "row_menu": "Действия"
+        "row_menu": "Действия",
+        "expand": "Развернуть или свернуть"
     },
     "editor": {
         "load_failed": "Не удалось загрузить редактор",
@@ -681,8 +682,14 @@
             "task_list": "Список задач",
             "toggle": "Сворачиваемый блок",
             "callout": "Выноска",
+            "callout_info": "Выноска — информация",
+            "callout_success": "Выноска — успех",
+            "callout_warning": "Выноска — предупреждение",
+            "callout_danger": "Выноска — опасность",
             "blockquote": "Цитата",
             "code_block": "Блок кода",
+            "image": "Картинка",
+            "platform_file": "Файл",
             "table": "Таблица",
             "horizontal_rule": "Разделитель",
             "math_block": "Формула",
@@ -693,7 +700,20 @@
             "em": "Курсив",
             "strike": "Зачёркнутый",
             "code": "Код",
-            "highlight": "Выделение"
+            "highlight": "Выделение",
+            "link": "Ссылка"
+        },
+        "link": {
+            "href": "Адрес ссылки",
+            "apply": "Применить",
+            "remove": "Убрать"
+        },
+        "highlight": {
+            "yellow": "Жёлтый",
+            "green": "Зелёный",
+            "blue": "Синий",
+            "pink": "Розовый",
+            "orange": "Оранжевый"
         },
         "slash": {
             "title": "Блоки",

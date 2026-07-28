@@ -338,7 +338,7 @@
           "required": false
         },
         "colwidth": {
-          "kind": "int",
+          "kind": "int_list",
           "default": null,
           "required": false
         },
@@ -372,7 +372,7 @@
           "required": false
         },
         "colwidth": {
-          "kind": "int",
+          "kind": "int_list",
           "default": null,
           "required": false
         },

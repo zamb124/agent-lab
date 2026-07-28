@@ -5,6 +5,9 @@
  * переживает перезагрузку. Границу можно двигать и с клавиатуры — иначе
  * панель недоступна тем, кто не пользуется мышью.
  *
+ * `collapsed` сжимает боковую панель до `collapsed-size` и убирает ручку,
+ * не затирая настроенную ширину: при развороте возвращается прежний размер.
+ *
  * @example
  * <platform-resizable-split storage-key="tree" min-size="220" max-size="480">
  *     <nav slot="side">...</nav>
@@ -31,6 +34,8 @@ export class PlatformResizableSplit extends PlatformElement {
         storageKey: { type: String, attribute: 'storage-key' },
         storageScope: { type: String, attribute: 'storage-scope' },
         disabled: { type: Boolean, reflect: true },
+        collapsed: { type: Boolean, reflect: true },
+        collapsedSize: { type: Number, attribute: 'collapsed-size' },
     };
 
     static styles = [
@@ -91,7 +96,8 @@ export class PlatformResizableSplit extends PlatformElement {
                 outline-offset: 1px;
             }
 
-            :host([disabled]) .handle {
+            :host([disabled]) .handle,
+            :host([collapsed]) .handle {
                 display: none;
             }
         `,
@@ -106,6 +112,8 @@ export class PlatformResizableSplit extends PlatformElement {
         this.storageKey = '';
         this.storageScope = 'core';
         this.disabled = false;
+        this.collapsed = false;
+        this.collapsedSize = 72;
         this._dragging = false;
         this._onPointerMove = this._onPointerMove.bind(this);
         this._onPointerUp = this._onPointerUp.bind(this);
@@ -164,8 +172,12 @@ export class PlatformResizableSplit extends PlatformElement {
         this.emit('split-resize', { size: next });
     }
 
+    _sideWidth() {
+        return this.collapsed ? this.collapsedSize : this.size;
+    }
+
     _onPointerDown(event) {
-        if (this.disabled) {
+        if (this.disabled || this.collapsed) {
             return;
         }
         event.preventDefault();
@@ -201,6 +213,9 @@ export class PlatformResizableSplit extends PlatformElement {
     }
 
     _onHandleKeyDown(event) {
+        if (this.collapsed) {
+            return;
+        }
         const towardsMain = this.side === 'right' ? 'ArrowLeft' : 'ArrowRight';
         const towardsSide = this.side === 'right' ? 'ArrowRight' : 'ArrowLeft';
         if (event.key === towardsMain) {
@@ -218,7 +233,7 @@ export class PlatformResizableSplit extends PlatformElement {
 
     render() {
         return html`
-            <div class="side" style=${`width:${this.size}px`} part="side">
+            <div class="side" style=${`width:${this._sideWidth()}px`} part="side">
                 <slot name="side"></slot>
             </div>
             <div

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from apps.wiki.content.markdown_html import html_fragment_to_blocks
 from apps.wiki.content.markdown_notices import WikiMarkdownNoticeKind
 from apps.wiki.content.markdown_parser import (
     WikiMarkdownError,
@@ -122,6 +123,30 @@ def test_task_list_reads_checked_state():
     assert [item.attrs["checked"] for item in task_list.content] == [False, True]
 
 
+def test_fenced_code_keeps_language():
+    document = markdown_to_document('```json\n{"a": 1}\n```')
+    block = document.content[0]
+    assert block.type == "code_block"
+    assert block.attrs["language"] == "json"
+    assert block.content[0].text == '{"a": 1}'
+
+
+def test_fenced_code_normalizes_js_alias():
+    document = markdown_to_document("```js\nconst x = 1;\n```")
+    assert document.content[0].attrs["language"] == "javascript"
+
+
+def test_html_pre_code_reads_language_class():
+    blocks, notices = html_fragment_to_blocks(
+        '<pre><code class="language-json">{"ok": true}</code></pre>'
+    )
+    assert notices == []
+    assert len(blocks) == 1
+    assert blocks[0].type == "code_block"
+    assert blocks[0].attrs["language"] == "json"
+    assert blocks[0].content[0].text == '{"ok": true}'
+
+
 def test_mentions_become_typed_nodes():
     document = markdown_to_document("Привет @[Иван](user:u-1) и @[Фирма](entity:e-9)")
     mentions = [node for node in document.content[0].content if node.type == "platform_mention"]
@@ -162,6 +187,43 @@ def test_yjs_float_attributes_are_normalized_to_int():
     normalized = normalize_document(raw)
     assert normalized.content[0].attrs["level"] == 2
     assert document_to_markdown(raw) == "## Заголовок"
+
+
+def test_table_colwidth_list_is_accepted_and_normalized():
+    # Resize колонок пишет colwidth как number[]; Yjs может отдать float в элементах.
+    paragraph = ProseMirrorNode(
+        type="paragraph", content=[ProseMirrorNode(type="text", text="ячейка")]
+    )
+    raw = ProseMirrorNode(
+        type="doc",
+        content=[
+            ProseMirrorNode(
+                type="table",
+                content=[
+                    ProseMirrorNode(
+                        type="table_row",
+                        content=[
+                            ProseMirrorNode(
+                                type="table_header",
+                                attrs={"colwidth": [404.0]},
+                                content=[paragraph],
+                            ),
+                            ProseMirrorNode(
+                                type="table_cell",
+                                attrs={"colwidth": [220]},
+                                content=[paragraph],
+                            ),
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+    normalized = normalize_document(raw)
+    header = normalized.content[0].content[0].content[0]
+    cell = normalized.content[0].content[0].content[1]
+    assert header.attrs["colwidth"] == [404]
+    assert cell.attrs["colwidth"] == [220]
 
 
 def test_mark_order_is_deterministic():

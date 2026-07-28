@@ -81,6 +81,17 @@ describe('platform-tree', () => {
         expect(rowById(el, 'root').querySelector('.twisty').hasAttribute('hidden')).to.be.false;
     });
 
+    it('у узла с детьми шеврон видим и крупнее листа', async () => {
+        const el = await mountTree();
+        const twisty = rowById(el, 'root').querySelector('[data-twisty="root"]');
+        const icon = twisty.querySelector('platform-icon');
+
+        expect(twisty.hasAttribute('hidden')).to.be.false;
+        expect(getComputedStyle(twisty).visibility).to.equal('visible');
+        expect(icon.getAttribute('size')).to.equal('16');
+        expect(twisty.getAttribute('aria-label')).to.be.a('string').and.not.empty;
+    });
+
     it('раскрытие эмитит tree-toggle', async () => {
         const el = await mountTree();
 

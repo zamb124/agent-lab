@@ -17,12 +17,19 @@ import '@platform/lib/components/platform-icon.js';
  * Динамический хвост (имя заметки, имя
  * документа и т.д.) — через prop `currentLabel`.
  *
+ * Вложенность внутри одного маршрута (дерево страниц wiki, папки документов)
+ * не выражается маршрутами, поэтому её задаёт prop `trail` — массив
+ * `{ label, routeKey, params }`. Он вставляется между цепочкой маршрутов и
+ * текущей подписью, каждая крошка ведёт на свой узел.
+ *
  * Клик по неактивной крошке диспатчит `ROUTER_NAVIGATE_REQUESTED` с params
  * текущего маршрута, если совпадает routeKey, иначе с `{}`.
  */
 export class PlatformBreadcrumbs extends PlatformElement {
     static properties = {
         currentLabel: { type: String, attribute: 'current-label' },
+        /** `{ label, routeKey, params }[]` — путь внутри текущего маршрута. */
+        trail: { attribute: false },
         compact: { type: Boolean, reflect: true },
         _separator: { type: String },
     };
@@ -103,6 +110,7 @@ export class PlatformBreadcrumbs extends PlatformElement {
     constructor() {
         super();
         this.currentLabel = '';
+        this.trail = [];
         this._separator = '/';
         this._routerSel = this.select((s) => ({
             routeKey: s.router.routeKey,
@@ -134,6 +142,25 @@ export class PlatformBreadcrumbs extends PlatformElement {
         return chain.reverse();
     }
 
+    /** @returns {{ label: string, routeKey: string, params: object }[]} */
+    _trailSegments() {
+        if (!Array.isArray(this.trail)) {
+            throw new Error('platform-breadcrumbs: trail must be an array');
+        }
+        return this.trail.map((item) => {
+            if (!item || typeof item.label !== 'string' || item.label.length === 0) {
+                throw new Error('platform-breadcrumbs: trail item requires non-empty label');
+            }
+            if (typeof item.routeKey !== 'string' || item.routeKey.length === 0) {
+                throw new Error('platform-breadcrumbs: trail item requires routeKey');
+            }
+            if (item.params === null || typeof item.params !== 'object') {
+                throw new Error('platform-breadcrumbs: trail item requires params object');
+            }
+            return { label: item.label, routeKey: item.routeKey, params: item.params };
+        });
+    }
+
     _resolveLabel(route) {
         if (typeof route.titleKey === 'string' && route.titleKey.length > 0) {
             return this.t(route.titleKey);
@@ -152,39 +179,51 @@ export class PlatformBreadcrumbs extends PlatformElement {
         const router = this._routerSel.value;
         const chain = this._buildChain(router.routes, router.routeKey);
         const trimmedCurrent = typeof this.currentLabel === 'string' ? this.currentLabel.trim() : '';
+        const trail = this._trailSegments();
         // Цепочка из одного узла дублирует заголовок страницы и не несёт навигации,
         // поэтому показываем крошки только когда есть хотя бы один родитель,
-        // либо когда страница даёт динамический хвост через current-label.
+        // либо когда страница даёт динамический хвост через current-label или trail.
         if (chain.length === 0) return html``;
-        if (chain.length === 1 && trimmedCurrent.length === 0) return html``;
+        if (chain.length === 1 && trimmedCurrent.length === 0 && trail.length === 0) return html``;
+
+        const routeSegments = chain.map((route) => ({
+            label: this._resolveLabel(route),
+            routeKey: route.key,
+            params: route.key === router.routeKey ? router.params : {},
+        }));
+        const segments = trimmedCurrent.length > 0
+            // Подпись текущей страницы занимает место последнего маршрута,
+            // а путь внутри маршрута встаёт перед ней.
+            ? [
+                ...routeSegments.slice(0, -1),
+                ...trail,
+                { ...routeSegments[routeSegments.length - 1], label: trimmedCurrent },
+            ]
+            : [...routeSegments, ...trail];
 
         return html`
             <nav class="breadcrumbs" aria-label="Breadcrumb">
-                ${chain.map((route, index) => {
-                    const isLast = index === chain.length - 1;
-                    const label = isLast && trimmedCurrent.length > 0
-                        ? trimmedCurrent
-                        : this._resolveLabel(route);
-                    const params = route.key === router.routeKey ? router.params : {};
+                ${segments.map((segment, index) => {
+                    const isLast = index === segments.length - 1;
                     return html`
                         ${isLast
                             ? html`
                                 <span class="breadcrumb-item breadcrumb-current" aria-current="page">
-                                    ${label}
+                                    ${segment.label}
                                 </span>
                             `
                             : html`
                                 <button
                                     type="button"
                                     class="breadcrumb-item"
-                                    @click=${() => this._onClick(route.key, params)}
+                                    @click=${() => this._onClick(segment.routeKey, segment.params)}
                                 >
-                                    ${label}
+                                    ${segment.label}
                                 </button>
                             `}
-                        ${index < chain.length - 1
-                            ? html`<span class="breadcrumb-separator" aria-hidden="true">${this._separator}</span>`
-                            : html``}
+                        ${isLast
+                            ? html``
+                            : html`<span class="breadcrumb-separator" aria-hidden="true">${this._separator}</span>`}
                     `;
                 })}
             </nav>

@@ -139,14 +139,26 @@ export class PlatformTree extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                width: 18px;
-                height: 18px;
+                width: 22px;
+                height: 22px;
                 border: none;
                 border-radius: var(--radius-xs, 4px);
                 background: transparent;
-                color: var(--text-tertiary, #9aa0a6);
+                color: var(--text-secondary, #5f6368);
                 cursor: pointer;
-                transition: transform 120ms ease;
+                transition:
+                    transform 120ms ease,
+                    background 120ms ease,
+                    color 120ms ease;
+            }
+
+            .twisty:hover {
+                background: var(--glass-tint-subtle, rgba(0, 0, 0, 0.06));
+                color: var(--text-primary, #202124);
+            }
+
+            .row.is-selected .twisty {
+                color: var(--text-primary, #202124);
             }
 
             .twisty[hidden] {
@@ -586,10 +598,12 @@ export class PlatformTree extends PlatformElement {
                     tabindex="-1"
                     ?hidden=${!hasChildren}
                     aria-hidden=${hasChildren ? 'false' : 'true'}
+                    aria-label=${hasChildren ? this.t('tree.expand') : nothing}
+                    title=${hasChildren ? this.t('tree.expand') : nothing}
                     data-twisty=${node.id}
                     @click=${(event) => this._toggle(node, event)}
                 >
-                    <platform-icon name="chevron-right" size="12"></platform-icon>
+                    <platform-icon name="chevron-right" size="16"></platform-icon>
                 </button>
                 <span class="icon">
                     ${node.emoji

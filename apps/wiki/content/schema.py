@@ -24,12 +24,13 @@ from core.types import JsonObject, JsonValue
 
 
 class WikiAttrKind(StrEnum):
-    """Тип значения атрибута. Только скаляры — см. `ProseMirrorAttrValue`."""
+    """Тип значения атрибута — см. `ProseMirrorAttrValue`."""
 
     STRING = "string"
     INT = "int"
     FLOAT = "float"
     BOOL = "bool"
+    INT_LIST = "int_list"
 
 
 class WikiAttrSpec(WikiBaseModel):
@@ -192,7 +193,7 @@ WIKI_NODES: Final[dict[str, WikiNodeSpec]] = {
         attrs={
             "colspan": WikiAttrSpec(kind=WikiAttrKind.INT, default=1),
             "rowspan": WikiAttrSpec(kind=WikiAttrKind.INT, default=1),
-            "colwidth": WikiAttrSpec(kind=WikiAttrKind.INT, default=None),
+            "colwidth": WikiAttrSpec(kind=WikiAttrKind.INT_LIST, default=None),
             "align": WikiAttrSpec(
                 kind=WikiAttrKind.STRING, default=WikiTableAlign.NONE.value
             ),
@@ -204,7 +205,7 @@ WIKI_NODES: Final[dict[str, WikiNodeSpec]] = {
         attrs={
             "colspan": WikiAttrSpec(kind=WikiAttrKind.INT, default=1),
             "rowspan": WikiAttrSpec(kind=WikiAttrKind.INT, default=1),
-            "colwidth": WikiAttrSpec(kind=WikiAttrKind.INT, default=None),
+            "colwidth": WikiAttrSpec(kind=WikiAttrKind.INT_LIST, default=None),
             "align": WikiAttrSpec(
                 kind=WikiAttrKind.STRING, default=WikiTableAlign.NONE.value
             ),
@@ -309,17 +310,17 @@ def _normalize_attr_value(
         return spec.default
 
     if spec.kind == WikiAttrKind.INT:
-        if isinstance(raw, bool):
-            raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидалось целое, получен bool")
-        if isinstance(raw, float):
-            if not raw.is_integer():
-                raise WikiSchemaError(
-                    f"{node_or_mark}.{attr_name}: ожидалось целое, получено {raw}"
-                )
-            return int(raw)
-        if isinstance(raw, int):
-            return raw
-        raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидалось целое, получено {raw!r}")
+        return _normalize_int_attr(node_or_mark, attr_name, raw)
+
+    if spec.kind == WikiAttrKind.INT_LIST:
+        if not isinstance(raw, list):
+            raise WikiSchemaError(
+                f"{node_or_mark}.{attr_name}: ожидался список целых, получено {raw!r}"
+            )
+        return [
+            _normalize_int_attr(node_or_mark, f"{attr_name}[{index}]", item)
+            for index, item in enumerate(raw)
+        ]
 
     if spec.kind == WikiAttrKind.FLOAT:
         if isinstance(raw, bool) or not isinstance(raw, (int, float)):
@@ -334,6 +335,20 @@ def _normalize_attr_value(
     if not isinstance(raw, str):
         raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидалась строка")
     return raw
+
+
+def _normalize_int_attr(
+    node_or_mark: str, attr_name: str, raw: ProseMirrorAttrValue
+) -> int:
+    if isinstance(raw, bool):
+        raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидалось целое, получен bool")
+    if isinstance(raw, float):
+        if not raw.is_integer():
+            raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидалось целое, получено {raw}")
+        return int(raw)
+    if isinstance(raw, int):
+        return raw
+    raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидалось целое, получено {raw!r}")
 
 
 def _normalize_mark(mark: ProseMirrorMark) -> ProseMirrorMark:

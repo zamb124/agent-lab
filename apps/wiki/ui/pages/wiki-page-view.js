@@ -4,6 +4,13 @@
  * Правки уходят на сервер с задержкой: редактор шлёт событие на каждое
  * нажатие, а сохранять на каждый символ значит и грузить сеть, и плодить
  * версии. Индикатор состояния показывает, что происходит.
+ *
+ * Шапка с путём и действиями идёт по всей ширине рабочей области и липнет к
+ * верху при прокрутке; колонка текста при этом остаётся по центру.
+ *
+ * Боковая панель (оглавление, ссылки, комментарии, история) по умолчанию
+ * закрыта: ширина колонки текста важнее постоянно висящих списков. Открытое
+ * состояние и выбранная вкладка запоминаются, как ширина дерева.
  */
 
 import { html, css, nothing } from 'lit';
@@ -11,6 +18,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
+import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-emoji-picker.js';
@@ -18,9 +26,15 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-menu.js';
 import '@platform/lib/components/platform-popover.js';
 import '@platform/lib/components/platform-rich-editor.js';
+import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
+import { WIKI_PANEL_TABS } from '../components/wiki-page-panel.js';
+import '../components/wiki-page-panel.js';
 
 const SAVE_DEBOUNCE_MS = 900;
+
+const PANEL_STORAGE_KEY = platformStorageKey('wiki', 'page.panel');
+const PANEL_DEFAULT_TAB = 'outline';
 
 /** Состояние строки сохранения. */
 const SAVE_IDLE = 'idle';
@@ -38,7 +52,8 @@ export class WikiPageView extends PlatformPage {
         _outline: { state: true },
         _iconAnchor: { state: true },
         _menuAnchor: { state: true },
-        _commentDraft: { state: true },
+        _panelOpen: { state: true },
+        _panelTab: { state: true },
     };
 
     static styles = [
@@ -51,13 +66,13 @@ export class WikiPageView extends PlatformPage {
             }
 
             .layout {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) var(--wiki-outline-width);
+                display: flex;
                 height: 100%;
                 min-height: 0;
             }
 
             .scroll {
+                flex: 1;
                 min-width: 0;
                 overflow-y: auto;
             }
@@ -77,19 +92,34 @@ export class WikiPageView extends PlatformPage {
                 gap: var(--space-2);
             }
 
-            /* По бокам поля шире на --wiki-block-gutter: в левом живут кнопки
-               блока редактора, правое держит колонку текста по центру. */
+            /* Боковое поле равно --wiki-block-gutter: в левом живут кнопки блока
+               редактора, правое зеркалит его, чтобы текст стоял по центру. */
             .paper {
                 max-width: var(--wiki-page-max-width);
                 margin: 0 auto;
-                padding: var(--space-6) calc(var(--space-6) + var(--wiki-block-gutter)) var(--space-10);
+                padding: var(--space-4) var(--wiki-block-gutter) var(--space-10);
             }
 
-            .head-actions {
+            /* Полная ширина — свойство страницы: колонка занимает всю рабочую
+               область, боковые поля остаются равными полосе кнопок блока. */
+            .paper[data-full-width] {
+                max-width: none;
+            }
+
+            /* Шапка занимает всю ширину рабочей области, а не колонку текста:
+               путь читается от левого края, действия прижаты к правому. При
+               прокрутке остаётся на месте — иначе с длинной страницы не выйти. */
+            .topbar {
+                position: sticky;
+                top: 0;
+                z-index: 3;
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                margin-bottom: var(--space-3);
+                padding: var(--space-2) var(--space-4);
+                background: var(--glass-tint-subtle);
+                backdrop-filter: blur(var(--glass-blur-medium));
+                -webkit-backdrop-filter: blur(var(--glass-blur-medium));
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
             }
@@ -117,21 +147,52 @@ export class WikiPageView extends PlatformPage {
                 flex: 1;
             }
 
-            .outline-btn {
-                display: none;
+            .edited {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                padding: 3px var(--space-2);
+                border: none;
+                border-radius: var(--radius-sm);
+                background: transparent;
+                color: var(--text-tertiary);
+                font-family: inherit;
+                font-size: var(--text-xs);
+                white-space: nowrap;
+                cursor: pointer;
+            }
+
+            .edited:hover {
+                background: var(--wiki-surface-muted);
+                color: var(--text-primary);
+            }
+
+            @media (max-width: 767px) {
+                .edited {
+                    display: none;
+                }
+            }
+
+            .title-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                margin-bottom: var(--space-2);
+                min-width: 0;
             }
 
             .icon-btn {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                width: 64px;
-                height: 64px;
-                margin-bottom: var(--space-2);
+                flex-shrink: 0;
+                width: 52px;
+                height: 52px;
+                margin: 0;
                 border: none;
                 border-radius: var(--radius-md);
                 background: transparent;
-                font-size: 52px;
+                font-size: 40px;
                 line-height: 1;
                 cursor: pointer;
             }
@@ -140,20 +201,24 @@ export class WikiPageView extends PlatformPage {
                 background: var(--wiki-surface-muted);
             }
 
-            .title-input {
-                width: 100%;
+            /* Специфичность выше :host input { font: inherit } из baseStyles —
+               иначе shorthand сбрасывает размер и вес до body. */
+            :host input.title-input {
+                flex: 1;
+                min-width: 0;
+                width: auto;
                 border: none;
                 background: transparent;
                 color: var(--text-primary);
                 font-family: inherit;
-                font-size: 40px;
-                font-weight: var(--font-bold);
-                line-height: 1.15;
-                letter-spacing: -0.02em;
+                font-size: 48px;
+                font-weight: 700;
+                line-height: 1.12;
+                letter-spacing: -0.03em;
                 outline: none;
             }
 
-            .title-input::placeholder {
+            :host input.title-input::placeholder {
                 color: var(--text-disabled);
             }
 
@@ -167,98 +232,9 @@ export class WikiPageView extends PlatformPage {
                 color: var(--error);
             }
 
-            .aside {
-                min-width: 0;
-                padding: var(--space-6) var(--space-4);
+            wiki-page-panel {
+                flex: 0 0 var(--wiki-outline-width);
                 border-left: 1px solid var(--glass-border-subtle);
-                overflow-y: auto;
-            }
-
-            .aside-title {
-                margin-bottom: var(--space-2);
-                color: var(--text-tertiary);
-                font-size: var(--text-xs);
-                font-weight: var(--font-semibold);
-                letter-spacing: var(--tracking-wide);
-                text-transform: uppercase;
-            }
-
-            .aside-section + .aside-section {
-                margin-top: var(--space-6);
-            }
-
-            .outline-item {
-                display: block;
-                width: 100%;
-                padding: 3px 0;
-                border: none;
-                background: transparent;
-                color: var(--text-secondary);
-                font-family: inherit;
-                font-size: var(--text-sm);
-                text-align: left;
-                cursor: pointer;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-
-            .outline-item:hover {
-                color: var(--wiki-accent);
-            }
-
-            .backlink {
-                display: block;
-                padding: 4px 0;
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                text-decoration: none;
-                cursor: pointer;
-            }
-
-            .backlink:hover {
-                color: var(--wiki-accent);
-            }
-
-            .comment {
-                padding: var(--space-2) 0;
-                border-bottom: 1px solid var(--glass-border-subtle);
-            }
-
-            .comment-body {
-                margin-top: 4px;
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                overflow-wrap: anywhere;
-            }
-
-            .comment-resolved {
-                color: var(--success);
-                font-size: var(--text-xs);
-            }
-
-            .comment-form {
-                margin-top: var(--space-3);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-            }
-
-            .comment-input {
-                min-height: 64px;
-                padding: var(--space-2);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-sm);
-                background: var(--wiki-surface-muted);
-                color: var(--text-primary);
-                font-family: inherit;
-                font-size: var(--text-sm);
-                resize: vertical;
-            }
-
-            .muted {
-                color: var(--text-tertiary);
-                font-size: var(--text-sm);
             }
 
             .state {
@@ -269,27 +245,27 @@ export class WikiPageView extends PlatformPage {
                 color: var(--text-tertiary);
             }
 
+            /* Узкий экран: панель не отнимает ширину у текста, вкладки уходят
+               в bottom-sheet по кнопке в шапке. */
             @media (max-width: 1100px) {
-                .layout {
-                    grid-template-columns: minmax(0, 1fr);
-                }
-                .aside {
+                wiki-page-panel {
                     display: none;
                 }
             }
 
-            @media (max-width: 1100px) {
-                /* Правая колонка скрыта — оглавление открывается снизу. */
-                .outline-btn {
-                    display: inline-flex;
-                }
-            }
-
             @media (max-width: 767px) {
-                .paper {
-                    padding: var(--space-4) var(--space-4) var(--space-10);
+                .topbar {
+                    padding: var(--space-2);
                 }
-                .title-input {
+                .paper {
+                    padding: var(--space-3) var(--space-4) var(--space-10);
+                }
+                :host input.title-input {
+                    font-size: 32px;
+                }
+                .icon-btn {
+                    width: 40px;
+                    height: 40px;
                     font-size: 28px;
                 }
             }
@@ -304,7 +280,9 @@ export class WikiPageView extends PlatformPage {
         this._outline = [];
         this._iconAnchor = null;
         this._menuAnchor = null;
-        this._commentDraft = '';
+        this._panelOpen = false;
+        this._panelTab = PANEL_DEFAULT_TAB;
+        this._restorePanelState();
         this._saveTimer = null;
         this._pendingContent = null;
         this._pendingTitle = null;
@@ -313,17 +291,13 @@ export class WikiPageView extends PlatformPage {
         this._save = this.useOp('wiki/page_save');
         this._properties = this.useOp('wiki/page_properties');
         this._deletePage = this.useOp('wiki/page_delete');
-        this._backlinks = this.useOp('wiki/backlinks');
-        this._comments = this.useOp('wiki/comments');
-        this._commentCreate = this.useOp('wiki/comment_create');
-        this._commentResolve = this.useOp('wiki/comment_resolve');
         this._search = this.useOp('wiki/search');
         this._markdownImport = this.useOp('wiki/page_markdown_import');
         this._markdownParse = this.useOp('wiki/markdown_parse');
         this._pages = this.useResource('wiki/pages');
         this._locale = this.select((state) => state.i18n.locale);
         this._mentionProvider = this._mentionProvider.bind(this);
-        this._openOutlineSheet = this._openOutlineSheet.bind(this);
+        this._openPanelSheet = this._openPanelSheet.bind(this);
         this._parseMarkdown = this._parseMarkdown.bind(this);
         this._onMarkdownFileDrop = this._onMarkdownFileDrop.bind(this);
         this._onMarkdownFileSelected = this._onMarkdownFileSelected.bind(this);
@@ -358,11 +332,68 @@ export class WikiPageView extends PlatformPage {
             return;
         }
         this._page = page;
-        if (!page || typeof page.wiki_page_id !== 'string') {
+    }
+
+    // --- боковая панель ---
+
+    /** Раскладка панели переживает переход между страницами и перезагрузку. */
+    _restorePanelState() {
+        const stored = window.localStorage.getItem(PANEL_STORAGE_KEY);
+        if (stored === null) {
             return;
         }
-        void this._backlinks.run({ target_id: pageId });
-        void this._comments.run({ wiki_page_id: pageId });
+        const parsed = JSON.parse(stored);
+        if (typeof parsed.open !== 'boolean' || !WIKI_PANEL_TABS.includes(parsed.tab)) {
+            throw new Error(`wiki-page-view: битое состояние панели ${stored}`);
+        }
+        this._panelOpen = parsed.open;
+        this._panelTab = parsed.tab;
+    }
+
+    _persistPanelState() {
+        window.localStorage.setItem(
+            PANEL_STORAGE_KEY,
+            JSON.stringify({ open: this._panelOpen, tab: this._panelTab }),
+        );
+    }
+
+    /** Кнопка в шапке: та же вкладка закрывает панель, другая переключает. */
+    _togglePanel(tab) {
+        if (window.matchMedia('(max-width: 1100px)').matches) {
+            this._panelTab = tab;
+            this._persistPanelState();
+            this._openPanelSheet();
+            return;
+        }
+        this._panelOpen = !(this._panelOpen && this._panelTab === tab);
+        this._panelTab = tab;
+        this._persistPanelState();
+        this._refreshOutline();
+    }
+
+    _closePanel() {
+        this._panelOpen = false;
+        this._persistPanelState();
+    }
+
+    _onPanelTabChange(event) {
+        this._panelTab = event.detail.tab;
+        this._persistPanelState();
+    }
+
+    _openPanelSheet() {
+        this._refreshOutline();
+        // Прокрутку делает страница: только у неё есть ссылка на редактор.
+        this.openBottomSheet('wiki.outline', {
+            pageId: this.pageId,
+            tab: this._panelTab,
+            outline: this._outline,
+            onPick: (pos) => this._scrollToHeading(pos),
+            onTabChange: (tab) => {
+                this._panelTab = tab;
+                this._persistPanelState();
+            },
+        });
     }
 
     // --- сохранение ---
@@ -415,7 +446,21 @@ export class WikiPageView extends PlatformPage {
     }
 
     _onEditorChange(event) {
-        this._pendingContent = event.detail.content;
+        // Редактор в light DOM: native `change` с select языка / file input
+        // тоже всплывает сюда без detail — их игнорируем.
+        const detail = event.detail;
+        if (detail === null || typeof detail !== 'object' || !('content' in detail)) {
+            return;
+        }
+        const content = detail.content;
+        if (content === null || typeof content !== 'object') {
+            throw new Error('wiki-page-view: editor change without document content');
+        }
+        this._pendingContent = content;
+        // Страница перерисовывается от индикатора сохранения и оглавления и при
+        // этом заново связывает `.value` редактора. Без синхронизации туда
+        // уезжал бы документ до правки, и набранный символ терялся.
+        this._page = { ...this._page, content };
         this._scheduleSave();
         this._refreshOutline();
     }
@@ -638,23 +683,6 @@ export class WikiPageView extends PlatformPage {
         void this._importMarkdownFile(event.detail.file);
     }
 
-    // --- комментарии ---
-
-    async _sendComment() {
-        const body = this._commentDraft.trim();
-        if (body === '') {
-            return;
-        }
-        await this._commentCreate.run({ wiki_page_id: this.pageId, body_markdown: body });
-        this._commentDraft = '';
-        void this._comments.run({ wiki_page_id: this.pageId });
-    }
-
-    async _resolveComment(commentId) {
-        await this._commentResolve.run({ wiki_comment_id: commentId, resolved: true });
-        void this._comments.run({ wiki_page_id: this.pageId });
-    }
-
     render() {
         if (this._page === null) {
             return html`<div class="state">
@@ -666,23 +694,25 @@ export class WikiPageView extends PlatformPage {
 
         return html`
             <div class="layout">
-                <div class="scroll">
+                <div class="scroll" data-wiki-page-scroll>
+                    ${this._renderTopbar()}
                     ${this._page.cover_url !== ''
                         ? html`<div class="cover" style=${`background-image:url(${this._page.cover_url})`}></div>`
                         : nothing}
-                    <div class="paper">
-                        ${this._renderHeadActions()}
-                        ${this._renderIcon()}
-                        <input
-                            class="title-input"
-                            type="text"
-                            data-canon="inline-edit"
-                            data-wiki-title
-                            aria-label=${this.t('page.title_placeholder')}
-                            placeholder=${this.t('page.title_placeholder')}
-                            .value=${this._page.title}
-                            @input=${this._onTitleInput}
-                        />
+                    <div class="paper" ?data-full-width=${this._page.is_full_width}>
+                        <div class="title-row">
+                            ${this._renderIcon()}
+                            <input
+                                class="title-input"
+                                type="text"
+                                data-canon="inline-edit"
+                                data-wiki-title
+                                aria-label=${this.t('page.title_placeholder')}
+                                placeholder=${this.t('page.title_placeholder')}
+                                .value=${this._page.title}
+                                @input=${this._onTitleInput}
+                            />
+                        </div>
                         <div class="save-state" data-state=${this._saveState}>${this._saveLabel()}</div>
                         <platform-rich-editor
                             .value=${this._page.content}
@@ -701,11 +731,17 @@ export class WikiPageView extends PlatformPage {
                         />
                     </div>
                 </div>
-                <aside class="aside">
-                    ${this._renderOutline()}
-                    ${this._renderBacklinks()}
-                    ${this._renderComments()}
-                </aside>
+                ${this._panelOpen
+                    ? html`<wiki-page-panel
+                          page-id=${this.pageId}
+                          tab=${this._panelTab}
+                          .outline=${this._outline}
+                          @panel-close=${this._closePanel}
+                          @panel-tab-change=${this._onPanelTabChange}
+                          @outline-pick=${(event) => this._scrollToHeading(event.detail.pos)}
+                          @revision-restored=${() => this._loadPage()}
+                      ></wiki-page-panel>`
+                    : nothing}
             </div>
             ${this._renderIconPopover()}
             ${this._renderPageMenu()}
@@ -719,20 +755,41 @@ export class WikiPageView extends PlatformPage {
         return '';
     }
 
-    _renderHeadActions() {
+    _renderTopbar() {
         return html`
-            <div class="head-actions">
+            <div class="topbar">
                 <platform-breadcrumbs
                     current-label=${this._page.title === '' ? this.t('page.untitled') : this._page.title}
+                    .trail=${this._breadcrumbTrail()}
                 ></platform-breadcrumbs>
                 <span class="spacer"></span>
+                ${this._renderEditedBy()}
                 <span>${this._page.is_published ? this.t('page.published') : this.t('page.draft')}</span>
+                <platform-switch
+                    class="full-width-switch"
+                    size="sm"
+                    data-wiki-full-width
+                    ?checked=${this._page.is_full_width === true}
+                    label=${this.t('page.full_width')}
+                    @change=${this._onFullWidthChange}
+                ></platform-switch>
                 <button
-                    class="ghost-btn outline-btn"
+                    class="ghost-btn"
                     type="button"
-                    data-wiki-outline-sheet
-                    aria-label=${this.t('page.outline')}
-                    @click=${this._openOutlineSheet}
+                    data-wiki-panel-comments
+                    aria-label=${this.t('page.comments')}
+                    title=${this.t('page.comments')}
+                    @click=${() => this._togglePanel('comments')}
+                >
+                    <platform-icon name="chat" size="16"></platform-icon>
+                </button>
+                <button
+                    class="ghost-btn"
+                    type="button"
+                    data-wiki-panel-toggle
+                    aria-label=${this.t('panel.open')}
+                    title=${this.t('panel.open')}
+                    @click=${() => this._togglePanel('outline')}
                 >
                     <platform-icon name="list" size="16"></platform-icon>
                 </button>
@@ -747,6 +804,56 @@ export class WikiPageView extends PlatformPage {
                 </button>
             </div>
         `;
+    }
+
+    async _onFullWidthChange(event) {
+        const detail = event.detail;
+        if (detail === null || typeof detail !== 'object' || typeof detail.value !== 'boolean') {
+            throw new Error('wiki-page-view: full width switch change without boolean value');
+        }
+        const fullWidth = detail.value;
+        await this._properties.run({ wiki_page_id: this.pageId, is_full_width: fullWidth });
+        this._page = { ...this._page, is_full_width: fullWidth };
+    }
+
+    /** Автор последней правки — вход в историю версий: иначе её не видно. */
+    _renderEditedBy() {
+        return html`
+            <button
+                class="edited"
+                type="button"
+                data-wiki-edited-by
+                title=${this.t('history.title')}
+                @click=${() => this._togglePanel('history')}
+            >
+                <span>${this.t('page.edited_label')}</span>
+                <platform-user-chip user-id=${this._page.last_edited_by_user_id} size="sm"></platform-user-chip>
+                <span>${formatPlatformDateTime(new Date(this._page.updated_at), this._locale.value)}</span>
+            </button>
+        `;
+    }
+
+    /**
+     * Путь от корня пространства до текущей страницы: маршруты роутера
+     * вложенность страниц не выражают, её знает только дерево.
+     */
+    _breadcrumbTrail() {
+        const byId = new Map(this._pages.items.map((page) => [page.wiki_page_id, page]));
+        const chain = [];
+        let parentId = this._page.parent_page_id;
+        while (typeof parentId === 'string' && parentId !== '' && !chain.some((page) => page.wiki_page_id === parentId)) {
+            const parent = byId.get(parentId);
+            if (parent === undefined) {
+                break;
+            }
+            chain.unshift(parent);
+            parentId = parent.parent_page_id;
+        }
+        return chain.map((page) => ({
+            label: page.title === '' ? this.t('page.untitled') : page.title,
+            routeKey: 'wiki_page',
+            params: { pageId: page.wiki_page_id },
+        }));
     }
 
     _renderIcon() {
@@ -810,98 +917,8 @@ export class WikiPageView extends PlatformPage {
         `;
     }
 
-    _renderOutline() {
-        return html`
-            <section class="aside-section">
-                <div class="aside-title">${this.t('page.outline')}</div>
-                ${this._outline.length === 0
-                    ? html`<div class="muted">${this.t('page.outline_empty')}</div>`
-                    : this._outline.map((item) => html`
-                          <button
-                              class="outline-item"
-                              type="button"
-                              style=${`padding-left:${(item.level - 1) * 10}px`}
-                              @click=${() => this._scrollToHeading(item.pos)}
-                          >${item.text}</button>
-                      `)}
-            </section>
-        `;
-    }
-
-    _openOutlineSheet() {
-        this._refreshOutline();
-        // Прокрутку делает страница: только у неё есть ссылка на редактор.
-        this.openBottomSheet('wiki.outline', {
-            outline: this._outline,
-            onPick: (pos) => this._scrollToHeading(pos),
-        });
-    }
-
     _scrollToHeading(pos) {
         this.renderRoot.querySelector('platform-rich-editor').scrollToPosition(pos);
-    }
-
-    _renderBacklinks() {
-        const result = this._backlinks.lastResult;
-        const links = result && Array.isArray(result.items) ? result.items : [];
-        return html`
-            <section class="aside-section">
-                <div class="aside-title">${this.t('page.backlinks')}</div>
-                ${links.length === 0
-                    ? html`<div class="muted">${this.t('page.backlinks_empty')}</div>`
-                    : links.map((link) => html`
-                          <a
-                              class="backlink"
-                              data-wiki-backlink=${link.wiki_page_id}
-                              @click=${() => this.navigate('wiki_page', { pageId: link.wiki_page_id })}
-                          >${link.title === '' ? this.t('page.untitled') : link.title}</a>
-                      `)}
-            </section>
-        `;
-    }
-
-    _renderComments() {
-        const result = this._comments.lastResult;
-        const comments = result && Array.isArray(result.items) ? result.items : [];
-        return html`
-            <section class="aside-section">
-                <div class="aside-title">${this.t('page.comments')}</div>
-                ${comments.length === 0
-                    ? html`<div class="muted">${this.t('page.comments_empty')}</div>`
-                    : comments.map((comment) => html`
-                          <div class="comment" data-wiki-comment=${comment.wiki_comment_id}>
-                              <platform-user-chip
-                                  user-id=${comment.author_user_id}
-                                  size="sm"
-                              ></platform-user-chip>
-                              <div class="comment-body">${comment.body_markdown}</div>
-                              ${comment.resolved_at === null
-                                  ? html`<button
-                                        class="ghost-btn"
-                                        type="button"
-                                        @click=${() => this._resolveComment(comment.wiki_comment_id)}
-                                    >${this.t('page.comment_resolve')}</button>`
-                                  : html`<span class="comment-resolved">${this.t('page.comment_resolved')}</span>`}
-                              <div class="muted">
-                                  ${formatPlatformDateTime(new Date(comment.created_at), this._locale.value)}
-                              </div>
-                          </div>
-                      `)}
-                <div class="comment-form">
-                    <textarea
-                        class="comment-input"
-                        data-canon="composer"
-                        aria-label=${this.t('page.comment_placeholder')}
-                        placeholder=${this.t('page.comment_placeholder')}
-                        .value=${this._commentDraft}
-                        @input=${(event) => { this._commentDraft = event.target.value; }}
-                    ></textarea>
-                    <button class="ghost-btn" type="button" data-wiki-comment-send @click=${this._sendComment}>
-                        ${this.t('page.comment_send')}
-                    </button>
-                </div>
-            </section>
-        `;
     }
 }
 

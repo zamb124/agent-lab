@@ -16,6 +16,10 @@ export const baseStyles = css`
      * color: inherit на :host button запрещён: специфичность (0,1,1) перебивает
      * .btn-primary / .cta-btn (0,1,0) и в light theme даёт тёмный --text-primary на violet CTA.
      * Цвет кнопки — только variant-токены (--platform-btn-*-text) или локальный class.
+     *
+     * :host input (0,1,1) сильнее класса .title-input (0,1,0): локальный
+     * font-size/weight на input нужно писать как :host input.title-input, иначе
+     * shorthand font: inherit съест размер заголовка страницы.
      */
     :host button {
         font: inherit;

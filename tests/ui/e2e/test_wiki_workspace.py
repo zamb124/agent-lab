@@ -9,6 +9,7 @@ from tests.ui.e2e.wiki_e2e_helpers import (
     wiki_api_create_page,
     wiki_e2e_open_page,
     wiki_e2e_open_with_namespace,
+    wiki_e2e_set_locale_ru,
     wiki_e2e_title_input,
     wiki_e2e_tree_row,
 )
@@ -167,18 +168,19 @@ async def test_wiki_search_pages(
     service="wiki",
     tag="access",
     doc_slug="public-link",
-    title="Wiki: публичная ссылка на страницу",
-    title_en="Wiki: public link to a page",
-    description="Включение публичной ссылки и чтение страницы без входа в систему.",
-    description_en="Enabling a public link and reading the page without signing in.",
+    title="Wiki: публичная ссылка на раздел",
+    title_en="Wiki: public link to a section",
+    description="Включение публичной ссылки и чтение раздела с подстраницами без входа в систему.",
+    description_en="Enabling a public link and reading a section with subpages without signing in.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(90)
+@pytest.mark.timeout(120)
 async def test_wiki_public_link(
     scenario: ScenarioRecorder,
     wiki_ui: AppUI,
     ui_page_system: Page,
+    ui_page_anonymous: Page,
     auth_token_system: str,
     unique_id: str,
 ) -> None:
@@ -192,6 +194,15 @@ async def test_wiki_public_link(
         title=f"Публичная {unique_id}",
         markdown="Этот текст открыт по ссылке.",
     )
+    child_title = f"Глава {unique_id}"
+    _ = await wiki_api_create_page(
+        wiki_ui.origin,
+        auth_token_system,
+        namespace=namespace,
+        title=child_title,
+        parent_page_id=page_id,
+        markdown="Текст подстраницы раздела.",
+    )
     await wiki_e2e_open_page(page, wiki_ui.origin, page_id)
 
     await page.locator("wiki-page-view [data-wiki-page-menu]").click()
@@ -202,4 +213,26 @@ async def test_wiki_public_link(
 
     await access_modal.locator("[data-wiki-public-link]").click()
     await expect(access_modal.locator("[data-wiki-copy-link]")).to_be_visible(timeout=15_000)
+    link_url = await access_modal.locator("[data-wiki-link-url]").inner_text()
     await scenario.step("Публичная ссылка включена", page)
+
+    await wiki_e2e_set_locale_ru(ui_page_anonymous)
+    _ = await ui_page_anonymous.goto(link_url.strip(), wait_until="domcontentloaded")
+    site = ui_page_anonymous.locator("wiki-public-preview-page")
+    await expect(site).to_contain_text("Этот текст открыт по ссылке.", timeout=30_000)
+    await scenario.step(
+        "Раздел открыт без входа в систему",
+        ui_page_anonymous,
+        label_en="Section opened without signing in",
+    )
+
+    await site.locator("platform-tree").get_by_text(child_title).click()
+    await expect(site).to_contain_text("Текст подстраницы раздела.", timeout=30_000)
+    await expect(site.locator("platform-breadcrumbs")).to_contain_text(
+        f"Публичная {unique_id}", timeout=15_000
+    )
+    await scenario.step(
+        "Подстраница открыта по той же ссылке",
+        ui_page_anonymous,
+        label_en="Subpage opened via the same link",
+    )

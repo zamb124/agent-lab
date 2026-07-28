@@ -5,8 +5,10 @@
 import { expect } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { collectFactories } from '@platform/lib/events/index.js';
+import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 
 import { WikiApp } from '../../../../apps/wiki/ui/app/wiki-app.js';
+import { WIKI_PANEL_TABS } from '../../../../apps/wiki/ui/components/wiki-page-panel.js';
 import '../../../../apps/wiki/ui/components/wiki-sidebar.js';
 import '../../../../apps/wiki/ui/pages/wiki-home-page.js';
 import '../../../../apps/wiki/ui/pages/wiki-page-view.js';
@@ -40,6 +42,7 @@ describe('wiki ui', () => {
             'wiki-import-report-modal',
             'wiki-outline-sheet',
             'wiki-tree-sheet',
+            'wiki-page-panel',
         ];
         for (const tag of tags) {
             expect(customElements.get(tag), tag).to.exist;
@@ -83,6 +86,65 @@ describe('wiki ui', () => {
             'wiki/page_markdown_create',
             'wiki/markdown_parse',
         ]);
+    });
+});
+
+describe('wiki page panel state', () => {
+    const STORAGE_KEY = platformStorageKey('wiki', 'page.panel');
+
+    beforeEach(() => {
+        resetPlatformState();
+        bootstrapTestBus({ factories: WikiApp.factories });
+        window.localStorage.removeItem(STORAGE_KEY);
+    });
+
+    afterEach(() => {
+        window.localStorage.removeItem(STORAGE_KEY);
+    });
+
+    function createPageView() {
+        return document.createElement('wiki-page-view');
+    }
+
+    it('без сохранённого состояния панель закрыта на оглавлении', () => {
+        const view = createPageView();
+
+        expect(view._panelOpen).to.equal(false);
+        expect(view._panelTab).to.equal('outline');
+    });
+
+    it('сохранённое состояние восстанавливается при монтировании', () => {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ open: true, tab: 'history' }));
+
+        const view = createPageView();
+
+        expect(view._panelOpen).to.equal(true);
+        expect(view._panelTab).to.equal('history');
+    });
+
+    it('битое состояние панели — ошибка, а не тихий дефолт', () => {
+        const view = createPageView();
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ open: true, tab: 'unknown' }));
+
+        expect(() => view._restorePanelState()).to.throw(/панели/);
+    });
+
+    it('переключение вкладок пишет состояние в storage', () => {
+        const view = createPageView();
+
+        view._panelTab = 'comments';
+        view._panelOpen = true;
+        view._persistPanelState();
+
+        expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY))).to.deep.equal({
+            open: true,
+            tab: 'comments',
+        });
+    });
+
+    it('вкладки панели объявлены единым списком без дублей', () => {
+        expect(WIKI_PANEL_TABS).to.deep.equal(['outline', 'backlinks', 'comments', 'history']);
+        expect(new Set(WIKI_PANEL_TABS).size).to.equal(WIKI_PANEL_TABS.length);
     });
 });
 

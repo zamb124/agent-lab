@@ -1,23 +1,31 @@
 /**
- * Доступ к странице: видимость, участники и публичная ссылка.
+ * Доступ к странице: публикация, участники и публичная ссылка.
  *
- * Ограниченная видимость и список участников — одно решение: пока страница
- * видна всей компании, персональные гранты не имеют смысла, поэтому список
- * появляется только вместе с ограничением.
+ * Ограничение доступа задаётся не отдельным полем, а списком участников:
+ * появился хотя бы один — страница и её поддерево становятся `restricted`,
+ * пропали все — страница снова видна всему пространству. Поэтому переключатель
+ * «только участники» добавляет текущего пользователя администратором, а
+ * обратный ход снимает всех участников.
+ *
+ * Адрес публичной ссылки в базе лежит хешем, поэтому показать его можно только
+ * сразу после выпуска. Позже остаётся перевыпуск с новым адресом.
  */
 
 import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { TEAM_EVENTS } from '@platform/lib/events/index.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 
-const VISIBILITY_COMPANY = 'company';
 const VISIBILITY_RESTRICTED = 'restricted';
+const PERMISSION_ADMIN = 'admin';
+const PERMISSION_READ = 'read';
+const LINK_PERMISSION_VIEW = 'view';
 
 export class WikiPageAccessModal extends PlatformModal {
     static modalKind = 'wiki.page_access';
@@ -27,6 +35,8 @@ export class WikiPageAccessModal extends PlatformModal {
         pageId: { type: String, attribute: 'page-id' },
         _newMemberId: { state: true },
         _newPermission: { state: true },
+        /** Адрес известен только в этой сессии — сразу после выпуска ссылки. */
+        _issuedLinkUrl: { state: true },
     };
 
     static styles = [
@@ -34,7 +44,7 @@ export class WikiPageAccessModal extends PlatformModal {
         css`
             .grid {
                 display: grid;
-                gap: var(--space-4);
+                gap: var(--space-5);
             }
 
             .row {
@@ -45,6 +55,7 @@ export class WikiPageAccessModal extends PlatformModal {
             }
 
             .section-title {
+                margin-bottom: var(--space-2);
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
                 font-weight: var(--font-semibold);
@@ -66,16 +77,55 @@ export class WikiPageAccessModal extends PlatformModal {
                 font-size: var(--text-xs);
             }
 
+            .hint {
+                margin-top: var(--space-1);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+            }
+
+            .warning {
+                margin-top: var(--space-1);
+                color: var(--warning);
+                font-size: var(--text-xs);
+            }
+
             .muted {
                 color: var(--text-tertiary);
                 font-size: var(--text-sm);
             }
 
+            .link-actions {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                margin-top: var(--space-2);
+            }
+
+            .link-url {
+                flex: 1;
+                min-width: 0;
+                padding: var(--space-2);
+                border-radius: var(--radius-sm);
+                background: var(--wiki-surface-muted);
+                color: var(--text-secondary);
+                font-family: var(--font-mono);
+                font-size: var(--text-xs);
+                overflow-wrap: anywhere;
+            }
+
+            .link-icon-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                flex-shrink: 0;
+            }
+
             .add-row {
                 display: grid;
-                grid-template-columns: minmax(0, 1fr) 10rem auto;
+                grid-template-columns: minmax(0, 1fr) 12rem auto;
                 gap: var(--space-2);
                 align-items: end;
+                margin-top: var(--space-3);
             }
         `,
     ];
@@ -85,13 +135,16 @@ export class WikiPageAccessModal extends PlatformModal {
         this.size = 'md';
         this.pageId = '';
         this._newMemberId = '';
-        this._newPermission = 'view';
+        this._newPermission = PERMISSION_READ;
+        this._issuedLinkUrl = '';
         this._access = this.useOp('wiki/access_read');
+        this._page = this.useOp('wiki/page_read');
         this._memberAdd = this.useOp('wiki/member_add');
         this._memberRemove = this.useOp('wiki/member_remove');
         this._publicLink = this.useOp('wiki/public_link');
         this._properties = this.useOp('wiki/page_properties');
         this._pages = this.useResource('wiki/pages');
+        this._userSel = this.select((s) => s.auth.user);
         this._teamMembersSel = this.select((s) => s.team.members);
         this._teamLoadingSel = this.select((s) => s.team.loading);
     }
@@ -99,6 +152,7 @@ export class WikiPageAccessModal extends PlatformModal {
     connectedCallback() {
         super.connectedCallback();
         void this._access.run({ wiki_page_id: this.pageId });
+        void this._page.run({ wiki_page_id: this.pageId });
         const members = this._teamMembersSel.value;
         const loading = this._teamLoadingSel.value;
         if ((!Array.isArray(members) || members.length === 0) && !loading) {
@@ -106,22 +160,89 @@ export class WikiPageAccessModal extends PlatformModal {
         }
     }
 
-    _state() {
-        return this._access.state;
+    _accessState() {
+        return this._access.lastResult;
+    }
+
+    _members() {
+        const access = this._accessState();
+        return access && Array.isArray(access.members) ? access.members : [];
     }
 
     _isRestricted() {
-        return this._state().visibility === VISIBILITY_RESTRICTED;
+        const access = this._accessState();
+        return Boolean(access) && access.visibility === VISIBILITY_RESTRICTED;
     }
 
-    async _onVisibilityToggle(event) {
-        const restricted = event.detail.checked;
-        await this._properties.run({
-            wiki_page_id: this.pageId,
-            visibility: restricted ? VISIBILITY_RESTRICTED : VISIBILITY_COMPANY,
-        });
+    /** Ограничение с предка снимается только на самом предке. */
+    _inheritedFromAncestorId() {
+        const access = this._accessState();
+        if (!access || typeof access.inherited_from_page_id !== 'string') {
+            return '';
+        }
+        return access.inherited_from_page_id === this.pageId ? '' : access.inherited_from_page_id;
+    }
+
+    _isPublished() {
+        const page = this._page.lastResult;
+        return Boolean(page) && page.is_published === true;
+    }
+
+    _linkEnabled() {
+        const access = this._accessState();
+        return Boolean(access) && access.link_enabled === true;
+    }
+
+    _linkPermission() {
+        const access = this._accessState();
+        return access && typeof access.link_permission === 'string'
+            ? access.link_permission
+            : LINK_PERMISSION_VIEW;
+    }
+
+    _currentUserId() {
+        const user = this._userSel.value;
+        if (!user || typeof user.user_id !== 'string' || user.user_id === '') {
+            throw new Error('wiki page access: в сессии нет user_id');
+        }
+        return user.user_id;
+    }
+
+    async _reload() {
         await this._access.run({ wiki_page_id: this.pageId });
         void this._pages.load();
+    }
+
+    // --- публикация ---
+
+    async _onPublishToggle(event) {
+        await this._properties.run({
+            wiki_page_id: this.pageId,
+            is_published: Boolean(event.detail.value),
+        });
+        await this._page.run({ wiki_page_id: this.pageId });
+        void this._pages.load();
+    }
+
+    // --- участники ---
+
+    async _onRestrictedToggle(event) {
+        if (Boolean(event.detail.value)) {
+            await this._memberAdd.run({
+                wiki_page_id: this.pageId,
+                user_id: this._currentUserId(),
+                permission: PERMISSION_ADMIN,
+            });
+            await this._reload();
+            return;
+        }
+        for (const member of this._members()) {
+            await this._memberRemove.run({
+                wiki_page_id: this.pageId,
+                member_user_id: member.user_id,
+            });
+        }
+        await this._reload();
     }
 
     async _addMember() {
@@ -134,41 +255,88 @@ export class WikiPageAccessModal extends PlatformModal {
             permission: this._newPermission,
         });
         this._newMemberId = '';
-        await this._access.run({ wiki_page_id: this.pageId });
+        await this._reload();
     }
 
     async _removeMember(userId) {
         await this._memberRemove.run({ wiki_page_id: this.pageId, member_user_id: userId });
-        await this._access.run({ wiki_page_id: this.pageId });
+        await this._reload();
     }
 
-    async _togglePublicLink(event) {
-        await this._publicLink.run({
+    // --- публичная ссылка ---
+
+    async _onLinkToggle(event) {
+        const result = await this._publicLink.run({
             wiki_page_id: this.pageId,
-            enabled: event.detail.checked,
-            permission: 'view',
+            enabled: Boolean(event.detail.value),
+            permission: this._linkPermission(),
         });
-        await this._access.run({ wiki_page_id: this.pageId });
+        this._issuedLinkUrl = result && typeof result.url === 'string' ? result.url : '';
+        await this._reload();
+    }
+
+    async _onLinkPermissionChange(event) {
+        const result = await this._publicLink.run({
+            wiki_page_id: this.pageId,
+            enabled: true,
+            permission: event.detail.value,
+        });
+        this._issuedLinkUrl = result && typeof result.url === 'string' ? result.url : '';
+        await this._reload();
+    }
+
+    async _rotateLink() {
+        const confirmed = await platformConfirm({
+            title: this.t('access.link_rotate_confirm_title'),
+            message: this.t('access.link_rotate_confirm_body'),
+        });
+        if (!confirmed) {
+            return;
+        }
+        const result = await this._publicLink.run({
+            wiki_page_id: this.pageId,
+            enabled: true,
+            permission: this._linkPermission(),
+        });
+        this._issuedLinkUrl = result && typeof result.url === 'string' ? result.url : '';
+        await this._reload();
+    }
+
+    /** Сайт открывается отдельной вкладкой: в текущей остаётся редактирование. */
+    _openSite() {
+        if (this._issuedLinkUrl === '') {
+            return;
+        }
+        window.open(this._issuedLinkUrl, '_blank', 'noopener');
     }
 
     _copyLink() {
-        const token = this._state().public_link_token;
-        if (typeof token !== 'string' || token === '') {
+        if (this._issuedLinkUrl === '') {
             return;
         }
-        const url = `${window.location.origin}/wiki/s/${token}`;
-        this.copyToClipboard(url, {
+        this.copyToClipboard(this._issuedLinkUrl, {
             success_i18n_key: 'wiki:access.link_copied',
             error_i18n_key: 'wiki:toast.access.link_failed',
         });
     }
 
+    // --- справочники полей ---
+
     _permissionConfig() {
         return {
             values: [
-                { value: 'view', label: this.t('access.permission_view') },
-                { value: 'comment', label: this.t('access.permission_comment') },
-                { value: 'edit', label: this.t('access.permission_edit') },
+                { value: 'read', label: this.t('access.permission_read') },
+                { value: 'write', label: this.t('access.permission_write') },
+                { value: 'admin', label: this.t('access.permission_admin') },
+            ],
+        };
+    }
+
+    _linkPermissionConfig() {
+        return {
+            values: [
+                { value: 'view', label: this.t('access.link_permission_view') },
+                { value: 'comment', label: this.t('access.link_permission_comment') },
             ],
         };
     }
@@ -190,50 +358,74 @@ export class WikiPageAccessModal extends PlatformModal {
         return { values };
     }
 
-    _members() {
-        const members = this._state().members;
-        return Array.isArray(members) ? members : [];
-    }
-
     renderHeader() {
         return this.t('access.title');
     }
 
     renderBody() {
-        const linkEnabled = this._state().public_link_enabled === true;
+        if (!this._accessState()) {
+            return html`<div class="muted">${this.t('access.loading')}</div>`;
+        }
         return html`
             <div class="grid">
+                ${this._renderPublish()}
+                ${this._renderVisibility()}
+                ${this._isRestricted() ? this._renderMembers() : nothing}
+                ${this._renderPublicLink()}
+            </div>
+        `;
+    }
+
+    _renderPublish() {
+        return html`
+            <div>
+                <div class="section-title">${this.t('access.publish_title')}</div>
                 <div class="row">
-                    <span>${this.t('access.visibility_label')}</span>
+                    <platform-switch
+                        data-wiki-publish
+                        ?checked=${this._isPublished()}
+                        label=${this.t('access.publish_label')}
+                        @change=${this._onPublishToggle}
+                    ></platform-switch>
+                </div>
+                <div class="hint">${this.t('access.publish_hint')}</div>
+            </div>
+        `;
+    }
+
+    _renderVisibility() {
+        const inheritedFrom = this._inheritedFromAncestorId();
+        return html`
+            <div>
+                <div class="section-title">${this.t('access.visibility_label')}</div>
+                <div class="row">
                     <platform-switch
                         data-wiki-visibility
                         ?checked=${this._isRestricted()}
+                        ?disabled=${inheritedFrom !== ''}
                         label=${this.t('access.visibility_restricted')}
-                        @change=${this._onVisibilityToggle}
+                        @change=${this._onRestrictedToggle}
                     ></platform-switch>
                 </div>
-
-                ${this._isRestricted() ? this._renderMembers() : nothing}
-
-                <div>
-                    <div class="section-title">${this.t('access.link_title')}</div>
-                    <div class="row">
-                        <platform-switch
-                            data-wiki-public-link
-                            ?checked=${linkEnabled}
-                            label=${this.t('access.link_enable')}
-                            @change=${this._togglePublicLink}
-                        ></platform-switch>
-                        ${linkEnabled
-                            ? html`<platform-button
-                                  variant="ghost"
-                                  size="sm"
-                                  data-wiki-copy-link
-                                  @click=${this._copyLink}
-                              >${this.t('access.link_copy')}</platform-button>`
-                            : html`<span class="muted">${this.t('access.link_disabled')}</span>`}
-                    </div>
+                <div class="hint">
+                    ${this._isRestricted()
+                        ? this.t('access.visibility_restricted_hint')
+                        : this.t('access.visibility_company_hint')}
                 </div>
+                ${inheritedFrom === ''
+                    ? nothing
+                    : html`<div class="warning">
+                          ${this.t('access.inherited')}
+                          <platform-button
+                              variant="ghost"
+                              size="sm"
+                              data-wiki-inherited-open
+                              @click=${() => {
+                                  this.close();
+                                  this.navigate('wiki_page', { pageId: inheritedFrom });
+                              }}
+                          >${this.t('access.inherited_open')}</platform-button>
+                      </div>`}
             </div>
         `;
     }
@@ -270,7 +462,7 @@ export class WikiPageAccessModal extends PlatformModal {
                     <platform-field
                         type="enum"
                         mode="edit"
-                        label=${this.t('access.visibility_label')}
+                        label=${this.t('access.permission_label')}
                         .value=${this._newPermission}
                         .config=${this._permissionConfig()}
                         @change=${(event) => { this._newPermission = event.detail.value; }}
@@ -280,6 +472,79 @@ export class WikiPageAccessModal extends PlatformModal {
                     </platform-button>
                 </div>
             </div>
+        `;
+    }
+
+    _renderPublicLink() {
+        const enabled = this._linkEnabled();
+        return html`
+            <div>
+                <div class="section-title">${this.t('access.link_title')}</div>
+                <div class="row">
+                    <platform-switch
+                        data-wiki-public-link
+                        ?checked=${enabled}
+                        label=${this.t('access.link_enable')}
+                        @change=${this._onLinkToggle}
+                    ></platform-switch>
+                    ${enabled ? nothing : html`<span class="muted">${this.t('access.link_disabled')}</span>`}
+                </div>
+                ${enabled ? this._renderLinkDetails() : nothing}
+            </div>
+        `;
+    }
+
+    _renderLinkDetails() {
+        return html`
+            <platform-field
+                type="enum"
+                mode="edit"
+                label=${this.t('access.link_permission_label')}
+                .value=${this._linkPermission()}
+                .config=${this._linkPermissionConfig()}
+                @change=${this._onLinkPermissionChange}
+            ></platform-field>
+            <div class="hint">${this.t('access.link_subtree_hint')}</div>
+            ${this._isPublished() ? nothing : html`<div class="warning">${this.t('access.link_draft_warning')}</div>`}
+            ${this._issuedLinkUrl === ''
+                ? html`
+                    <div class="hint">${this.t('access.link_hidden')}</div>
+                    <platform-button
+                        variant="ghost"
+                        size="sm"
+                        data-wiki-rotate-link
+                        @click=${this._rotateLink}
+                    >${this.t('access.link_rotate')}</platform-button>
+                `
+                : html`
+                    <div class="link-actions">
+                        <div class="link-url" data-wiki-link-url>${this._issuedLinkUrl}</div>
+                        <div class="link-icon-actions">
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                size="sm"
+                                data-wiki-copy-link
+                                title=${this.t('access.link_copy')}
+                                aria-label=${this.t('access.link_copy')}
+                                @click=${this._copyLink}
+                            >
+                                <platform-icon name="copy" size="16"></platform-icon>
+                            </platform-button>
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                size="sm"
+                                data-wiki-open-site
+                                title=${this.t('access.link_open_site')}
+                                aria-label=${this.t('access.link_open_site')}
+                                @click=${this._openSite}
+                            >
+                                <platform-icon name="external-link" size="16"></platform-icon>
+                            </platform-button>
+                        </div>
+                    </div>
+                `}
         `;
     }
 }

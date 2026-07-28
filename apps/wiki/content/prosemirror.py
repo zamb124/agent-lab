@@ -15,11 +15,11 @@ from pydantic import Field, field_validator
 
 from apps.wiki.base_model import WikiContentModel
 
-type ProseMirrorAttrValue = str | int | float | bool | None
+type ProseMirrorAttrValue = str | int | float | bool | list[int | float] | None
 """Значение атрибута ноды или марки.
 
-Схема wiki допускает только скаляры: они переживают round-trip через Yjs
-и напрямую ложатся в метаданные RAG, где поддерживаются лишь string/number/boolean.
+Скаляры — основной случай (Yjs round-trip, RAG metadata). Исключение —
+`colwidth` у ячеек таблицы: prosemirror-tables хранит `number[] | null`.
 """
 
 

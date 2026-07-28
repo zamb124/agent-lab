@@ -262,6 +262,40 @@ async def test_rotating_public_link_invalidates_previous_token(
     ).status_code == 200
 
 
+async def test_draft_page_is_not_available_by_public_link(
+    wiki_client, wiki_client_anonymous, wiki_page
+):
+    """Черновик по ссылке не отдаётся, даже если ссылка включена."""
+    page_id = wiki_page["wiki_page_id"]
+    link = await wiki_client.post(f"{PAGES_URL}/{page_id}/access/link", json={"enabled": True})
+    token = link.json()["url"].rsplit("/", 1)[-1]
+
+    unpublished = await wiki_client.patch(f"{PAGES_URL}/{page_id}", json={"is_published": False})
+
+    assert unpublished.status_code == 200, unpublished.text
+    assert (await wiki_client_anonymous.get(f"/wiki/api/v1/public/pages/{token}")).status_code == 404
+    assert (
+        await wiki_client_anonymous.get(f"/wiki/api/v1/public/pages/{token}/markdown")
+    ).status_code == 404
+
+
+async def test_publishing_page_again_restores_public_link(
+    wiki_client, wiki_client_anonymous, wiki_page
+):
+    """Токен переживает снятие публикации: возвращать его повторно не нужно."""
+    page_id = wiki_page["wiki_page_id"]
+    link = await wiki_client.post(f"{PAGES_URL}/{page_id}/access/link", json={"enabled": True})
+    token = link.json()["url"].rsplit("/", 1)[-1]
+    assert (
+        await wiki_client.patch(f"{PAGES_URL}/{page_id}", json={"is_published": False})
+    ).status_code == 200
+
+    published = await wiki_client.patch(f"{PAGES_URL}/{page_id}", json={"is_published": True})
+
+    assert published.status_code == 200, published.text
+    assert (await wiki_client_anonymous.get(f"/wiki/api/v1/public/pages/{token}")).status_code == 200
+
+
 async def test_unknown_public_token_returns_404(wiki_client_anonymous):
     response = await wiki_client_anonymous.get("/wiki/api/v1/public/pages/not-a-real-token")
 

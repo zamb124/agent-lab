@@ -77,6 +77,12 @@ def test_table_cells_carry_alignment():
         assert WIKI_NODES[node_type].attrs["align"].default == ""
 
 
+def test_table_cells_colwidth_is_int_list():
+    # prosemirror-tables: colwidth = number[] | null, не скаляр.
+    for node_type in ("table_cell", "table_header"):
+        assert WIKI_NODES[node_type].attrs["colwidth"].kind.value == "int_list"
+        assert WIKI_NODES[node_type].attrs["colwidth"].default is None
+
 def test_paragraph_is_the_first_block_of_its_group():
     """ProseMirror берёт первый узел группы как заполнитель пустого контейнера.
 

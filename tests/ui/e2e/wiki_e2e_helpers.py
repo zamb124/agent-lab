@@ -76,7 +76,12 @@ async def wiki_api_create_page(
 
 
 def wiki_e2e_tree_row(page: Page, page_id: str):
-    return page.locator(f'platform-tree [data-node-id="{page_id}"]')
+    """Строка дерева в сайдбаре.
+
+    Второе дерево той же страницы живёт в мобильном листе `wiki.tree`: он всегда
+    в DOM, поэтому без привязки к сайдбару локатор находит два узла.
+    """
+    return page.locator(f'wiki-sidebar platform-tree [data-node-id="{page_id}"]')
 
 
 def wiki_e2e_title_input(page: Page):

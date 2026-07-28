@@ -53,6 +53,7 @@ class WikiPagePropertiesUpdateRequest(WikiBaseModel):
     cover_url: str | None = None
     is_published: bool | None = None
     is_template: bool | None = None
+    is_full_width: bool | None = None
 
 
 class WikiPageMoveRequest(WikiBaseModel):
@@ -172,13 +173,38 @@ class WikiBacklinksResponse(WikiBaseModel):
 
 
 class WikiPublicPageResponse(WikiBaseModel):
-    """Страница по публичной ссылке — без служебных полей и прав."""
+    """Страница публичного сайта — без служебных полей и прав.
+
+    `parent_page_id` нужен посетителю для пути: крошки строятся по тому же
+    поддереву, что и навигация. Медиа в `content` уже переписано на роуты с
+    токеном, платформенных ссылок на файлы здесь не остаётся.
+    """
 
     wiki_page_id: str
+    parent_page_id: str | None = None
     title: str = ""
     icon: str = ""
+    cover_url: str = ""
+    is_full_width: bool = False
     content: ProseMirrorNode
     updated_at: datetime
+
+
+class WikiPublicPageSummary(WikiBaseModel):
+    """Узел навигации публичного сайта."""
+
+    wiki_page_id: str
+    parent_page_id: str | None = None
+    title: str = ""
+    icon: str = ""
+    has_children: bool = False
+
+
+class WikiPublicTreeResponse(WikiBaseModel):
+    """Состав сайта: корень ссылки и все опубликованные страницы под ним."""
+
+    root_page_id: str
+    items: list[WikiPublicPageSummary] = Field(default_factory=list)
 
 
 class WikiMarkdownResponse(WikiBaseModel):

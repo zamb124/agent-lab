@@ -32,6 +32,7 @@ from apps.wiki.content.markdown_html import (
     html_fragment_to_blocks,
     image_node_from_attrs,
     normalize_align,
+    normalize_code_language,
     parse_tag,
 )
 from apps.wiki.content.markdown_notices import (
@@ -758,7 +759,7 @@ class _MarkdownReader:
                 continue
 
             if token_type in {"fence", "code_block"}:
-                language = token.info.strip() if token.info else ""
+                language = normalize_code_language(token.info if token.info else "")
                 code = token.content.rstrip("\n")
                 content = [ProseMirrorNode(type="text", text=code)] if code else []
                 self._builder.add(

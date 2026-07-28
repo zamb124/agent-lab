@@ -113,6 +113,37 @@ describe('platform-rich-editor', () => {
         expect(el.querySelector('.pm-editor').textContent).to.contain('Новое содержимое');
     });
 
+    it('перерисовка хозяина с тем же значением не стирает правку', async () => {
+        // Хозяин связывает `.value` со своим состоянием и перерисовывается по
+        // своим причинам (индикатор сохранения, оглавление). Отданное редактором
+        // значение обратно применять нельзя: `updated()` асинхронный, и к его
+        // вызову правка уже в документе.
+        const el = await mountEditor({ value: docWithText('Текст') });
+        const changed = oneEvent(el, 'change');
+        const { state } = el._view;
+        el._view.dispatch(state.tr.insertText('!', state.doc.content.size - 1));
+        const event = await changed;
+
+        el.value = event.detail.content;
+        await elementUpdated(el);
+
+        expect(el.querySelector('.pm-editor').textContent).to.contain('Текст!');
+    });
+
+    it('устаревшее значение хозяина всё ещё применяется как внешняя правка', async () => {
+        const el = await mountEditor({ value: docWithText('Текст') });
+        const { state } = el._view;
+        el._view.dispatch(state.tr.insertText('!', state.doc.content.size - 1));
+        await elementUpdated(el);
+
+        // Другой объект — это осознанная замена содержимого (загрузка, импорт,
+        // восстановление версии), и она должна дойти до документа.
+        el.value = docWithText('Совсем другое');
+        await elementUpdated(el);
+
+        expect(el.querySelector('.pm-editor').textContent).to.equal('Совсем другое');
+    });
+
     it('в режиме чтения редактор не редактируется', async () => {
         const el = await mountEditor({ value: docWithText('Только чтение'), readonly: true });
 
@@ -403,6 +434,67 @@ describe('platform-rich-editor', () => {
         expect(el.querySelector('platform-menu')).to.exist;
     });
 
+    it('ручка блока готовит ProseMirror dragging и переносит блок на drop', async () => {
+        const el = await mountEditor({
+            value: {
+                type: 'doc',
+                content: [
+                    { type: 'paragraph', content: [{ type: 'text', text: 'Первый' }] },
+                    { type: 'paragraph', content: [{ type: 'text', text: 'Второй' }] },
+                ],
+            },
+        });
+        el._handleTop = 0;
+        el._handleBlockPos = 0;
+        await elementUpdated(el);
+
+        const handle = el.querySelector('.pm-block-handle-btn');
+        const transfer = new DataTransfer();
+        handle.dispatchEvent(new DragEvent('dragstart', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: transfer,
+        }));
+
+        expect(el._view.dragging).to.exist;
+        expect(el._view.dragging.move).to.be.true;
+        expect(el._view.state.selection.node.type.name).to.equal('paragraph');
+
+        const paragraphs = el.querySelectorAll('.pm-editor > p');
+        expect(paragraphs.length).to.equal(2);
+        const target = paragraphs[1].getBoundingClientRect();
+        el.querySelector('.pm-editor').dispatchEvent(new DragEvent('drop', {
+            bubbles: true,
+            cancelable: true,
+            clientX: target.left + 8,
+            clientY: target.bottom - 1,
+            dataTransfer: transfer,
+        }));
+        await elementUpdated(el);
+
+        const texts = el.value.content.map((block) => {
+            if (!block.content || block.content.length === 0) {
+                throw new Error('expected text in paragraph');
+            }
+            return block.content[0].text;
+        });
+        expect(texts).to.deep.equal(['Второй', 'Первый']);
+    });
+
+    it('кнопки блока достаточно крупные для захвата', async () => {
+        const el = await mountEditor({ value: docWithText('Строка') });
+        el._handleTop = 0;
+        el._handleBlockPos = 0;
+        await elementUpdated(el);
+
+        const add = el.querySelector('.pm-block-add-btn').getBoundingClientRect();
+        const grip = el.querySelector('.pm-block-handle-btn').getBoundingClientRect();
+        expect(add.width).to.be.at.least(28);
+        expect(add.height).to.be.at.least(28);
+        expect(grip.width).to.be.at.least(28);
+        expect(grip.height).to.be.at.least(28);
+    });
+
     it('меню блока удаляет блок', async () => {
         const el = await mountEditor({
             value: {
@@ -493,5 +585,274 @@ describe('platform-rich-editor', () => {
         const outline = el.getOutline();
         expect(outline.map((item) => item.text)).to.deep.equal(['Первый', 'Второй']);
         expect(outline.map((item) => item.level)).to.deep.equal([1, 2]);
+    });
+
+    it('scrollToPosition крутит scroll-контейнер ко второму заголовку', async () => {
+        const filler = Array.from({ length: 40 }, (_, index) => ({
+            type: 'paragraph',
+            content: [{ type: 'text', text: `строка ${index + 1}` }],
+        }));
+        const scroller = await fixture(html`
+            <div data-wiki-page-scroll style="height:180px;overflow:auto;">
+                <div class="topbar" style="height:32px;"></div>
+                <platform-rich-editor
+                    .value=${{
+                        type: 'doc',
+                        content: [
+                            { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Первый' }] },
+                            ...filler,
+                            { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Второй' }] },
+                        ],
+                    }}
+                ></platform-rich-editor>
+            </div>
+        `);
+        const el = scroller.querySelector('platform-rich-editor');
+        for (let attempt = 0; attempt < 60 && el._view === null; attempt += 1) {
+            await aTimeout(20);
+        }
+        await elementUpdated(el);
+
+        const outline = el.getOutline();
+        expect(outline).to.have.length(2);
+        scroller.scrollTop = 0;
+        el.scrollToPosition(outline[1].pos);
+        await elementUpdated(el);
+
+        expect(scroller.scrollTop).to.be.greaterThan(100);
+        const second = el._view.nodeDOM(outline[1].pos);
+        expect(second).to.exist;
+        expect(second.textContent).to.include('Второй');
+    });
+
+    it('toggle сворачивается по шеврону и в readonly', async () => {
+        const el = await mountEditor({
+            value: {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'toggle',
+                        content: [
+                            { type: 'toggle_summary', content: [{ type: 'text', text: 'Заголовок' }] },
+                            { type: 'paragraph', content: [{ type: 'text', text: 'Тело' }] },
+                        ],
+                    },
+                ],
+            },
+            readonly: true,
+        });
+
+        const toggle = el.querySelector('.pm-toggle');
+        expect(toggle).to.exist;
+        expect(toggle.classList.contains('is-collapsed')).to.equal(false);
+
+        toggle.querySelector('.pm-toggle-chevron').click();
+        await elementUpdated(el);
+
+        expect(toggle.classList.contains('is-collapsed')).to.equal(true);
+        expect(el.querySelector('.pm-editor').textContent).to.contain('Заголовок');
+    });
+
+    it('клик по чекбоксу task_item переключает checked', async () => {
+        const el = await mountEditor({
+            value: {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'task_list',
+                        content: [
+                            {
+                                type: 'task_item',
+                                attrs: { checked: false },
+                                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Сделать' }] }],
+                            },
+                        ],
+                    },
+                ],
+            },
+        });
+
+        const checkbox = el.querySelector('.pm-task-checkbox');
+        expect(checkbox).to.exist;
+        expect(checkbox.checked).to.equal(false);
+
+        checkbox.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        await elementUpdated(el);
+
+        expect(el.value.content[0].content[0].attrs.checked).to.equal(true);
+        expect(el.querySelector('.pm-task-checkbox').checked).to.equal(true);
+    });
+
+    it('в readonly чекбокс task_item не переключается', async () => {
+        const el = await mountEditor({
+            value: {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'task_list',
+                        content: [
+                            {
+                                type: 'task_item',
+                                attrs: { checked: false },
+                                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Сделать' }] }],
+                            },
+                        ],
+                    },
+                ],
+            },
+            readonly: true,
+        });
+
+        el.querySelector('.pm-task-checkbox').dispatchEvent(
+            new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+        );
+        await elementUpdated(el);
+
+        expect(el.value.content[0].content[0].attrs.checked).to.equal(false);
+    });
+
+    it('проставляет ссылку через bubble и снимает её', async () => {
+        const el = await mountEditor({ value: docWithText('Ссылка') });
+        const { state } = el._view;
+        const selection = el._pm.TextSelection.create(state.doc, 1, 7);
+        el._view.dispatch(state.tr.setSelection(selection));
+        await elementUpdated(el);
+
+        el.querySelector('[data-editor-link]').click();
+        await elementUpdated(el);
+        expect(el._linkOpen).to.equal(true);
+
+        el._linkHref = 'https://example.com';
+        el._applyLink();
+        await elementUpdated(el);
+
+        const linked = el.value.content[0].content[0];
+        expect(linked.marks[0].type).to.equal('link');
+        expect(linked.marks[0].attrs.href).to.equal('https://example.com');
+
+        const nextState = el._view.state;
+        el._view.dispatch(
+            nextState.tr.setSelection(el._pm.TextSelection.create(nextState.doc, 1, 7)),
+        );
+        await elementUpdated(el);
+        el._openLinkEditor();
+        el._removeLink();
+        await elementUpdated(el);
+
+        expect(el.value.content[0].content[0].marks || []).to.deep.equal([]);
+    });
+
+    it('выбирает цвет highlight', async () => {
+        const el = await mountEditor({ value: docWithText('Ярко') });
+        const { state } = el._view;
+        el._view.dispatch(state.tr.setSelection(el._pm.TextSelection.create(state.doc, 1, 5)));
+        await elementUpdated(el);
+
+        el.querySelector('[data-editor-highlight]').click();
+        await elementUpdated(el);
+        el.querySelector('[data-highlight-color="green"]').click();
+        await elementUpdated(el);
+
+        const marked = el.value.content[0].content[0];
+        expect(marked.marks[0].type).to.equal('highlight');
+        expect(marked.marks[0].attrs.color).to.equal('green');
+    });
+
+    it('code_block рисует CodeMirror и меняет язык', async () => {
+        const el = await mountEditor({
+            value: {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'code_block',
+                        attrs: { language: 'python' },
+                        content: [{ type: 'text', text: 'print(1)' }],
+                    },
+                ],
+            },
+        });
+
+        for (let attempt = 0; attempt < 60 && el.querySelector('.cm-editor') === null; attempt += 1) {
+            await aTimeout(20);
+        }
+        expect(el.querySelector('.pm-code-block')).to.exist;
+        expect(el.querySelector('.cm-editor')).to.exist;
+        expect(el.querySelector('.pm-code-block-lang').value).to.equal('python');
+
+        const select = el.querySelector('.pm-code-block-lang');
+        let bubbledNativeChange = false;
+        el.addEventListener('change', (event) => {
+            if (event.target === select) {
+                bubbledNativeChange = true;
+            }
+        });
+        select.value = 'javascript';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await elementUpdated(el);
+
+        expect(el.value.content[0].attrs.language).to.equal('javascript');
+        expect(bubbledNativeChange).to.equal(false);
+    });
+
+    it('code_block подсвечивает json внутри ShadowRoot страницы', async () => {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        const { root, el } = await mountEditorInShadowRoot({
+            value: {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'code_block',
+                        attrs: { language: 'json' },
+                        content: [{ type: 'text', text: '{"ok": true}' }],
+                    },
+                ],
+            },
+        });
+
+        for (let attempt = 0; attempt < 60 && el.querySelector('.cm-editor') === null; attempt += 1) {
+            await aTimeout(20);
+        }
+        expect(el.querySelector('.cm-editor')).to.exist;
+        expect(el.querySelector('.pm-code-block-lang').value).to.equal('json');
+
+        // oneDark монтирует листы в ShadowRoot (adoptedStyleSheets и/или <style>).
+        const adopted = root.adoptedStyleSheets.length;
+        const styleTags = root.querySelectorAll('style').length;
+        expect(adopted + styleTags).to.be.greaterThan(0);
+
+        const token = el.querySelector('.cm-line span[class]');
+        expect(token).to.exist;
+        const color = getComputedStyle(token).color;
+        const base = getComputedStyle(el.querySelector('.cm-content')).color;
+        expect(color).to.not.equal(base);
+    });
+
+    it('insertPlatformFile рисует ссылку скачивания', async () => {
+        const el = await mountEditor();
+        el.fileUrlBase = '/wiki/api/v1/public/pages/tok/files/';
+        el.insertPlatformFile({
+            fileId: 'file-1',
+            originalName: 'note.pdf',
+            contentType: 'application/pdf',
+        });
+        await elementUpdated(el);
+
+        const chip = el.querySelector('a.pm-file-chip');
+        expect(chip).to.exist;
+        expect(chip.getAttribute('href')).to.equal('/wiki/api/v1/public/pages/tok/files/file-1');
+        expect(chip.textContent).to.equal('note.pdf');
+    });
+
+    it('slash-меню содержит image, platform_file и тона callout', async () => {
+        const el = await mountEditor();
+        el._slashOpen = true;
+        await elementUpdated(el);
+
+        const commands = Array.from(el.querySelectorAll('[data-slash-command]'))
+            .map((node) => node.dataset.slashCommand);
+        expect(commands).to.include('image');
+        expect(commands).to.include('platform_file');
+        expect(commands).to.include('callout_warning');
+        expect(commands).to.not.include('callout');
     });
 });
