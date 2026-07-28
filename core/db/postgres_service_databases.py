@@ -14,7 +14,7 @@ from typing import Final
 
 from asyncpg.exceptions import InvalidPasswordError
 from sqlalchemy import pool, text
-from sqlalchemy.engine.url import make_url
+from sqlalchemy.engine.url import URL, make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -29,8 +29,9 @@ _PG_AUTH_HINT = (
     "старый volume не обновляет — пересоздайте том или поправьте URL."
 )
 
-def _pg_target_debug(shared_url: str) -> str:
-    u = make_url(shared_url)
+def _pg_target_debug(database_url: str | URL) -> str:
+    # str(URL) в SQLAlchemy маскирует пароль как "***" — для диагностики нужен объект URL или исходная строка.
+    u = database_url if isinstance(database_url, URL) else make_url(database_url)
     host = u.host or "?"
     port = u.port or "?"
     user = u.username or "?"
@@ -138,7 +139,8 @@ async def ensure_postgres_service_databases_async(
         if db_name == shared_db_name:
             continue
         need_vector = db_name in vector_dbs
-        db_url = str(make_url(shared_str).set(database=db_name))
+        # Не str(URL): SQLAlchemy маскирует пароль "***" и ломает auth.
+        db_url = make_url(shared_str).set(database=db_name)
         db_engine = create_async_engine(db_url, poolclass=pool.NullPool)
         try:
             async with db_engine.begin() as db_conn:
