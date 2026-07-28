@@ -17,6 +17,7 @@
 import { html, nothing } from '../lit-shim.js';
 
 import { PlatformElement } from '../platform-element/index.js';
+import { StyleCache } from '../utils/style-cache.js';
 import {
     SLASH_MENU_ITEMS,
     buildBlockCommands,
@@ -35,8 +36,11 @@ const EMPTY_DOCUMENT = Object.freeze({
     content: [{ type: 'paragraph' }],
 });
 
-/** Ширина полосы слева от блока, в которой показывается ручка перетаскивания. */
-const HANDLE_GUTTER_PX = 44;
+/** Стили области правки: light DOM не покрывается стилями самого компонента. */
+const EDITOR_STYLESHEET_URL = '/static/core/assets/css/prosemirror.css';
+
+/** Отступ от левого края, по которому ищется блок под курсором мыши. */
+const BLOCK_PROBE_INSET_PX = 24;
 
 const BLOCK_MENU_ACTIONS = Object.freeze([
     { id: 'duplicate', icon: 'copy' },
@@ -61,6 +65,8 @@ const TABLE_ACTIONS = Object.freeze([
 ]);
 
 export class PlatformRichEditor extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         value: { type: Object },
         readonly: { type: Boolean, reflect: true },
@@ -68,6 +74,13 @@ export class PlatformRichEditor extends PlatformElement {
         autofocus: { type: Boolean },
         /** `(query: string) => Promise<MentionItem[]>` для меню по `@`. */
         mentionProvider: { attribute: false },
+        /**
+         * `(markdown: string) => Promise<object>` — документ ProseMirror из
+         * markdown. Разбор живёт на сервере, поэтому редактор о нём ничего не
+         * знает и берёт функцию у хозяина: второй реализации диалекта в
+         * браузере быть не должно.
+         */
+        markdownParser: { attribute: false },
         _ready: { state: true },
         _slashOpen: { state: true },
         _slashQuery: { state: true },
@@ -97,6 +110,7 @@ export class PlatformRichEditor extends PlatformElement {
         this.placeholder = '';
         this.autofocus = false;
         this.mentionProvider = null;
+        this.markdownParser = null;
         this._ready = false;
         this._slashOpen = false;
         this._slashQuery = '';
@@ -120,11 +134,29 @@ export class PlatformRichEditor extends PlatformElement {
         this._commands = null;
         this._applyingExternalValue = false;
         this._onHostPointerMove = this._onHostPointerMove.bind(this);
-        this._onHostPointerLeave = this._onHostPointerLeave.bind(this);
+        this._onShellPointerLeave = this._onShellPointerLeave.bind(this);
     }
 
     async firstUpdated() {
+        await this._adoptEditorStyles();
         await this._initEditor();
+    }
+
+    /**
+     * Область правки живёт в light DOM, поэтому её стили — глобальный
+     * `prosemirror.css` из index.html. Внутри shadow root страницы глобальный
+     * лист не действует, и тот же файл подключается в этот корень.
+     */
+    async _adoptEditorStyles() {
+        const root = this.getRootNode();
+        if (!(root instanceof ShadowRoot)) {
+            return;
+        }
+        const sheet = await StyleCache.load(EDITOR_STYLESHEET_URL);
+        if (root.adoptedStyleSheets.includes(sheet)) {
+            return;
+        }
+        root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
     }
 
     disconnectedCallback() {
@@ -141,6 +173,11 @@ export class PlatformRichEditor extends PlatformElement {
         }
         if (changed.has('readonly') && this._view) {
             this._view.setProps({ editable: () => !this.readonly });
+        }
+        // Подсказка живёт в decoration, а не в атрибуте: пустая транзакция
+        // пересчитывает её при смене локали.
+        if (changed.has('placeholder') && this._view) {
+            this._view.dispatch(this._view.state.tr);
         }
     }
 
@@ -163,7 +200,11 @@ export class PlatformRichEditor extends PlatformElement {
 
         const plugins = [
             buildInputRules(pm, schema),
-            buildKeymap(pm, schema),
+            buildKeymap(pm, schema, {
+                onPasteMarkdown: () => {
+                    void this._pasteAsMarkdown();
+                },
+            }),
             pm.keymap(pm.baseKeymap),
             pm.history(),
             pm.dropCursor(),
@@ -172,6 +213,7 @@ export class PlatformRichEditor extends PlatformElement {
             pm.columnResizing(),
             this._slashPlugin(pm),
             this._mentionPlugin(pm),
+            this._placeholderPlugin(pm),
         ];
 
         const state = pm.EditorState.create({
@@ -182,19 +224,28 @@ export class PlatformRichEditor extends PlatformElement {
         this._view = new pm.EditorView(host, {
             state,
             editable: () => !this.readonly,
-            attributes: {
-                class: 'pm-editor',
-                'data-placeholder': this.placeholder || '',
+            attributes: { class: 'pm-editor' },
+            // Клик по уже стоящей каретке транзакции не даёт, поэтому кнопки
+            // блока подтягиваются к строке ещё и на фокусе.
+            handleDOMEvents: {
+                focus: () => {
+                    this._syncHandleToSelection();
+                    return false;
+                },
+                drop: (view, event) => this._onEditorDrop(event),
             },
             dispatchTransaction: (transaction) => this._onTransaction(transaction),
         });
 
         host.addEventListener('pointermove', this._onHostPointerMove);
-        host.addEventListener('pointerleave', this._onHostPointerLeave);
+        // Уход отслеживает вся оболочка: кнопки блока лежат в полосе слева, вне
+        // области правки, и на пути мыши к ним не должны пропадать.
+        this.querySelector('.pm-shell').addEventListener('pointerleave', this._onShellPointerLeave);
 
         this._ready = true;
         if (this.autofocus && !this.readonly) {
             this._view.focus();
+            this._syncHandleToSelection();
         }
     }
 
@@ -262,6 +313,48 @@ export class PlatformRichEditor extends PlatformElement {
         });
     }
 
+    /**
+     * Подсказка на пустом абзаце.
+     *
+     * ProseMirror держит в пустом абзаце `<br>`, поэтому CSS-селектор `:empty`
+     * на нём не срабатывает — пустоту определяет схема документа, а не разметка.
+     */
+    _placeholderPlugin(pm) {
+        return new pm.Plugin({
+            key: new pm.PluginKey('wiki-placeholder'),
+            props: {
+                decorations: (state) => {
+                    if (this.placeholder === '') return null;
+                    const target = this._placeholderBlock(state);
+                    if (target === null) return null;
+                    return pm.DecorationSet.create(state.doc, [
+                        pm.Decoration.node(target.pos, target.pos + target.node.nodeSize, {
+                            class: 'is-empty',
+                            'data-placeholder': this.placeholder,
+                        }),
+                    ]);
+                },
+            },
+        });
+    }
+
+    /**
+     * Где показывать подсказку: на пустом абзаце под курсором, а в нетронутом
+     * документе — на единственном абзаце, чтобы её было видно до первого клика.
+     */
+    _placeholderBlock(state) {
+        const { doc, selection } = state;
+        const isEmptyParagraph = (node) => node.type.name === 'paragraph' && node.content.size === 0;
+        const { $from } = selection;
+        if (selection.empty && $from.depth === 1 && isEmptyParagraph($from.parent)) {
+            return { pos: $from.before(1), node: $from.parent };
+        }
+        if (doc.childCount === 1 && isEmptyParagraph(doc.firstChild)) {
+            return { pos: 0, node: doc.firstChild };
+        }
+        return null;
+    }
+
     // --- транзакции и состояние слоёв ---
 
     _onTransaction(transaction) {
@@ -293,6 +386,7 @@ export class PlatformRichEditor extends PlatformElement {
             }
         }
 
+        this._syncHandleToSelection();
         this._bubble = this._bubbleState(nextState);
         this._bubbleAnchor = this._bubble === null ? null : this._selectionAnchor(nextState);
         // Контролы таблицы нужны при курсоре в ячейке, а не только при выделении.
@@ -448,29 +542,51 @@ export class PlatformRichEditor extends PlatformElement {
         if (!this._view || this.readonly) return;
         const host = this.querySelector('.pm-host');
         if (!host) return;
-        const hostRect = host.getBoundingClientRect();
-        const found = this._view.posAtCoords({ left: hostRect.left + HANDLE_GUTTER_PX, top: event.clientY });
+        const found = this._view.posAtCoords({
+            left: host.getBoundingClientRect().left + BLOCK_PROBE_INSET_PX,
+            top: event.clientY,
+        });
         if (!found) {
             this._handleTop = -1;
             this._handleBlockPos = -1;
             return;
         }
-        const resolved = this._view.state.doc.resolve(found.pos);
-        const blockPos = resolved.depth === 0 ? found.pos : resolved.before(1);
+        this._showHandleForBlock(this._blockPosAt(this._view.state, found.pos));
+    }
+
+    _onShellPointerLeave() {
+        if (this._blockMenuAnchor !== null) return;
+        // Курсор в тексте — кнопки остаются у своей строки: иначе после ухода
+        // мыши единственный способ добавить блок снова пришлось бы искать.
+        if (this._view !== null && this._view.hasFocus()) {
+            this._syncHandleToSelection();
+            return;
+        }
+        this._handleTop = -1;
+    }
+
+    /** Позиция блока верхнего уровня, внутри которого лежит позиция документа. */
+    _blockPosAt(state, pos) {
+        const resolved = state.doc.resolve(pos);
+        return resolved.depth === 0 ? pos : resolved.before(1);
+    }
+
+    _syncHandleToSelection() {
+        if (this.readonly || this._view === null) return;
+        const { state } = this._view;
+        this._showHandleForBlock(this._blockPosAt(state, state.selection.from));
+    }
+
+    _showHandleForBlock(blockPos) {
+        const host = this.querySelector('.pm-host');
         const dom = this._view.nodeDOM(blockPos);
         const element = dom instanceof Element ? dom : null;
-        if (!element) {
+        if (host === null || element === null) {
             this._handleTop = -1;
             return;
         }
-        const rect = element.getBoundingClientRect();
-        this._handleTop = rect.top - hostRect.top;
+        this._handleTop = element.getBoundingClientRect().top - host.getBoundingClientRect().top;
         this._handleBlockPos = blockPos;
-    }
-
-    _onHostPointerLeave() {
-        if (this._blockMenuAnchor !== null) return;
-        this._handleTop = -1;
     }
 
     _openBlockMenu(event) {
@@ -519,6 +635,34 @@ export class PlatformRichEditor extends PlatformElement {
         this._view.focus();
     }
 
+    /**
+     * Кнопка «плюс» у блока: курсор уходит в пустой абзац и открывается то же
+     * меню команд, что по слэшу. Слэш вставляется в текст, поэтому дальнейшая
+     * фильтрация набором работает как при обычном вводе.
+     */
+    _onHandleAdd() {
+        if (!this._view || this._handleBlockPos < 0) return;
+        const { state } = this._view;
+        const node = state.doc.nodeAt(this._handleBlockPos);
+        if (!node) return;
+
+        const paragraph = this._schema.nodes.paragraph;
+        if (node.type === paragraph && node.content.size === 0) {
+            const selection = this._pm.TextSelection.create(state.doc, this._handleBlockPos + 1);
+            this._view.dispatch(state.tr.setSelection(selection));
+        } else {
+            const insertAt = this._handleBlockPos + node.nodeSize;
+            const transaction = state.tr.insert(insertAt, paragraph.create());
+            transaction.setSelection(this._pm.TextSelection.create(transaction.doc, insertAt + 1));
+            this._view.dispatch(transaction);
+        }
+
+        this._slashOpen = true;
+        this._slashQuery = '';
+        this._view.focus();
+        this._view.dispatch(this._view.state.tr.insertText('/'));
+    }
+
     _onHandleDragStart(event) {
         if (!this._view || this._handleBlockPos < 0) return;
         const node = this._view.state.doc.nodeAt(this._handleBlockPos);
@@ -538,6 +682,68 @@ export class PlatformRichEditor extends PlatformElement {
             throw new Error(`platform-rich-editor: нет табличной команды ${actionId}`);
         }
         command(this._view.state, this._view.dispatch);
+        this._view.focus();
+    }
+
+    // --- markdown ---
+
+    /**
+     * Перетащенный `.md` уходит наверх событием, а не разбирается здесь:
+     * решение «заменить страницу или вставить в текст» доменное, и принимать его
+     * редактору не по чину.
+     */
+    _onEditorDrop(event) {
+        const file = this._markdownFileFrom(event.dataTransfer);
+        if (file === null) {
+            return false;
+        }
+        event.preventDefault();
+        this.emit('markdown-file-drop', { file });
+        return true;
+    }
+
+    _markdownFileFrom(transfer) {
+        if (!transfer || !transfer.files || transfer.files.length !== 1) {
+            return null;
+        }
+        const file = transfer.files[0];
+        const name = typeof file.name === 'string' ? file.name.toLowerCase() : '';
+        const isMarkdown = name.endsWith('.md')
+            || name.endsWith('.markdown')
+            || file.type === 'text/markdown';
+        return isMarkdown ? file : null;
+    }
+
+    /** Вставить содержимое буфера как markdown, а не как обычный текст. */
+    async _pasteAsMarkdown() {
+        if (typeof this.markdownParser !== 'function' || this._view === null) {
+            return;
+        }
+        const text = await navigator.clipboard.readText();
+        if (text.trim() === '') {
+            return;
+        }
+        await this.insertMarkdown(text);
+    }
+
+    /**
+     * Вставить markdown в позицию курсора.
+     * @param {string} markdown
+     */
+    async insertMarkdown(markdown) {
+        if (typeof this.markdownParser !== 'function') {
+            throw new Error('platform-rich-editor: markdownParser required to insert markdown');
+        }
+        const document = await this.markdownParser(markdown);
+        if (this._view === null || !document || typeof document !== 'object') {
+            return;
+        }
+        // Разбор отдаёт целый `doc`; вставляется его содержимое, иначе документ
+        // оказался бы вложен в документ.
+        const parsed = this._schema.nodeFromJSON(document);
+        const slice = new this._pm.Slice(parsed.content, 0, 0);
+        const { state } = this._view;
+        this._view.dispatch(state.tr.replaceSelection(slice).scrollIntoView());
         this._view.focus();
     }
 
@@ -603,13 +809,22 @@ export class PlatformRichEditor extends PlatformElement {
             <div class="pm-block-handle" style=${`top:${this._handleTop}px`}>
                 <button
                     type="button"
+                    class="pm-block-add-btn"
+                    aria-label=${this.t('editor.add_block')}
+                    title=${this.t('editor.add_block')}
+                    @click=${this._onHandleAdd}
+                >
+                    <platform-icon name="plus" size="14"></platform-icon>
+                </button>
+                <button
+                    type="button"
                     class="pm-block-handle-btn"
                     draggable="true"
                     aria-label=${this.t('editor.block_menu.aria')}
                     @dragstart=${this._onHandleDragStart}
                     @click=${this._openBlockMenu}
                 >
-                    <platform-icon name="grip-vertical" size="14"></platform-icon>
+                    <platform-icon name="drag-handle" size="14"></platform-icon>
                 </button>
             </div>
         `;

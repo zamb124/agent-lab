@@ -325,7 +325,13 @@ async def _connect(database_name: str, base_dsn: str) -> PostgresConnection:
     return await connect_fn(_postgres_dsn(base_dsn, database_name))
 
 
+async def _ensure_pg_stat_statements(connection: PostgresConnection) -> None:
+    # БД, созданные после init.sql (ensure_postgres_service_databases), могут не иметь extension.
+    _ = await connection.execute("CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
+
+
 async def _reset_database(connection: PostgresConnection) -> None:
+    await _ensure_pg_stat_statements(connection)
     _ = await connection.execute("SELECT pg_stat_statements_reset()")
 
 
@@ -361,6 +367,7 @@ async def _collect_database(
 ) -> DatabaseSnapshot:
     connection = await _connect(entry.database_name, base_dsn)
     try:
+        await _ensure_pg_stat_statements(connection)
         statement_records = await connection.fetch(
             """
             SELECT

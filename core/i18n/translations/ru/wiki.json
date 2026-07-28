@@ -66,7 +66,11 @@
         "delete_confirm_body": "Страница и вложенные в неё попадут в корзину.",
         "published": "Опубликована",
         "draft": "Черновик",
-        "restricted": "Ограниченный доступ"
+        "restricted": "Ограниченный доступ",
+        "import_markdown": "Импорт из Markdown",
+        "export_markdown": "Экспорт в Markdown",
+        "import_confirm_title": "Заменить содержимое страницы?",
+        "import_confirm_body": "Содержимое страницы будет заменено файлом {name}. Прежнюю версию можно вернуть из истории."
     },
     "home": {
         "title": "База знаний",
@@ -148,6 +152,25 @@
             "member_add_failed": "Не удалось выдать доступ",
             "member_removed": "Доступ отозван",
             "member_remove_failed": "Не удалось отозвать доступ"
+        },
+        "markdown": {
+            "imported": "Файл импортирован",
+            "import_failed": "Не удалось импортировать файл",
+            "empty_file": "Файл пустой"
+        }
+    },
+    "import_report": {
+        "title": "Что не перенеслось",
+        "intro": "Файл импортирован, но {count} конструкций пришлось изменить или отбросить.",
+        "line": "строка {line}",
+        "close": "Понятно",
+        "kind": {
+            "dropped_html": "HTML отброшен",
+            "unsupported_construct": "Не поддержано",
+            "image_extracted": "Изображение вынесено",
+            "unresolved_page_link": "Ссылка не разрешена",
+            "front_matter_unknown_key": "Шапка файла",
+            "oversized_data_uri": "Тяжёлое вложение"
         }
     }
 }

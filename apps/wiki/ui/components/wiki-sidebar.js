@@ -1,6 +1,10 @@
 /**
  * Боковая панель базы знаний: выбор пространства и дерево страниц.
  *
+ * NS-селектор — `useResource('wiki/namespaces', { autoload: true })`.
+ * Режим «все пространства» запрещён (как в Documents): при `all` или
+ * неизвестном имени автоматически выбирается первый workspace.
+ *
  * Дерево строит `platform-tree`; здесь только доменная часть — превращение
  * страниц в узлы, фильтр по названию, создание и перемещение.
  *
@@ -11,6 +15,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
 import {
     getPlatformNamespaceSidebarSelection,
     setPlatformNamespaceSelection,
@@ -152,13 +157,16 @@ export class WikiSidebar extends PlatformElement {
         this.collapsed = false;
         this.mobileOpen = false;
         this._filter = '';
-        this._pages = this.useResource('wiki/pages');
+        this._pages = this.useResource('wiki/pages', { autoload: true });
         this._createPage = this.useOp('wiki/page_create');
         this._movePage = this.useOp('wiki/page_move');
         this._deletePage = this.useOp('wiki/page_delete');
         this._authSelect = this.select((state) => state.auth.user);
-        this._namespaces = this.useResource('wiki/namespaces');
+        this._namespaces = this.useResource('wiki/namespaces', { autoload: true });
         this._treeMenuItems = this._treeMenuItems.bind(this);
+        this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
+            this._pages.load();
+        });
     }
 
     _companyId() {
@@ -221,6 +229,30 @@ export class WikiSidebar extends PlatformElement {
         return items.length > 0 ? items[0].name : '';
     }
 
+    /**
+     * Wiki не умеет режим «все пространства»: страница всегда в одном NS.
+     * Если в storage `all` или чужой namespace (из CRM), фиксируем workspace из списка.
+     */
+    _ensureExplicitNamespace(items, sidebarSel, companyId) {
+        if (companyId === '') {
+            return;
+        }
+        if (!Array.isArray(items) || items.length === 0) {
+            return;
+        }
+        const first = items[0];
+        if (!first || typeof first.name !== 'string' || first.name.length === 0) {
+            return;
+        }
+        if (sidebarSel === 'all') {
+            setPlatformNamespaceSelection(companyId, first.name);
+            return;
+        }
+        if (!items.some((namespace) => namespace.name === sidebarSel)) {
+            setPlatformNamespaceSelection(companyId, first.name);
+        }
+    }
+
     _onNamespaceChange(event) {
         const companyId = this._companyId();
         const name = String(event.detail.value).trim();
@@ -228,7 +260,6 @@ export class WikiSidebar extends PlatformElement {
             return;
         }
         setPlatformNamespaceSelection(companyId, name);
-        this._pages.load();
     }
 
     _onFilterInput(event) {
@@ -237,12 +268,18 @@ export class WikiSidebar extends PlatformElement {
 
     async _createRootPage() {
         const created = await this._createPage.run({ title: '' });
+        if (!created || typeof created.wiki_page_id !== 'string' || created.wiki_page_id === '') {
+            return;
+        }
         await this._pages.load();
         this.navigate('wiki_page', { pageId: created.wiki_page_id });
     }
 
     async _createChildPage(parentPageId) {
         const created = await this._createPage.run({ title: '', parent_page_id: parentPageId });
+        if (!created || typeof created.wiki_page_id !== 'string' || created.wiki_page_id === '') {
+            return;
+        }
         await this._pages.load();
         this.navigate('wiki_page', { pageId: created.wiki_page_id });
     }
@@ -252,7 +289,7 @@ export class WikiSidebar extends PlatformElement {
             { id: 'open', label: this.t('tree_menu.open'), icon: 'external-link' },
             { id: 'create_child', label: this.t('tree_menu.create_child'), icon: 'plus' },
             { id: 'sep', kind: 'separator' },
-            { id: 'move', label: this.t('tree_menu.move'), icon: 'move' },
+            { id: 'move', label: this.t('tree_menu.move'), icon: 'swap-horiz' },
             { id: 'access', label: this.t('tree_menu.access'), icon: 'lock' },
             { id: 'history', label: this.t('tree_menu.history'), icon: 'history' },
             { id: 'sep2', kind: 'separator' },
@@ -315,6 +352,10 @@ export class WikiSidebar extends PlatformElement {
     }
 
     render() {
+        const items = this._namespaces.items;
+        const companyId = this._companyId();
+        const sidebarSel = getPlatformNamespaceSidebarSelection(companyId);
+        this._ensureExplicitNamespace(items, sidebarSel, companyId);
         const nodes = this._nodes();
         const recent = this._recentPages();
         return html`
@@ -400,9 +441,10 @@ export class WikiSidebar extends PlatformElement {
                 </div>
 
                 <div slot="footer">
-                    <platform-notification-manager></platform-notification-manager>
-                    <platform-user block></platform-user>
-                    <platform-deployment-version></platform-deployment-version>
+                    <platform-user block>
+                        <platform-notification-manager slot="user-toolbar"></platform-notification-manager>
+                    </platform-user>
+                    <platform-deployment-version base-url="/wiki" footer></platform-deployment-version>
                 </div>
             </platform-service-sidebar>
         `;

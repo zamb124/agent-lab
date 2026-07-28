@@ -1,8 +1,10 @@
 """
-Идемпотентное создание сервисных БД и расширений pgvector по migrations/services.json.
+Идемпотентное создание сервисных БД и расширений по migrations/services.json.
 
 Перед `scripts.db_migrate upgrade` вызывается автоматически: на старом томе Postgres
-init.sql не перезапускается, поэтому новые БД (например platform_search) создаются здесь.
+init.sql не перезапускается, поэтому новые БД (например platform_wiki) создаются здесь.
+На каждую БД из postgres.databases ставится pg_stat_statements; vector — на БД из
+postgres.vector_extensions (как migrations/postgres/init.sql).
 """
 
 from __future__ import annotations
@@ -52,7 +54,8 @@ async def ensure_postgres_service_databases_async(
 ) -> None:
     """
     Подключение к той же БД, что в shared_url (как Alembic для shared): на кластере проверяются имена из
-    postgres.databases, при отсутствии — CREATE DATABASE и GRANT; на БД из vector_extensions — extension vector.
+    postgres.databases, при отсутствии — CREATE DATABASE и GRANT; на каждой БД — pg_stat_statements;
+    на БД из vector_extensions — extension vector.
     Раньше использовалась отдельная БД postgres; на части pg_hba / кастомных кластеров к ней иначе пускают,
     из‑за чего миграции ломались при том же URL, с которым shared уже подключался.
 
@@ -119,7 +122,8 @@ async def ensure_postgres_service_databases_async(
                     text(f"GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {role}")
                 )
 
-            if shared_db_name in vector_dbs and shared_db_name in created_databases:
+            _ = await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_stat_statements"))
+            if shared_db_name in vector_dbs:
                 _ = await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     except InvalidPasswordError as e:
         raise RuntimeError(f"{_PG_AUTH_HINT}\n{_pg_target_debug(shared_str)}") from e
@@ -130,25 +134,26 @@ async def ensure_postgres_service_databases_async(
     finally:
         await admin_engine.dispose()
 
-    for ext_db in vector_dbs:
-        if ext_db == shared_db_name:
+    for db_name in databases:
+        if db_name == shared_db_name:
             continue
-        if ext_db not in created_databases:
-            continue
-        db_url = str(make_url(shared_str).set(database=ext_db))
-        v_engine = create_async_engine(db_url, poolclass=pool.NullPool)
+        need_vector = db_name in vector_dbs
+        db_url = str(make_url(shared_str).set(database=db_name))
+        db_engine = create_async_engine(db_url, poolclass=pool.NullPool)
         try:
-            async with v_engine.begin() as v_conn:
-                _ = await v_conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            async with db_engine.begin() as db_conn:
+                _ = await db_conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_stat_statements"))
+                if need_vector:
+                    _ = await db_conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         except InvalidPasswordError as e:
             raise RuntimeError(
-                f"{_PG_AUTH_HINT}\nБаза для vector: {ext_db}. {_pg_target_debug(db_url)}"
+                f"{_PG_AUTH_HINT}\nБаза для extensions: {db_name}. {_pg_target_debug(db_url)}"
             ) from e
         except OperationalError as e:
             if isinstance(e.orig, InvalidPasswordError):
                 raise RuntimeError(
-                    f"{_PG_AUTH_HINT}\nБаза для vector: {ext_db}. {_pg_target_debug(db_url)}"
+                    f"{_PG_AUTH_HINT}\nБаза для extensions: {db_name}. {_pg_target_debug(db_url)}"
                 ) from e
             raise
         finally:
-            await v_engine.dispose()
+            await db_engine.dispose()

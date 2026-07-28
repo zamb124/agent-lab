@@ -68,8 +68,19 @@ describe('calendarEffect', () => {
         expect(dispatched.find((d) => d.type === CALENDAR_EVENTS.INTEGRATIONS_LOADED).payload.items).toEqual([{ provider: 'apple' }]);
     });
 
-    it('INTEGRATION_DISCONNECT_REQUESTED требует provider', async () => {
-        await expect(createCalendarEffect({ baseUrl: '/svc' })(ev(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_REQUESTED, {}), buildCtx(() => ({}), []))).rejects.toThrow(/provider/);
+    it('INTEGRATION_DISCONNECT_REQUESTED требует integration_id', async () => {
+        await expect(createCalendarEffect({ baseUrl: '/svc' })(ev(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_REQUESTED, {}), buildCtx(() => ({}), []))).rejects.toThrow(/integration_id/);
+    });
+
+    it('INTEGRATION_DISCONNECT_REQUESTED удаляет интеграцию по integration_id', async () => {
+        fetchMock.respondJson('DELETE', '/svc/api/calendar/integrations/int-1', { success: true });
+        const dispatched = [];
+        await createCalendarEffect({ baseUrl: '/svc' })(
+            ev(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_REQUESTED, { integration_id: 'int-1' }),
+            buildCtx(() => ({}), dispatched),
+        );
+        const done = dispatched.find((d) => d.type === CALENDAR_EVENTS.INTEGRATION_DISCONNECTED);
+        expect(done.payload.integration_id).toBe('int-1');
     });
 
     it('SYNC_REQUESTED → SYNC_COMPLETED', async () => {

@@ -554,3 +554,86 @@ async def test_calendar_create_event_sends_invite_notification_by_attendee_email
             f"/frontend/api/calendar/events/{event_id}",
             headers=auth_headers_system,
         )
+
+
+@pytest.mark.asyncio
+async def test_calendar_integrations_are_isolated_per_mailbox(
+    unique_id: str,
+    frontend_client,
+    auth_headers_system,
+) -> None:
+    """Два ящика одного провайдера у одного пользователя = две независимые интеграции."""
+    first_binding_id = f"mailbind_cal_a_{unique_id}"
+    second_binding_id = f"mailbind_cal_b_{unique_id}"
+
+    async def connect(mailbox_binding_id: str, calendar_id: str) -> dict[str, object]:
+        response = await frontend_client.post(
+            "/frontend/api/calendar/integrations/connect",
+            json={
+                "provider": "mailru",
+                "mailbox_binding_id": mailbox_binding_id,
+                "username": f"{mailbox_binding_id}@mail.ru",
+                "access_token": "app-password",
+                "default_calendar_id": calendar_id,
+                "sync_enabled": True,
+            },
+            headers=auth_headers_system,
+        )
+        assert response.status_code == 200
+        return response.json()
+
+    first = await connect(first_binding_id, f"cal-a-{unique_id}")
+    second = await connect(second_binding_id, f"cal-b-{unique_id}")
+
+    assert first["mailbox_binding_id"] == first_binding_id
+    assert second["mailbox_binding_id"] == second_binding_id
+    assert first["integration_id"] != second["integration_id"]
+
+    try:
+        list_response = await frontend_client.get(
+            "/frontend/api/calendar/integrations",
+            headers=auth_headers_system,
+        )
+        assert list_response.status_code == 200
+        items = list_response.json()["items"]
+        by_id = {item["integration_id"]: item for item in items}
+        assert by_id[first["integration_id"]]["settings"]["default_calendar_id"] == f"cal-a-{unique_id}"
+        assert by_id[second["integration_id"]]["settings"]["default_calendar_id"] == f"cal-b-{unique_id}"
+
+        disconnect_response = await frontend_client.delete(
+            f"/frontend/api/calendar/integrations/{first['integration_id']}",
+            headers=auth_headers_system,
+        )
+        assert disconnect_response.status_code == 200
+
+        after_response = await frontend_client.get(
+            "/frontend/api/calendar/integrations",
+            headers=auth_headers_system,
+        )
+        remaining_ids = {item["integration_id"] for item in after_response.json()["items"]}
+        assert first["integration_id"] not in remaining_ids
+        assert second["integration_id"] in remaining_ids
+    finally:
+        await frontend_client.delete(
+            f"/frontend/api/calendar/integrations/{second['integration_id']}",
+            headers=auth_headers_system,
+        )
+
+
+@pytest.mark.asyncio
+async def test_calendar_sync_requires_known_integration_id(
+    unique_id: str,
+    frontend_client,
+    auth_headers_system,
+) -> None:
+    start_at = datetime.now(timezone.utc)
+    response = await frontend_client.post(
+        "/frontend/api/calendar/sync",
+        json={
+            "integration_id": f"missing-{unique_id}",
+            "start_at": start_at.isoformat(),
+            "end_at": (start_at + timedelta(days=1)).isoformat(),
+        },
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 404

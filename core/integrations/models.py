@@ -29,6 +29,7 @@ class IntegrationCredential(StrictBaseModel):
     user_id: str
     provider: IntegrationProvider
     service: str
+    mailbox_binding_id: str | None = None
     access_token: str
     refresh_token: str | None = None
     expires_at: datetime | None = None

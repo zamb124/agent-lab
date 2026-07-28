@@ -34,6 +34,8 @@ export const MAIL_EVENTS = Object.freeze({
     BINDING_PATCH_REQUESTED: 'mail/binding/patch_requested',
     BINDING_PATCHED: 'mail/binding/patched',
     BINDING_PATCH_FAILED: 'mail/binding/patch_failed',
+    BINDING_CALENDAR_AUTOLINK_REQUESTED: 'mail/binding/calendar_autolink_requested',
+    BINDING_CALENDAR_UNLINK_REQUESTED: 'mail/binding/calendar_unlink_requested',
     BINDING_HEALTHCHECK_REQUESTED: 'mail/binding/healthcheck_requested',
     BINDING_HEALTHCHECK_COMPLETED: 'mail/binding/healthcheck_completed',
     BINDING_HEALTHCHECK_FAILED: 'mail/binding/healthcheck_failed',

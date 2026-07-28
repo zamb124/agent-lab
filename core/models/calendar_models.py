@@ -131,14 +131,37 @@ class CalendarIntegration(StrictBaseModel):
     company_id: str
     user_id: str
     provider: CalendarProvider
+    mailbox_binding_id: str | None = None
     credentials: CalendarIntegrationCredentials
     settings: CalendarIntegrationSettings = Field(default_factory=CalendarIntegrationSettings)
     created_at: datetime
     updated_at: datetime
 
 
+class CalendarAutolinkStatus(StrEnum):
+    """
+    Итог авто-подъёма календаря для почтового ящика. Хранится на MailboxBinding,
+    возвращается календарём в CalendarAutolinkOutcome.
+    """
+
+    LINKED = "linked"
+    UNSUPPORTED = "unsupported"
+    NEEDS_OAUTH = "needs_oauth"
+    NEEDS_PASSWORD = "needs_password"
+    FAILED = "failed"
+    DISABLED = "disabled"
+
+
+class CalendarAutolinkOutcome(StrictBaseModel):
+    status: CalendarAutolinkStatus
+    provider: CalendarProvider | None = None
+    integration_id: str | None = None
+    detail: str
+
+
 class CalendarIntegrationConnectPayload(StrictBaseModel):
     provider: CalendarProvider
+    mailbox_binding_id: str | None = None
     username: str | None = None
     access_token: str
     refresh_token: str | None = None

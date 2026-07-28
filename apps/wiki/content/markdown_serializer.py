@@ -18,10 +18,15 @@ from typing import Final
 
 from apps.wiki.content.prosemirror import ProseMirrorMark, ProseMirrorNode
 from apps.wiki.content.schema import (
+    FOOTNOTE_DEFINITION_NODE,
+    FOOTNOTE_REFERENCE_NODE,
     MARK_SERIALIZATION_ORDER,
+    MATH_BLOCK_NODE,
+    MATH_INLINE_NODE,
     WikiCalloutTone,
     WikiMentionKind,
     WikiSchemaError,
+    WikiTableAlign,
     normalize_document,
 )
 
@@ -39,7 +44,7 @@ MENTION_LINK_SCHEME: Final[dict[WikiMentionKind, str]] = {
 
 PLATFORM_FILE_SCHEME: Final[str] = "platform-file"
 
-_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"([\\`*_\[\]<])")
+_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"([\\`*_\[\]<$])")
 _ESCAPE_PAIR_RE: Final[re.Pattern[str]] = re.compile(r"(~~|==)")
 _BLOCK_START_RE: Final[re.Pattern[str]] = re.compile(r"^(\s*)([#>+|-]|\d+[.)])")
 _TABLE_CELL_PIPE_RE: Final[re.Pattern[str]] = re.compile(r"\|")
@@ -114,17 +119,37 @@ def _serialize_mention(node: ProseMirrorNode) -> str:
     return f"@[{label_text}]({MENTION_LINK_SCHEME[kind]}:{target_id})"
 
 
+def _required_attr(node: ProseMirrorNode, name: str) -> str:
+    value = node.attrs.get(name)
+    if not isinstance(value, str) or not value:
+        raise WikiSchemaError(f"{node.type}.{name} пуст при сериализации")
+    return value
+
+
 def _serialize_inline(nodes: list[ProseMirrorNode]) -> str:
     parts: list[str] = []
+    # Разметка переноса строки съедает пробелы по краям, поэтому они снимаются
+    # здесь: иначе повторный разбор давал бы уже другой текст.
+    after_break = False
     for node in nodes:
         if node.type == "text":
-            parts.append(_serialize_text_node(node))
+            text = _serialize_text_node(node)
+            parts.append(text.lstrip() if after_break else text)
         elif node.type == "hard_break":
+            if parts:
+                parts[-1] = parts[-1].rstrip()
             parts.append("  \n")
+            after_break = True
+            continue
         elif node.type == "platform_mention":
             parts.append(_serialize_mention(node))
+        elif node.type == FOOTNOTE_REFERENCE_NODE:
+            parts.append(f"[^{_required_attr(node, 'label')}]")
+        elif node.type == MATH_INLINE_NODE:
+            parts.append(f"${_required_attr(node, 'formula')}$")
         else:
             raise WikiSchemaError(f"Узел {node.type} не является inline")
+        after_break = False
     return "".join(parts)
 
 
@@ -136,6 +161,17 @@ def _indent_block(text: str, prefix: str, first_prefix: str | None = None) -> st
         marker = head if index == 0 else prefix
         rendered.append(f"{marker}{line}" if line else marker.rstrip())
     return "\n".join(rendered)
+
+
+def _align_separator(align: str) -> str:
+    """Разделитель столбца по выравниванию ячейки шапки."""
+    if align == WikiTableAlign.LEFT.value:
+        return ":---"
+    if align == WikiTableAlign.CENTER.value:
+        return ":---:"
+    if align == WikiTableAlign.RIGHT.value:
+        return "---:"
+    return "---"
 
 
 def _serialize_table(node: ProseMirrorNode) -> str:
@@ -156,10 +192,18 @@ def _serialize_table(node: ProseMirrorNode) -> str:
     width = max(len(row) for row in rows)
     normalized = [row + [""] * (width - len(row)) for row in rows]
     header = normalized[0]
-    separator = ["---"] * width
+    # Выравнивание задаёт шапка: в markdown оно одно на столбец.
+    header_cells = node.content[0].content
+    aligns: list[str] = []
+    for index in range(width):
+        raw_align = header_cells[index].attrs.get("align") if index < len(header_cells) else ""
+        aligns.append(raw_align if isinstance(raw_align, str) else "")
     body = normalized[1:]
 
-    lines = ["| " + " | ".join(header) + " |", "| " + " | ".join(separator) + " |"]
+    lines = [
+        "| " + " | ".join(header) + " |",
+        "| " + " | ".join(_align_separator(align) for align in aligns) + " |",
+    ]
     lines.extend("| " + " | ".join(row) + " |" for row in body)
     return "\n".join(lines)
 
@@ -252,6 +296,12 @@ def _serialize_block(node: ProseMirrorNode) -> str:
         return f"[{label}]({PLATFORM_FILE_SCHEME}:{file_id})"
     if node.type == "table":
         return _serialize_table(node)
+    if node.type == MATH_BLOCK_NODE:
+        return f"$$\n{_required_attr(node, 'formula')}\n$$"
+    if node.type == FOOTNOTE_DEFINITION_NODE:
+        label = _required_attr(node, "label")
+        body = _serialize_blocks(node.content)
+        return _indent_block(body, "    ", f"[^{label}]: ")
     raise WikiSchemaError(f"Узел {node.type} не поддержан сериализатором")
 
 
@@ -265,11 +315,21 @@ def document_to_markdown(document: ProseMirrorNode) -> str:
 
     Документ нормализуется по схеме перед обходом: сериализатор не должен
     угадывать пропущенные атрибуты и порядок марок.
+
+    Определения сносок всегда уезжают в конец файла: markdown не читает
+    определение, встреченное посреди текста, как часть предыдущего блока, и
+    документ с определением в середине после экспорта стал бы невалидным.
     """
     normalized = normalize_document(document)
     if normalized.type != "doc":
         raise WikiSchemaError(f"Ожидался doc, получен {normalized.type}")
-    return _serialize_blocks(normalized.content).strip()
+    body = [
+        node for node in normalized.content if node.type != FOOTNOTE_DEFINITION_NODE
+    ]
+    footnotes = [
+        node for node in normalized.content if node.type == FOOTNOTE_DEFINITION_NODE
+    ]
+    return _serialize_blocks([*body, *footnotes]).strip()
 
 
 def document_to_plain_text(document: ProseMirrorNode) -> str:
@@ -284,6 +344,11 @@ def document_to_plain_text(document: ProseMirrorNode) -> str:
             label = node.attrs.get("label")
             if isinstance(label, str) and label:
                 chunks.append(label)
+        elif node.type in {MATH_INLINE_NODE, MATH_BLOCK_NODE}:
+            # Формула — часть текста страницы: по ней ищут так же, как по коду.
+            formula = node.attrs.get("formula")
+            if isinstance(formula, str) and formula:
+                chunks.append(formula)
         for child in node.content:
             walk(child)
         if node.type in {"paragraph", "heading", "list_item", "task_item", "table_cell"}:

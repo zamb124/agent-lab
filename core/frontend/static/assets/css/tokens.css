@@ -780,6 +780,9 @@
     --wiki-outline-width: 15rem;
     --wiki-page-max-width: 46rem;
     --wiki-cover-height: 12rem;
+    /* Полоса слева от колонки текста под кнопки блока: её резервирует страница,
+       иначе ручка перетаскивания легла бы на первые символы строки. */
+    --wiki-block-gutter: 2.75rem;
 
     /* Shimmer эффект для загрузки */
     --shimmer-gradient: linear-gradient(

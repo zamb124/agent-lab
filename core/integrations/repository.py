@@ -20,6 +20,7 @@ def _credential_from_record(record: IntegrationCredentialRecord) -> IntegrationC
         user_id=record.user_id,
         provider=IntegrationProvider(record.provider),
         service=record.service,
+        mailbox_binding_id=record.mailbox_binding_id,
         access_token=record.access_token,
         refresh_token=record.refresh_token,
         expires_at=record.expires_at,
@@ -42,6 +43,7 @@ class IntegrationCredentialRepository:
         provider: IntegrationProvider,
         service: str,
     ) -> IntegrationCredential | None:
+        """Credential без привязки к ящику (OAuth-провайдеры уровня пользователя)."""
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -50,12 +52,87 @@ class IntegrationCredentialRepository:
                     IntegrationCredentialRecord.user_id == user_id,
                     IntegrationCredentialRecord.provider == provider,
                     IntegrationCredentialRecord.service == service,
+                    IntegrationCredentialRecord.mailbox_binding_id.is_(None),
                 )
             )
             row = result.scalar_one_or_none()
             if row is None:
                 return None
             return _credential_from_record(row)
+
+    async def get_by_user_provider_service_mailbox(
+        self,
+        company_id: str,
+        user_id: str,
+        provider: IntegrationProvider,
+        service: str,
+        mailbox_binding_id: str | None,
+    ) -> IntegrationCredential | None:
+        if mailbox_binding_id is None:
+            return await self.get_by_user_provider_service(
+                company_id=company_id,
+                user_id=user_id,
+                provider=provider,
+                service=service,
+            )
+        session_factory = await get_session_factory(self._db_url)
+        async with session_factory() as session:
+            result = await session.execute(
+                select(IntegrationCredentialRecord).where(
+                    IntegrationCredentialRecord.company_id == company_id,
+                    IntegrationCredentialRecord.user_id == user_id,
+                    IntegrationCredentialRecord.provider == provider,
+                    IntegrationCredentialRecord.service == service,
+                    IntegrationCredentialRecord.mailbox_binding_id == mailbox_binding_id,
+                )
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                return None
+            return _credential_from_record(row)
+
+    async def get_by_credential_id(
+        self,
+        credential_id: str,
+        company_id: str,
+        user_id: str,
+    ) -> IntegrationCredential | None:
+        session_factory = await get_session_factory(self._db_url)
+        async with session_factory() as session:
+            result = await session.execute(
+                select(IntegrationCredentialRecord).where(
+                    IntegrationCredentialRecord.credential_id == credential_id,
+                    IntegrationCredentialRecord.company_id == company_id,
+                    IntegrationCredentialRecord.user_id == user_id,
+                )
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                return None
+            return _credential_from_record(row)
+
+    async def list_by_user_provider_service(
+        self,
+        company_id: str,
+        user_id: str,
+        provider: IntegrationProvider,
+        service: str,
+    ) -> list[IntegrationCredential]:
+        """Все credentials провайдера у пользователя: по одному на ящик + один без ящика."""
+        session_factory = await get_session_factory(self._db_url)
+        async with session_factory() as session:
+            result = await session.execute(
+                select(IntegrationCredentialRecord)
+                .where(
+                    IntegrationCredentialRecord.company_id == company_id,
+                    IntegrationCredentialRecord.user_id == user_id,
+                    IntegrationCredentialRecord.provider == provider,
+                    IntegrationCredentialRecord.service == service,
+                )
+                .order_by(IntegrationCredentialRecord.created_at.asc())
+            )
+            rows = list(result.scalars().all())
+            return [_credential_from_record(item) for item in rows]
 
     async def list_by_user(
         self,
@@ -105,6 +182,7 @@ class IntegrationCredentialRepository:
             "user_id": credential.user_id,
             "provider": credential.provider,
             "service": credential.service,
+            "mailbox_binding_id": credential.mailbox_binding_id,
             "access_token": credential.access_token,
             "refresh_token": credential.refresh_token,
             "expires_at": credential.expires_at,
@@ -118,6 +196,7 @@ class IntegrationCredentialRepository:
         stmt = stmt.on_conflict_do_update(
             index_elements=["credential_id"],
             set_={
+                "mailbox_binding_id": stmt.excluded.mailbox_binding_id,
                 "access_token": stmt.excluded.access_token,
                 "refresh_token": stmt.excluded.refresh_token,
                 "expires_at": stmt.excluded.expires_at,
@@ -168,3 +247,22 @@ class IntegrationCredentialRepository:
             )
             await session.commit()
             return get_rowcount(result) > 0
+
+    async def delete_by_mailbox_binding(
+        self,
+        company_id: str,
+        mailbox_binding_id: str,
+        service: str,
+    ) -> int:
+        """Снять credentials ящика при его отвязке, чтобы не оставлять висячие строки."""
+        session_factory = await get_session_factory(self._db_url)
+        async with session_factory() as session:
+            result = await session.execute(
+                delete(IntegrationCredentialRecord).where(
+                    IntegrationCredentialRecord.company_id == company_id,
+                    IntegrationCredentialRecord.mailbox_binding_id == mailbox_binding_id,
+                    IntegrationCredentialRecord.service == service,
+                )
+            )
+            await session.commit()
+            return get_rowcount(result)

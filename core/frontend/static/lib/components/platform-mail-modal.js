@@ -1431,6 +1431,23 @@ export class PlatformMailModal extends PlatformModal {
                 justify-content: flex-start;
                 align-items: center;
             }
+            .binding-calendar {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                align-items: center;
+                justify-content: space-between;
+                margin-top: var(--space-2);
+                padding-top: var(--space-2);
+                border-top: 1px solid var(--border-subtle);
+            }
+            .binding-calendar-status {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                align-items: center;
+                min-width: 0;
+            }
             .settings-row.editing {
                 border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
                 box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
@@ -4178,9 +4195,60 @@ export class PlatformMailModal extends PlatformModal {
                         ` : nothing}
                     </div>
                 </div>
+                ${isRole ? nothing : this._renderBindingCalendarRow(binding)}
                 ${isEditing ? this._renderBindingEditPanel(binding) : nothing}
             </div>
         `;
+    }
+
+    _renderBindingCalendarRow(binding) {
+        const status = typeof binding.calendar_autolink_status === 'string'
+            ? binding.calendar_autolink_status
+            : 'disabled';
+        const isLinked = status === 'linked';
+        // Пароль ящика не подошёл к CalDAV или подъём упал: календарь ещё можно
+        // настроить вручную, введя пароль приложения для календаря.
+        const canConfigure = isLinked || status === 'needs_password' || status === 'failed';
+        const detail = typeof binding.calendar_autolink_detail === 'string'
+            ? binding.calendar_autolink_detail
+            : '';
+        return html`
+            <div class="binding-calendar">
+                <div class="binding-calendar-status">
+                    <span class="att-badge">${this.t(`calendar_autolink_${status}`)}</span>
+                    ${detail ? html`<span class="settings-hint">${detail}</span>` : nothing}
+                </div>
+                <div class="binding-actions">
+                    <platform-button
+                        variant="secondary"
+                        @click=${() => this.dispatch(MAIL_EVENTS.BINDING_CALENDAR_AUTOLINK_REQUESTED, {
+                            mailbox_binding_id: binding.mailbox_binding_id,
+                        })}
+                    >${isLinked ? this.t('calendar_relink') : this.t('calendar_connect')}</platform-button>
+                    ${canConfigure ? html`
+                        <platform-button
+                            variant="ghost"
+                            @click=${() => this._openCalendarSurface()}
+                        >${this.t('calendar_configure')}</platform-button>
+                    ` : nothing}
+                    ${isLinked ? html`
+                        <platform-button
+                            variant="ghost"
+                            @click=${() => this.dispatch(MAIL_EVENTS.BINDING_CALENDAR_UNLINK_REQUESTED, {
+                                mailbox_binding_id: binding.mailbox_binding_id,
+                            })}
+                        >${this.t('calendar_disconnect')}</platform-button>
+                    ` : nothing}
+                </div>
+            </div>
+        `;
+    }
+
+    _openCalendarSurface() {
+        this.openModal('platform.calendar', {}, {
+            replaceKinds: ['platform.mail', 'platform.calendar'],
+            skipEnterMotion: true,
+        });
     }
 
     _ensureRoleMembersLoaded(mailboxBindingId) {

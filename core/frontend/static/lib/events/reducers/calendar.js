@@ -102,8 +102,12 @@ export function calendarReducer(state = initialCalendarState, event) {
         case CALENDAR_EVENTS.INTEGRATIONS_LOADED:
             return { ...state, integrations: requireItems(event.payload, event.type) };
         case CALENDAR_EVENTS.INTEGRATION_DISCONNECTED: {
-            const provider = event.payload && event.payload.provider;
-            return { ...state, integrations: state.integrations.filter((i) => i.provider !== provider) };
+            const integrationId = event.payload && event.payload.integration_id;
+            if (!integrationId) return state;
+            return {
+                ...state,
+                integrations: state.integrations.filter((i) => i.integration_id !== integrationId),
+            };
         }
         case CALENDAR_EVENTS.SYNC_REQUESTED:
             return { ...state, syncing: true };

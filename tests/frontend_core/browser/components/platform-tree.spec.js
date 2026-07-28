@@ -109,6 +109,34 @@ describe('platform-tree', () => {
         expect(rowById(el, 'root').getAttribute('aria-selected')).to.equal('false');
     });
 
+    it('выбранный узел раскрывается вместе с предками', async () => {
+        const el = await mountTree({ selectedId: 'onboarding' });
+
+        expect(rowById(el, 'onboarding')).to.exist;
+        expect(el.isExpanded('root')).to.be.true;
+        expect(el.isExpanded('guides')).to.be.true;
+    });
+
+    it('выбранный узел раскрывается, когда дерево пришло позже выбора', async () => {
+        const el = await mountTree({ nodes: [], selectedId: 'onboarding' });
+
+        el.nodes = NODES;
+        await elementUpdated(el);
+
+        expect(rowById(el, 'onboarding')).to.exist;
+    });
+
+    it('свёрнутую вручную ветку выбранного узла не разворачивает обратно', async () => {
+        const el = await mountTree({ selectedId: 'onboarding' });
+
+        rowById(el, 'guides').querySelector('[data-twisty="guides"]').click();
+        await elementUpdated(el);
+        el.nodes = [...NODES];
+        await elementUpdated(el);
+
+        expect(el.isExpanded('guides')).to.be.false;
+    });
+
     it('revealNode раскрывает всех предков', async () => {
         const el = await mountTree();
 
@@ -222,6 +250,8 @@ describe('platform-tree', () => {
         expect(event.detail.id).to.equal('archive');
         expect(event.detail.position).to.equal('inside');
         expect(event.detail.parent_id).to.equal('root');
+        // Иначе перенесённый узел пропадает внутри свёрнутого родителя.
+        expect(el.isExpanded('root')).to.be.true;
     });
 
     it('перетаскивание к верхней кромке вставляет перед узлом', async () => {
@@ -293,6 +323,50 @@ describe('platform-tree', () => {
         const event = await action;
 
         expect(event.detail).to.include({ action: 'delete', id: 'archive' });
+    });
+
+    it('кнопка меню есть в каждой строке и открывает те же действия', async () => {
+        const el = await mountTree({
+            menuItems: () => [{ id: 'delete', label: 'Удалить', danger: true }],
+        });
+
+        expect(rows(el).every((row) => row.querySelector('.row-menu') !== null)).to.be.true;
+
+        // Выбор узла по кнопке меню срабатывать не должен.
+        let selected = false;
+        el.addEventListener('tree-select', () => { selected = true; });
+        rowById(el, 'archive').querySelector('[data-row-menu="archive"]').click();
+        await elementUpdated(el);
+
+        const menu = el.shadowRoot.querySelector('platform-menu');
+        expect(menu).to.exist;
+        expect(selected).to.be.false;
+        await elementUpdated(menu);
+
+        const action = oneEvent(el, 'tree-action');
+        menu.shadowRoot.querySelector('[data-menu-item="delete"]').click();
+        const event = await action;
+
+        expect(event.detail).to.include({ action: 'delete', id: 'archive' });
+    });
+
+    it('повторный клик по кнопке меню закрывает его', async () => {
+        const el = await mountTree({ menuItems: () => [{ id: 'delete', label: 'Удалить' }] });
+        const button = rowById(el, 'archive').querySelector('[data-row-menu="archive"]');
+
+        button.click();
+        await elementUpdated(el);
+        expect(el.shadowRoot.querySelector('platform-menu')).to.exist;
+
+        button.click();
+        await elementUpdated(el);
+        expect(el.shadowRoot.querySelector('platform-menu')).to.be.null;
+    });
+
+    it('без menuItems кнопки меню в строке нет', async () => {
+        const el = await mountTree();
+
+        expect(rowById(el, 'root').querySelector('.row-menu')).to.be.null;
     });
 
     it('без menuItems контекстное меню не открывается', async () => {

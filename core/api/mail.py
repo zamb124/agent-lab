@@ -248,6 +248,36 @@ async def delete_mail_binding(
         _raise_http_for_mail_error(exc)
 
 
+@router.post(
+    "/bindings/{mailbox_binding_id}/calendar/autolink",
+    response_model=MailboxBindingPublic,
+)
+async def autolink_mail_binding_calendar(
+    mailbox_binding_id: str,
+    mail_service: MailServiceDep,
+) -> MailboxBindingPublic:
+    try:
+        binding = await mail_service.relink_mailbox_calendar(mailbox_binding_id)
+    except Exception as exc:
+        _raise_http_for_mail_error(exc)
+    return await mail_service.public_binding(binding)
+
+
+@router.delete(
+    "/bindings/{mailbox_binding_id}/calendar",
+    response_model=MailboxBindingPublic,
+)
+async def unlink_mail_binding_calendar(
+    mailbox_binding_id: str,
+    mail_service: MailServiceDep,
+) -> MailboxBindingPublic:
+    try:
+        binding = await mail_service.unlink_mailbox_calendar(mailbox_binding_id)
+    except Exception as exc:
+        _raise_http_for_mail_error(exc)
+    return await mail_service.public_binding(binding)
+
+
 @router.get("/folders", response_model=MailFolderListResult)
 async def list_mail_folders(
     mail_service: MailServiceDep,

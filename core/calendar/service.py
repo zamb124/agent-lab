@@ -15,6 +15,12 @@ from zoneinfo import ZoneInfo
 import httpx
 from pydantic import ConfigDict, Field
 
+from core.calendar.caldav_discovery import (
+    CALDAV_PROVIDERS,
+    CaldavAutolinkKind,
+    resolve_caldav_base_url,
+    resolve_caldav_target,
+)
 from core.calendar.events import CALENDAR_EVENT_CREATED
 from core.calendar.repositories import CalendarEventSqlRepository
 from core.clients.service_client import ServiceClient, ServiceClientError
@@ -29,6 +35,8 @@ from core.integrations.repository import IntegrationCredentialRepository
 from core.logging import get_logger
 from core.models import (
     CalendarAttendee,
+    CalendarAutolinkOutcome,
+    CalendarAutolinkStatus,
     CalendarEvent,
     CalendarEventSource,
     CalendarEventStatus,
@@ -56,18 +64,6 @@ logger = get_logger(__name__)
 GOOGLE_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
-# Единый протокол CalDAV: разные провайдеры = разные base_url, один клиент.
-CALDAV_PROVIDERS: frozenset[CalendarProvider] = frozenset(
-    {CalendarProvider.YANDEX, CalendarProvider.MAILRU, CalendarProvider.CALDAV}
-)
-
-# Preset base_url для известных парольных провайдеров. CALDAV (custom) требует
-# явного caldav_base_url в payload/settings.
-CALDAV_PRESET_BASE_URLS: dict[CalendarProvider, str] = {
-    CalendarProvider.YANDEX: "https://caldav.yandex.ru",
-    CalendarProvider.MAILRU: "https://calendar.mail.ru",
-}
-
 _PROVIDER_TO_SOURCE: dict[CalendarProvider, CalendarEventSource] = {
     CalendarProvider.GOOGLE: CalendarEventSource.GOOGLE,
     CalendarProvider.YANDEX: CalendarEventSource.YANDEX,
@@ -76,33 +72,11 @@ _PROVIDER_TO_SOURCE: dict[CalendarProvider, CalendarEventSource] = {
 }
 
 
-# Автоподъём CalDAV календаря при подключении personal mailbox с известным хостом.
-_IMAP_HOST_TO_CALDAV_PROVIDER: dict[str, CalendarProvider] = {
-    "imap.yandex.com": CalendarProvider.YANDEX,
-    "imap.yandex.ru": CalendarProvider.YANDEX,
-    "imap.mail.ru": CalendarProvider.MAILRU,
-}
-
-
-def caldav_provider_for_imap_host(imap_host: str) -> CalendarProvider | None:
-    return _IMAP_HOST_TO_CALDAV_PROVIDER.get(imap_host.strip().lower())
-
-
 def calendar_source_for_provider(provider: CalendarProvider) -> CalendarEventSource:
     source = _PROVIDER_TO_SOURCE.get(provider)
     if source is None:
         raise ValueError(f"No calendar event source mapping for provider {provider}")
     return source
-
-
-def resolve_caldav_base_url(provider: CalendarProvider, explicit_base_url: str | None) -> str:
-    """base_url приоритет: явный (settings/payload) -> preset. Fail-closed для custom."""
-    if explicit_base_url and explicit_base_url.strip():
-        return explicit_base_url.strip().rstrip("/")
-    preset = CALDAV_PRESET_BASE_URLS.get(provider)
-    if preset is None:
-        raise ValueError(f"CalDAV provider {provider} requires explicit caldav_base_url")
-    return preset
 
 
 class GoogleCalendarDateTimePayload(FlexibleBaseModel):
@@ -343,6 +317,16 @@ class CalDavClient:
             return self._absolutize(external_event_id)
         return f"{self._calendar_url(username=username, calendar_id=calendar_id)}{external_event_id}.ics"
 
+    def _discovery_roots(self) -> list[str]:
+        """
+        RFC 6764: сначала /.well-known/caldav (он редиректит на реальный корень,
+        как у calendar.mail.ru → /principals/), затем сам base_url.
+        """
+        well_known = f"{self._origin()}/.well-known/caldav"
+        if well_known == self._base_url:
+            return [well_known]
+        return [well_known, self._base_url]
+
     async def discover_default_calendar_id(self, username: str, app_password: str) -> str:
         """
         RFC 4791 discovery: current-user-principal -> calendar-home-set ->
@@ -355,10 +339,24 @@ class CalDavClient:
             '<?xml version="1.0" encoding="utf-8" ?>'
             '<d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>'
         )
-        principal_root = await self._propfind(self._base_url, principal_body, depth="0", auth=auth)
-        principal_href = self._first_text(
-            principal_root, "d:response/d:propstat/d:prop/d:current-user-principal/d:href", ns
-        )
+        principal_href: str | None = None
+        roots = self._discovery_roots()
+        for index, root_url in enumerate(roots):
+            is_last_root = index == len(roots) - 1
+            try:
+                principal_root = await self._propfind(
+                    root_url, principal_body, depth="0", auth=auth
+                )
+            except httpx.HTTPStatusError as error:
+                # 401/403 — проблема доступа, а не адреса: следующий корень не поможет.
+                if error.response.status_code in {401, 403} or is_last_root:
+                    raise
+                continue
+            principal_href = self._first_text(
+                principal_root, "d:response/d:propstat/d:prop/d:current-user-principal/d:href", ns
+            )
+            if principal_href:
+                break
         if not principal_href:
             raise ValueError(f"CalDAV principal not found at {self._base_url}")
         home_body = (
@@ -405,7 +403,7 @@ class CalDavClient:
         self, url: str, body: str, *, depth: str, auth: tuple[str, str]
     ) -> ElementTree.Element:
         headers = {"Depth": depth, "Content-Type": "application/xml"}
-        async with get_httpx_client(timeout=60.0) as client:
+        async with get_httpx_client(timeout=60.0, follow_redirects=True) as client:
             response = await client.request(
                 "PROPFIND", url, content=body.encode("utf-8"), headers=headers, auth=auth
             )
@@ -539,6 +537,7 @@ def calendar_integration_from_credential(cred: IntegrationCredential) -> Calenda
         company_id=cred.company_id,
         user_id=cred.user_id,
         provider=CalendarProvider(cred.provider),
+        mailbox_binding_id=cred.mailbox_binding_id,
         credentials=CalendarIntegrationCredentials(
             username=metadata.username,
             access_token=cred.access_token,
@@ -565,6 +564,7 @@ def _calendar_integration_to_credential(integration: CalendarIntegration) -> Int
         user_id=integration.user_id,
         provider=IntegrationProvider(integration.provider),
         service="calendar",
+        mailbox_binding_id=integration.mailbox_binding_id,
         access_token=integration.credentials.access_token,
         refresh_token=integration.credentials.refresh_token,
         expires_at=integration.credentials.expires_at,
@@ -663,7 +663,7 @@ class CalendarService:
             company_id=credential.company_id,
             start_at=now - timedelta(days=30),
             end_at=now + timedelta(days=365),
-            provider=CalendarProvider.GOOGLE,
+            integration_id=credential.credential_id,
         )
         return return_path
 
@@ -1082,11 +1082,12 @@ class CalendarService:
         provider = payload.provider
         if provider != CalendarProvider.GOOGLE and provider not in CALDAV_PROVIDERS:
             raise ValueError(f"Unsupported calendar provider for integration: {provider}")
-        existing = await self._credential_repository.get_by_user_provider_service(
+        existing = await self._credential_repository.get_by_user_provider_service_mailbox(
             company_id=company_id,
             user_id=user_id,
             provider=IntegrationProvider(provider),
             service="calendar",
+            mailbox_binding_id=payload.mailbox_binding_id,
         )
         existing_settings = (
             calendar_integration_from_credential(existing).settings if existing else None
@@ -1115,6 +1116,7 @@ class CalendarService:
             company_id=company_id,
             user_id=user_id,
             provider=provider,
+            mailbox_binding_id=payload.mailbox_binding_id,
             credentials=CalendarIntegrationCredentials(
                 username=payload.username,
                 access_token=payload.access_token,
@@ -1143,27 +1145,76 @@ class CalendarService:
         *,
         user_id: str,
         company_id: str,
+        mailbox_binding_id: str,
         email_address: str,
         password: str,
         imap_host: str,
-    ) -> CalendarIntegration | None:
+        mail_domain: str,
+    ) -> CalendarAutolinkOutcome:
         """
-        Идемпотентно поднимает CalDAV calendar integration из personal mailbox,
-        если IMAP host относится к известному провайдеру (Yandex/Mail.ru).
-        Возвращает None, если провайдер не поддерживает auto-link.
+        Идемпотентно поднимает CalDAV-интеграцию для ящика: пресет по домену,
+        пресет по IMAP-хосту, затем RFC 6764 проба. Итог всегда типизирован,
+        чтобы почта могла записать статус привязки.
         """
-        provider = caldav_provider_for_imap_host(imap_host)
-        if provider is None:
-            return None
-        payload = CalendarIntegrationConnectPayload(
-            provider=provider,
-            username=email_address,
-            access_token=password,
+        resolution = await resolve_caldav_target(
+            mail_domain=mail_domain,
+            imap_host=imap_host,
         )
-        return await self.connect_integration(
-            user_id=user_id,
+        if resolution.kind == CaldavAutolinkKind.NEEDS_OAUTH:
+            return CalendarAutolinkOutcome(
+                status=CalendarAutolinkStatus.NEEDS_OAUTH,
+                detail=resolution.detail,
+            )
+        if resolution.kind == CaldavAutolinkKind.UNSUPPORTED:
+            return CalendarAutolinkOutcome(
+                status=CalendarAutolinkStatus.UNSUPPORTED,
+                detail=resolution.detail,
+            )
+        provider, base_url = resolution.require_target()
+        try:
+            integration = await self.connect_integration(
+                user_id=user_id,
+                company_id=company_id,
+                payload=CalendarIntegrationConnectPayload(
+                    provider=provider,
+                    mailbox_binding_id=mailbox_binding_id,
+                    username=email_address,
+                    access_token=password,
+                    caldav_base_url=base_url,
+                ),
+            )
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code not in {401, 403}:
+                raise
+            # Пароль ящика не подошёл к CalDAV: у Mail.ru пароль внешнего
+            # приложения выдаётся отдельно для календаря.
+            return CalendarAutolinkOutcome(
+                status=CalendarAutolinkStatus.NEEDS_PASSWORD,
+                provider=provider,
+                detail=(
+                    f"{base_url} rejected the mailbox password "
+                    f"(HTTP {error.response.status_code}): a separate app password "
+                    "for the calendar is required"
+                ),
+            )
+        return CalendarAutolinkOutcome(
+            status=CalendarAutolinkStatus.LINKED,
+            provider=provider,
+            integration_id=integration.integration_id,
+            detail=resolution.detail,
+        )
+
+    async def delete_calendar_integrations_for_mailbox(
+        self,
+        *,
+        company_id: str,
+        mailbox_binding_id: str,
+    ) -> int:
+        """Снять календарные интеграции ящика при его отвязке."""
+        return await self._credential_repository.delete_by_mailbox_binding(
             company_id=company_id,
-            payload=payload,
+            mailbox_binding_id=mailbox_binding_id,
+            service="calendar",
         )
 
     async def upsert_imip_event(
@@ -1191,15 +1242,14 @@ class CalendarService:
             company_id=company_id,
         )
 
-    async def disconnect_integration(self, user_id: str, company_id: str, provider: CalendarProvider) -> None:
-        deleted = await self._credential_repository.delete_by_user_provider_service(
+    async def disconnect_integration(self, user_id: str, company_id: str, integration_id: str) -> None:
+        deleted = await self._credential_repository.delete(
+            credential_id=integration_id,
             company_id=company_id,
             user_id=user_id,
-            provider=IntegrationProvider(provider),
-            service="calendar",
         )
         if not deleted:
-            raise ValueError(f"Calendar integration {provider} not found")
+            raise ValueError(f"Calendar integration {integration_id} not found")
 
     async def run_sync(
         self,
@@ -1207,21 +1257,21 @@ class CalendarService:
         company_id: str,
         start_at: datetime,
         end_at: datetime,
-        provider: CalendarProvider,
+        integration_id: str,
     ) -> dict[str, int]:
         if _ensure_utc(start_at) >= _ensure_utc(end_at):
             raise ValueError("Calendar sync range start_at must be before end_at")
-        credential = await self._credential_repository.get_by_user_provider_service(
+        credential = await self._credential_repository.get_by_credential_id(
+            credential_id=integration_id,
             company_id=company_id,
             user_id=user_id,
-            provider=IntegrationProvider(provider),
-            service="calendar",
         )
-        if credential is None:
-            raise ValueError(f"Calendar integration {provider} not found")
+        if credential is None or credential.service != "calendar":
+            raise ValueError(f"Calendar integration {integration_id} not found")
         integration = calendar_integration_from_credential(credential)
+        provider = integration.provider
         if not integration.settings.sync_enabled:
-            raise ValueError(f"Calendar integration {provider} is disabled")
+            raise ValueError(f"Calendar integration {integration_id} is disabled")
         calendar_id = integration.settings.default_calendar_id
         if not calendar_id:
             raise ValueError(f"{provider} integration default_calendar_id is required")
@@ -1276,6 +1326,7 @@ class CalendarService:
                     user_id=user_id,
                     credentials=integration.credentials,
                     calendar_id=calendar_id,
+                    mailbox_binding_id=integration.mailbox_binding_id,
                     start_at=start_at,
                     end_at=end_at,
                 )
@@ -1387,6 +1438,7 @@ class CalendarService:
         user_id: str,
         credentials: CalendarIntegrationCredentials,
         calendar_id: str,
+        mailbox_binding_id: str | None,
         start_at: datetime,
         end_at: datetime,
     ) -> int:
@@ -1461,6 +1513,7 @@ class CalendarService:
                     )
                 ],
                 metadata={},
+                mailbox_binding_id=mailbox_binding_id,
                 created_by_user_id=matched.created_by_user_id if matched else user_id,
                 updated_by_user_id=user_id,
                 created_at=matched.created_at if matched else now,
@@ -1597,17 +1650,42 @@ class CalendarService:
             exported += 1
         return exported
 
-    async def _delete_external_links(self, event: CalendarEvent) -> None:
-        for ref in event.external_refs:
-            credential = await self._credential_repository.get_by_user_provider_service(
-                company_id=event.company_id,
-                user_id=event.updated_by_user_id or event.created_by_user_id or "",
-                provider=IntegrationProvider(ref.provider),
-                service="calendar",
-            )
-            if credential is None:
-                continue
+    async def _integration_for_external_ref(
+        self,
+        *,
+        company_id: str,
+        user_id: str,
+        ref: CalendarExternalRef,
+    ) -> CalendarIntegration | None:
+        """
+        Интеграция, через которую событие ушло во внешний календарь. У одного
+        провайдера может быть несколько интеграций (по одной на ящик), поэтому
+        различаем их по calendar_id из ref.
+        """
+        credentials = await self._credential_repository.list_by_user_provider_service(
+            company_id=company_id,
+            user_id=user_id,
+            provider=IntegrationProvider(ref.provider),
+            service="calendar",
+        )
+        for credential in credentials:
             integration = calendar_integration_from_credential(credential)
+            if integration.settings.default_calendar_id == ref.calendar_id:
+                return integration
+        return None
+
+    async def _delete_external_links(self, event: CalendarEvent) -> None:
+        owner_user_id = event.updated_by_user_id or event.created_by_user_id
+        if owner_user_id is None or not owner_user_id.strip():
+            return
+        for ref in event.external_refs:
+            integration = await self._integration_for_external_ref(
+                company_id=event.company_id,
+                user_id=owner_user_id,
+                ref=ref,
+            )
+            if integration is None:
+                continue
             if ref.provider == CalendarProvider.GOOGLE:
                 await self._google_client.delete_event(
                     access_token=integration.credentials.access_token,

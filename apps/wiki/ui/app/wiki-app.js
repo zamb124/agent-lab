@@ -22,6 +22,9 @@ import {
     wikiPageRestoreOp,
     wikiDeletedPagesOp,
     wikiPageMarkdownOp,
+    wikiPageMarkdownImportOp,
+    wikiPageMarkdownCreateOp,
+    wikiMarkdownParseOp,
 } from '../events/resources/pages.resource.js';
 import {
     wikiAccessReadOp,
@@ -53,6 +56,7 @@ import '../pages/wiki-history-page.js';
 import '../pages/wiki-public-preview-page.js';
 import '../modals/wiki-move-page-modal.js';
 import '../modals/wiki-page-access-modal.js';
+import '../modals/wiki-import-report-modal.js';
 
 const WIKI_ROUTES = [
     { key: 'wiki_home',         path: '',                     titleKey: 'routes.wiki_home' },
@@ -65,7 +69,7 @@ const WIKI_ROUTES = [
 const WIKI_BOTTOM_NAV_ITEMS = [
     { key: 'home',    routeKey: 'wiki_home',   icon: 'book-open', labelKey: 'bottom_nav.home' },
     { key: 'search',  routeKey: 'wiki_search', icon: 'search',    labelKey: 'bottom_nav.search' },
-    { key: 'tree',    sheet: 'wiki.tree',      icon: 'list-tree', labelKey: 'bottom_nav.tree' },
+    { key: 'tree',    sheet: 'wiki.tree',      icon: 'trace-tree', labelKey: 'bottom_nav.tree' },
     { key: 'profile', sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
 ];
 
@@ -96,6 +100,9 @@ export class WikiApp extends PlatformApp {
         wikiPageRestoreOp,
         wikiDeletedPagesOp,
         wikiPageMarkdownOp,
+        wikiPageMarkdownImportOp,
+        wikiPageMarkdownCreateOp,
+        wikiMarkdownParseOp,
         wikiAccessReadOp,
         wikiMemberAddOp,
         wikiMemberRemoveOp,
@@ -137,6 +144,15 @@ export class WikiApp extends PlatformApp {
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
+                padding: var(--space-4);
+                padding-left: 0;
+                box-sizing: border-box;
+            }
+
+            platform-island {
+                flex: 1;
+                min-height: 0;
+                min-width: 0;
             }
 
             .public {
@@ -152,6 +168,9 @@ export class WikiApp extends PlatformApp {
                 }
                 .sidebar {
                     display: none;
+                }
+                .main {
+                    padding: 0;
                 }
             }
         `,
@@ -232,7 +251,11 @@ export class WikiApp extends PlatformApp {
                         active-page-id=${pageId}
                     ></wiki-sidebar>
                 </div>
-                <div class="main">${this._renderPage(routeKey, params)}</div>
+                <div class="main">
+                    <platform-island padding="none" ?content-no-scroll=${true}>
+                        ${this._renderPage(routeKey, params)}
+                    </platform-island>
+                </div>
             </platform-resizable-split>
             <platform-command-palette
                 .provider=${this._paletteProvider}

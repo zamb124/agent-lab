@@ -48,6 +48,8 @@ const DROP_AFTER = 'after';
 const EDGE_RATIO = 0.28;
 
 export class PlatformTree extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         nodes: { type: Array },
         selectedId: { type: String, attribute: 'selected-id' },
@@ -180,6 +182,41 @@ export class PlatformTree extends PlatformElement {
                 font-variant-numeric: tabular-nums;
             }
 
+            /* Меню строки: правая кнопка мыши есть не у всех (тач, трекпад),
+               поэтому те же действия открывает видимая кнопка. */
+            .row-menu {
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 20px;
+                height: 20px;
+                border: none;
+                border-radius: var(--radius-xs, 4px);
+                background: transparent;
+                color: var(--text-tertiary, #9aa0a6);
+                opacity: 0.55;
+                cursor: pointer;
+                transition: var(--motion-transition-interactive, opacity 120ms ease);
+            }
+
+            .row:hover .row-menu,
+            .row.is-selected .row-menu,
+            .row-menu:hover,
+            .row-menu:focus-visible {
+                opacity: 1;
+            }
+
+            .row-menu:hover {
+                background: var(--glass-tint-medium, rgba(120, 120, 140, 0.16));
+                color: var(--text-primary);
+            }
+
+            .row-menu:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 1px;
+            }
+
             .empty {
                 padding: var(--space-3, 12px);
                 color: var(--text-tertiary, #9aa0a6);
@@ -203,6 +240,31 @@ export class PlatformTree extends PlatformElement {
         this._menuNode = null;
         this._menuAnchor = null;
         this._focusedId = '';
+        this._revealedSelectedId = '';
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        this._revealSelected();
+    }
+
+    /**
+     * Выбранный узел всегда виден: переход по ссылке или создание вложенного
+     * узла не должны оставлять его за свёрнутым родителем.
+     *
+     * Раскрываем один раз на выбранный id и только когда узел уже есть в
+     * `nodes` (дерево может прийти позже маршрута). Свёрнутую вручную ветку
+     * повторно не разворачиваем.
+     */
+    _revealSelected() {
+        if (this.selectedId === '' || this._revealedSelectedId === this.selectedId) {
+            return;
+        }
+        if (!this.nodes.some((node) => node.id === this.selectedId)) {
+            return;
+        }
+        this.revealNode(this.selectedId);
+        this._revealedSelectedId = this.selectedId;
     }
 
     /** Раскрыть узел и всех его предков — используется при переходе по ссылке. */
@@ -283,6 +345,18 @@ export class PlatformTree extends PlatformElement {
         event.stopPropagation();
         this._menuNode = node;
         this._menuAnchor = { x: event.clientX, y: event.clientY };
+    }
+
+    /** Кнопка меню строки: якорь — сама кнопка, выбор узла не срабатывает. */
+    _openRowMenu(node, event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (this._menuNode !== null && this._menuNode.id === node.id) {
+            this._menuNode = null;
+            return;
+        }
+        this._menuNode = node;
+        this._menuAnchor = event.currentTarget;
     }
 
     _onMenuSelect(event) {
@@ -371,6 +445,10 @@ export class PlatformTree extends PlatformElement {
         this._dropTarget = null;
         if (dragId === node.id) {
             return;
+        }
+        if (position === DROP_INSIDE) {
+            // Иначе перенесённый узел пропадает внутри свёрнутого родителя.
+            this.setExpanded(node.id, true);
         }
         this.emit('tree-move', {
             id: dragId,
@@ -521,6 +599,20 @@ export class PlatformTree extends PlatformElement {
                 <span class="label" title=${node.label}>${node.label}</span>
                 ${typeof node.count === 'number'
                     ? html`<span class="count">${node.count}</span>`
+                    : nothing}
+                ${typeof this.menuItems === 'function'
+                    ? html`<button
+                          class="row-menu"
+                          type="button"
+                          tabindex="-1"
+                          data-row-menu=${node.id}
+                          aria-haspopup="menu"
+                          aria-label=${this.t('tree.row_menu')}
+                          title=${this.t('tree.row_menu')}
+                          @click=${(event) => this._openRowMenu(node, event)}
+                      >
+                          <platform-icon name="more-vert" size="14"></platform-icon>
+                      </button>`
                     : nothing}
             </div>
             ${expanded

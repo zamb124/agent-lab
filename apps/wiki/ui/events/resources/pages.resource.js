@@ -7,6 +7,10 @@
  *
  * Все запросы адресованы рабочему пространству: заголовок
  * `X-Platform-Namespace` обязателен, без него backend отвечает ошибкой.
+ *
+ * Mutating/read endpoints возвращают `WikiPageResponse { page, can_edit, ... }`.
+ * Фабрики отдают наружу только `page`: UI и push-редьюсеры работают с
+ * канонической моделью `WikiPage`, а не с обёрткой ответа.
  */
 
 import { createAsyncOp, createResourceCollection } from '@platform/lib/events/index.js';
@@ -32,6 +36,25 @@ function mergeSummary(state, summary) {
         ? [...state.items, summary]
         : state.items.map((item, position) => (position === index ? summary : item));
     return { ...state, items, byId: { ...state.byId, [id]: summary } };
+}
+
+/** @param {unknown} response */
+function unwrapWikiPage(response) {
+    if (
+        !response
+        || typeof response !== 'object'
+        || !('page' in response)
+        || response.page === null
+        || typeof response.page !== 'object'
+    ) {
+        throw new Error('wiki pages: ожидался WikiPageResponse с полем page');
+    }
+    return response.page;
+}
+
+/** @param {Parameters<typeof httpRequest>[0]} options */
+async function requestWikiPage(options) {
+    return unwrapWikiPage(await httpRequest(options));
 }
 
 export const wikiPagesResource = createResourceCollection({
@@ -62,7 +85,7 @@ export const wikiPageReadOp = createAsyncOp({
     name: 'wiki/page_read',
     silent: true,
     restMirror: { method: 'GET', path: '/wiki/api/v1/pages/:wiki_page_id' },
-    request: ({ payload, ctx }) => httpRequest({
+    request: ({ payload, ctx }) => requestWikiPage({
         method: 'GET',
         url: `${BASE_URL}/${payload.wiki_page_id}`,
         headers: platformNamespaceHeader(ctx),
@@ -74,7 +97,7 @@ export const wikiPageCreateOp = createAsyncOp({
     successToastKey: 'wiki:toast.page.created',
     errorToastKey: 'wiki:toast.page.create_failed',
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages' },
-    request: ({ payload, ctx }) => httpRequest({
+    request: ({ payload, ctx }) => requestWikiPage({
         method: 'POST',
         url: BASE_URL,
         headers: platformNamespaceHeader(ctx),
@@ -86,7 +109,7 @@ export const wikiPageSaveOp = createAsyncOp({
     name: 'wiki/page_save',
     silent: true,
     restMirror: { method: 'PUT', path: '/wiki/api/v1/pages/:wiki_page_id/content' },
-    request: ({ payload, ctx }) => httpRequest({
+    request: ({ payload, ctx }) => requestWikiPage({
         method: 'PUT',
         url: `${BASE_URL}/${payload.wiki_page_id}/content`,
         headers: platformNamespaceHeader(ctx),
@@ -104,7 +127,7 @@ export const wikiPagePropertiesOp = createAsyncOp({
     restMirror: { method: 'PATCH', path: '/wiki/api/v1/pages/:wiki_page_id' },
     request: ({ payload, ctx }) => {
         const { wiki_page_id: pageId, ...body } = payload;
-        return httpRequest({
+        return requestWikiPage({
             method: 'PATCH',
             url: `${BASE_URL}/${pageId}`,
             headers: platformNamespaceHeader(ctx),
@@ -117,7 +140,7 @@ export const wikiPageMoveOp = createAsyncOp({
     name: 'wiki/page_move',
     silent: true,
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages/:wiki_page_id/move' },
-    request: ({ payload, ctx }) => httpRequest({
+    request: ({ payload, ctx }) => requestWikiPage({
         method: 'POST',
         url: `${BASE_URL}/${payload.wiki_page_id}/move`,
         headers: platformNamespaceHeader(ctx),
@@ -130,7 +153,7 @@ export const wikiPageMoveNamespaceOp = createAsyncOp({
     successToastKey: 'wiki:toast.page.namespace_changed',
     errorToastKey: 'wiki:toast.page.namespace_change_failed',
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages/:wiki_page_id/move-namespace' },
-    request: ({ payload, ctx }) => httpRequest({
+    request: ({ payload, ctx }) => requestWikiPage({
         method: 'POST',
         url: `${BASE_URL}/${payload.wiki_page_id}/move-namespace`,
         headers: platformNamespaceHeader(ctx),
@@ -158,7 +181,7 @@ export const wikiPageRestoreOp = createAsyncOp({
     successToastKey: 'wiki:toast.page.restored',
     errorToastKey: 'wiki:toast.page.restore_failed',
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages/:wiki_page_id/restore' },
-    request: ({ payload, ctx }) => httpRequest({
+    request: ({ payload, ctx }) => requestWikiPage({
         method: 'POST',
         url: `${BASE_URL}/${payload.wiki_page_id}/restore`,
         headers: platformNamespaceHeader(ctx),
@@ -184,5 +207,58 @@ export const wikiPageMarkdownOp = createAsyncOp({
         method: 'GET',
         url: `${BASE_URL}/${payload.wiki_page_id}/markdown`,
         headers: platformNamespaceHeader(ctx),
+    }),
+});
+
+/**
+ * Импорт файла в существующую страницу.
+ *
+ * Ответ отдаётся целиком, а не только `page`: заметки о том, что не перенеслось,
+ * нужны UI, чтобы показать их пользователю.
+ */
+export const wikiPageMarkdownImportOp = createAsyncOp({
+    name: 'wiki/page_markdown_import',
+    successToastKey: 'wiki:toast.markdown.imported',
+    errorToastKey: 'wiki:toast.markdown.import_failed',
+    restMirror: { method: 'POST', path: '/wiki/api/v1/pages/:wiki_page_id/import/markdown' },
+    request: ({ payload, ctx }) => httpRequest({
+        method: 'POST',
+        url: `${BASE_URL}/${payload.wiki_page_id}/import/markdown`,
+        headers: platformNamespaceHeader(ctx),
+        body: {
+            markdown: payload.markdown,
+            apply_front_matter: payload.apply_front_matter,
+        },
+    }),
+});
+
+/** Разбор markdown без записи: вставка в редактор и предпросмотр. */
+export const wikiMarkdownParseOp = createAsyncOp({
+    name: 'wiki/markdown_parse',
+    silent: true,
+    restMirror: { method: 'POST', path: '/wiki/api/v1/pages/markdown/parse' },
+    request: ({ payload, ctx }) => httpRequest({
+        method: 'POST',
+        url: `${BASE_URL}/markdown/parse`,
+        headers: platformNamespaceHeader(ctx),
+        body: { markdown: payload.markdown },
+    }),
+});
+
+/** Импорт файла новой страницей. */
+export const wikiPageMarkdownCreateOp = createAsyncOp({
+    name: 'wiki/page_markdown_create',
+    successToastKey: 'wiki:toast.markdown.imported',
+    errorToastKey: 'wiki:toast.markdown.import_failed',
+    restMirror: { method: 'POST', path: '/wiki/api/v1/pages/import/markdown' },
+    request: ({ payload, ctx }) => httpRequest({
+        method: 'POST',
+        url: `${BASE_URL}/import/markdown`,
+        headers: platformNamespaceHeader(ctx),
+        body: {
+            markdown: payload.markdown,
+            parent_page_id: payload.parent_page_id,
+            apply_front_matter: payload.apply_front_matter,
+        },
     }),
 });

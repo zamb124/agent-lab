@@ -11,6 +11,8 @@
 from core.models.base import FlexibleBaseModel, StrictBaseModel
 from core.models.calendar_models import (
     CalendarAttendee,
+    CalendarAutolinkOutcome,
+    CalendarAutolinkStatus,
     CalendarEvent,
     CalendarEventSource,
     CalendarEventStatus,
@@ -69,4 +71,6 @@ __all__ = [
     "CalendarIntegrationSettings",
     "CalendarIntegration",
     "CalendarIntegrationConnectPayload",
+    "CalendarAutolinkStatus",
+    "CalendarAutolinkOutcome",
 ]

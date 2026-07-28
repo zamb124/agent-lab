@@ -43,11 +43,13 @@ describe('calendarReducer', () => {
         expect(next.events).toEqual([]);
     });
 
-    it('INTEGRATIONS_LOADED + INTEGRATION_DISCONNECTED', () => {
-        const a = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.INTEGRATIONS_LOADED, { items: [{ provider: 'google' }, { provider: 'apple' }] }));
+    it('INTEGRATIONS_LOADED + INTEGRATION_DISCONNECTED по integration_id', () => {
+        const first = { integration_id: 'int-1', provider: 'mailru', mailbox_binding_id: 'mb-1' };
+        const second = { integration_id: 'int-2', provider: 'mailru', mailbox_binding_id: 'mb-2' };
+        const a = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.INTEGRATIONS_LOADED, { items: [first, second] }));
         expect(a.integrations).toHaveLength(2);
-        const b = calendarReducer(a, ev(CALENDAR_EVENTS.INTEGRATION_DISCONNECTED, { provider: 'google' }));
-        expect(b.integrations).toEqual([{ provider: 'apple' }]);
+        const b = calendarReducer(a, ev(CALENDAR_EVENTS.INTEGRATION_DISCONNECTED, { integration_id: 'int-1' }));
+        expect(b.integrations).toEqual([second]);
     });
 
     it('SYNC флаг', () => {

@@ -18,6 +18,13 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 
+from apps.wiki.content.markdown_file import (
+    WikiMarkdownFrontMatter,
+    compose_markdown_file,
+    split_markdown_file,
+)
+from apps.wiki.content.markdown_notices import WikiMarkdownNotice
+from apps.wiki.content.markdown_parser import parse_markdown
 from apps.wiki.content.markdown_serializer import document_to_markdown
 from apps.wiki.content.prosemirror import ProseMirrorNode, empty_document
 from apps.wiki.content.schema import normalize_document
@@ -299,6 +306,84 @@ class WikiService:
             WIKI_PAGE_UPDATED, self._to_summary(stored, False), company_id
         )
         return stored
+
+    # --- markdown ---
+
+    async def import_markdown(
+        self,
+        company_id: str,
+        namespace: str,
+        user_id: str,
+        markdown: str,
+        wiki_page_id: str | None = None,
+        parent_page_id: str | None = None,
+        apply_front_matter: bool = True,
+    ) -> tuple[WikiPage, list[WikiMarkdownNotice]]:
+        """Импортировать markdown-файл в страницу.
+
+        Без `wiki_page_id` создаётся новая страница, с ним — заменяется
+        содержимое существующей. Заметки о том, что не перенеслось, возвращаются
+        наверх: пользователь должен увидеть расхождение, а не обнаружить его
+        через месяц.
+        """
+        parts = split_markdown_file(markdown)
+        parsed = parse_markdown(parts.body)
+        notices = [*parts.notices, *parsed.notices]
+        front_matter = (
+            parts.front_matter if apply_front_matter else WikiMarkdownFrontMatter()
+        )
+
+        if wiki_page_id is None:
+            page = await self.create_page(
+                company_id=company_id,
+                namespace=namespace,
+                user_id=user_id,
+                title=front_matter.title if front_matter.title is not None else "",
+                parent_page_id=parent_page_id,
+                content=parsed.document,
+                icon=front_matter.icon if front_matter.icon is not None else "",
+            )
+        else:
+            page = await self.update_page_content(
+                company_id=company_id,
+                namespace=namespace,
+                user_id=user_id,
+                wiki_page_id=wiki_page_id,
+                content=parsed.document,
+                title=front_matter.title,
+            )
+
+        # Иконку новой страницы проставил `create_page`; обложка живёт только в
+        # свойствах, поэтому её всегда дописывает отдельный вызов.
+        icon_update = front_matter.icon if wiki_page_id is not None else None
+        if icon_update is not None or front_matter.cover_url is not None:
+            page = await self.update_page_properties(
+                company_id=company_id,
+                namespace=namespace,
+                user_id=user_id,
+                wiki_page_id=page.wiki_page_id,
+                icon=icon_update,
+                cover_url=front_matter.cover_url,
+            )
+
+        if notices:
+            logger.info(
+                "wiki.markdown_import.notices",
+                wiki_page_id=page.wiki_page_id,
+                namespace=namespace,
+                notice_count=len(notices),
+                notice_kinds=sorted({notice.kind.value for notice in notices}),
+            )
+        return page, notices
+
+    def export_markdown_file(self, page: WikiPage) -> str:
+        """Файл для выгрузки: свойства страницы в YAML-шапке плюс содержимое."""
+        return compose_markdown_file(
+            title=page.title,
+            icon=page.icon,
+            cover_url=page.cover_url,
+            body=page.text_markdown,
+        )
 
     async def move_page(
         self,

@@ -251,6 +251,36 @@ export function createMailEffect({ baseUrl }) {
                 }
                 return;
             }
+            case MAIL_EVENTS.BINDING_CALENDAR_AUTOLINK_REQUESTED:
+            case MAIL_EVENTS.BINDING_CALENDAR_UNLINK_REQUESTED: {
+                const id = event.payload && event.payload.mailbox_binding_id;
+                if (!id) throw new Error('mail.effect: mailbox_binding_id required');
+                const linking = event.type === MAIL_EVENTS.BINDING_CALENDAR_AUTOLINK_REQUESTED;
+                try {
+                    const binding = await httpRequest({
+                        method: linking ? 'POST' : 'DELETE',
+                        url: linking
+                            ? `${base}/api/mail/bindings/${encodeURIComponent(id)}/calendar/autolink`
+                            : `${base}/api/mail/bindings/${encodeURIComponent(id)}/calendar`,
+                    });
+                    ctx.dispatch(
+                        MAIL_EVENTS.BINDING_PATCHED,
+                        { binding },
+                        { causation_id: event.id, source: 'http' },
+                    );
+                    ctx.dispatch(MAIL_EVENTS.BINDINGS_LOAD_REQUESTED, null, {
+                        causation_id: event.id,
+                        source: 'local',
+                    });
+                } catch (err) {
+                    ctx.dispatch(
+                        MAIL_EVENTS.BINDING_PATCH_FAILED,
+                        { message: errorMessage(err) },
+                        { causation_id: event.id, source: 'http' },
+                    );
+                }
+                return;
+            }
             case MAIL_EVENTS.BINDING_HEALTHCHECK_REQUESTED: {
                 const id = event.payload && event.payload.mailbox_binding_id;
                 if (!id) throw new Error('mail.effect: mailbox_binding_id required');

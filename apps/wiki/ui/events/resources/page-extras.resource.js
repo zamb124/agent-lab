@@ -168,7 +168,10 @@ export const wikiBacklinksOp = createAsyncOp({
     request: ({ payload, ctx }) => httpRequest({
         method: 'GET',
         url: `${API_URL}/backlinks`,
-        query: { wiki_page_id: payload.wiki_page_id },
+        query: {
+            target_kind: 'wiki_page',
+            target_id: payload.target_id,
+        },
         headers: platformNamespaceHeader(ctx),
     }),
 });

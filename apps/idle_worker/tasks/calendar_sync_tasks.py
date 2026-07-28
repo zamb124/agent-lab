@@ -170,7 +170,7 @@ async def _sync_single_integration(
             company_id=integration.company_id,
             start_at=start_at,
             end_at=end_at,
-            provider=provider,
+            integration_id=integration.integration_id,
         )
         after_ids = await _load_existing_event_ids(
             calendar_service=calendar_service,

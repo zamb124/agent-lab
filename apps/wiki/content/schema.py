@@ -88,6 +88,20 @@ class WikiCalloutTone(StrEnum):
     DANGER = "danger"
 
 
+class WikiTableAlign(StrEnum):
+    """Выравнивание содержимого ячейки.
+
+    Пустое значение — выравнивание не задано; в markdown это `---` без
+    двоеточий, и отличать его от явного `:---` нужно, иначе экспорт добавлял бы
+    выравнивание, которого автор не просил.
+    """
+
+    NONE = ""
+    LEFT = "left"
+    CENTER = "center"
+    RIGHT = "right"
+
+
 DOC_NODE: Final[str] = "doc"
 TEXT_NODE: Final[str] = "text"
 PARAGRAPH_NODE: Final[str] = "paragraph"
@@ -95,7 +109,13 @@ HEADING_NODE: Final[str] = "heading"
 MENTION_NODE: Final[str] = "platform_mention"
 FILE_NODE: Final[str] = "platform_file"
 
-MAX_HEADING_LEVEL: Final[int] = 4
+MAX_HEADING_LEVEL: Final[int] = 6
+"""Столько уровней заголовков есть в markdown; меньше — значит терять h5 и h6."""
+
+FOOTNOTE_DEFINITION_NODE: Final[str] = "footnote_definition"
+FOOTNOTE_REFERENCE_NODE: Final[str] = "footnote_reference"
+MATH_BLOCK_NODE: Final[str] = "math_block"
+MATH_INLINE_NODE: Final[str] = "math_inline"
 
 WIKI_NODES: Final[dict[str, WikiNodeSpec]] = {
     DOC_NODE: WikiNodeSpec(content="block+"),
@@ -142,6 +162,17 @@ WIKI_NODES: Final[dict[str, WikiNodeSpec]] = {
         },
     ),
     "horizontal_rule": WikiNodeSpec(group="block", atom=True),
+    FOOTNOTE_DEFINITION_NODE: WikiNodeSpec(
+        group="block",
+        content="block+",
+        defining=True,
+        attrs={"label": WikiAttrSpec(kind=WikiAttrKind.STRING, required=True)},
+    ),
+    MATH_BLOCK_NODE: WikiNodeSpec(
+        group="block",
+        atom=True,
+        attrs={"formula": WikiAttrSpec(kind=WikiAttrKind.STRING, required=True)},
+    ),
     "image": WikiNodeSpec(
         group="block",
         atom=True,
@@ -162,6 +193,9 @@ WIKI_NODES: Final[dict[str, WikiNodeSpec]] = {
             "colspan": WikiAttrSpec(kind=WikiAttrKind.INT, default=1),
             "rowspan": WikiAttrSpec(kind=WikiAttrKind.INT, default=1),
             "colwidth": WikiAttrSpec(kind=WikiAttrKind.INT, default=None),
+            "align": WikiAttrSpec(
+                kind=WikiAttrKind.STRING, default=WikiTableAlign.NONE.value
+            ),
         },
     ),
     "table_header": WikiNodeSpec(
@@ -171,6 +205,9 @@ WIKI_NODES: Final[dict[str, WikiNodeSpec]] = {
             "colspan": WikiAttrSpec(kind=WikiAttrKind.INT, default=1),
             "rowspan": WikiAttrSpec(kind=WikiAttrKind.INT, default=1),
             "colwidth": WikiAttrSpec(kind=WikiAttrKind.INT, default=None),
+            "align": WikiAttrSpec(
+                kind=WikiAttrKind.STRING, default=WikiTableAlign.NONE.value
+            ),
         },
     ),
     FILE_NODE: WikiNodeSpec(
@@ -193,6 +230,18 @@ WIKI_NODES: Final[dict[str, WikiNodeSpec]] = {
             "target_id": WikiAttrSpec(kind=WikiAttrKind.STRING, required=True),
             "label": WikiAttrSpec(kind=WikiAttrKind.STRING, default=""),
         },
+    ),
+    FOOTNOTE_REFERENCE_NODE: WikiNodeSpec(
+        group="inline",
+        inline=True,
+        atom=True,
+        attrs={"label": WikiAttrSpec(kind=WikiAttrKind.STRING, required=True)},
+    ),
+    MATH_INLINE_NODE: WikiNodeSpec(
+        group="inline",
+        inline=True,
+        atom=True,
+        attrs={"formula": WikiAttrSpec(kind=WikiAttrKind.STRING, required=True)},
     ),
     "hard_break": WikiNodeSpec(group="inline", inline=True, selectable=False),
     TEXT_NODE: WikiNodeSpec(group="inline", inline=True),
@@ -230,10 +279,16 @@ MARK_SERIALIZATION_ORDER: Final[tuple[str, ...]] = (
 """
 
 BLOCK_NODES_WITHOUT_MARKDOWN: Final[frozenset[str]] = frozenset(
-    {"toggle_summary", "table_row"}
+    {"toggle_summary", "table_row", "list_item", "task_item", "table_cell", "table_header"}
 )
 """Узлы, которые не имеют собственного markdown-представления и
-сериализуются через родителя."""
+сериализуются через родителя.
+
+Реестр не декоративный: `tests/wiki/test_wiki_markdown_coverage.py` требует, чтобы
+каждый остальной узел схемы имел ветку в сериализаторе. Добавить узел и забыть
+про markdown теперь нельзя."""
+
+TABLE_CELL_NODES: Final[frozenset[str]] = frozenset({"table_cell", "table_header"})
 
 
 class WikiSchemaError(ValueError):
@@ -327,6 +382,11 @@ def normalize_document(node: ProseMirrorNode) -> ProseMirrorNode:
         if raw_kind not in {member.value for member in WikiMentionKind}:
             raise WikiSchemaError(f"platform_mention.mention_kind неизвестен: {raw_kind!r}")
 
+    if node.type in TABLE_CELL_NODES:
+        raw_align = attrs.get("align")
+        if raw_align not in {member.value for member in WikiTableAlign}:
+            raise WikiSchemaError(f"{node.type}.align неизвестен: {raw_align!r}")
+
     if node.type == TEXT_NODE:
         if node.text is None:
             raise WikiSchemaError("Текстовый узел без text")
@@ -398,6 +458,7 @@ def schema_as_json() -> JsonObject:
         "mark_order": list(MARK_SERIALIZATION_ORDER),
         "mention_kinds": [member.value for member in WikiMentionKind],
         "callout_tones": [member.value for member in WikiCalloutTone],
+        "table_aligns": [member.value for member in WikiTableAlign],
         "max_heading_level": MAX_HEADING_LEVEL,
     }
     return payload
@@ -407,11 +468,16 @@ __all__ = [
     "BLOCK_NODES_WITHOUT_MARKDOWN",
     "DOC_NODE",
     "FILE_NODE",
+    "FOOTNOTE_DEFINITION_NODE",
+    "FOOTNOTE_REFERENCE_NODE",
     "HEADING_NODE",
     "MARK_SERIALIZATION_ORDER",
+    "MATH_BLOCK_NODE",
+    "MATH_INLINE_NODE",
     "MAX_HEADING_LEVEL",
     "MENTION_NODE",
     "PARAGRAPH_NODE",
+    "TABLE_CELL_NODES",
     "TEXT_NODE",
     "WIKI_MARKS",
     "WIKI_NODES",
@@ -422,6 +488,7 @@ __all__ = [
     "WikiMentionKind",
     "WikiNodeSpec",
     "WikiSchemaError",
+    "WikiTableAlign",
     "normalize_document",
     "schema_as_json",
 ]

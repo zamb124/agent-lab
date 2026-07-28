@@ -354,6 +354,48 @@ describe('mailEffect', () => {
         });
     });
 
+    it('BINDING_CALENDAR_AUTOLINK_REQUESTED → BINDING_PATCHED со статусом календаря', async () => {
+        fetchMock.respondJson('POST', '/svc/api/mail/bindings/b1/calendar/autolink', {
+            mailbox_binding_id: 'b1',
+            calendar_autolink_status: 'linked',
+        });
+        const dispatched = [];
+        await createMailEffect({ baseUrl: '/svc' })(
+            ev(MAIL_EVENTS.BINDING_CALENDAR_AUTOLINK_REQUESTED, { mailbox_binding_id: 'b1' }),
+            buildCtx(() => ({ mail: {} }), dispatched),
+        );
+        expect(dispatched.find((d) => d.type === MAIL_EVENTS.BINDING_PATCHED).payload.binding).toEqual({
+            mailbox_binding_id: 'b1',
+            calendar_autolink_status: 'linked',
+        });
+        expect(dispatched.some((d) => d.type === MAIL_EVENTS.BINDINGS_LOAD_REQUESTED)).toBe(true);
+    });
+
+    it('BINDING_CALENDAR_UNLINK_REQUESTED → BINDING_PATCHED со статусом disabled', async () => {
+        fetchMock.respondJson('DELETE', '/svc/api/mail/bindings/b1/calendar', {
+            mailbox_binding_id: 'b1',
+            calendar_autolink_status: 'disabled',
+        });
+        const dispatched = [];
+        await createMailEffect({ baseUrl: '/svc' })(
+            ev(MAIL_EVENTS.BINDING_CALENDAR_UNLINK_REQUESTED, { mailbox_binding_id: 'b1' }),
+            buildCtx(() => ({ mail: {} }), dispatched),
+        );
+        expect(
+            dispatched.find((d) => d.type === MAIL_EVENTS.BINDING_PATCHED).payload.binding.calendar_autolink_status,
+        ).toBe('disabled');
+    });
+
+    it('BINDING_CALENDAR_AUTOLINK_REQUESTED при ошибке → BINDING_PATCH_FAILED', async () => {
+        fetchMock.respondStatus('POST', '/svc/api/mail/bindings/b1/calendar/autolink', 500);
+        const dispatched = [];
+        await createMailEffect({ baseUrl: '/svc' })(
+            ev(MAIL_EVENTS.BINDING_CALENDAR_AUTOLINK_REQUESTED, { mailbox_binding_id: 'b1' }),
+            buildCtx(() => ({ mail: {} }), dispatched),
+        );
+        expect(dispatched.some((d) => d.type === MAIL_EVENTS.BINDING_PATCH_FAILED)).toBe(true);
+    });
+
     it('MESSAGES_SEARCH_REQUESTED → MESSAGES_LOADED', async () => {
         fetchMock.respondJson('POST', '/svc/api/mail/messages/search', {
             items: [{ uid: '7', subject: 'hit' }],

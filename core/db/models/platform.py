@@ -277,6 +277,7 @@ class IntegrationCredentialRecord(Base):
     user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     service: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    mailbox_binding_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     access_token: Mapped[str] = mapped_column(Text, nullable=False)
     refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -296,9 +297,24 @@ class IntegrationCredentialRecord(Base):
     )
 
     __table_args__: _TableArgs = (
-        UniqueConstraint(
-            "company_id", "user_id", "provider", "service",
-            name="uq_integration_credentials_user_provider_service",
+        Index(
+            "uq_integration_credentials_user_provider_service",
+            "company_id",
+            "user_id",
+            "provider",
+            "service",
+            unique=True,
+            postgresql_where=text("mailbox_binding_id IS NULL"),
+        ),
+        Index(
+            "uq_integration_credentials_user_provider_service_mailbox",
+            "company_id",
+            "user_id",
+            "provider",
+            "service",
+            "mailbox_binding_id",
+            unique=True,
+            postgresql_where=text("mailbox_binding_id IS NOT NULL"),
         ),
     )
 
@@ -664,6 +680,10 @@ class MailboxBindingRecord(Base):
     sync_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     calendar_color: Mapped[str] = mapped_column(String(32), nullable=False, default="default")
+    calendar_autolink_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="disabled", server_default=text("'disabled'")
+    )
+    calendar_autolink_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False

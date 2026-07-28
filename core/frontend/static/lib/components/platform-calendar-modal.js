@@ -16,6 +16,7 @@ import { buildCalendarEventFileCreateSpecJson } from '../utils/file-create-spec.
 import { registerModalKind } from '../utils/modal-registry.js';
 
 import { COLOR_PALETTE, resolvePaletteColor } from '@platform/lib/utils/color-palette.js';
+import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 
 const EVENT_COLOR_KEY = 'event_color';
 const DEFAULT_EVENT_COLOR = 'default';
@@ -252,6 +253,7 @@ export class PlatformCalendarModal extends PlatformModal {
         _syncing: { state: true },
         _selectedEventId: { state: true },
         _activeProvider: { state: true },
+        _activeIntegrationId: { state: true },
         _integrationsMenuOpen: { state: true },
         _integrationModalProvider: { state: true },
         _eventDialogOpen: { state: true },
@@ -2141,6 +2143,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._syncing = false;
         this._selectedEventId = null;
         this._activeProvider = 'google';
+        this._activeIntegrationId = null;
         this._integrationsMenuOpen = false;
         this._integrationModalProvider = null;
         this._eventDialogOpen = false;
@@ -2219,6 +2222,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._dateSheetOpen = false;
         this._integrationsMenuOpen = false;
         this._integrationModalProvider = null;
+        this._activeIntegrationId = null;
         this._isCompactLayout = window.matchMedia('(max-width: 767px)').matches;
         if (this._isCompactLayout) {
             this._view = 'day';
@@ -2247,6 +2251,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._dateSheetOpen = false;
         this._integrationsMenuOpen = false;
         this._integrationModalProvider = null;
+        this._activeIntegrationId = null;
         this._eventDialogOpen = false;
     }
 
@@ -3408,8 +3413,10 @@ export class PlatformCalendarModal extends PlatformModal {
             this.toast('err_google_oauth_only', { type: 'error' });
             return;
         }
+        const activeIntegration = this._activeIntegration();
         const payload = {
             provider: this._activeProvider,
+            mailbox_binding_id: activeIntegration ? activeIntegration.mailbox_binding_id : null,
             username: this._integrationForm.username.trim(),
             access_token: this._integrationForm.app_password.trim(),
             refresh_token: null,
@@ -3446,30 +3453,59 @@ export class PlatformCalendarModal extends PlatformModal {
         window.location.assign(connectUrl);
     }
 
-    _disconnectIntegration(provider) {
-        this.dispatch(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_REQUESTED, { provider });
+    _disconnectIntegration(integrationId) {
+        if (typeof integrationId !== 'string' || integrationId.length === 0) {
+            throw new Error('platform-calendar-modal: integration_id required to disconnect');
+        }
+        this.dispatch(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_REQUESTED, { integration_id: integrationId });
     }
 
-    _runSync(provider) {
+    _runSync(integrationId) {
+        if (typeof integrationId !== 'string' || integrationId.length === 0) {
+            throw new Error('platform-calendar-modal: integration_id required to sync');
+        }
         this._syncing = true;
         const range = this._viewRange();
         this.dispatch(CALENDAR_EVENTS.SYNC_REQUESTED, {
-            provider,
+            integration_id: integrationId,
             start_at: range.start.toISOString(),
             end_at: range.end.toISOString(),
         });
     }
 
-    _onIntegrationProviderSelect(provider) {
-        this._activeProvider = provider;
+    _activeIntegration() {
         const integrations = this._integrationsSelect.value;
-        const activeIntegration = integrations.find((item) => item.provider === provider) || null;
+        if (this._activeIntegrationId) {
+            return integrations.find((item) => item.integration_id === this._activeIntegrationId) || null;
+        }
+        return integrations.find((item) => item.provider === this._activeProvider) || null;
+    }
+
+    _mailboxLabelForIntegration(integration) {
+        const mailboxBindingId = integration && integration.mailbox_binding_id;
+        if (typeof mailboxBindingId !== 'string' || mailboxBindingId.length === 0) {
+            return null;
+        }
+        const mail = this._mailSelect.value;
+        const binding = Array.isArray(mail.bindings)
+            ? mail.bindings.find((item) => item.mailbox_binding_id === mailboxBindingId)
+            : null;
+        return binding ? binding.email_address : mailboxBindingId;
+    }
+
+    _onIntegrationProviderSelect(provider, integrationId = null) {
+        this._activeProvider = provider;
+        this._activeIntegrationId = integrationId;
+        const activeIntegration = this._activeIntegration();
         if (!this._isCalDavProvider(provider) || !activeIntegration) {
             return;
         }
         const settings = activeIntegration.settings || {};
         this._integrationForm = {
             ...this._integrationForm,
+            username: activeIntegration.mailbox_binding_id
+                ? (this._mailboxLabelForIntegration(activeIntegration) || '')
+                : this._integrationForm.username,
             default_calendar_id: settings.default_calendar_id || '',
             caldav_base_url: settings.caldav_base_url || '',
             sync_enabled: settings.sync_enabled !== false,
@@ -3946,15 +3982,15 @@ export class PlatformCalendarModal extends PlatformModal {
         `;
     }
 
-    _openIntegrationModal(provider) {
+    _openIntegrationModal(provider, integrationId = null) {
         this._integrationsMenuOpen = false;
-        this._activeProvider = provider;
-        this._onIntegrationProviderSelect(provider);
+        this._onIntegrationProviderSelect(provider, integrationId);
         this._integrationModalProvider = provider;
     }
 
     _closeIntegrationModal() {
         this._integrationModalProvider = null;
+        this._activeIntegrationId = null;
     }
 
     _renderIntegrationModal() {
@@ -3983,7 +4019,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
     _renderIntegrationContent() {
         const c = (key, params) => this._calT(key, params);
-        const activeIntegration = this._integrationsSelect.value.find((item) => item.provider === this._activeProvider) || null;
+        const activeIntegration = this._activeIntegration();
 
         if (this._activeProvider === 'google') {
             return this._renderGoogleIntegration(c, activeIntegration);
@@ -4008,11 +4044,16 @@ export class PlatformCalendarModal extends PlatformModal {
                 <button class="btn btn-primary" type="button" @click=${() => this._startGoogleConnect()}>
                     ${activeIntegration ? c('reconnect_google') : c('connect_google')}
                 </button>
-                <button class="btn btn-secondary" type="button" @click=${() => this._runSync('google')} ?disabled=${this._syncing || !activeIntegration}>
+                <button
+                    class="btn btn-secondary"
+                    type="button"
+                    @click=${() => this._runSync(activeIntegration.integration_id)}
+                    ?disabled=${this._syncing || !activeIntegration}
+                >
                     ${this._syncing ? c('syncing') : c('sync')}
                 </button>
                 ${activeIntegration ? html`
-                    <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration('google')}>
+                    <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration(activeIntegration.integration_id)}>
                         ${c('disconnect')}
                     </button>
                 ` : ''}
@@ -4029,19 +4070,24 @@ export class PlatformCalendarModal extends PlatformModal {
         const calendarIdPlaceholder = isCustom
             ? c('caldav_calendar_id_placeholder')
             : c('yandex_calendar_id_placeholder');
+        const mailboxLabel = this._mailboxLabelForIntegration(activeIntegration);
+        const baseUrlPlaceholder = isCustom
+            ? 'https://caldav.example.com'
+            : (provider === 'mailru' ? 'https://calendar.mail.ru' : 'https://caldav.yandex.ru');
         return html`
             <div class="hint">${c('caldav_hint')}</div>
-            ${isCustom ? html`
-                <div class="row">
-                    <label class="form-label">${c('caldav_base_url_label')}</label>
-                    <input
-                        class="form-input"
-                        .value=${this._integrationForm.caldav_base_url}
-                        @input=${(e) => this._integrationForm = { ...this._integrationForm, caldav_base_url: e.target.value }}
-                        placeholder="https://caldav.example.com"
-                    />
-                </div>
+            ${mailboxLabel ? html`
+                <div class="hint">${c('integration_mailbox_label', { email: mailboxLabel })}</div>
             ` : ''}
+            <div class="row">
+                <label class="form-label">${c('caldav_base_url_label')}</label>
+                <input
+                    class="form-input"
+                    .value=${this._integrationForm.caldav_base_url}
+                    @input=${(e) => this._integrationForm = { ...this._integrationForm, caldav_base_url: e.target.value }}
+                    placeholder=${baseUrlPlaceholder}
+                />
+            </div>
             <div class="row">
                 <label class="form-label">${c('yandex_username_label')}</label>
                 <input
@@ -4083,11 +4129,16 @@ export class PlatformCalendarModal extends PlatformModal {
                 <button class="btn btn-primary" type="button" @click=${this._saveIntegration} ?disabled=${this._saving}>
                     ${c('save_connection')}
                 </button>
-                <button class="btn btn-secondary" type="button" @click=${() => this._runSync(provider)} ?disabled=${this._syncing || !activeIntegration}>
+                <button
+                    class="btn btn-secondary"
+                    type="button"
+                    @click=${() => this._runSync(activeIntegration.integration_id)}
+                    ?disabled=${this._syncing || !activeIntegration}
+                >
                     ${this._syncing ? c('syncing') : c('sync')}
                 </button>
                 ${activeIntegration ? html`
-                    <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration(provider)}>
+                    <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration(activeIntegration.integration_id)}>
                         ${c('disconnect')}
                     </button>
                 ` : ''}
@@ -4100,15 +4151,34 @@ export class PlatformCalendarModal extends PlatformModal {
         const c = (key, params) => this._calT(key, params);
         return html`
             <div class="integration-list">
-                ${this._integrationsSelect.value.map((integration) => html`
-                    <div class="integration-item">
-                        <div>
-                            <div>${integration.provider.toUpperCase()} / ${integration.settings?.default_calendar_id || 'no-calendar'}</div>
-                            <div class="hint">updated: ${new Date(integration.updated_at).toLocaleString('ru-RU')}</div>
+                ${this._integrationsSelect.value.map((integration) => {
+                    const mailboxLabel = this._mailboxLabelForIntegration(integration);
+                    const title = mailboxLabel
+                        ? `${this._providerDisplayLabel(integration.provider)} / ${mailboxLabel}`
+                        : `${this._providerDisplayLabel(integration.provider)} / ${integration.settings?.default_calendar_id || c('integration_no_calendar')}`;
+                    return html`
+                        <div class="integration-item">
+                            <div>
+                                <div>${title}</div>
+                                <div class="hint">${c('integration_updated_at', {
+                                    value: formatPlatformDateTime(integration.updated_at, this._localeSelect.value),
+                                })}</div>
+                            </div>
+                            <div class="actions">
+                                <button
+                                    class="btn btn-secondary"
+                                    type="button"
+                                    @click=${() => this._openIntegrationModal(integration.provider, integration.integration_id)}
+                                >${c('integration_configure')}</button>
+                                <button
+                                    class="btn btn-danger"
+                                    type="button"
+                                    @click=${() => this._disconnectIntegration(integration.integration_id)}
+                                >${c('disconnect')}</button>
+                            </div>
                         </div>
-                        <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration(integration.provider)}>${c('disconnect')}</button>
-                    </div>
-                `)}
+                    `;
+                })}
             </div>
         `;
     }

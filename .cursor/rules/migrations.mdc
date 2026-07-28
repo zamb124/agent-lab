@@ -43,7 +43,7 @@ alwaysApply: false
 
 ## Локальный Postgres
 
-`docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. Прод: тот же `init.sql` в ConfigMap `postgres-init-scripts` Helm-чарта (`deploy/helm/agent-lab/templates/10-postgres/configmap-init.yaml`), монтируется в `/docker-entrypoint-initdb.d/`. Физические БД Alembic **не** создаёт; перед `upgrade` `scripts.db_migrate` идемпотентно вызывает `core.db.postgres_service_databases.ensure_postgres_service_databases_async` (CREATE DATABASE + GRANT + vector на БД из `postgres.vector_extensions`).
+`docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. Прод: тот же `init.sql` в ConfigMap `postgres-init-scripts` Helm-чарта (`deploy/helm/agent-lab/templates/10-postgres/configmap-init.yaml`), монтируется в `/docker-entrypoint-initdb.d/`. Физические БД Alembic **не** создаёт; перед `upgrade` `scripts.db_migrate` идемпотентно вызывает `core.db.postgres_service_databases.ensure_postgres_service_databases_async` (CREATE DATABASE + GRANT + `pg_stat_statements` на все БД из `postgres.databases` + `vector` на БД из `postgres.vector_extensions`).
 
 Если в `init.sql` добавили новую БД, а том Postgres dev уже существует, entrypoint-initdb **не выполнится** снова — достаточно `make migrate` (создаст БД и применит Alembic). Альтернатива: `make dev-clean && make dev-up` (полный сброс тома). На проде Helm пересоздаёт Postgres только при чистом PVC.
 

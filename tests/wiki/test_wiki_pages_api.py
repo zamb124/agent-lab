@@ -66,9 +66,23 @@ async def test_create_page_rejects_both_content_and_markdown(wiki_client):
     assert "markdown" in response.json()["detail"]
 
 
-async def test_create_page_rejects_unparsable_markdown(wiki_client):
+async def test_create_page_converts_raw_html_instead_of_failing(wiki_client):
+    """Создание по markdown с HTML не отклоняется: тег разворачивается в текст.
+
+    Отклонять весь файл из-за `<div>` значило бы, что импорт настоящих выгрузок
+    невозможен; о расхождении сообщает отчёт роутов импорта.
+    """
     response = await wiki_client.post(
         PAGES_URL, json={"title": "Сырой html", "markdown": "<div>блок</div>"}
+    )
+
+    assert response.status_code == 201
+    assert response.json()["page"]["text_markdown"] == "блок"
+
+
+async def test_create_page_rejects_markdown_with_broken_mention(wiki_client):
+    response = await wiki_client.post(
+        PAGES_URL, json={"title": "Битое упоминание", "markdown": "@[Иван](user:)"}
     )
 
     assert response.status_code == 400

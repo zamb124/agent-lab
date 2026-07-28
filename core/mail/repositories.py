@@ -37,6 +37,7 @@ from core.mail.models import (
     StoredMailboxFolder,
     StoredMailMessage,
 )
+from core.models.calendar_models import CalendarAutolinkStatus
 from core.types import JsonObject
 
 INBOX_FOLDER: Final[str] = "INBOX"
@@ -82,6 +83,8 @@ def _binding_from_record(record: MailboxBindingRecord) -> MailboxBinding:
         sync_enabled=record.sync_enabled,
         is_default=record.is_default,
         calendar_color=record.calendar_color,
+        calendar_autolink_status=CalendarAutolinkStatus(record.calendar_autolink_status),
+        calendar_autolink_detail=record.calendar_autolink_detail,
         password_encrypted=record.password_encrypted,
         created_at=record.created_at,
         updated_at=record.updated_at,
@@ -516,6 +519,8 @@ class MailboxBindingRepository:
             "sync_enabled": binding.sync_enabled,
             "is_default": binding.is_default,
             "calendar_color": binding.calendar_color,
+            "calendar_autolink_status": str(binding.calendar_autolink_status),
+            "calendar_autolink_detail": binding.calendar_autolink_detail,
             "password_encrypted": binding.password_encrypted,
             "created_at": binding.created_at,
             "updated_at": binding.updated_at,
@@ -532,6 +537,8 @@ class MailboxBindingRepository:
                 "sync_enabled": stmt.excluded.sync_enabled,
                 "is_default": stmt.excluded.is_default,
                 "calendar_color": stmt.excluded.calendar_color,
+                "calendar_autolink_status": stmt.excluded.calendar_autolink_status,
+                "calendar_autolink_detail": stmt.excluded.calendar_autolink_detail,
                 "password_encrypted": stmt.excluded.password_encrypted,
                 "updated_at": stmt.excluded.updated_at,
             },

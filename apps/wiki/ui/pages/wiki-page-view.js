@@ -8,6 +8,7 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -76,10 +77,12 @@ export class WikiPageView extends PlatformPage {
                 gap: var(--space-2);
             }
 
+            /* По бокам поля шире на --wiki-block-gutter: в левом живут кнопки
+               блока редактора, правое держит колонку текста по центру. */
             .paper {
                 max-width: var(--wiki-page-max-width);
                 margin: 0 auto;
-                padding: var(--space-6) var(--space-6) var(--space-10);
+                padding: var(--space-6) calc(var(--space-6) + var(--wiki-block-gutter)) var(--space-10);
             }
 
             .head-actions {
@@ -315,10 +318,20 @@ export class WikiPageView extends PlatformPage {
         this._commentCreate = this.useOp('wiki/comment_create');
         this._commentResolve = this.useOp('wiki/comment_resolve');
         this._search = this.useOp('wiki/search');
+        this._markdownImport = this.useOp('wiki/page_markdown_import');
+        this._markdownParse = this.useOp('wiki/markdown_parse');
         this._pages = this.useResource('wiki/pages');
         this._locale = this.select((state) => state.i18n.locale);
         this._mentionProvider = this._mentionProvider.bind(this);
         this._openOutlineSheet = this._openOutlineSheet.bind(this);
+        this._parseMarkdown = this._parseMarkdown.bind(this);
+        this._onMarkdownFileDrop = this._onMarkdownFileDrop.bind(this);
+        this._onMarkdownFileSelected = this._onMarkdownFileSelected.bind(this);
+        this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
+            if (this.pageId !== '') {
+                void this._loadPage();
+            }
+        });
     }
 
     updated(changed) {
@@ -334,12 +347,22 @@ export class WikiPageView extends PlatformPage {
     }
 
     async _loadPage() {
+        const pageId = this.pageId;
+        if (pageId === '') {
+            return;
+        }
         this._page = null;
         this._outline = [];
-        const page = await this._read.run({ wiki_page_id: this.pageId });
+        const page = await this._read.run({ wiki_page_id: pageId });
+        if (this.pageId !== pageId) {
+            return;
+        }
         this._page = page;
-        void this._backlinks.run({ wiki_page_id: this.pageId });
-        void this._comments.run({ wiki_page_id: this.pageId });
+        if (!page || typeof page.wiki_page_id !== 'string') {
+            return;
+        }
+        void this._backlinks.run({ target_id: pageId });
+        void this._comments.run({ wiki_page_id: pageId });
     }
 
     // --- сохранение ---
@@ -367,26 +390,28 @@ export class WikiPageView extends PlatformPage {
 
     async _commitSave() {
         if (this._page === null) {
+            this._saveState = SAVE_FAILED;
             return;
         }
         const content = this._pendingContent === null ? this._page.content : this._pendingContent;
         const title = this._pendingTitle === null ? this._page.title : this._pendingTitle;
-        try {
-            const saved = await this._save.run({
-                wiki_page_id: this.pageId,
-                content,
-                title,
-                create_revision: true,
-            });
-            this._page = saved;
-            this._pendingContent = null;
-            this._pendingTitle = null;
-            this._saveState = SAVE_DONE;
-            void this._pages.load();
-        } catch (error) {
+        const saved = await this._save.run({
+            wiki_page_id: this.pageId,
+            content,
+            title,
+            create_revision: true,
+        });
+        // Неудача резолвится в null (контракт OpController): правки остаются
+        // в pending, страница на экране не подменяется пустотой.
+        if (saved === null) {
             this._saveState = SAVE_FAILED;
-            throw error;
+            return;
         }
+        this._page = saved;
+        this._pendingContent = null;
+        this._pendingTitle = null;
+        this._saveState = SAVE_DONE;
+        void this._pages.load();
     }
 
     _onEditorChange(event) {
@@ -426,7 +451,10 @@ export class WikiPageView extends PlatformPage {
         return [
             { id: 'history', label: this.t('page.history_link'), icon: 'history' },
             { id: 'access', label: this.t('tree_menu.access'), icon: 'lock' },
-            { id: 'move', label: this.t('tree_menu.move'), icon: 'move' },
+            { id: 'move', label: this.t('tree_menu.move'), icon: 'swap-horiz' },
+            { id: 'sep_md', kind: 'separator' },
+            { id: 'import_markdown', label: this.t('page.import_markdown'), icon: 'import' },
+            { id: 'export_markdown', label: this.t('page.export_markdown'), icon: 'download' },
             { id: 'sep', kind: 'separator' },
             {
                 id: hasCover ? 'remove_cover' : 'add_cover',
@@ -451,6 +479,14 @@ export class WikiPageView extends PlatformPage {
         }
         if (action === 'move') {
             this.openModal('wiki.move_page', { pageId: this.pageId });
+            return;
+        }
+        if (action === 'import_markdown') {
+            this._openMarkdownPicker();
+            return;
+        }
+        if (action === 'export_markdown') {
+            this._downloadMarkdown();
             return;
         }
         if (action === 'add_cover') {
@@ -508,6 +544,100 @@ export class WikiPageView extends PlatformPage {
         return [...pages, ...extra];
     }
 
+    // --- markdown ---
+
+    _openMarkdownPicker() {
+        const input = this.renderRoot.querySelector('[data-wiki-markdown-input]');
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error('wiki-page-view: markdown file input missing');
+        }
+        input.value = '';
+        input.click();
+    }
+
+    async _onMarkdownFileSelected(event) {
+        const input = event.target;
+        const file = input.files && input.files.length > 0 ? input.files[0] : null;
+        if (file === null) {
+            return;
+        }
+        await this._importMarkdownFile(file);
+    }
+
+    /**
+     * Импорт заменяет содержимое страницы целиком, поэтому у непустой страницы
+     * спрашивается подтверждение: отменить импорт можно только через историю
+     * версий, а это неочевидно.
+     */
+    async _importMarkdownFile(file) {
+        const markdown = await file.text();
+        if (markdown.trim() === '') {
+            this.toast('toast.markdown.empty_file', { type: 'warning' });
+            return;
+        }
+        if (this._hasContent()) {
+            const confirmed = await platformConfirm({
+                title: this.t('page.import_confirm_title'),
+                message: this.t('page.import_confirm_body', { name: file.name }),
+            });
+            if (!confirmed) {
+                return;
+            }
+        }
+
+        const result = await this._markdownImport.run({
+            wiki_page_id: this.pageId,
+            markdown,
+            apply_front_matter: true,
+        });
+        if (result === null) {
+            return;
+        }
+        this._page = result.page;
+        this._pendingContent = null;
+        this._pendingTitle = null;
+        this._saveState = SAVE_IDLE;
+        void this._pages.load();
+        this._refreshOutline();
+        if (Array.isArray(result.notices) && result.notices.length > 0) {
+            this.openModal('wiki.import_report', { notices: result.notices });
+        }
+    }
+
+    /** Есть ли на странице что-то, кроме единственного пустого абзаца. */
+    _hasContent() {
+        const content = this._page.content;
+        if (!content || !Array.isArray(content.content)) {
+            return false;
+        }
+        if (content.content.length !== 1) {
+            return content.content.length > 1;
+        }
+        const only = content.content[0];
+        return only.type !== 'paragraph' || Array.isArray(only.content) && only.content.length > 0;
+    }
+
+    /**
+     * Выгрузка идёт обычной ссылкой на роут файла: это не изменение состояния,
+     * а браузеру нужны его же заголовки вложения.
+     */
+    _downloadMarkdown() {
+        const anchor = document.createElement('a');
+        anchor.href = `/wiki/api/v1/pages/${encodeURIComponent(this.pageId)}/markdown/file`;
+        anchor.download = '';
+        anchor.click();
+    }
+
+    /** Разбор markdown живёт на сервере; редактор получает только эту функцию. */
+    async _parseMarkdown(markdown) {
+        const result = await this._markdownParse.run({ markdown });
+        return result === null ? null : result.document;
+    }
+
+    _onMarkdownFileDrop(event) {
+        void this._importMarkdownFile(event.detail.file);
+    }
+
     // --- комментарии ---
 
     async _sendComment() {
@@ -557,9 +687,18 @@ export class WikiPageView extends PlatformPage {
                         <platform-rich-editor
                             .value=${this._page.content}
                             .mentionProvider=${this._mentionProvider}
-                            placeholder=${this.t('page.title_placeholder')}
+                            .markdownParser=${this._parseMarkdown}
+                            placeholder=${this.t('editor.placeholder', null, 'platform')}
                             @change=${this._onEditorChange}
+                            @markdown-file-drop=${this._onMarkdownFileDrop}
                         ></platform-rich-editor>
+                        <input
+                            type="file"
+                            hidden
+                            data-wiki-markdown-input
+                            accept=".md,.markdown,text/markdown"
+                            @change=${this._onMarkdownFileSelected}
+                        />
                     </div>
                 </div>
                 <aside class="aside">
@@ -604,7 +743,7 @@ export class WikiPageView extends PlatformPage {
                     aria-label=${this.t('tree_menu.open')}
                     @click=${(event) => { this._menuAnchor = event.currentTarget; }}
                 >
-                    <platform-icon name="more-horizontal" size="16"></platform-icon>
+                    <platform-icon name="more-vert" size="16"></platform-icon>
                 </button>
             </div>
         `;
@@ -703,8 +842,8 @@ export class WikiPageView extends PlatformPage {
     }
 
     _renderBacklinks() {
-        const items = this._backlinks.state.items;
-        const links = Array.isArray(items) ? items : [];
+        const result = this._backlinks.lastResult;
+        const links = result && Array.isArray(result.items) ? result.items : [];
         return html`
             <section class="aside-section">
                 <div class="aside-title">${this.t('page.backlinks')}</div>
@@ -722,8 +861,8 @@ export class WikiPageView extends PlatformPage {
     }
 
     _renderComments() {
-        const items = this._comments.state.items;
-        const comments = Array.isArray(items) ? items : [];
+        const result = this._comments.lastResult;
+        const comments = result && Array.isArray(result.items) ? result.items : [];
         return html`
             <section class="aside-section">
                 <div class="aside-title">${this.t('page.comments')}</div>

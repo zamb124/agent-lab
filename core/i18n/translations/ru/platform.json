@@ -664,10 +664,14 @@
             "unavailable_recorder": "Запись голоса не поддерживается в этом браузере"
         }
     },
+    "tree": {
+        "row_menu": "Действия"
+    },
     "editor": {
         "load_failed": "Не удалось загрузить редактор",
         "format_toolbar": "Форматирование",
         "placeholder": "Нажмите / для команд",
+        "add_block": "Добавить блок",
         "block": {
             "heading_1": "Заголовок 1",
             "heading_2": "Заголовок 2",
@@ -680,7 +684,9 @@
             "blockquote": "Цитата",
             "code_block": "Блок кода",
             "table": "Таблица",
-            "horizontal_rule": "Разделитель"
+            "horizontal_rule": "Разделитель",
+            "math_block": "Формула",
+            "footnote": "Сноска"
         },
         "mark": {
             "strong": "Полужирный",

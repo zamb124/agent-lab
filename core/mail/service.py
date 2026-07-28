@@ -12,6 +12,7 @@ from typing import Final, final
 
 from core.ai.company_settings import decrypt_secret, encrypt_secret
 from core.clients.rag_client import RagClient
+from core.config import get_settings
 from core.config.models import MailConfig, MailLocalDevConfig
 from core.context import get_context
 from core.db.repositories.company_repository import CompanyRepository
@@ -112,6 +113,7 @@ from core.mail.repositories import (
     MailMessageRepository,
 )
 from core.mail.threads import thread_id_for_message
+from core.models.calendar_models import CalendarAutolinkStatus
 from core.models.identity_models import NamespaceKind, User
 from core.namespace import (
     NamespaceService,
@@ -209,6 +211,8 @@ def to_public_binding(
         sync_enabled=binding.sync_enabled,
         is_default=binding.is_default,
         calendar_color=binding.calendar_color,
+        calendar_autolink_status=binding.calendar_autolink_status,
+        calendar_autolink_detail=binding.calendar_autolink_detail,
         has_password=bool(binding.password_encrypted and binding.password_encrypted.strip()),
         imap_host=connection.imap_host if connection is not None else None,
         imap_port=connection.imap_port if connection is not None else None,
@@ -856,13 +860,13 @@ class MailService:
                 company_id=resolved_company_id,
                 mailbox_binding_id=stored.mailbox_binding_id,
             )
-            await self._autolink_personal_calendar(
+            return await self._autolink_mailbox_calendar(
                 binding=stored,
                 company_id=resolved_company_id,
                 imap_host=imap_host,
+                mail_domain=mail_domain,
                 password=payload.password,
             )
-            return stored
 
         connection_id = f"mailconn_{uuid.uuid4().hex}"
         connection = CompanyMailConnection(
@@ -924,41 +928,198 @@ class MailService:
             company_id=resolved_company_id,
             mailbox_binding_id=stored.mailbox_binding_id,
         )
-        await self._autolink_personal_calendar(
+        return await self._autolink_mailbox_calendar(
             binding=stored,
             company_id=resolved_company_id,
             imap_host=imap_host,
+            mail_domain=mail_domain,
             password=payload.password,
         )
-        return stored
 
-    async def _autolink_personal_calendar(
+    async def relink_mailbox_calendar(
+        self,
+        mailbox_binding_id: str,
+        *,
+        company_id: str | None = None,
+    ) -> MailboxBinding:
+        """
+        Повторная попытка авто-привязки календаря по сохранённому паролю ящика:
+        пользователю не нужно вводить app password заново.
+        """
+        resolved_company_id = company_id if company_id is not None else self._active_company_id()
+        binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
+        if binding is None:
+            raise MailBindingNotFoundError(mailbox_binding_id)
+        await self._require_binding_calendar_access(
+            binding, company_id=resolved_company_id
+        )
+        connection = await self._require_connection_for_binding(binding)
+        secret = self._binding_secret(binding)
+        return await self._autolink_mailbox_calendar(
+            binding=binding,
+            company_id=resolved_company_id,
+            imap_host=connection.imap_host,
+            mail_domain=connection.mail_domain,
+            password=secret.password,
+        )
+
+    async def unlink_mailbox_calendar(
+        self,
+        mailbox_binding_id: str,
+        *,
+        company_id: str | None = None,
+    ) -> MailboxBinding:
+        """Отключить календарь ящика, оставив саму почту подключённой."""
+        resolved_company_id = company_id if company_id is not None else self._active_company_id()
+        binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
+        if binding is None:
+            raise MailBindingNotFoundError(mailbox_binding_id)
+        await self._require_binding_calendar_access(
+            binding, company_id=resolved_company_id
+        )
+        await self._unlink_mailbox_calendar(binding)
+        return await self._store_calendar_autolink_status(
+            binding=binding,
+            status=CalendarAutolinkStatus.DISABLED,
+            detail="disconnected by user",
+        )
+
+    async def _require_binding_calendar_access(
+        self,
+        binding: MailboxBinding,
+        *,
+        company_id: str,
+    ) -> None:
+        if self._is_company_admin(company_id):
+            return
+        acting_user_id = self._active_user_id()
+        is_owner = (
+            binding.kind == MailboxBindingKind.USER
+            and binding.user_id is not None
+            and binding.user_id == acting_user_id
+        )
+        if not is_owner:
+            raise MailPermissionError(
+                f"no access to manage calendar for mailbox_binding_id={binding.mailbox_binding_id}"
+            )
+
+    async def _autolink_mailbox_calendar(
         self,
         *,
         binding: MailboxBinding,
         company_id: str,
         imap_host: str,
+        mail_domain: str,
         password: str,
-    ) -> None:
+    ) -> MailboxBinding:
         """
-        Best-effort: поднять CalDAV календарь для known-провайдера. Сбой календаря
-        (HTTP/discovery) логируется и не откатывает bind почты.
+        Поднять CalDAV календарь ящика и записать итог в binding. Сбой календаря
+        (HTTP/discovery) не откатывает bind почты, но виден как статус привязки.
         """
+        if not self._calendar_autolink_enabled():
+            return await self._store_calendar_autolink_status(
+                binding=binding,
+                status=CalendarAutolinkStatus.DISABLED,
+                detail="calendar_sync.autolink_enabled is false",
+            )
         if self._calendar_bridge is None or binding.user_id is None:
-            return
+            return await self._store_calendar_autolink_status(
+                binding=binding,
+                status=CalendarAutolinkStatus.DISABLED,
+                detail="calendar autolink needs a user-owned mailbox and calendar bridge",
+            )
         try:
-            _ = await self._calendar_bridge.ensure_caldav_integration_from_mailbox(
+            outcome = await self._calendar_bridge.ensure_caldav_integration_from_mailbox(
                 user_id=binding.user_id,
                 company_id=company_id,
+                mailbox_binding_id=binding.mailbox_binding_id,
                 email_address=binding.email_address,
                 password=password,
                 imap_host=imap_host,
+                mail_domain=mail_domain,
             )
         except Exception as exc:
             logger.warning(
-                "mail.personal_calendar_autolink_failed",
+                "mail.calendar_autolink_failed",
                 mailbox_binding_id=binding.mailbox_binding_id,
                 imap_host=imap_host,
+                mail_domain=mail_domain,
+                error=str(exc),
+            )
+            return await self._store_calendar_autolink_status(
+                binding=binding,
+                status=CalendarAutolinkStatus.FAILED,
+                detail=str(exc),
+            )
+        return await self._store_calendar_autolink_status(
+            binding=binding,
+            status=outcome.status,
+            detail=outcome.detail,
+        )
+
+    def _calendar_autolink_enabled(self) -> bool:
+        return get_settings().calendar_sync.autolink_enabled
+
+    async def _store_calendar_autolink_status(
+        self,
+        *,
+        binding: MailboxBinding,
+        status: CalendarAutolinkStatus,
+        detail: str | None,
+    ) -> MailboxBinding:
+        if (
+            binding.calendar_autolink_status == status
+            and binding.calendar_autolink_detail == detail
+        ):
+            return binding
+        updated = binding.model_copy(
+            update={
+                "calendar_autolink_status": status,
+                "calendar_autolink_detail": detail,
+                "updated_at": _utcnow(),
+            }
+        )
+        return await self._binding_repository.upsert(updated)
+
+    async def _autolink_company_mailbox_calendar(
+        self,
+        *,
+        binding: MailboxBinding,
+        connection: CompanyMailConnection,
+    ) -> MailboxBinding:
+        """
+        Авто-подъём календаря для корпоративного ящика. Пробуем один раз: после
+        первой попытки статус зафиксирован, повтор — из настроек пользователем.
+        """
+        if binding.calendar_autolink_status != CalendarAutolinkStatus.DISABLED:
+            return binding
+        if binding.user_id is None:
+            return binding
+        secret = self._binding_secret(binding)
+        return await self._autolink_mailbox_calendar(
+            binding=binding,
+            company_id=binding.company_id,
+            imap_host=connection.imap_host,
+            mail_domain=connection.mail_domain,
+            password=secret.password,
+        )
+
+    async def _unlink_mailbox_calendar(self, binding: MailboxBinding) -> None:
+        """
+        Снять календарные интеграции отвязанного ящика: per-mailbox credential
+        без ящика — висячая строка.
+        """
+        if self._calendar_bridge is None:
+            return
+        try:
+            _ = await self._calendar_bridge.delete_calendar_integrations_for_mailbox(
+                company_id=binding.company_id,
+                mailbox_binding_id=binding.mailbox_binding_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "mail.calendar_unlink_failed",
+                mailbox_binding_id=binding.mailbox_binding_id,
                 error=str(exc),
             )
 
@@ -1161,7 +1322,10 @@ class MailService:
                 )
                 local_override = self._local_dev_mailbox_password(email_address)
                 if has_secret and local_override is None:
-                    return existing
+                    return await self._autolink_company_mailbox_calendar(
+                        binding=existing,
+                        connection=connection,
+                    )
                 password = local_override if local_override is not None else secrets.token_urlsafe(24)
                 if payload.provision and connection.supports_provision:
                     port = self._port_for(connection)
@@ -1184,7 +1348,11 @@ class MailService:
                         "updated_at": _utcnow(),
                     }
                 )
-                return await self._binding_repository.upsert(repaired)
+                stored_repaired = await self._binding_repository.upsert(repaired)
+                return await self._autolink_company_mailbox_calendar(
+                    binding=stored_repaired,
+                    connection=connection,
+                )
 
         previous_user_id = existing.user_id if existing is not None else None
         previous_was_default = bool(existing is not None and existing.is_default)
@@ -1293,7 +1461,10 @@ class MailService:
                     company_id=resolved_company_id,
                     acting_as_admin=True,
                 )
-        return stored
+        return await self._autolink_company_mailbox_calendar(
+            binding=stored,
+            connection=connection,
+        )
 
     async def unbind_mailbox(
         self,
@@ -1328,6 +1499,7 @@ class MailService:
         deleted = await self._binding_repository.delete(mailbox_binding_id, resolved_company_id)
         if not deleted:
             raise MailBindingNotFoundError(mailbox_binding_id)
+        await self._unlink_mailbox_calendar(binding)
         if is_personal and connection is not None:
             _ = await self._connection_repository.delete(
                 connection.company_mail_connection_id

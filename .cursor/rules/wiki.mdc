@@ -37,6 +37,23 @@ UI обязан слать заголовок сам: фабрики испол�
 
 Enum-поля моделей наследуют `WikiBaseModel` (`use_enum_values=False`) — иначе перечисления превращались бы в строки и ломали сравнения по типу.
 
+Добавление узла или марки — цепочка целиком, иначе редактор не поднимется или упадёт первое же сохранение: `schema.py` → регенерация JSON → `DOM_SPECS`/`MARK_DOM_SPECS` в `wiki-schema-builder.js` → ветка в `markdown_serializer` → разбор в `markdown_parser` → команда и slash-пункт в `wiki-editor-plugins.js` → стили в `prosemirror.css` → ключи `platform.editor.block.*` в ru+en. Полноту сериализации держит `tests/wiki/test_wiki_markdown_coverage.py`: каждый узел схемы, кроме `BLOCK_NODES_WITHOUT_MARKDOWN`, обязан иметь ветку.
+
+## Markdown
+
+Диалект — CommonMark 0.31 + GFM + то, что де-факто понимает GitHub. Конвертация живёт **только в Python** (`apps/wiki/content/`): схема там же, и вторая реализация в браузере разошлась бы с ней. UI markdown не разбирает и не собирает — ходит в REST.
+
+- Поддержано в обе стороны: заголовки h1–h6, абзацы, цитаты, fenced и отступный код с языком, списки (маркированные, нумерованные со `start`, задачи, вложенные), таблицы с выравниванием, разделители, изображения, ссылки, автоссылки (linkify), `code`, `strong`, `em`, `strike`, `==highlight==`, сноски `[^label]`, формулы `$...$` и `$$...$$`, упоминания `@[имя](user:id)`, карточки файлов `platform-file:`, callout и toggle в синтаксисе `> [!TONE]`.
+- **Разбор терпим, но не молчалив.** `parse_markdown` возвращает `WikiMarkdownParseResult(document, notices)`. Сырой HTML переводится в узлы по whitelist (`markdown_html.py`): `<br>`, `<b>`, `<i>`, `<s>`, `<code>`, `<mark>`, `<a>`, `<img>`, `<p>`, `<h1>..<h6>`, `<ul>/<ol>/<li>`, `<pre>`, `<hr>`, `<table>`, `<blockquote>`, `<details>/<summary>` → toggle. Обёртки вроде `<div>` разворачиваются, `<script>`/`<iframe>`/`<style>` отбрасываются с содержимым. Всё это попадает в `notices` — молча терять текст пользователя нельзя.
+- `markdown_to_document` — та же реализация без отчёта, для вызовов, которым некуда его показать (создание и правка страницы по markdown, в том числе агентами). Заметки там пишет в лог сервис.
+- Фатальным остаётся только сломанный документ: упоминание без цели даёт `WikiMarkdownError` и 400.
+- `image` и `platform_file` в схеме блочные, поэтому абзац «текст ![картинка] текст» разбивается на блоки в исходном порядке с заметкой `image_extracted`.
+- Определения сносок сериализуются в конец файла: определение посреди текста markdown не прочитает как отдельный блок.
+- Front matter — граница файла, а не содержимое (`markdown_file.py`). Импорт берёт из шапки `title`, `icon`, `cover_url`, экспорт их туда пишет. В `document_to_markdown` шапки нет: тот же текст идёт в `text_markdown` и в RAG.
+- Маршруты: `GET /pages/{id}/markdown` (JSON, тело без шапки — для агентов), `GET /pages/{id}/markdown/file` (файл с шапкой и `Content-Disposition`), `POST /pages/import/markdown` (новая страница), `POST /pages/{id}/import/markdown` (замена содержимого), `POST /pages/markdown/parse` (разбор без записи — для вставки в редактор).
+- Гарантия устойчивости: `md → doc → md → md` не меняется. Корпус реальных файлов — `tests/wiki/fixtures/markdown/`, проверки в `tests/wiki/test_wiki_markdown_corpus.py`.
+- Вне схемы и потому в заметках: списки определений, `<u>`, `<sup>`, `<sub>`. Формулы хранятся точно, но показываются моноширинно — вёрстки TeX в редакторе нет.
+
 ## Доступ
 
 - `visibility`: `company` (вся компания) или `restricted` (только участники). Персональные гранты имеют смысл только вместе с ограничением, поэтому список участников в UI появляется вместе с ним.
@@ -58,9 +75,12 @@ Enum-поля моделей наследуют `WikiBaseModel` (`use_enum_value
 SPA `/wiki`, `defaultI18nNamespace = 'wiki'`, ассистент `serviceId/branchId = wiki`.
 
 - Раскладка — `platform-resizable-split` (ширина дерева в `platform:wiki:split.tree`), на мобиле дерево уезжает в bottom-sheet `wiki.tree`, оглавление — в `wiki.outline`.
+- Контент справа лежит в `platform-island` (`padding="none"`, `content-no-scroll`) как в остальных сервисах: скролл держат сами страницы. Публичный маршрут `wiki_public_preview` — без острова и без сайдбара.
 - Дерево страниц — общий `platform-tree` (перетаскивание, контекстное меню, клавиатура). Отдельного дерева у сервиса нет.
-- Страница — `wiki-page-view`: обложка, иконка через `platform-emoji-picker`, заголовок как первый элемент документа, `platform-rich-editor`, справа оглавление, обратные ссылки и комментарии.
-- Сохранение отложенное (900 мс) с досохранением при уходе со страницы; состояние показывает строка `.save-state`.
+- Страница — `wiki-page-view`: обложка, иконка через `platform-emoji-picker`, заголовок как первый элемент документа, `platform-rich-editor` с подсказкой `platform:editor.placeholder`, справа оглавление, обратные ссылки и комментарии.
+- Импорт и экспорт markdown — в меню страницы. Импорт заменяет содержимое, поэтому у непустой страницы спрашивает подтверждение; заметки о том, что не перенеслось, показывает модалка `wiki.import_report` (только когда они есть). Экспорт — обычная ссылка на файловый роут: выгрузка не состояние. Редактор принимает `.markdownParser` (разбор на сервере) и отдаёт наверх `markdown-file-drop` для брошенного `.md`; `Mod-Shift-v` вставляет буфер как markdown.
+- Боковые отступы `.paper` шире на `--wiki-block-gutter`: в левой полосе стоят кнопки блока редактора, правая держит колонку текста по центру. Заголовок, иконка и текст выровнены по одному краю.
+- Сохранение отложенное (900 мс) с досохранением при уходе со страницы; состояние показывает строка `.save-state`. Неудача сохранения резолвится в `null` (контракт `OpController`) — правки остаются в pending, `_page` не затирается.
 - Cmd+K — `platform-command-palette` с провайдером поверх `wiki/search`.
 - Маршруты: `wiki_home` (`''`), `wiki_page` (`p/:pageId`), `wiki_page_history` (`p/:pageId/history`), `wiki_search` (`search`), `wiki_public_preview` (`s/:token`).
 
@@ -70,4 +90,5 @@ Wiki входит в `FACTORY_CANON_SERVICES` (`scripts/check_ui_canon.sh`, `scr
 
 - Backend: `tests/wiki/**` — реальная БД, реальный RAG, без моков (`pytest.mark.no_test_doubles`).
 - Схема: `tests/wiki/test_wiki_schema_parity.py` держит Python и сгенерированный JSON в согласии.
+- Markdown: `test_wiki_markdown_roundtrip.py` (конструкции), `test_wiki_markdown_corpus.py` (реальные файлы, устойчивость, заметки), `test_wiki_markdown_coverage.py` (полнота покрытия схемы), `test_wiki_markdown_api.py` (импорт, экспорт, разбор).
 - UI: `tests/frontend_core/browser/wiki/**`, e2e — `tests/ui/e2e/test_wiki_workspace.py` (порт 9023, фикстура `wiki_ui`, helpers `tests/ui/e2e/wiki_e2e_helpers.py`).

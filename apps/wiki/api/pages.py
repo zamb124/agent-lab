@@ -8,15 +8,26 @@
 from __future__ import annotations
 
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 
 from apps.wiki.api._scope import load_viewable_page, require_scope
-from apps.wiki.content.markdown_parser import WikiMarkdownError, markdown_to_document
+from apps.wiki.content.markdown_file import markdown_file_name, split_markdown_file
+from apps.wiki.content.markdown_parser import (
+    WikiMarkdownError,
+    markdown_to_document,
+    parse_markdown,
+)
 from apps.wiki.content.prosemirror import ProseMirrorNode
 from apps.wiki.content.schema import WikiSchemaError
 from apps.wiki.dependencies import ContainerDep
 from apps.wiki.models.api import (
+    WikiMarkdownImportRequest,
+    WikiMarkdownImportResponse,
+    WikiMarkdownParseRequest,
+    WikiMarkdownParseResponse,
     WikiMarkdownResponse,
     WikiPageContentUpdateRequest,
     WikiPageCreateRequest,
@@ -117,7 +128,11 @@ async def get_page(container: ContainerDep, wiki_page_id: str) -> WikiPageRespon
 async def get_page_markdown(
     container: ContainerDep, wiki_page_id: str
 ) -> WikiMarkdownResponse:
-    """Markdown страницы — для экспорта и чтения агентами."""
+    """Markdown страницы — для чтения агентами.
+
+    Отдаёт только содержимое, без YAML-шапки: свойства страницы агент читает из
+    обычного ответа `GET /pages/{id}`, а шапка засоряла бы текст.
+    """
     scope = await require_scope(container)
     page = await load_viewable_page(container, scope, wiki_page_id)
     return WikiMarkdownResponse(
@@ -125,6 +140,96 @@ async def get_page_markdown(
         title=page.title,
         markdown=page.text_markdown,
     )
+
+
+@router.get("/{wiki_page_id}/markdown/file", response_class=PlainTextResponse)
+async def download_page_markdown(container: ContainerDep, wiki_page_id: str) -> PlainTextResponse:
+    """Выгрузка страницы файлом: YAML-шапка со свойствами плюс содержимое.
+
+    Отдельный роут вместо флага у JSON-варианта: браузеру нужен заголовок
+    вложения и `text/markdown`, а агенту — чистое тело в JSON.
+    """
+    scope = await require_scope(container)
+    page = await load_viewable_page(container, scope, wiki_page_id)
+    file_name = markdown_file_name(page.title, page.wiki_page_id)
+    return PlainTextResponse(
+        content=container.wiki_service.export_markdown_file(page),
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename*=UTF-8''{quote(file_name)}"
+            )
+        },
+    )
+
+
+@router.post("/markdown/parse", response_model=WikiMarkdownParseResponse)
+async def parse_markdown_fragment(
+    container: ContainerDep, request: WikiMarkdownParseRequest
+) -> WikiMarkdownParseResponse:
+    """Разобрать markdown в документ, ничего не записывая.
+
+    Нужен вставке в редактор: диалект и его расширения знает только сервер, и
+    второй реализации разбора в браузере быть не должно.
+    """
+    scope = await require_scope(container)
+    _ = scope
+    parts = split_markdown_file(request.markdown)
+    try:
+        parsed = parse_markdown(parts.body)
+    except WikiMarkdownError as exc:
+        raise HTTPException(status_code=400, detail=f"Markdown не разобран: {exc}") from exc
+    return WikiMarkdownParseResponse(
+        document=parsed.document, notices=[*parts.notices, *parsed.notices]
+    )
+
+
+@router.post("/import/markdown", response_model=WikiMarkdownImportResponse, status_code=201)
+async def import_markdown_as_page(
+    container: ContainerDep, request: WikiMarkdownImportRequest
+) -> WikiMarkdownImportResponse:
+    """Создать страницу из markdown-файла."""
+    scope = await require_scope(container)
+    try:
+        page, notices = await container.wiki_service.import_markdown(
+            company_id=scope.company_id,
+            namespace=scope.namespace,
+            user_id=scope.user_id,
+            markdown=request.markdown,
+            parent_page_id=request.parent_page_id,
+            apply_front_matter=request.apply_front_matter,
+        )
+    except WikiMarkdownError as exc:
+        raise HTTPException(status_code=400, detail=f"Markdown не разобран: {exc}") from exc
+    except WikiPageNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Родительская страница не найдена") from exc
+    except WikiAccessDeniedError as exc:
+        raise HTTPException(status_code=403, detail="Нет прав на создание страницы") from exc
+    return WikiMarkdownImportResponse(page=page, notices=notices)
+
+
+@router.post("/{wiki_page_id}/import/markdown", response_model=WikiMarkdownImportResponse)
+async def import_markdown_into_page(
+    container: ContainerDep, wiki_page_id: str, request: WikiMarkdownImportRequest
+) -> WikiMarkdownImportResponse:
+    """Заменить содержимое страницы markdown-файлом."""
+    scope = await require_scope(container)
+    try:
+        page, notices = await container.wiki_service.import_markdown(
+            company_id=scope.company_id,
+            namespace=scope.namespace,
+            user_id=scope.user_id,
+            markdown=request.markdown,
+            wiki_page_id=wiki_page_id,
+            apply_front_matter=request.apply_front_matter,
+        )
+    except WikiMarkdownError as exc:
+        raise HTTPException(status_code=400, detail=f"Markdown не разобран: {exc}") from exc
+    except WikiPageNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Страница не найдена") from exc
+    except WikiAccessDeniedError as exc:
+        raise HTTPException(status_code=403, detail="Нет прав на изменение страницы") from exc
+    return WikiMarkdownImportResponse(page=page, notices=notices)
 
 
 @router.put("/{wiki_page_id}/content", response_model=WikiPageResponse)

@@ -46,7 +46,7 @@ class CalendarConnectIntegrationRequest(CalendarIntegrationConnectPayload):
 
 
 class CalendarSyncRequest(BaseModel):
-    provider: CalendarProvider
+    integration_id: str
     start_at: datetime
     end_at: datetime
 
@@ -56,6 +56,7 @@ class CalendarIntegrationPublic(BaseModel):
     company_id: str
     user_id: str
     provider: CalendarProvider
+    mailbox_binding_id: str | None = None
     settings: CalendarIntegrationSettings
     created_at: datetime
     updated_at: datetime
@@ -72,6 +73,7 @@ def _to_public_integration(integration: CalendarIntegration) -> CalendarIntegrat
         company_id=integration.company_id,
         user_id=integration.user_id,
         provider=integration.provider,
+        mailbox_binding_id=integration.mailbox_binding_id,
         settings=integration.settings,
         created_at=integration.created_at,
         updated_at=integration.updated_at,
@@ -266,8 +268,8 @@ async def complete_google_calendar_oauth(
     return RedirectResponse(url=redirect_url)
 
 
-@router.delete("/integrations/{provider}")
-async def disconnect_calendar_integration(provider: CalendarProvider, service: CalendarServiceDep) -> dict[str, bool]:
+@router.delete("/integrations/{integration_id}")
+async def disconnect_calendar_integration(integration_id: str, service: CalendarServiceDep) -> dict[str, bool]:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -275,7 +277,7 @@ async def disconnect_calendar_integration(provider: CalendarProvider, service: C
         await service.disconnect_integration(
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
-            provider=provider,
+            integration_id=integration_id,
         )
     except Exception as exc:
         _raise_http_for_calendar_service_error(exc)
@@ -293,7 +295,7 @@ async def sync_calendar(payload: CalendarSyncRequest, service: CalendarServiceDe
             company_id=ctx.active_company.company_id,
             start_at=payload.start_at,
             end_at=payload.end_at,
-            provider=payload.provider,
+            integration_id=payload.integration_id,
         )
     except Exception as exc:
         _raise_http_for_calendar_service_error(exc)

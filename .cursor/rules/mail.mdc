@@ -87,6 +87,8 @@ Wire folder = exact IMAP name; роли только SPECIAL-USE. Ensure: sent/d
 - `mail_messages`: `flagged`, `answered`, `draft`; `user_id` nullable (role)
 - `mailbox_sync_cursors`: `backfill_completed`, `oldest_uid`, `last_reconcile_at`
 - `mailbox_binding_members`: PK `(mailbox_binding_id, user_id)`, `role ∈ {member, manager}`
+- `mailbox_bindings`: `calendar_autolink_status` (default `disabled`), `calendar_autolink_detail`
+- `integration_credentials`: `mailbox_binding_id` + два partial unique index (см. «Один календарь на ящик»)
 
 ## Provision
 
@@ -139,15 +141,39 @@ Deep-link: `notify/mail/mail_new_message_received` → `OPEN_FROM_NOTIFICATION`.
 | `POST /messages/mark_seen\|mark_unseen\|trash\|archive\|delete\|star\|move\|drafts\|send` | mutations |
 | `POST /messages/rag-index` | enqueue/retry async RAG index |
 | `GET/POST/DELETE /bindings/{id}/members` | role ACL |
+| `POST /bindings/{id}/calendar/autolink`, `DELETE /bindings/{id}/calendar` | календарь ящика (см. ниже) |
 
 ## Календарь: разделение с почтой
 
 IMAP/SMTP — только письма. События календаря идут отдельным каналом:
 
-- **CalDAV** (единый протокол для парольных провайдеров) — `core/calendar/service.py::CalDavClient`. Один клиент, разные `base_url`. Presets — `CALDAV_PRESET_BASE_URLS` (`yandex`→`caldav.yandex.ru`, `mailru`→`calendar.mail.ru`); `caldav` (custom) требует явного `caldav_base_url`. `discover_default_calendar_id` (RFC 4791 PROPFIND: current-user-principal → calendar-home-set → первая VEVENT-коллекция) поднимает `default_calendar_id`, если он не задан.
+- **CalDAV** (единый протокол для парольных провайдеров) — `core/calendar/service.py::CalDavClient`. Один клиент, разные `base_url`. `discover_default_calendar_id` (RFC 4791 PROPFIND: current-user-principal → calendar-home-set → первая VEVENT-коллекция) поднимает `default_calendar_id`, если он не задан.
 - Providers календаря — `CalendarProvider {google, yandex, mailru, caldav}`; CalDAV-семейство = `CALDAV_PROVIDERS`. Единый sync — `_sync_caldav_inbound/_sync_caldav_outbound`; Google — своим API, но мапится в тот же `CalendarEvent`. `CalendarEventSource` и `IntegrationProvider` расширены `mailru`/`caldav`.
-- **Auto-link**: `connect_personal_mailbox` при known IMAP host (`imap.yandex.*`, `imap.mail.ru`) best-effort поднимает CalDAV integration через инверсию зависимости `MailCalendarBridge` (порт в `core/mail/ports.py`, реализация — `CalendarService`, wiring — `BaseContainer.mail_service(calendar_bridge=...)`). Сбой календаря (HTTP/discovery) логируется, не откатывает bind почты.
-- Фоновый `calendar_sync_tick` итерирует google+yandex+mailru+caldav; source по `calendar_source_for_provider`.
+- Фоновый `calendar_sync_tick` итерирует google+yandex+mailru+caldav; source по `calendar_source_for_provider`; `run_sync`/`disconnect_integration` — по `integration_id`, не по `provider`.
+
+### Один календарь на ящик
+
+`integration_credentials.mailbox_binding_id` + два partial unique index: `(company_id,user_id,provider,service) WHERE mailbox_binding_id IS NULL` (OAuth уровня пользователя) и `(…,mailbox_binding_id) WHERE NOT NULL` (по ящику). У одного пользователя может быть несколько ящиков одного провайдера — интеграции не перезаписывают друг друга. `_sync_caldav_inbound` проставляет `mailbox_binding_id` в `CalendarEvent`, поэтому ленточка `MailboxBinding.calendar_color` работает и для CalDAV-событий.
+
+### Определение эндпоинта — `core/calendar/caldav_discovery.py`
+
+`resolve_caldav_target(mail_domain, imap_host)` → `CaldavAutolinkResolution` (`kind ∈ {caldav, needs_oauth, unsupported}`), порядок:
+
+1. `CALDAV_DOMAIN_PRESETS` — домены провайдера (`mail.ru`/`inbox.ru`/`list.ru`/`bk.ru`/`internet.ru` → `calendar.mail.ru`; `yandex.*`/`ya.ru`/`narod.ru` → `caldav.yandex.ru`); `gmail.com`/`googlemail.com` → `needs_oauth` (парольного CalDAV нет).
+2. `CALDAV_IMAP_HOST_PRESETS` — адрес на своём домене, ящик у известного провайдера.
+3. RFC 6764 проба `GET https://<mail_domain>/.well-known/caldav` (`follow_redirects`); `caldav_probe_decision` считает эндпоинтом `2xx/3xx/401`; `base_url` — origin конечного адреса. Так подхватываются корпоративные домены.
+
+Флаги — `CalendarSyncConfig`: `autolink_enabled`, `autolink_well_known_probe_enabled`, `autolink_probe_timeout_seconds`.
+
+### Auto-link и статус на ящике
+
+- Триггеры: `connect_personal_mailbox` (всегда, пароль свежий), `bind_mailbox` и лениво `get_or_create_user_binding` для корпоративных ящиков — там `_autolink_company_mailbox_calendar` пробует **один раз** (`calendar_autolink_status == disabled`), пароль из `_binding_secret`.
+- Мост — `MailCalendarBridge` (`core/mail/ports.py`, реализация `CalendarService`, wiring `BaseContainer.mail_service(calendar_bridge=...)`): `ensure_caldav_integration_from_mailbox` → `CalendarAutolinkOutcome`, `delete_calendar_integrations_for_mailbox`, `upsert_imip_event`.
+- Итог пишется в `MailboxBinding.calendar_autolink_status` (`CalendarAutolinkStatus`: `linked|unsupported|needs_oauth|needs_password|failed|disabled`) + `calendar_autolink_detail`. Сбой календаря не откатывает bind почты, но виден в API/UI, а не только в логе.
+- **Mail.ru**: пароль внешнего приложения выдаётся отдельно для календаря — почтовый пароль CalDAV отклоняет (401 на `/principals/`). Такой ответ даёт `needs_password`, интеграция не создаётся, пользователь вводит календарный пароль через «Настроить». Discovery идёт по RFC 6764: `CalDavClient._discovery_roots()` пробует `{origin}/.well-known/caldav` (у Mail.ru 301 → `/principals/`), затем `base_url`; PROPFIND с `follow_redirects=True`. 401/403 не перебирает корни — это доступ, а не адрес.
+- `unbind_mailbox` снимает календарные credentials ящика (иначе висячая строка).
+- Ручное управление: `POST /bindings/{id}/calendar/autolink` (повтор по сохранённому паролю) и `DELETE /bindings/{id}/calendar`; доступ — owner user-binding или admin.
+- UI: в «Мои ящики» строка статуса + «Подключить/Переподключить календарь», «Настроить» (переход на поверхность календаря), «Отключить календарь». В `platform-calendar-modal` интеграции подписаны email ящика, `caldav_base_url` и `default_calendar_id` переопределяются на конкретной интеграции.
 
 ## iMIP
 
@@ -171,6 +197,7 @@ Hosts: hostname панели (`sm36.hosting.reg.ru`), не `mail.linnex.io` ес
 
 ## Тесты
 
-- Offline: `tests/core/mail` + `RecordingMailServerPort` (`--ignore=live`); personal — `test_mail_personal.py`.
+- Offline: `tests/core/mail` + `RecordingMailServerPort` (`--ignore=live`); personal — `test_mail_personal.py`; календарь ящика — `test_mail_calendar_autolink.py`, discovery — `tests/core/calendar/test_caldav_discovery.py`.
+- Live CalDAV: `tests/core/calendar/live` (`-m network`). Почтовый пароль — `mail.local_dev.mailbox_passwords`, календарный — `mail.live_test.personal.calendar_app_password_a`; без него проверяется только статус `needs_password`.
 - Live: `tests/core/mail/live` + `@pytest.mark.network`; только `plt-*`; `mail_quota_sweeper` удаляет созданные ящики в конце.
 - CI opt-in: `.github/workflows/mail-live.yml`.

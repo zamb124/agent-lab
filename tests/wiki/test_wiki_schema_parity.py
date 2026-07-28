@@ -15,10 +15,12 @@ from pathlib import Path
 
 from apps.wiki.content.schema import (
     MARK_SERIALIZATION_ORDER,
+    MAX_HEADING_LEVEL,
     WIKI_MARKS,
     WIKI_NODES,
     WikiCalloutTone,
     WikiMentionKind,
+    WikiTableAlign,
     schema_as_json,
 )
 
@@ -54,6 +56,35 @@ def test_enums_are_exported_for_editor():
     payload = schema_as_json()
     assert payload["mention_kinds"] == [member.value for member in WikiMentionKind]
     assert payload["callout_tones"] == [member.value for member in WikiCalloutTone]
+    assert payload["table_aligns"] == [member.value for member in WikiTableAlign]
+
+
+def test_heading_covers_every_markdown_level():
+    # Меньше шести — значит терять h5 и h6 при импорте.
+    assert schema_as_json()["max_heading_level"] == 6
+    assert MAX_HEADING_LEVEL == 6
+
+
+def test_footnote_and_math_nodes_require_their_payload():
+    assert WIKI_NODES["footnote_reference"].attrs["label"].required is True
+    assert WIKI_NODES["footnote_definition"].attrs["label"].required is True
+    assert WIKI_NODES["math_inline"].attrs["formula"].required is True
+    assert WIKI_NODES["math_block"].attrs["formula"].required is True
+
+
+def test_table_cells_carry_alignment():
+    for node_type in ("table_cell", "table_header"):
+        assert WIKI_NODES[node_type].attrs["align"].default == ""
+
+
+def test_paragraph_is_the_first_block_of_its_group():
+    """ProseMirror берёт первый узел группы как заполнитель пустого контейнера.
+
+    Если первым окажется блок с `content: block+`, автозаполнение ячейки таблицы
+    уходит в бесконечную рекурсию.
+    """
+    block_nodes = [name for name, spec in WIKI_NODES.items() if spec.group == "block"]
+    assert block_nodes[0] == "paragraph"
 
 
 def test_document_root_and_text_nodes_present():

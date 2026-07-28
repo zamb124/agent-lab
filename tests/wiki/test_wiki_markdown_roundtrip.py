@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import pytest
 
-from apps.wiki.content.markdown_parser import WikiMarkdownError, markdown_to_document
+from apps.wiki.content.markdown_notices import WikiMarkdownNoticeKind
+from apps.wiki.content.markdown_parser import (
+    WikiMarkdownError,
+    markdown_to_document,
+    parse_markdown,
+)
 from apps.wiki.content.markdown_serializer import (
     document_to_markdown,
     document_to_plain_text,
@@ -210,6 +215,79 @@ def test_unknown_node_is_rejected():
         _ = normalize_document(document)
 
 
-def test_unsupported_markdown_construct_raises():
+def test_raw_html_is_converted_and_reported_not_rejected():
+    """Файл с HTML импортируется: отклонить его целиком значит не дать работать.
+
+    Обёртка разворачивается, текст остаётся, о расхождении сообщает заметка.
+    """
+    result = parse_markdown("<div>сырой html</div>")
+    assert document_to_plain_text(result.document) == "сырой html"
+    assert [notice.kind for notice in result.notices] == [
+        WikiMarkdownNoticeKind.DROPPED_HTML
+    ]
+
+
+def test_mention_without_target_still_raises():
+    """Терпимость не безгранична: упоминание без цели — сломанные данные."""
     with pytest.raises(WikiMarkdownError):
-        _ = markdown_to_document("<div>сырой html</div>")
+        _ = markdown_to_document("@[Иван](user:)")
+
+
+def test_heading_levels_up_to_six_are_kept():
+    document = markdown_to_document("##### Пятый\n\n###### Шестой")
+    assert [node.attrs["level"] for node in document.content] == [5, 6]
+    assert _roundtrip("##### Пятый") == "##### Пятый"
+
+
+def test_table_alignment_is_read_and_written():
+    document = markdown_to_document("| a | b |\n| :-- | --: |\n| 1 | 2 |")
+    header = document.content[0].content[0]
+    assert [cell.attrs["align"] for cell in header.content] == ["left", "right"]
+    assert "| :--- | ---: |" in document_to_markdown(document)
+
+
+def test_math_survives_in_both_forms():
+    document = markdown_to_document("Формула $x^2$ в тексте.\n\n$$\ny = kx\n$$")
+    paragraph = document.content[0]
+    assert [node.type for node in paragraph.content if node.type == "math_inline"]
+    assert document.content[1].type == "math_block"
+    assert document.content[1].attrs["formula"] == "y = kx"
+    assert _roundtrip("$$\ny = kx\n$$") == "$$\ny = kx\n$$"
+
+
+def test_footnote_reference_and_definition_pair_up():
+    document = markdown_to_document("Текст[^a].\n\n[^a]: Сноска.")
+    reference = next(
+        node for node in document.content[0].content if node.type == "footnote_reference"
+    )
+    definition = next(
+        node for node in document.content if node.type == "footnote_definition"
+    )
+    assert reference.attrs["label"] == definition.attrs["label"] == "a"
+    assert _roundtrip("Текст[^a].\n\n[^a]: Сноска.") == "Текст[^a].\n\n[^a]: Сноска."
+
+
+def test_bare_url_becomes_a_link():
+    document = markdown_to_document("Смотри https://example.com/x подробнее.")
+    linked = [
+        node
+        for node in document.content[0].content
+        if any(mark.type == "link" for mark in node.marks)
+    ]
+    assert [node.text for node in linked] == ["https://example.com/x"]
+
+
+def test_dollar_sign_in_text_is_escaped():
+    """Иначе `цена 5$ и 3$` при обратном разборе стало бы формулой."""
+    document = ProseMirrorNode(
+        type="doc",
+        content=[
+            ProseMirrorNode(
+                type="paragraph",
+                content=[ProseMirrorNode(type="text", text="цена 5$ и 3$ за штуку")],
+            )
+        ],
+    )
+    rendered = document_to_markdown(document)
+    assert rendered == "цена 5\\$ и 3\\$ за штуку"
+    assert document_to_plain_text(markdown_to_document(rendered)) == "цена 5$ и 3$ за штуку"

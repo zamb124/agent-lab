@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from core.calendar.service import (
+from core.calendar.caldav_discovery import (
     CALDAV_PROVIDERS,
-    CalDavClient,
     caldav_provider_for_imap_host,
-    calendar_source_for_provider,
     resolve_caldav_base_url,
 )
+from core.calendar.service import CalDavClient, calendar_source_for_provider
 from core.models import CalendarEventSource, CalendarProvider
 
 

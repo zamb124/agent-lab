@@ -664,10 +664,14 @@
             "unavailable_recorder": "Voice recording is not supported in this browser"
         }
     },
+    "tree": {
+        "row_menu": "Actions"
+    },
     "editor": {
         "load_failed": "Failed to load the editor",
         "format_toolbar": "Formatting",
         "placeholder": "Press / for commands",
+        "add_block": "Add block",
         "block": {
             "heading_1": "Heading 1",
             "heading_2": "Heading 2",
@@ -680,7 +684,9 @@
             "blockquote": "Quote",
             "code_block": "Code block",
             "table": "Table",
-            "horizontal_rule": "Divider"
+            "horizontal_rule": "Divider",
+            "math_block": "Formula",
+            "footnote": "Footnote"
         },
         "mark": {
             "strong": "Bold",

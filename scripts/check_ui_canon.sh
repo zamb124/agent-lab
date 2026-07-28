@@ -507,6 +507,18 @@ if [ -f core/frontend/static/lib/components/prompt-editor.js ]; then
     fail "core/.../prompt-editor.js должен быть удалён — логика в platform-markdown-editor.js"
 fi
 
+# 37. Подвал сайдбара: колокольчик живёт внутри <platform-user> в слоте user-toolbar.
+#     Рядом с блоком пользователя он повисает отдельной кнопкой и ломает ряд футера.
+STRAY_NOTIF=$(rg -l "platform-notification-manager" apps/*/ui/components/*-sidebar.js 2>/dev/null | while read -r file; do
+    if rg -q "<platform-notification-manager(?![^>]*slot=\"user-toolbar\")" -P "$file" 2>/dev/null; then
+        echo "$file"
+    fi
+done)
+if [ -n "$STRAY_NOTIF" ]; then
+    fail "sidebar footer: <platform-notification-manager> обязан идти slot=\"user-toolbar\" внутри <platform-user> (ui_components.mdc)"
+    echo "$STRAY_NOTIF" >&2
+fi
+
 if [ "$ERR" -ne 0 ]; then
     exit 1
 fi

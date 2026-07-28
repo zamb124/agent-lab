@@ -16,6 +16,9 @@ dependencies = [
     "pywebpush>=2.1.2",
     "reportlab>=4.4.7",
     "xlrd>=2.0.1",
+    "markdown-it-py>=4.2.0",
+    "mdit-py-plugins>=0.6.1",
+    "linkify-it-py>=2.1.0",
 ]
 [tool.uv]
 default-groups = [

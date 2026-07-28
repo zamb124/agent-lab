@@ -9,6 +9,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import { TEAM_EVENTS } from '@platform/lib/events/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
@@ -91,12 +92,18 @@ export class WikiPageAccessModal extends PlatformModal {
         this._publicLink = this.useOp('wiki/public_link');
         this._properties = this.useOp('wiki/page_properties');
         this._pages = this.useResource('wiki/pages');
-        this._team = this.useResource('platform/team_members');
+        this._teamMembersSel = this.select((s) => s.team.members);
+        this._teamLoadingSel = this.select((s) => s.team.loading);
     }
 
     connectedCallback() {
         super.connectedCallback();
         void this._access.run({ wiki_page_id: this.pageId });
+        const members = this._teamMembersSel.value;
+        const loading = this._teamLoadingSel.value;
+        if ((!Array.isArray(members) || members.length === 0) && !loading) {
+            this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
+        }
     }
 
     _state() {
@@ -168,9 +175,18 @@ export class WikiPageAccessModal extends PlatformModal {
 
     _memberConfig() {
         const granted = new Set(this._members().map((member) => member.user_id));
-        const values = this._team.items
-            .filter((member) => !granted.has(member.user_id))
-            .map((member) => ({ value: member.user_id, label: member.name }));
+        const team = this._teamMembersSel.value;
+        if (!Array.isArray(team)) {
+            throw new Error('wiki page access: state.team.members must be array');
+        }
+        const values = team
+            .filter((member) => member && typeof member.user_id === 'string' && !granted.has(member.user_id))
+            .map((member) => ({
+                value: member.user_id,
+                label: typeof member.name === 'string' && member.name.length > 0
+                    ? member.name
+                    : member.user_id,
+            }));
         return { values };
     }
 

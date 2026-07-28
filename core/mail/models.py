@@ -8,6 +8,7 @@ from enum import StrEnum
 from pydantic import Field
 
 from core.models.base import StrictBaseModel
+from core.models.calendar_models import CalendarAutolinkStatus
 
 
 class MailProvider(StrEnum):
@@ -144,6 +145,8 @@ class MailboxBinding(StrictBaseModel):
     sync_enabled: bool = True
     is_default: bool = False
     calendar_color: str = "default"
+    calendar_autolink_status: CalendarAutolinkStatus = CalendarAutolinkStatus.DISABLED
+    calendar_autolink_detail: str | None = None
     password_encrypted: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -218,6 +221,8 @@ class MailboxBindingPublic(StrictBaseModel):
     sync_enabled: bool
     is_default: bool
     calendar_color: str
+    calendar_autolink_status: CalendarAutolinkStatus
+    calendar_autolink_detail: str | None = None
     has_password: bool
     imap_host: str | None = None
     imap_port: int | None = None

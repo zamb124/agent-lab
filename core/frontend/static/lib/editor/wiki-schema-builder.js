@@ -20,7 +20,7 @@ const DOM_SPECS = Object.freeze({
         toDOM: () => ['p', 0],
     },
     heading: {
-        parseDOM: [1, 2, 3, 4].map((level) => ({ tag: `h${level}`, attrs: { level } })),
+        parseDOM: [1, 2, 3, 4, 5, 6].map((level) => ({ tag: `h${level}`, attrs: { level } })),
         toDOM: (node) => [`h${node.attrs.level}`, 0],
     },
     blockquote: {
@@ -105,6 +105,67 @@ const DOM_SPECS = Object.freeze({
     horizontal_rule: {
         parseDOM: [{ tag: 'hr' }],
         toDOM: () => ['hr'],
+    },
+    footnote_definition: {
+        parseDOM: [
+            {
+                tag: 'div[data-footnote-definition]',
+                getAttrs: (dom) => ({ label: dom.getAttribute('data-label') || '' }),
+            },
+        ],
+        toDOM: (node) => [
+            'div',
+            {
+                'data-footnote-definition': 'true',
+                'data-label': node.attrs.label,
+                class: 'pm-footnote-def',
+            },
+            0,
+        ],
+    },
+    footnote_reference: {
+        parseDOM: [
+            {
+                tag: 'sup[data-footnote-reference]',
+                getAttrs: (dom) => ({ label: dom.getAttribute('data-label') || '' }),
+            },
+        ],
+        toDOM: (node) => [
+            'sup',
+            {
+                'data-footnote-reference': 'true',
+                'data-label': node.attrs.label,
+                class: 'pm-footnote-ref',
+            },
+            node.attrs.label,
+        ],
+    },
+    // Формула хранится и переносится точно; рендер моноширинный, без вёрстки TeX.
+    math_block: {
+        parseDOM: [
+            {
+                tag: 'div[data-math-block]',
+                getAttrs: (dom) => ({ formula: dom.textContent || '' }),
+            },
+        ],
+        toDOM: (node) => [
+            'div',
+            { 'data-math-block': 'true', class: 'pm-math-block' },
+            node.attrs.formula,
+        ],
+    },
+    math_inline: {
+        parseDOM: [
+            {
+                tag: 'span[data-math-inline]',
+                getAttrs: (dom) => ({ formula: dom.textContent || '' }),
+            },
+        ],
+        toDOM: (node) => [
+            'span',
+            { 'data-math-inline': 'true', class: 'pm-math-inline' },
+            node.attrs.formula,
+        ],
     },
     image: {
         parseDOM: [
@@ -242,10 +303,20 @@ export function buildWikiSchema(schemaJson, pm) {
 
     // Таблицы описывает генератор prosemirror-tables: он задаёт colwidth и
     // поведение ячеек, повторять это вручную значило бы разойтись с плагином.
+    // Выравнивание добавляется его же механизмом `cellAttributes`, иначе
+    // colspan и resize пришлось бы описывать самим.
     const tableSpecs = pm.tableNodes({
         tableGroup: 'block',
         cellContent: 'block+',
-        cellAttributes: {},
+        cellAttributes: {
+            align: {
+                default: '',
+                getFromDOM: (dom) => dom.style.textAlign || dom.getAttribute('data-align') || '',
+                setDOMAttr: (value, attrs) => {
+                    if (value) attrs.style = `text-align: ${value}`;
+                },
+            },
+        },
     });
 
     const nodes = {};

@@ -19,6 +19,8 @@ async function mountEditor(props = {}) {
             .value=${props.value ?? { type: 'doc', content: [{ type: 'paragraph' }] }}
             ?readonly=${props.readonly === true}
             .mentionProvider=${props.mentionProvider ?? null}
+            .markdownParser=${props.markdownParser ?? null}
+            placeholder=${props.placeholder ?? ''}
         ></platform-rich-editor>
     `);
     // Схема и бандл ProseMirror грузятся динамически.
@@ -50,6 +52,25 @@ function selectFirstTableCell(el) {
 
 function countTableRows(doc) {
     return JSON.stringify(doc).split('"table_row"').length - 1;
+}
+
+/**
+ * Монтирование внутри shadow root — как на странице сервиса: глобальный
+ * `prosemirror.css` туда не достаёт, компонент подключает его сам. Токен полосы
+ * кнопок в приложении приходит из `tokens.css`, здесь его задаёт host.
+ */
+async function mountEditorInShadowRoot(props = {}) {
+    const host = await fixture(html`<div></div>`);
+    host.style.setProperty('--wiki-block-gutter', '2.75rem');
+    const root = host.attachShadow({ mode: 'open' });
+    const el = document.createElement('platform-rich-editor');
+    el.value = props.value ?? { type: 'doc', content: [{ type: 'paragraph' }] };
+    root.appendChild(el);
+    for (let attempt = 0; attempt < 60 && el._view === null; attempt += 1) {
+        await aTimeout(20);
+    }
+    await elementUpdated(el);
+    return { root, el };
 }
 
 /** Поставить курсор в конец документа и вернуть состояние. */
@@ -228,6 +249,143 @@ describe('platform-rich-editor', () => {
         await elementUpdated(el);
 
         expect(el._mentionItems.map((item) => item.id)).to.deep.equal(['fresh']);
+    });
+
+    it('подсказка показывается на пустом документе и уходит после ввода', async () => {
+        const el = await mountEditor({ placeholder: 'Нажмите / для команд' });
+
+        const paragraph = el.querySelector('.pm-editor p');
+        expect(paragraph.classList.contains('is-empty')).to.be.true;
+        expect(paragraph.dataset.placeholder).to.equal('Нажмите / для команд');
+
+        const { state } = el._view;
+        el._view.dispatch(state.tr.insertText('Текст', 1));
+        await elementUpdated(el);
+
+        expect(el.querySelector('.pm-editor p').classList.contains('is-empty')).to.be.false;
+    });
+
+    it('подсказка переходит на пустой абзац под курсором', async () => {
+        const el = await mountEditor({
+            value: {
+                type: 'doc',
+                content: [
+                    { type: 'paragraph', content: [{ type: 'text', text: 'Первый' }] },
+                    { type: 'paragraph' },
+                ],
+            },
+            placeholder: 'Нажмите / для команд',
+        });
+        const paragraphs = () => Array.from(el.querySelectorAll('.pm-editor p'));
+        expect(paragraphs().some((node) => node.classList.contains('is-empty'))).to.be.false;
+
+        focusEnd(el);
+        await elementUpdated(el);
+
+        expect(paragraphs()[1].classList.contains('is-empty')).to.be.true;
+    });
+
+    it('кнопки блока встают у строки с курсором без наведения мышью', async () => {
+        const el = await mountEditor({ value: docWithText('Строка') });
+
+        focusEnd(el);
+        await elementUpdated(el);
+
+        expect(el._handleBlockPos).to.equal(0);
+        expect(el._handleTop).to.be.at.least(0);
+        expect(el.querySelector('.pm-block-add-btn')).to.exist;
+    });
+
+    it('кнопки блока стоят слева от колонки текста, а не поверх строки', async () => {
+        const { el } = await mountEditorInShadowRoot({ value: docWithText('Строка текста') });
+        el._handleTop = 0;
+        el._handleBlockPos = 0;
+        await elementUpdated(el);
+
+        const handle = el.querySelector('.pm-block-handle').getBoundingClientRect();
+        const editor = el.querySelector('.pm-editor').getBoundingClientRect();
+        expect(handle.width).to.be.greaterThan(0);
+        expect(Math.round(handle.right)).to.be.at.most(Math.round(editor.left));
+    });
+
+    it('вставка markdown берёт документ у переданного разборщика', async () => {
+        // Диалект markdown разбирает сервер; редактор получает только функцию.
+        const parsed = {
+            type: 'doc',
+            content: [
+                { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Раздел' }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Абзац' }] },
+            ],
+        };
+        const calls = [];
+        const el = await mountEditor({
+            markdownParser: async (markdown) => {
+                calls.push(markdown);
+                return parsed;
+            },
+        });
+
+        await el.insertMarkdown('## Раздел\n\nАбзац');
+        await elementUpdated(el);
+
+        expect(calls).to.deep.equal(['## Раздел\n\nАбзац']);
+        const types = el.value.content.map((node) => node.type);
+        expect(types).to.include('heading');
+        expect(el.querySelector('.pm-editor').textContent).to.contain('Раздел');
+    });
+
+    it('без разборщика вставка markdown это ошибка, а не тихий пропуск', async () => {
+        const el = await mountEditor();
+
+        let failed = false;
+        try {
+            await el.insertMarkdown('# Заголовок');
+        } catch (error) {
+            failed = true;
+        }
+        expect(failed).to.be.true;
+    });
+
+    it('брошенный .md файл уходит наверх событием', async () => {
+        const el = await mountEditor({ value: docWithText('Текст') });
+        const file = new File(['# Из файла'], 'note.md', { type: 'text/markdown' });
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+
+        const dropped = oneEvent(el, 'markdown-file-drop');
+        el.querySelector('.pm-editor').dispatchEvent(
+            new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }),
+        );
+        const event = await dropped;
+
+        expect(event.detail.file.name).to.equal('note.md');
+        // Документ редактор не меняет: решение доменное.
+        expect(el.querySelector('.pm-editor').textContent).to.contain('Текст');
+    });
+
+    it('внутри shadow root подключает лист стилей области правки', async () => {
+        const { root } = await mountEditorInShadowRoot();
+
+        const cssText = root.adoptedStyleSheets
+            .flatMap((sheet) => Array.from(sheet.cssRules).map((rule) => rule.cssText))
+            .join('');
+        expect(cssText).to.contain('.pm-editor');
+        expect(cssText).to.contain('.pm-block-handle');
+    });
+
+    it('кнопка плюса у блока открывает меню команд в новом абзаце', async () => {
+        const el = await mountEditor({ value: docWithText('Блок текста') });
+
+        el._handleTop = 10;
+        el._handleBlockPos = 0;
+        await elementUpdated(el);
+
+        el.querySelector('.pm-block-add-btn').click();
+        await elementUpdated(el);
+
+        expect(el._slashOpen).to.be.true;
+        expect(el.querySelector('.pm-slash')).to.exist;
+        expect(el.value.content.length).to.equal(2);
     });
 
     it('ручка блока появляется при наведении и открывает меню', async () => {

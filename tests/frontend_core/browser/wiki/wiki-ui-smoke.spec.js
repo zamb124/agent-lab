@@ -17,6 +17,7 @@ import '../../../../apps/wiki/ui/components/sheets/wiki-outline-sheet.js';
 import '../../../../apps/wiki/ui/components/sheets/wiki-tree-sheet.js';
 import '../../../../apps/wiki/ui/modals/wiki-move-page-modal.js';
 import '../../../../apps/wiki/ui/modals/wiki-page-access-modal.js';
+import '../../../../apps/wiki/ui/modals/wiki-import-report-modal.js';
 import { buildLineDiff } from '../../../../apps/wiki/ui/pages/wiki-history-page.js';
 
 describe('wiki ui', () => {
@@ -36,6 +37,7 @@ describe('wiki ui', () => {
             'wiki-public-preview-page',
             'wiki-move-page-modal',
             'wiki-page-access-modal',
+            'wiki-import-report-modal',
             'wiki-outline-sheet',
             'wiki-tree-sheet',
         ];
@@ -50,13 +52,16 @@ describe('wiki ui', () => {
         expect(WikiApp.platformAssistant.branchId).to.equal('wiki');
     });
 
-    it('нижняя навигация ссылается на существующие маршруты', () => {
+    it('нижняя навигация ссылается на существующие маршруты и иконки', () => {
         const routeKeys = new Set(['wiki_home', 'wiki_page', 'wiki_page_history', 'wiki_search', 'wiki_public_preview']);
         for (const item of WikiApp.bottomNavItems) {
             if (typeof item.routeKey === 'string') {
                 expect(routeKeys.has(item.routeKey), item.routeKey).to.be.true;
             }
             expect(typeof item.labelKey).to.equal('string');
+            expect(typeof item.icon).to.equal('string');
+            expect(item.icon).to.not.equal('list-tree');
+            expect(item.icon).to.not.equal('more-horizontal');
         }
     });
 
@@ -68,6 +73,16 @@ describe('wiki ui', () => {
     it('каждая фабрика имеет уникальное имя', () => {
         const names = WikiApp.factories.map((factory) => factory.name);
         expect(new Set(names).size).to.equal(names.length);
+    });
+
+    it('операции markdown зарегистрированы приложением', () => {
+        const names = WikiApp.factories.map((factory) => factory.name);
+        expect(names).to.include.members([
+            'wiki/page_markdown',
+            'wiki/page_markdown_import',
+            'wiki/page_markdown_create',
+            'wiki/markdown_parse',
+        ]);
     });
 });
 

@@ -13,6 +13,7 @@ from datetime import datetime
 from pydantic import Field
 
 from apps.wiki.base_model import WikiBaseModel
+from apps.wiki.content.markdown_notices import WikiMarkdownNotice
 from apps.wiki.content.prosemirror import ProseMirrorNode
 from apps.wiki.models.domain import (
     WikiComment,
@@ -186,3 +187,45 @@ class WikiMarkdownResponse(WikiBaseModel):
     wiki_page_id: str
     title: str = ""
     markdown: str = ""
+
+
+class WikiMarkdownImportRequest(WikiBaseModel):
+    """Содержимое markdown-файла для импорта."""
+
+    markdown: str = Field(..., description="Текст файла целиком, включая YAML-шапку")
+    parent_page_id: str | None = Field(
+        default=None,
+        description="Родитель новой страницы; игнорируется при импорте в существующую",
+    )
+    apply_front_matter: bool = Field(
+        default=True,
+        description="Брать из YAML-шапки заголовок, иконку и обложку страницы",
+    )
+
+
+class WikiMarkdownParseRequest(WikiBaseModel):
+    """Markdown для разбора без записи страницы."""
+
+    markdown: str
+
+
+class WikiMarkdownParseResponse(WikiBaseModel):
+    """Документ из markdown плюс заметки о расхождениях.
+
+    Нужен вставке в редактор: диалект разбирает только сервер, а браузеру для
+    вставки достаточно готового документа.
+    """
+
+    document: ProseMirrorNode
+    notices: list[WikiMarkdownNotice] = Field(default_factory=list)
+
+
+class WikiMarkdownImportResponse(WikiBaseModel):
+    """Страница после импорта плюс то, что не перенеслось из файла.
+
+    Отчёт возвращается всегда: пустой список значит перенос без потерь, и это
+    честнее, чем молчание.
+    """
+
+    page: WikiPage
+    notices: list[WikiMarkdownNotice] = Field(default_factory=list)

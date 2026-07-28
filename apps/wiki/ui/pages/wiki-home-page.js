@@ -117,6 +117,9 @@ export class WikiHomePage extends PlatformPage {
 
     async _createRootPage() {
         const created = await this._createPage.run({ title: '' });
+        if (!created || typeof created.wiki_page_id !== 'string' || created.wiki_page_id === '') {
+            return;
+        }
         await this._pages.load();
         this.navigate('wiki_page', { pageId: created.wiki_page_id });
     }

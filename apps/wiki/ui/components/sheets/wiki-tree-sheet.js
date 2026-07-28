@@ -64,7 +64,7 @@ export class WikiTreeSheet extends PlatformBottomSheet {
     _treeMenuItems() {
         return [
             { id: 'open', label: this.t('tree_menu.open'), icon: 'external-link' },
-            { id: 'move', label: this.t('tree_menu.move'), icon: 'move' },
+            { id: 'move', label: this.t('tree_menu.move'), icon: 'swap-horiz' },
             { id: 'access', label: this.t('tree_menu.access'), icon: 'lock' },
         ];
     }

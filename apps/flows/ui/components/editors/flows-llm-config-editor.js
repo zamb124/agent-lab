@@ -757,7 +757,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                                                 @dragstart=${(e) => this._onFallbackDragStart(idx, e)}
                                                                                 @dragend=${() => this._onFallbackDragEnd()}
                                                                             >
-                                                                                <platform-icon name="grip-vertical"></platform-icon>
+                                                                                <platform-icon name="drag-handle"></platform-icon>
                                                                             </span>
                                                                             <span class="fallback-label">
                                                                                 <span class="fallback-label-main">

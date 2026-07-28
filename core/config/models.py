@@ -1591,6 +1591,9 @@ class CalendarSyncConfig(BaseModel):
     sync_meeting_reminder_enabled: bool = True
     sync_meeting_reminder_cron: str = "*/15 * * * *"
     sync_meeting_reminder_limit: int = 500
+    autolink_enabled: bool = True
+    autolink_well_known_probe_enabled: bool = True
+    autolink_probe_timeout_seconds: float = 5.0
 
 
 class MailSyncConfig(BaseModel):
@@ -1656,6 +1659,9 @@ class MailLivePersonalConfig(BaseModel):
     use_ssl: bool = True
     account_a: str = ""
     account_b: str = ""
+    # Mail.ru выдаёт пароль внешнего приложения отдельно для календаря: почтовый
+    # пароль CalDAV отклоняет. Пусто — live-тест проверяет только статус needs_password.
+    calendar_app_password_a: str = ""
 
 
 class MailLiveTestConfig(BaseModel):

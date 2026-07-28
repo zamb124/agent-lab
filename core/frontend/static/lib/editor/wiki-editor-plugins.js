@@ -15,7 +15,7 @@ export function buildInputRules(pm, schema) {
     const rules = [];
 
     rules.push(
-        pm.textblockTypeInputRule(/^(#{1,4})\s$/, schema.nodes.heading, (match) => ({
+        pm.textblockTypeInputRule(/^(#{1,6})\s$/, schema.nodes.heading, (match) => ({
             level: match[1].length,
         })),
     );
@@ -42,13 +42,20 @@ export function buildInputRules(pm, schema) {
         }),
     );
 
+    // `$$` — блок формулы: атомарный узел, поэтому тоже вручную.
+    rules.push(
+        new pm.InputRule(/^\$\$\s$/, (state, match, start, end) => (
+            state.tr.replaceRangeWith(start, end, schema.nodes.math_block.create({ formula: '' }))
+        )),
+    );
+
     return pm.inputRules({ rules });
 }
 
 /**
  * @param {object} pm
  * @param {object} schema
- * @param {{onSlash?: () => void}} handlers
+ * @param {{onSlash?: () => void, onPasteMarkdown?: () => void}} handlers
  * @returns {object} плагин keymap
  */
 export function buildKeymap(pm, schema, handlers = {}) {
@@ -81,8 +88,16 @@ export function buildKeymap(pm, schema, handlers = {}) {
         ),
     };
 
-    for (const level of [1, 2, 3, 4]) {
+    for (const level of [1, 2, 3, 4, 5, 6]) {
         keys[`Mod-Alt-${level}`] = pm.setBlockType(schema.nodes.heading, { level });
+    }
+
+    // Обычная вставка кладёт markdown как текст; эта — разбирает его в блоки.
+    if (typeof handlers.onPasteMarkdown === 'function') {
+        keys['Mod-Shift-v'] = () => {
+            handlers.onPasteMarkdown();
+            return true;
+        };
     }
 
     return pm.keymap(keys);
@@ -120,6 +135,36 @@ export function buildBlockCommands(pm, schema) {
         horizontal_rule: (state, dispatch) => {
             if (dispatch) {
                 dispatch(state.tr.replaceSelectionWith(schema.nodes.horizontal_rule.create()).scrollIntoView());
+            }
+            return true;
+        },
+        math_block: (state, dispatch) => {
+            if (dispatch) {
+                dispatch(
+                    state.tr
+                        .replaceSelectionWith(schema.nodes.math_block.create({ formula: '' }))
+                        .scrollIntoView(),
+                );
+            }
+            return true;
+        },
+        footnote: (state, dispatch) => {
+            // Сноска это пара: ссылка в тексте и определение в конце документа.
+            // Метка выводится из числа уже существующих определений.
+            const { footnote_reference: reference, footnote_definition: definition, paragraph } = schema.nodes;
+            let used = 0;
+            state.doc.descendants((node) => {
+                if (node.type === definition) used += 1;
+                return true;
+            });
+            const label = String(used + 1);
+            if (dispatch) {
+                const tr = state.tr.replaceSelectionWith(reference.create({ label }), false);
+                tr.insert(
+                    tr.doc.content.size,
+                    definition.create({ label }, paragraph.create()),
+                );
+                dispatch(tr.scrollIntoView());
             }
             return true;
         },
@@ -178,9 +223,9 @@ export function insertPlatformFileCommand(schema, file) {
 }
 
 export const SLASH_MENU_ITEMS = Object.freeze([
-    { command: 'heading_1', icon: 'type', labelKey: 'editor.block.heading_1' },
-    { command: 'heading_2', icon: 'type', labelKey: 'editor.block.heading_2' },
-    { command: 'heading_3', icon: 'type', labelKey: 'editor.block.heading_3' },
+    { command: 'heading_1', icon: 'heading-1', labelKey: 'editor.block.heading_1' },
+    { command: 'heading_2', icon: 'heading-2', labelKey: 'editor.block.heading_2' },
+    { command: 'heading_3', icon: 'heading-3', labelKey: 'editor.block.heading_3' },
     { command: 'bullet_list', icon: 'list', labelKey: 'editor.block.bullet_list' },
     { command: 'ordered_list', icon: 'list', labelKey: 'editor.block.ordered_list' },
     { command: 'task_list', icon: 'check', labelKey: 'editor.block.task_list' },
@@ -189,5 +234,7 @@ export const SLASH_MENU_ITEMS = Object.freeze([
     { command: 'blockquote', icon: 'quote', labelKey: 'editor.block.blockquote' },
     { command: 'code_block', icon: 'code', labelKey: 'editor.block.code_block' },
     { command: 'table', icon: 'table', labelKey: 'editor.block.table' },
+    { command: 'math_block', icon: 'code', labelKey: 'editor.block.math_block' },
+    { command: 'footnote', icon: 'scroll-text', labelKey: 'editor.block.footnote' },
     { command: 'horizontal_rule', icon: 'minus', labelKey: 'editor.block.horizontal_rule' },
 ]);

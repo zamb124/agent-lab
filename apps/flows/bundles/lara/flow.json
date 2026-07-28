@@ -234,6 +234,34 @@
         }
       }
     },
+    "wiki": {
+      "name": "Wiki",
+      "description": "Lara entry: Wiki knowledge base focus; full platform skills attached",
+      "tags": [
+        "wiki",
+        "knowledge",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Wiki Assistant",
+          "prompt": "prompts/wiki.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.2,
+            "provider": "humanitec_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
+          ]
+        }
+      }
+    },
     "worktracker": {
       "name": "Worktracker",
       "description": "Lara entry: WorkItems and boards focus; full platform skills attached",

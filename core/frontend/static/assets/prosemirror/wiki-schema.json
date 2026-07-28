@@ -217,6 +217,44 @@
       "selectable": true,
       "attrs": {}
     },
+    "footnote_definition": {
+      "group": "block",
+      "content": "block+",
+      "marks": null,
+      "inline": false,
+      "atom": false,
+      "defining": true,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {
+        "label": {
+          "kind": "string",
+          "default": null,
+          "required": true
+        }
+      }
+    },
+    "math_block": {
+      "group": "block",
+      "content": null,
+      "marks": null,
+      "inline": false,
+      "atom": true,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {
+        "formula": {
+          "kind": "string",
+          "default": null,
+          "required": true
+        }
+      }
+    },
     "image": {
       "group": "block",
       "content": null,
@@ -303,6 +341,11 @@
           "kind": "int",
           "default": null,
           "required": false
+        },
+        "align": {
+          "kind": "string",
+          "default": "",
+          "required": false
         }
       }
     },
@@ -331,6 +374,11 @@
         "colwidth": {
           "kind": "int",
           "default": null,
+          "required": false
+        },
+        "align": {
+          "kind": "string",
+          "default": "",
           "required": false
         }
       }
@@ -390,6 +438,44 @@
           "kind": "string",
           "default": "",
           "required": false
+        }
+      }
+    },
+    "footnote_reference": {
+      "group": "inline",
+      "content": null,
+      "marks": null,
+      "inline": true,
+      "atom": true,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {
+        "label": {
+          "kind": "string",
+          "default": null,
+          "required": true
+        }
+      }
+    },
+    "math_inline": {
+      "group": "inline",
+      "content": null,
+      "marks": null,
+      "inline": true,
+      "atom": true,
+      "defining": false,
+      "isolating": false,
+      "code": false,
+      "draggable": false,
+      "selectable": true,
+      "attrs": {
+        "formula": {
+          "kind": "string",
+          "default": null,
+          "required": true
         }
       }
     },
@@ -495,6 +581,12 @@
     "warning",
     "danger"
   ],
-  "max_heading_level": 4,
+  "table_aligns": [
+    "",
+    "left",
+    "center",
+    "right"
+  ],
+  "max_heading_level": 6,
   "_note": "Сгенерировано scripts/generate_wiki_prosemirror_schema.py из apps/wiki/content/schema.py. Не редактировать вручную."
 }

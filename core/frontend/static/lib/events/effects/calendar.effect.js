@@ -86,13 +86,13 @@ export function createCalendarEffect({ baseUrl }) {
                 return;
             }
             case CALENDAR_EVENTS.INTEGRATION_DISCONNECT_REQUESTED: {
-                const provider = event.payload && event.payload.provider;
-                if (!provider) throw new Error('calendar.effect: provider required');
+                const integrationId = event.payload && event.payload.integration_id;
+                if (!integrationId) throw new Error('calendar.effect: integration_id required');
                 try {
-                    await httpRequest({ method: 'DELETE', url: `${base}/api/calendar/integrations/${encodeURIComponent(provider)}` });
-                    ctx.dispatch(CALENDAR_EVENTS.INTEGRATION_DISCONNECTED, { provider }, { causation_id: event.id, source: 'http' });
+                    await httpRequest({ method: 'DELETE', url: `${base}/api/calendar/integrations/${encodeURIComponent(integrationId)}` });
+                    ctx.dispatch(CALENDAR_EVENTS.INTEGRATION_DISCONNECTED, { integration_id: integrationId }, { causation_id: event.id, source: 'http' });
                 } catch (err) {
-                    ctx.dispatch(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_FAILED, { provider, message: errorMessage(err) }, { causation_id: event.id, source: 'http' });
+                    ctx.dispatch(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_FAILED, { integration_id: integrationId, message: errorMessage(err) }, { causation_id: event.id, source: 'http' });
                 }
                 return;
             }

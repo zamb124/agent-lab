@@ -66,7 +66,11 @@
         "delete_confirm_body": "The page and its children will move to the trash.",
         "published": "Published",
         "draft": "Draft",
-        "restricted": "Restricted access"
+        "restricted": "Restricted access",
+        "import_markdown": "Import from Markdown",
+        "export_markdown": "Export to Markdown",
+        "import_confirm_title": "Replace page content?",
+        "import_confirm_body": "The page content will be replaced with {name}. The previous version stays in history."
     },
     "home": {
         "title": "Knowledge base",
@@ -148,6 +152,25 @@
             "member_add_failed": "Could not grant access",
             "member_removed": "Access revoked",
             "member_remove_failed": "Could not revoke access"
+        },
+        "markdown": {
+            "imported": "File imported",
+            "import_failed": "Could not import the file",
+            "empty_file": "The file is empty"
+        }
+    },
+    "import_report": {
+        "title": "What did not transfer",
+        "intro": "The file was imported, but {count} constructs had to be changed or dropped.",
+        "line": "line {line}",
+        "close": "Got it",
+        "kind": {
+            "dropped_html": "HTML dropped",
+            "unsupported_construct": "Not supported",
+            "image_extracted": "Image lifted out",
+            "unresolved_page_link": "Link not resolved",
+            "front_matter_unknown_key": "Front matter",
+            "oversized_data_uri": "Heavy attachment"
         }
     }
 }
