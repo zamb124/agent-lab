@@ -199,9 +199,8 @@ export class WikiHistoryPage extends PlatformPage {
     }
 
     async _restore() {
-        const confirmed = await platformConfirm({
+        const confirmed = await platformConfirm(this.t('history.restore_confirm_body'), {
             title: this.t('history.restore_confirm_title'),
-            message: this.t('history.restore_confirm_body'),
         });
         if (!confirmed) {
             return;

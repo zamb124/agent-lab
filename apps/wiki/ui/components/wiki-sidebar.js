@@ -21,6 +21,7 @@ import {
     setPlatformNamespaceSelection,
 } from '@platform/lib/utils/platform-namespace.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
+import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/layout/platform-sidebar-namespace-select.js';
@@ -31,6 +32,7 @@ import '@platform/lib/components/platform-tree.js';
 import '@platform/lib/components/platform-user.js';
 
 const RECENT_LIMIT = 5;
+const RECENT_STORAGE_KEY = platformStorageKey('wiki', 'sidebar.recent');
 
 export class WikiSidebar extends PlatformElement {
     static i18nNamespace = 'wiki';
@@ -40,6 +42,7 @@ export class WikiSidebar extends PlatformElement {
         collapsed: { type: Boolean, reflect: true },
         mobileOpen: { type: Boolean, attribute: 'mobile-open' },
         _filter: { state: true },
+        _recentCollapsed: { state: true },
     };
 
     static styles = [
@@ -102,6 +105,38 @@ export class WikiSidebar extends PlatformElement {
                 text-transform: uppercase;
             }
 
+            .section-toggle {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                width: 100%;
+                margin: 0;
+                padding: var(--space-3) var(--space-3) var(--space-1);
+                border: none;
+                background: transparent;
+                color: var(--text-tertiary);
+                font-family: inherit;
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                letter-spacing: var(--tracking-wide);
+                text-transform: uppercase;
+                text-align: left;
+                cursor: pointer;
+            }
+
+            .section-toggle:hover {
+                color: var(--text-secondary);
+            }
+
+            .section-toggle platform-icon {
+                flex-shrink: 0;
+                transition: transform var(--motion-duration-fast, 120ms) ease;
+            }
+
+            .section-toggle[aria-expanded='false'] platform-icon {
+                transform: rotate(-90deg);
+            }
+
             .recent {
                 display: flex;
                 flex-direction: column;
@@ -155,6 +190,7 @@ export class WikiSidebar extends PlatformElement {
             platform-service-sidebar[collapsed] platform-sidebar-namespace-select,
             platform-service-sidebar[collapsed] .tools,
             platform-service-sidebar[collapsed] .section-title,
+            platform-service-sidebar[collapsed] .section-toggle,
             platform-service-sidebar[collapsed] .recent,
             platform-service-sidebar[collapsed] .tree-wrap,
             platform-service-sidebar[collapsed] .empty,
@@ -170,6 +206,7 @@ export class WikiSidebar extends PlatformElement {
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this._filter = '';
+        this._recentCollapsed = this._readRecentCollapsed();
         this._pages = this.useResource('wiki/pages', { autoload: true });
         this._createPage = this.useOp('wiki/page_create');
         this._movePage = this.useOp('wiki/page_move');
@@ -180,6 +217,30 @@ export class WikiSidebar extends PlatformElement {
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
             this._pages.load();
         });
+    }
+
+    _readRecentCollapsed() {
+        const stored = window.localStorage.getItem(RECENT_STORAGE_KEY);
+        if (stored === null) {
+            return false;
+        }
+        const parsed = JSON.parse(stored);
+        if (typeof parsed.collapsed !== 'boolean') {
+            throw new Error(`wiki-sidebar: битое состояние recent ${stored}`);
+        }
+        return parsed.collapsed;
+    }
+
+    _persistRecentCollapsed() {
+        window.localStorage.setItem(
+            RECENT_STORAGE_KEY,
+            JSON.stringify({ collapsed: this._recentCollapsed }),
+        );
+    }
+
+    _toggleRecent() {
+        this._recentCollapsed = !this._recentCollapsed;
+        this._persistRecentCollapsed();
     }
 
     _companyId() {
@@ -333,10 +394,10 @@ export class WikiSidebar extends PlatformElement {
             return;
         }
         if (action === 'delete') {
-            const confirmed = await platformConfirm({
+            const confirmed = await platformConfirm(this.t('page.delete_confirm_body'), {
                 title: this.t('page.delete_confirm_title'),
-                message: this.t('page.delete_confirm_body'),
-                danger: true,
+                variant: 'danger',
+                confirmVariant: 'danger',
             });
             if (!confirmed) {
                 return;
@@ -416,20 +477,34 @@ export class WikiSidebar extends PlatformElement {
                 </div>
 
                 ${recent.length > 0 && this._filter === '' ? html`
-                    <div class="section-title">${this.t('sidebar.recent')}</div>
-                    <div class="recent">
-                        ${recent.map((page) => html`
-                            <button
-                                class="recent-item"
-                                type="button"
-                                data-recent-page=${page.wiki_page_id}
-                                @click=${() => this.navigate('wiki_page', { pageId: page.wiki_page_id })}
-                            >
-                                <platform-icon name="clock" size="13"></platform-icon>
-                                <span>${page.title === '' ? this.t('page.untitled') : page.title}</span>
-                            </button>
-                        `)}
-                    </div>
+                    <button
+                        class="section-toggle"
+                        type="button"
+                        data-wiki-recent-toggle
+                        aria-expanded=${this._recentCollapsed ? 'false' : 'true'}
+                        aria-label=${this._recentCollapsed
+                            ? this.t('sidebar.recent_expand')
+                            : this.t('sidebar.recent_collapse')}
+                        @click=${() => this._toggleRecent()}
+                    >
+                        <platform-icon name="chevron-down" size="12"></platform-icon>
+                        <span>${this.t('sidebar.recent')}</span>
+                    </button>
+                    ${this._recentCollapsed ? '' : html`
+                        <div class="recent">
+                            ${recent.map((page) => html`
+                                <button
+                                    class="recent-item"
+                                    type="button"
+                                    data-recent-page=${page.wiki_page_id}
+                                    @click=${() => this.navigate('wiki_page', { pageId: page.wiki_page_id })}
+                                >
+                                    <platform-icon name="clock" size="13"></platform-icon>
+                                    <span>${page.title === '' ? this.t('page.untitled') : page.title}</span>
+                                </button>
+                            `)}
+                        </div>
+                    `}
                 ` : ''}
 
                 <div class="section-title">${this.t('sidebar.pages')}</div>

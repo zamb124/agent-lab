@@ -364,7 +364,11 @@ export class WikiPagePanel extends PlatformElement {
                     type="button"
                     data-wiki-outline-pos=${item.pos}
                     style=${`padding-left:${(item.level - 1) * 10}px`}
-                    @click=${() => this.emit('outline-pick', { pos: item.pos })}
+                    @click=${() => this.emit('outline-pick', {
+                        pos: item.pos,
+                        text: item.text,
+                        level: item.level,
+                    })}
                 >${item.text}</button>
             `)}
         `;
@@ -464,9 +468,8 @@ export class WikiPagePanel extends PlatformElement {
     }
 
     async _restoreRevision() {
-        const confirmed = await platformConfirm({
+        const confirmed = await platformConfirm(this.t('history.restore_confirm_body'), {
             title: this.t('history.restore_confirm_title'),
-            message: this.t('history.restore_confirm_body'),
         });
         if (!confirmed) {
             return;

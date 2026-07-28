@@ -401,7 +401,7 @@ Runtime (`lab_service`): harness-owned structured call (`record_evaluation_judgm
 
 Маршруты (`createRouterEffect(FLOWS_ROUTES)`): `list` (`/flows`), `flow_chat` (`/flows/:flowId`), `flow_chat_branch`, `flow_chat_session`, `flow_editor`, `flow_editor_branch`. Operator-маршрута во flows нет — задачи в worktracker. Старые `?session=`/`?edit=`/`?branch=` query — удалены.
 
-Подтверждения — core-helper `platformConfirm({...})` (`core/frontend/static/lib/components/platform-confirm-modal.js`). Отдельной `flows.confirm` нет.
+Подтверждения — core-helper `platformConfirm(message, { title, variant, ... })` (`core/frontend/static/lib/components/platform-confirm-modal.js`). Отдельной `flows.confirm` нет.
 
 **Library picker (`flows.tool_picker`)** — одна реализация `flows-library-picker-modal.js`. `useOp('flows/tools_all')`, REST `GET /flows/api/v1/tools/all` (`limit` ≤ 20; при открытии — первая страница, дальше infinite scroll; поиск — query `q` с debounce и сбросом offset). `pickMode: 'all' | 'flow_only' | 'mcp_only' | 'code_node'`. Body один: tag-groups (`buildToolTagGroups`) или MCP grouped layout; `onPick({kind:'tool'|'flow', tool_id, item})` / `onPickBatch`. В LLM-ноде «Из библиотеки» для `kind === 'flow'` в `cfg.tools` добавляется `{type:'flow', tool_id}`; для tool — `{tool_id}`. Canvas drop flow/MCP — `flow_only` / `mcp_only`. Code-нода «из шаблонов» — `pickMode: 'code_node'` + `onCommit({config, nodeName})` (каталог `flows/code_templates` + registry code tools в тех же tag-groups). Kind `flows.code_node_templates` — alias того же компонента (нормализует `pickMode` в `code_node`). MCP node editor смена tool — тот же `flows.tool_picker` `mcp_only`, не enum-поля.
 

@@ -165,13 +165,24 @@ export class PlatformFilePickerModal extends PlatformModal {
             }
             .toolbar {
                 display: flex;
-                flex-wrap: wrap;
-                align-items: center;
+                flex-wrap: nowrap;
+                align-items: stretch;
                 gap: var(--space-2);
             }
             .toolbar platform-field {
-                flex: 1 1 12rem;
+                flex: 1 1 auto;
                 min-width: 0;
+            }
+            .toolbar .upload-btn {
+                flex: 0 0 auto;
+                align-self: stretch;
+                --platform-button-icon-size: calc(
+                    (var(--field-pill-padding-y) * 2)
+                    + (var(--field-pill-label-size) * var(--field-pill-label-line))
+                    + var(--field-pill-gap)
+                    + (var(--field-pill-input-size) * var(--field-pill-input-line))
+                );
+                --platform-button-icon-radius: var(--field-pill-radius);
             }
             .drop-zone {
                 display: flex;
@@ -464,13 +475,15 @@ export class PlatformFilePickerModal extends PlatformModal {
                             @change=${(event) => void this._onSearchChange(event)}
                         ></platform-field>
                         <platform-button
+                            class="upload-btn"
                             variant="secondary"
-                            size="sm"
+                            icon-only
                             ?disabled=${this._uploading}
+                            title=${this.t('file_picker.upload')}
+                            aria-label=${this.t('file_picker.upload')}
                             @click=${this._pickLocalFile}
                         >
-                            <platform-icon name="upload" size="16" slot="icon-start"></platform-icon>
-                            ${this.t('file_picker.upload')}
+                            <platform-icon name="upload" size="22"></platform-icon>
                         </platform-button>
                     </div>
 

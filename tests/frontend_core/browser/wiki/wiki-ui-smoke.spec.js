@@ -98,6 +98,53 @@ describe('wiki ui', () => {
     });
 });
 
+describe('wiki sidebar recent collapse', () => {
+    const STORAGE_KEY = platformStorageKey('wiki', 'sidebar.recent');
+
+    beforeEach(() => {
+        resetPlatformState();
+        bootstrapTestBus({ factories: WikiApp.factories });
+        window.localStorage.removeItem(STORAGE_KEY);
+    });
+
+    afterEach(() => {
+        window.localStorage.removeItem(STORAGE_KEY);
+    });
+
+    function createSidebar() {
+        return document.createElement('wiki-sidebar');
+    }
+
+    it('без сохранённого состояния Recent развёрнут', () => {
+        const sidebar = createSidebar();
+        expect(sidebar._recentCollapsed).to.equal(false);
+    });
+
+    it('сохранённое свёрнутое состояние восстанавливается', () => {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ collapsed: true }));
+        const sidebar = createSidebar();
+        expect(sidebar._recentCollapsed).to.equal(true);
+    });
+
+    it('битое состояние Recent — ошибка, а не тихий дефолт', () => {
+        const sidebar = createSidebar();
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ collapsed: 'yes' }));
+        expect(() => sidebar._readRecentCollapsed()).to.throw(/recent/);
+    });
+
+    it('переключение пишет состояние в storage', () => {
+        const sidebar = createSidebar();
+        sidebar._toggleRecent();
+        expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY))).to.deep.equal({
+            collapsed: true,
+        });
+        sidebar._toggleRecent();
+        expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY))).to.deep.equal({
+            collapsed: false,
+        });
+    });
+});
+
 describe('wiki page panel state', () => {
     const STORAGE_KEY = platformStorageKey('wiki', 'page.panel');
 

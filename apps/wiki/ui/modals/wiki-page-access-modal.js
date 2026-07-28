@@ -286,9 +286,8 @@ export class WikiPageAccessModal extends PlatformModal {
     }
 
     async _rotateLink() {
-        const confirmed = await platformConfirm({
+        const confirmed = await platformConfirm(this.t('access.link_rotate_confirm_body'), {
             title: this.t('access.link_rotate_confirm_title'),
-            message: this.t('access.link_rotate_confirm_body'),
         });
         if (!confirmed) {
             return;

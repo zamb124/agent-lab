@@ -426,6 +426,16 @@ function getOrCreatePlatformConfirmModal() {
  * @returns {Promise<boolean|string|void>}
  */
 export async function platformConfirm(message, options = {}) {
+    if (typeof message !== 'string') {
+        throw new TypeError(
+            `platformConfirm: message must be a string, got ${typeof message}`,
+        );
+    }
+    if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+        throw new TypeError(
+            `platformConfirm: options must be a plain object, got ${typeof options}`,
+        );
+    }
     const modal = getOrCreatePlatformConfirmModal();
     return modal.confirm({ message, ...options });
 }

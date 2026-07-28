@@ -984,14 +984,40 @@ export class PlatformRichEditor extends PlatformElement {
         return outline;
     }
 
+    get isReady() {
+        return this._view !== null;
+    }
+
     /** Прокрутить к заголовку из оглавления. */
     scrollToPosition(pos) {
-        if (!this._view) return;
-        // Outline отдаёт позицию перед узлом — outer DOM heading берём через nodeDOM.
-        const node = this._view.nodeDOM(pos);
-        const element = node instanceof Element ? node : null;
-        if (element === null) {
-            throw new Error(`platform-rich-editor: no DOM node at outline position ${pos}`);
+        if (!this._view) {
+            throw new Error('platform-rich-editor: editor not ready');
+        }
+        if (typeof pos !== 'number' || !Number.isFinite(pos)) {
+            throw new Error(`platform-rich-editor: outline position must be a number, got ${String(pos)}`);
+        }
+        const { doc } = this._view.state;
+        if (pos < 0 || pos > doc.content.size) {
+            throw new Error(
+                `platform-rich-editor: outline position ${pos} out of range 0..${doc.content.size}`,
+            );
+        }
+        const heading = doc.resolve(pos).nodeAfter;
+        if (!heading || heading.type.name !== 'heading') {
+            throw new Error(`platform-rich-editor: outline position ${pos} is not a heading`);
+        }
+        // Outline отдаёт позицию перед узлом — outer DOM heading через nodeDOM.
+        // Если DOM ещё не привязан (смена doc после save) — берём через domAtPos.
+        let element = this._view.nodeDOM(pos);
+        if (!(element instanceof Element)) {
+            const inside = Math.min(pos + 1, doc.content.size);
+            const domAt = this._view.domAtPos(inside);
+            const start = domAt.node instanceof Element ? domAt.node : domAt.node.parentElement;
+            if (!(start instanceof Element)) {
+                throw new Error(`platform-rich-editor: no DOM node at outline position ${pos}`);
+            }
+            const closestHeading = start.closest('h1, h2, h3, h4, h5, h6');
+            element = closestHeading instanceof Element ? closestHeading : start;
         }
         const scroller = this.closest('[data-wiki-page-scroll]');
         if (scroller instanceof HTMLElement) {

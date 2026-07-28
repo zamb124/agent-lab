@@ -5,7 +5,7 @@
  *
  * Лист — второй хозяин `<wiki-page-panel>`: на мобиле правая колонка скрыта, а
  * оглавление, ссылки, комментарии и история нужны те же самые. Прокрутку к
- * заголовку делает страница, поэтому позиция уходит наружу через `onPick`.
+ * заголовку делает страница, поэтому цель оглавления уходит наружу через `onPick`.
  */
 
 import { html, css } from 'lit';
@@ -58,7 +58,7 @@ export class WikiOutlineSheet extends PlatformBottomSheet {
         if (typeof this.onPick !== 'function') {
             throw new Error('wiki-outline-sheet: требуется onPick');
         }
-        this.onPick(event.detail.pos);
+        this.onPick(event.detail);
         this.close();
     }
 

@@ -25,6 +25,8 @@
         "search_placeholder": "Search the tree",
         "favorites": "Favorites",
         "recent": "Recent",
+        "recent_collapse": "Hide recent",
+        "recent_expand": "Show recent",
         "pages": "Pages",
         "empty": "No pages yet",
         "empty_hint": "Create the first page of this workspace",

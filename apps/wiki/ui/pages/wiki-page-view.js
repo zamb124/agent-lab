@@ -342,6 +342,22 @@ export class WikiPageView extends PlatformPage {
             return;
         }
         this._page = page;
+        await this.updateComplete;
+        await this._refreshOutlineWhenEditorReady();
+    }
+
+    async _refreshOutlineWhenEditorReady() {
+        for (let attempt = 0; attempt < 60; attempt += 1) {
+            const editor = this.renderRoot.querySelector('platform-rich-editor');
+            if (editor && editor.isReady) {
+                this._outline = editor.getOutline();
+                return;
+            }
+            await new Promise((resolve) => {
+                window.setTimeout(resolve, 20);
+            });
+        }
+        this._refreshOutline();
     }
 
     // --- боковая панель ---
@@ -398,7 +414,7 @@ export class WikiPageView extends PlatformPage {
             pageId: this.pageId,
             tab: this._panelTab,
             outline: this._outline,
-            onPick: (pos) => this._scrollToHeading(pos),
+            onPick: (item) => this._scrollToHeading(item),
             onTabChange: (tab) => {
                 this._panelTab = tab;
                 this._persistPanelState();
@@ -452,6 +468,7 @@ export class WikiPageView extends PlatformPage {
         this._pendingContent = null;
         this._pendingTitle = null;
         this._saveState = SAVE_DONE;
+        this._refreshOutline();
         void this._pages.load();
     }
 
@@ -553,10 +570,10 @@ export class WikiPageView extends PlatformPage {
             return;
         }
         if (action === 'delete') {
-            const confirmed = await platformConfirm({
+            const confirmed = await platformConfirm(this.t('page.delete_confirm_body'), {
                 title: this.t('page.delete_confirm_title'),
-                message: this.t('page.delete_confirm_body'),
-                danger: true,
+                variant: 'danger',
+                confirmVariant: 'danger',
             });
             if (!confirmed) {
                 return;
@@ -709,10 +726,10 @@ export class WikiPageView extends PlatformPage {
             return;
         }
         if (this._hasContent()) {
-            const confirmed = await platformConfirm({
-                title: this.t('page.import_confirm_title'),
-                message: this.t('page.import_confirm_body', { name: file.name }),
-            });
+            const confirmed = await platformConfirm(
+                this.t('page.import_confirm_body', { name: file.name }),
+                { title: this.t('page.import_confirm_title') },
+            );
             if (!confirmed) {
                 return;
             }
@@ -850,7 +867,7 @@ export class WikiPageView extends PlatformPage {
                           .outline=${this._outline}
                           @panel-close=${this._closePanel}
                           @panel-tab-change=${this._onPanelTabChange}
-                          @outline-pick=${(event) => this._scrollToHeading(event.detail.pos)}
+                          @outline-pick=${(event) => this._scrollToHeading(event.detail)}
                           @revision-restored=${() => this._loadPage()}
                       ></wiki-page-panel>`
                     : nothing}
@@ -1029,8 +1046,30 @@ export class WikiPageView extends PlatformPage {
         `;
     }
 
-    _scrollToHeading(pos) {
-        this.renderRoot.querySelector('platform-rich-editor').scrollToPosition(pos);
+    _scrollToHeading(target) {
+        if (!target || typeof target !== 'object') {
+            throw new Error('wiki-page-view: outline target required');
+        }
+        const editor = this.renderRoot.querySelector('platform-rich-editor');
+        if (!editor) {
+            throw new Error('wiki-page-view: rich editor missing');
+        }
+        // После save/import позиции в панели могут отстать от живого документа —
+        // сверяем с актуальным оглавлением редактора.
+        const live = editor.getOutline();
+        this._outline = live;
+        const pos = target.pos;
+        const text = typeof target.text === 'string' ? target.text : '';
+        const level = target.level;
+        const match = live.find((item) => item.pos === pos)
+            || live.find((item) => item.text === text && item.level === level)
+            || live.find((item) => item.text === text);
+        if (!match) {
+            throw new Error(
+                `wiki-page-view: heading not found in live outline (pos=${String(pos)}, text=${text})`,
+            );
+        }
+        editor.scrollToPosition(match.pos);
     }
 }
 

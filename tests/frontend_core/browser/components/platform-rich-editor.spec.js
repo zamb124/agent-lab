@@ -631,6 +631,22 @@ describe('platform-rich-editor', () => {
         expect(second.textContent).to.include('Второй');
     });
 
+    it('scrollToPosition отвергает позицию не-заголовка', async () => {
+        const el = await mountEditor({
+            value: {
+                type: 'doc',
+                content: [
+                    { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Заголовок' }] },
+                    { type: 'paragraph', content: [{ type: 'text', text: 'текст' }] },
+                ],
+            },
+        });
+        const headingPos = el.getOutline()[0].pos;
+        const headingNode = el._view.state.doc.resolve(headingPos).nodeAfter;
+        const paragraphPos = headingPos + headingNode.nodeSize;
+        expect(() => el.scrollToPosition(paragraphPos)).to.throw(/not a heading/);
+    });
+
     it('toggle сворачивается по шеврону и в readonly', async () => {
         const el = await mountEditor({
             value: {
