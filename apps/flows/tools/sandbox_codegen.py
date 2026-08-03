@@ -7,7 +7,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from apps.flows.src.services.platform_facades import get_code_runner
+from apps.flows.src.clients.code_runner_client import CodeRunnerClient
 from apps.flows.src.tools.decorator import tool
 from core.ai.models import ResolvedAIModel
 from core.ai.providers import AICapability, split_provider_prefixed_model
@@ -15,13 +15,12 @@ from core.ai.requirements import AISelection
 from core.ai.resolver import resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
 from core.capabilities import CAPABILITY_LANGUAGES, CapabilityLanguage
-from core.clients.service_client import ServiceClient
+from core.clients.capability_gateway_client import CapabilityGatewayClient
 from core.config import get_settings
 from core.errors import CodeExecutionRuntimeError
 from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
-_CAPABILITY_DOCUMENTATION_PATH = "/capability-gateway/api/v1/capabilities/documentation"
 _LANGUAGES = CAPABILITY_LANGUAGES
 
 
@@ -93,17 +92,7 @@ class SandboxCodegenArgs(BaseModel):
 
 
 async def _language_docs(language: CapabilityLanguage, max_doc_chars: int) -> str:
-    raw = await ServiceClient().get(
-        "capability_gateway",
-        _CAPABILITY_DOCUMENTATION_PATH,
-        params={"language": language},
-        timeout=30.0,
-    )
-    payload = require_json_object(raw, "capability_gateway.documentation")
-    markdown = payload.get("markdown")
-    if not isinstance(markdown, str):
-        raise RuntimeError("capability-gateway documentation response is invalid")
-    docs = markdown
+    docs = (await CapabilityGatewayClient().get_documentation(language)).markdown
     if len(docs) <= max_doc_chars:
         return docs
     return docs[:max_doc_chars] + "\n\n# ... [documentation truncated by max_doc_chars]\n"
@@ -225,7 +214,7 @@ async def sandbox_codegen(
         resolved_llm,
         state=exec_state,
     )
-    runner = get_code_runner(language=capability_language)
+    runner = CodeRunnerClient(language=capability_language)
     args: JsonObject = dict(run_args) if run_args is not None else {}
     trace: list[JsonObject] = []
     last_code = ""
@@ -291,13 +280,7 @@ async def sandbox_codegen(
             "trace": trace,
         }
 
-    return {
-        "success": False,
-        "language": capability_language,
-        "result": None,
-        "state": _state_json(exec_state),
-        "final_code": last_code,
-        "attempts": max_iterations,
-        "trace": trace,
-        "error": "max_iterations_exhausted",
-    }
+    raise RuntimeError(
+        "sandbox_codegen: max_iterations exhausted "
+        + f"(attempts={max_iterations}, language={capability_language})"
+    )

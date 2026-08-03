@@ -67,7 +67,7 @@ const searchOp = createAsyncOp({
 const uploadOp = createAsyncOp({
     name: 'test/picker_upload',
     silent: true,
-    restMirror: { method: 'POST', path: '/frontend/api/v1/files/' },
+    restMirror: { method: 'POST', path: '/frontend/api/v1/files/uploads' },
     request: async ({ payload }) => {
         if (!payload || !(payload.file instanceof File)) {
             throw new Error('test/picker_upload: file required');

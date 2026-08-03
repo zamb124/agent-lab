@@ -15,6 +15,7 @@ from apps.office.config import get_office_settings
 from apps.office.services.callback_token import encode_callback_context_token
 from apps.office.services.minimal_ooxml import minimal_pptx_bytes, minimal_xlsx_bytes
 from apps.office.services.onlyoffice_jwt import encode_download_token
+from tests.office.helpers import upload_office_file_bytes
 
 pytestmark = [pytest.mark.timeout(120)]
 
@@ -611,20 +612,14 @@ async def test_office_download_rejects_invalid_and_mismatched_tokens(office_clie
 
 @pytest.mark.asyncio
 async def test_upload_rejects_empty_file(office_client, auth_headers_system, unique_id):
-    files = {
-        "file": (
-            f"empty-{unique_id}.txt",
-            b"",
-            "text/plain",
+    with pytest.raises(ValueError, match="empty content"):
+        await upload_office_file_bytes(
+            office_client,
+            auth_headers_system,
+            filename=f"empty-{unique_id}.txt",
+            content=b"",
+            content_type="text/plain",
         )
-    }
-    r = await office_client.post(
-        "/documents/api/v1/documents",
-        headers=auth_headers_system,
-        files=files,
-        data={"title": "x"},
-    )
-    assert r.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -741,18 +736,18 @@ async def test_editor_config_jwt_matches_uploaded_xlsx(
     office_client, auth_headers_system, unique_id
 ):
     catalog_id = await _dedicated_catalog_id(office_client, auth_headers_system, unique_id)
-    files = {
-        "file": (
-            f"upload-{unique_id}.xlsx",
-            minimal_xlsx_bytes(),
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    }
+    uploaded = await upload_office_file_bytes(
+        office_client,
+        auth_headers_system,
+        filename=f"upload-{unique_id}.xlsx",
+        content=minimal_xlsx_bytes(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    file_id = str(uploaded["file_id"])
     up = await office_client.post(
         "/documents/api/v1/documents",
         headers=auth_headers_system,
-        files=files,
-        data={"title": f"X {unique_id}", "catalog_id": catalog_id},
+        json={"file_id": file_id, "title": f"X {unique_id}", "catalog_id": catalog_id},
     )
     assert up.status_code == 200
     file_id = up.json()["file_id"]
@@ -782,18 +777,18 @@ async def test_editor_config_jwt_matches_uploaded_pptx(
     office_client, auth_headers_system, unique_id
 ):
     catalog_id = await _dedicated_catalog_id(office_client, auth_headers_system, unique_id)
-    files = {
-        "file": (
-            f"deck-{unique_id}.pptx",
-            minimal_pptx_bytes(),
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        )
-    }
+    uploaded = await upload_office_file_bytes(
+        office_client,
+        auth_headers_system,
+        filename=f"deck-{unique_id}.pptx",
+        content=minimal_pptx_bytes(),
+        content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+    file_id = str(uploaded["file_id"])
     up = await office_client.post(
         "/documents/api/v1/documents",
         headers=auth_headers_system,
-        files=files,
-        data={"title": f"P {unique_id}", "catalog_id": catalog_id},
+        json={"file_id": file_id, "title": f"P {unique_id}", "catalog_id": catalog_id},
     )
     assert up.status_code == 200
     file_id = up.json()["file_id"]
@@ -823,18 +818,18 @@ async def test_editor_config_jwt_matches_uploaded_csv(
 ):
     catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
     csv_body = b"a,b\n1,2\n"
-    files = {
-        "file": (
-            f"grid-{unique_id}.csv",
-            csv_body,
-            "text/csv",
-        )
-    }
+    uploaded = await upload_office_file_bytes(
+        office_client,
+        auth_headers_system,
+        filename=f"grid-{unique_id}.csv",
+        content=csv_body,
+        content_type="text/csv",
+    )
+    file_id = str(uploaded["file_id"])
     up = await office_client.post(
         "/documents/api/v1/documents",
         headers=auth_headers_system,
-        files=files,
-        data={"catalog_id": catalog_id},
+        json={"file_id": file_id, "catalog_id": catalog_id},
     )
     assert up.status_code == 200
     file_id = up.json()["file_id"]
@@ -854,18 +849,18 @@ async def test_upload_filename_blob_spreadsheet_mime_stores_cell_and_editor_cell
     office_client, auth_headers_system, unique_id
 ):
     catalog_id = await _dedicated_catalog_id(office_client, auth_headers_system, unique_id)
-    files = {
-        "file": (
-            "blob",
-            minimal_xlsx_bytes(),
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    }
+    uploaded = await upload_office_file_bytes(
+        office_client,
+        auth_headers_system,
+        filename="blob",
+        content=minimal_xlsx_bytes(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    file_id = str(uploaded["file_id"])
     up = await office_client.post(
         "/documents/api/v1/documents",
         headers=auth_headers_system,
-        files=files,
-        data={"title": f"Blob {unique_id}", "catalog_id": catalog_id},
+        json={"file_id": file_id, "title": f"Blob {unique_id}", "catalog_id": catalog_id},
     )
     assert up.status_code == 200
     file_id = up.json()["file_id"]

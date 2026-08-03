@@ -10,6 +10,7 @@ import pytest
 from httpx import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_str
+from tests.crm.e2e.attachment_upload_helpers import upload_and_attach_crm_file
 
 
 def _http_json(response: Response) -> dict[str, object]:
@@ -47,17 +48,22 @@ class TestSagaRollback:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Удаление entity → автоматически удаляются attachments"""
+        note_name = f"Note с вложениями {unique_id}"
         entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
-            "name": f"Note с вложениями {unique_id}",
+            "name": note_name,
         }, headers=auth_headers_system)
         entity_id = _entity_id(entity_resp)
 
-        files = {"file": ("document.txt", b"Content to be deleted", "text/plain")}
-        upload_resp = await crm_client.post(
-            f"/crm/api/v1/entities/{entity_id}/attachments",
-            files=files,
-            headers=auth_headers_system,
+        upload_resp = await upload_and_attach_crm_file(
+            crm_client,
+            auth_headers_system,
+            entity_id=entity_id,
+            entity_type="note",
+            entity_title=note_name,
+            filename="document.txt",
+            content=b"Content to be deleted",
+            content_type="text/plain",
         )
         _ = _document_id(upload_resp)
 
@@ -108,17 +114,22 @@ class TestSagaRollback:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Удаление entity с attachments + relationships одновременно"""
+        note_name = f"Complex entity {unique_id}"
         entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
-            "name": f"Complex entity {unique_id}",
+            "name": note_name,
         }, headers=auth_headers_system)
         entity_id = _entity_id(entity_resp)
 
-        files = {"file": ("file1.txt", b"Data 1", "text/plain")}
-        _ = await crm_client.post(
-            f"/crm/api/v1/entities/{entity_id}/attachments",
-            files=files,
-            headers=auth_headers_system,
+        _ = await upload_and_attach_crm_file(
+            crm_client,
+            auth_headers_system,
+            entity_id=entity_id,
+            entity_type="note",
+            entity_title=note_name,
+            filename="file1.txt",
+            content=b"Data 1",
+            content_type="text/plain",
         )
 
         related_resp = await crm_client.post("/crm/api/v1/entities/", json={

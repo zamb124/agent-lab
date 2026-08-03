@@ -23,13 +23,11 @@ from apps.flows.src.tools.base import (
     ToolResult,
 )
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
-from core.logging import get_logger
-from core.types import require_json_object, require_json_value
+from core.types import JsonObject, require_json_object, require_json_value
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-logger = get_logger(__name__)
 Permission = str | list[str] | None
 
 ToolFunction: TypeAlias = Callable[..., ToolFunctionResult]
@@ -56,6 +54,11 @@ class FunctionTool(BaseTool):
         billing_name: str | None = None,
         free_for_plans: list[str] | None = None,
         tariff_limits: dict[str, int] | None = None,
+        output_schema: JsonObject | None = None,
+        effects: list[str] | None = None,
+        confirmation_floor: str = "none",
+        idempotency: str = "none",
+        argument_sources: dict[str, str] | None = None,
     ):
         self._func: ToolFunction = func
         self.name: str = name
@@ -64,6 +67,11 @@ class FunctionTool(BaseTool):
         self.permission: Permission = permission
         self.react_role: ReactToolRole = react_role
         self.parameters_model: type[BaseModel] | None = parameters_model
+        self.output_schema: JsonObject | None = output_schema
+        self.effects: list[str] = effects if effects is not None else []
+        self.confirmation_floor: str = confirmation_floor
+        self.idempotency: str = idempotency
+        self.argument_sources: dict[str, str] = argument_sources if argument_sources is not None else {}
 
         self.cost: float = cost
         self.billing_name: str = billing_name or name
@@ -77,17 +85,6 @@ class FunctionTool(BaseTool):
         if self.parameters_model is None:
             raise RuntimeError(f"Tool '{self.name}' requires parameters_model")
         return pydantic_model_to_parameters_schema(self.parameters_model)
-
-    @override
-    async def run(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
-        """
-        Единственная точка входа для выполнения tool.
-        """
-        logger.debug(f"Tool {self.name}: run")
-        return require_json_value(
-            await self._run_impl(args, state),
-            f"tool.{self.name}.result",
-        )
 
     @override
     async def _run_impl(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
@@ -133,6 +130,11 @@ def tool(
     free_for_plans: list[str] | None = None,
     tariff_limits: dict[str, int] | None = None,
     listed_in_platform_tool_docs: bool = True,
+    output_schema: JsonObject | None = None,
+    effects: list[str] | None = None,
+    confirmation_floor: str = "none",
+    idempotency: str = "none",
+    argument_sources: dict[str, str] | None = None,
 ) -> Callable[[F], FunctionTool]:
     """
     Декоратор для создания tool из функции.
@@ -186,6 +188,11 @@ def tool(
             free_for_plans=free_for_plans,
             tariff_limits=tariff_limits,
             parameters_model=parameters_model,
+            output_schema=output_schema,
+            effects=effects,
+            confirmation_floor=confirmation_floor,
+            idempotency=idempotency,
+            argument_sources=argument_sources,
         )
 
     return decorator

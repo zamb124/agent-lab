@@ -16,9 +16,11 @@ from urllib.parse import urlparse
 import httpx
 from bs4 import BeautifulSoup
 
+from core.clients.rag_client import RagClient
 from core.config import get_settings
 from core.http import get_httpx_client
 from core.http.client import ProxyStrategy
+from core.rag.models import RAGMetadata, RAGMetadataFilter
 from core.types import (
     JsonArray,
     JsonObject,
@@ -225,6 +227,95 @@ class PravoClient:
         except ValueError as exc:
             raise PravoClientError("Ответ поиска IPS не является JSON-объектом") from exc
         return self._hits_from_search_json(body)
+
+    async def document_rag_search(
+        self,
+        *,
+        namespace_id: str,
+        collection_id: str,
+        document_ref: str,
+        query: str,
+        limit: int = 5,
+        force_refresh: bool = False,
+    ) -> JsonObject:
+        """Семантический поиск по одному НПА: при отсутствии чанков — fetch IPS → ingest → search."""
+        doc_hash = self.extract_legislation_document_hash(document_ref)
+        source_url = self.legislation_document_api_url(doc_hash)
+        rag_document_id = self.rag_document_id(doc_hash)
+        filters: RAGMetadataFilter = {
+            "$and": [
+                {"collection_id": collection_id},
+                {"document_id": rag_document_id},
+            ],
+        }
+        rag = RagClient()
+
+        if not force_refresh:
+            raw_first = await rag.search(
+                namespace_id,
+                query,
+                limit=limit,
+                filters=filters,
+            )
+            results_first = require_json_array(raw_first["results"], "rag.search.results")
+            if results_first:
+                return {
+                    "document_ingested": False,
+                    "pravo_document_hash": doc_hash,
+                    "source_url": source_url,
+                    "rag_document_id": rag_document_id,
+                    "documents": [
+                        {
+                            "document_hash": doc_hash,
+                            "source_url": source_url,
+                            "rag_document_id": rag_document_id,
+                            "title": None,
+                            "indexed_into_rag_this_call": False,
+                        },
+                    ],
+                    **raw_first,
+                }
+
+        doc = await self.fetch_legislation_document(document_hash=doc_hash)
+        merged_meta: RAGMetadata = {
+            "collection_id": collection_id,
+            "pravo_ips": True,
+            "pravo_document_hash": doc_hash,
+            "pravo_source_url": doc.source_url,
+        }
+        if doc.title:
+            merged_meta["pravo_title"] = doc.title
+        document_name = doc.title if doc.title else f"IPS {doc_hash[:16]}…"
+        _ = await rag.ingest_text(
+            namespace_id,
+            doc.text,
+            document_name=document_name,
+            metadata=merged_meta,
+            document_id=rag_document_id,
+        )
+        raw_second = await rag.search(
+            namespace_id,
+            query,
+            limit=limit,
+            filters=filters,
+        )
+        return {
+            "document_ingested": True,
+            "pravo_document_hash": doc_hash,
+            "source_url": source_url,
+            "rag_document_id": rag_document_id,
+            "documents": [
+                {
+                    "document_hash": doc_hash,
+                    "source_url": source_url,
+                    "rag_document_id": rag_document_id,
+                    "title": doc.title,
+                    "indexed_into_rag_this_call": True,
+                    "text_character_count": len(doc.text),
+                },
+            ],
+            **raw_second,
+        }
 
     async def _get(self, url: str) -> httpx.Response:
         try:

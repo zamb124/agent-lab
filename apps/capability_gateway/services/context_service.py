@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from apps.capability_gateway.services.contracts import CapabilityGatewayContainerProtocol
 from core.capabilities import CapabilityExecutionContext
 from core.context import Context, clear_context, get_context, set_context
+from core.context.job_context import build_job_context
 
 
 class CapabilityContextService:
@@ -31,15 +32,32 @@ class CapabilityContextService:
         if company is None:
             raise ValueError(f"Company not found: {execution_context.company_id}")
 
-        return Context(
+        company_subdomain = company.subdomain
+        if company_subdomain is None or company_subdomain.strip() == "":
+            host = company.company_id
+        else:
+            host = company_subdomain.strip()
+
+        trace_id = execution_context.trace_id
+        if trace_id is None:
+            request_id = execution_context.request_id
+            if isinstance(request_id, str) and request_id.strip():
+                trace_id = request_id.strip()
+            else:
+                trace_id = f"capability:{execution_context.session_id}"
+
+        job_context = build_job_context(
+            company=company,
             user=user,
-            active_company=company,
-            user_companies=[company],
+            host=host,
+            trace_id=trace_id,
             session_id=execution_context.session_id,
             channel=execution_context.channel,
-            flow_id=execution_context.flow_id,
-            trace_id=execution_context.trace_id,
         )
+        updates: dict[str, object] = {"flow_id": execution_context.flow_id}
+        if execution_context.namespace is not None:
+            updates["active_namespace"] = execution_context.namespace
+        return job_context.model_copy(update=updates)
 
     @contextmanager
     def activate(self, context: Context) -> Generator[None, None, None]:

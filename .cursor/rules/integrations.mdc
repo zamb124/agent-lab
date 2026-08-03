@@ -26,7 +26,7 @@ async for event in subscriber.subscribe(task_id):
 
 A2A — **Protocol 1.0 hard cut** (см. **`a2a.mdc`**). Типы только из `a2a-sdk` 1.x (protobuf): `TaskStatusUpdateEvent` / `TaskArtifactUpdateEvent` / `Part` / `Message`. Wire enums: `TASK_STATE_*`, `ROLE_*`. Свои A2A-модели и 0.3 aliases запрещены.
 
-**A2A вложения (`Part`):** `Part.raw` → S3 + `FileRecord` (`original_name`/`content_type` из `filename`/`mediaType`). `Part.url` — platform download reuse по `file_id`, иначе SSRF-safe HTTP fetch → persist. В `state.files` — `file_id` и same-origin `url` `/{server.name}/api/v1/files/download/{file_id}`. Нужен `active_company`. При takeover в `dialog_log` — только `file_id`.
+**A2A вложения (`Part`):** Platform UI → только `Part.url` после Files upload (`uploadPlatformFile` / `resolvePlatformFileRefs`); уже есть `FileRef` — без re-upload. `Part.raw` → S3 + `FileRecord` (`original_name`/`content_type` из `filename`/`mediaType`) для external клиентов. `Part.url` — platform download reuse по `file_id`, иначе SSRF-safe HTTP fetch → persist. В `state.files` — `file_id` и same-origin `url` (`/{segment}/api/v1/files/download/{file_id}`; segment сервиса-создателя или текущего SPA). Нужен `active_company`. При takeover в `dialog_log` — только `file_id`.
 
 ## HTTP клиенты
 
@@ -156,7 +156,7 @@ external_flow = await container.flow_discovery.register_agent(
 
 API company Google Workspace SA: `GET/PUT/DELETE .../integrations/credentials/google/workspace/company` (admin). System: `POST .../integrations/google/workspace/system/reconcile`.
 
-Google Docs/Sheets: один Connect — `service=workspace` (scopes documents+spreadsheets+drive.file). Prior `docs`/`sheets` credentials — только чтение существующих записей. Facade: `resolve_google_workspace_auth(state)` в `platform_facades.py`.
+Google Docs/Sheets: один Connect — `service=workspace` (scopes documents+spreadsheets+drive.file). Prior `docs`/`sheets` credentials — только чтение существующих записей. Client: `GoogleWorkspaceClient().resolve_auth(state)` в `apps/flows/src/clients/google_workspace_client.py`.
 
 Proactive user Connect (без interrupt): `GET .../credentials/google/workspace/authorize` → `{authorize_url}`; UI — `flows.integrations` modal (`flows/google_workspace_authorize`). Company SA status/admin form — те же company endpoints через `flows/google_workspace_company_*`.
 
@@ -180,7 +180,7 @@ Proactive user Connect (без interrupt): `GET .../credentials/google/workspace
 ### Безопасность и прозрачность
 
 - `company_id` для чтения/записи credentials — **только** из `get_context().active_company.company_id`. Разработчик flow не может подменить через `input_mapping` или `state.variables`.
-- Google Docs/Sheets auth — единый facade `resolve_google_workspace_auth`; тулы не дублируют цепочку credentials. Другие интеграции — явная логика в туле/сервисе без скрытых глобальных резолверов.
+- Google Docs/Sheets auth — единый `GoogleWorkspaceClient().resolve_auth`; тулы не дублируют цепочку credentials. Другие интеграции — явная логика в туле/сервисе без скрытых глобальных резолверов.
 
 ### CalendarService
 

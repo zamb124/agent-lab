@@ -33,7 +33,7 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
     )
     loader._target_company_id = "system"
 
-    prefix = "/frontend/api/v1/files/download/"
+    prefix = "/api/v1/files/download/"
     demo_ids = ("lawyer", "support_demo", "psy", "coach", "tutor")
 
     for bundle_id in demo_ids:
@@ -45,7 +45,7 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
         url = flow_cfg.store_card_image_url
         assert isinstance(url, str) and len(url) > 0
         assert prefix in url
-        assert url.startswith(prefix)
+        assert url.startswith("/")
 
         file_id = url.rstrip("/").split("/")[-1]
         assert file_id.startswith("file_")

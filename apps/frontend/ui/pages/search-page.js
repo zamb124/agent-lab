@@ -8,7 +8,7 @@ import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import {
     fileListToPublicSearchFiles,
-    filesToPublicSearchA2aParts,
+    setPendingPublicSearchRunFiles,
     takePendingPublicSearchFiles,
 } from '../utils/public-search-files.js';
 import { takePublicSearchLandingTransition } from '../utils/public-search-transition.js';
@@ -2262,9 +2262,9 @@ export class PublicSearchPage extends PlatformPage {
         const runId = `public_search_${Date.now().toString(36)}_${this._runSeq.toString(36)}`;
         this._preparingFiles = true;
         try {
-            const files = await filesToPublicSearchA2aParts(this._selectedFiles);
+            setPendingPublicSearchRunFiles(this._selectedFiles);
             this._preparingFiles = false;
-            void this._search.run({ run_id: runId, query, mode, files });
+            void this._search.run({ run_id: runId, query, mode });
         } catch (error) {
             this._preparingFiles = false;
             this.toast('search_page.file_upload_error', {

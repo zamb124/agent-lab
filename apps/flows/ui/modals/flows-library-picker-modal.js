@@ -723,6 +723,14 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 background: var(--accent-subtle);
                 color: var(--accent);
             }
+            .tag-tool-chip[data-kind='effect'] {
+                background: color-mix(in srgb, var(--accent) 14%, var(--glass-tint-medium));
+                color: var(--text-secondary);
+            }
+            .tag-tool-chip[data-kind='floor'] {
+                background: color-mix(in srgb, var(--warning) 18%, var(--glass-tint-medium));
+                color: var(--text-secondary);
+            }
             .tag-tool-id {
                 font-size: 10px;
                 color: var(--text-tertiary);
@@ -2236,6 +2244,16 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return this.t('tool_picker_modal.kind_tool');
     }
 
+    _confirmationFloorChipLabel(floor) {
+        if (floor === 'preview') {
+            return this.t('tool_picker_modal.confirmation_preview');
+        }
+        if (floor === 'approval') {
+            return this.t('tool_picker_modal.confirmation_approval');
+        }
+        return '';
+    }
+
     _renderTagToolCard(t, { batchEnabled }) {
         const toolId = typeof t.tool_id === 'string' ? t.tool_id : '';
         const title = registryItemTitle(t);
@@ -2246,6 +2264,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const chipLabel = this._tagToolKindChipLabel(kind, language);
         const mcpServerId = typeof t.mcp_server_id === 'string' ? t.mcp_server_id : '';
         const server = mcpServerId.length > 0 ? this._mcpServerById(mcpServerId) : null;
+        const effects = Array.isArray(t.effects)
+            ? t.effects.filter((effect) => typeof effect === 'string')
+            : [];
+        const confirmationFloor =
+            typeof t.confirmation_floor === 'string' ? t.confirmation_floor : '';
+        const floorLabel = this._confirmationFloorChipLabel(confirmationFloor);
         return html`
             <platform-picker-card
                 value=${toolId.length > 0 ? toolId : title}
@@ -2270,6 +2294,14 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                     ${desc.length > 0 ? html`<div class="tag-tool-desc">${desc}</div>` : nothing}
                     <div class="tag-tool-meta">
                         <span class="tag-tool-chip" data-kind=${kind}>${chipLabel}</span>
+                        ${effects.map(
+                            (effect) => html`
+                                <span class="tag-tool-chip" data-kind="effect">${effect}</span>
+                            `,
+                        )}
+                        ${floorLabel.length > 0
+                            ? html`<span class="tag-tool-chip" data-kind="floor">${floorLabel}</span>`
+                            : nothing}
                         ${batchEnabled
                             ? html`
                                 <platform-button

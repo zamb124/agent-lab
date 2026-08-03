@@ -19,7 +19,7 @@ import { html, nothing } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { StyleCache } from '../utils/style-cache.js';
 import {
-    DEFAULT_FILE_URL_BASE,
+    resolveDefaultFileUrlBase,
     buildWikiNodeViews,
     loadCodeMirrorBundle,
 } from '../editor/wiki-editor-nodeviews.js';
@@ -127,7 +127,7 @@ export class PlatformRichEditor extends PlatformElement {
         this.readonly = false;
         this.placeholder = '';
         this.autofocus = false;
-        this.fileUrlBase = DEFAULT_FILE_URL_BASE;
+        this.fileUrlBase = '';
         this.mentionProvider = null;
         this.markdownParser = null;
         this._ready = false;
@@ -295,10 +295,10 @@ export class PlatformRichEditor extends PlatformElement {
         return buildWikiNodeViews({
             cm: this._cm,
             getFileUrlBase: () => {
-                if (typeof this.fileUrlBase !== 'string' || this.fileUrlBase.length === 0) {
-                    throw new Error('platform-rich-editor: fileUrlBase required');
+                if (typeof this.fileUrlBase === 'string' && this.fileUrlBase.length > 0) {
+                    return this.fileUrlBase;
                 }
-                return this.fileUrlBase;
+                return resolveDefaultFileUrlBase();
             },
             isEditable: () => !this.readonly,
             onOpenFile: this.readonly

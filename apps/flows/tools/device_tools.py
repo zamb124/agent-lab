@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.agent.tunnel_bus import send_mcp_request_to_device
-from apps.flows.src.container_state import require_current_container
+from apps.flows.src.clients.device_client import DeviceClient
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.types import JsonObject, require_json_object
@@ -54,15 +53,12 @@ def _require_device_id(state: "ExecutionState") -> str:
     tags=["device"],
     parameters_model=DeviceToolsListArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
+    effects=["read"],
 )
 async def device_tools_list(*, state: "ExecutionState") -> JsonObject:
     device_id = _require_device_id(state)
-    container = require_current_container()
-    result = await send_mcp_request_to_device(
-        container.redis_client,
+    result = await DeviceClient().tools_list(
         device_id,
-        method="tools/list",
-        params={},
         timeout_seconds=_DEVICE_TOOL_TIMEOUT_SECONDS,
     )
     return {
@@ -82,6 +78,8 @@ async def device_tools_list(*, state: "ExecutionState") -> JsonObject:
     tags=["device"],
     parameters_model=DeviceToolsCallArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
+    effects=["external_send"],
+    confirmation_floor="preview",
 )
 async def device_tools_call(
     name: str,
@@ -95,12 +93,10 @@ async def device_tools_call(
         raise ValueError("name is required")
     call_arguments = arguments if arguments is not None else {}
     _ = require_json_object(call_arguments, "device_tools_call.arguments")
-    container = require_current_container()
-    result = await send_mcp_request_to_device(
-        container.redis_client,
+    result = await DeviceClient().tools_call(
         device_id,
-        method="tools/call",
-        params={"name": tool_name, "arguments": call_arguments},
+        name=tool_name,
+        arguments=call_arguments,
         timeout_seconds=_DEVICE_TOOL_TIMEOUT_SECONDS,
     )
     return {

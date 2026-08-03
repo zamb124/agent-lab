@@ -20,8 +20,8 @@ import { flowsChatMarkdownToHtml } from './markdown.js';
 import {
     normalizeFlowChatBlockForPlatformUrls,
     rewritePlatformFileUrlsInHtml,
-    CANONICAL_FILES_DOWNLOAD_PREFIX,
 } from './flows-url-rewrite.js';
+import { buildPlatformFileDownloadUrl } from '../utils/platform-files-url.js';
 import { registerBuiltinFlowChatBlocks } from './chat-builtin-blocks.js';
 import { stopStreamTtsPlayback } from '../voice/stream-tts-registry.js';
 import { normalizeChatAuthor } from './chat-author.js';
@@ -1269,7 +1269,7 @@ export class FlowsChatMessage extends PlatformElement {
         if (fid.length === 0) {
             return '';
         }
-        return `${CANONICAL_FILES_DOWNLOAD_PREFIX}/${encodeURIComponent(fid)}`;
+        return buildPlatformFileDownloadUrl(fid);
     }
 
     _markdownTemplate(text, opts = {}) {

@@ -39,6 +39,7 @@
         "flows-code",
         "sync-platform",
         "documents-platform",
+        "wiki-platform",
         "worktracker-platform",
         "litserve-platform",
         "docs-knowledge",

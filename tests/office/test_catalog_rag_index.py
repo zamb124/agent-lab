@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import io
 from urllib.parse import quote
 
 import jwt
@@ -152,19 +151,20 @@ async def _upload_searchable_csv(
     unique_id: str,
     *,
     title_suffix: str,
+    namespace: str = "default",
 ) -> tuple[str, str]:
+    from tests.office.access_helpers import upload_txt_document
+
     needle = f"office-rag-needle-{unique_id}-{title_suffix}"
     content = f"topic,content\nsearchable,{needle}\n".encode()
-    response = await office_client.post(
-        "/documents/api/v1/documents",
-        headers=headers,
-        files={"file": (f"{title_suffix}-{unique_id}.csv", io.BytesIO(content), "text/csv")},
-        data={"title": f"{title_suffix} {unique_id}", "catalog_id": catalog_id},
+    file_id = await upload_txt_document(
+        office_client,
+        headers,
+        catalog_id=catalog_id,
+        title=f"{title_suffix} {unique_id}",
+        content=content,
+        namespace=namespace,
     )
-    assert response.status_code == 200
-    body = response.json()
-    file_id = body["file_id"]
-    assert isinstance(file_id, str) and file_id
     return file_id, needle
 
 
@@ -531,7 +531,6 @@ async def test_upload_skips_index_when_catalog_rag_disabled(
 @pytest.mark.asyncio
 async def test_from_file_indexes_when_catalog_rag_enabled(
     office_client,
-    frontend_client,
     rag_client,
     rag_service,
     rag_worker,
@@ -549,7 +548,7 @@ async def test_from_file_indexes_when_catalog_rag_enabled(
     needle = f"office-rag-from-file-{unique_id}"
 
     uploaded = await upload_office_file_bytes(
-        frontend_client,
+        office_client,
         auth_headers_system,
         filename=f"raw-{unique_id}.txt",
         content=f"plain text content {needle}".encode(),
@@ -558,7 +557,7 @@ async def test_from_file_indexes_when_catalog_rag_enabled(
     file_id = str(uploaded["file_id"])
 
     create = await office_client.post(
-        "/documents/api/v1/documents/from-file",
+        "/documents/api/v1/documents",
         headers=auth_headers_system,
         json={
             "file_id": file_id,
@@ -1191,21 +1190,26 @@ async def test_signature_sidecar_skipped_from_catalog_rag_index(
         title_suffix="with-sig",
     )
     sig_content = b"\x30\x82\x02\x00fake-cryptopro-detached-signature"
+    sig_uploaded = await upload_office_file_bytes(
+        office_client,
+        auth_headers_system,
+        filename=f"contract-{unique_id}.pdf.sig",
+        content=sig_content,
+        content_type="application/octet-stream",
+    )
+    file_sig = str(sig_uploaded["file_id"])
     sig_response = await office_client.post(
         "/documents/api/v1/documents",
         headers=auth_headers_system,
-        files={
-            "file": (
-                f"contract-{unique_id}.pdf.sig",
-                io.BytesIO(sig_content),
-                "application/octet-stream",
-            )
+        json={
+            "file_id": file_sig,
+            "title": f"sig {unique_id}",
+            "catalog_id": catalog_id,
         },
-        data={"title": f"sig {unique_id}", "catalog_id": catalog_id},
     )
-    assert sig_response.status_code == 200
+    assert sig_response.status_code == 200, sig_response.text
     sig_body = sig_response.json()
-    file_sig = sig_body["file_id"]
+    assert sig_body["file_id"] == file_sig
     assert sig_body["file_category"] == "signature"
 
     await _wait_catalog_index_ready(
@@ -1251,7 +1255,6 @@ async def test_signature_sidecar_skipped_from_catalog_rag_index(
 @pytest.mark.asyncio
 async def test_onlyoffice_callback_save_reindexes_document(
     office_client,
-    frontend_client,
     rag_client,
     rag_service,
     rag_worker,
@@ -1270,7 +1273,7 @@ async def test_onlyoffice_callback_save_reindexes_document(
     needle = f"office-rag-callback-{unique_id}"
 
     uploaded = await upload_office_file_bytes(
-        frontend_client,
+        office_client,
         auth_headers_system,
         filename=f"callback-{unique_id}.txt",
         content=b"initial content before onlyoffice callback",
@@ -1279,7 +1282,7 @@ async def test_onlyoffice_callback_save_reindexes_document(
     file_id = str(uploaded["file_id"])
 
     create_response = await office_client.post(
-        "/documents/api/v1/documents/from-file",
+        "/documents/api/v1/documents",
         headers=auth_headers_system,
         json={
             "file_id": file_id,

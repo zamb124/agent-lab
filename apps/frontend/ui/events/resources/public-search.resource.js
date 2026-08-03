@@ -14,6 +14,10 @@ import {
     consumeA2aStream,
 } from '@platform/lib/chat/runtime/a2a-stream.js';
 import { mapA2aResultToChatRuntimeEvents } from '@platform/lib/chat/a2a-chat-runtime.js';
+import {
+    takePendingPublicSearchRunFiles,
+    uploadPublicSearchFilesForA2a,
+} from '../../utils/public-search-files.js';
 
 const SEARCH_RUN_MODES = Object.freeze(new Set(['quick', 'deep', 'research']));
 const PUBLIC_SEARCH_SESSION_MODES = Object.freeze(new Set(['quick', 'deep', 'research', 'source']));
@@ -178,17 +182,20 @@ function _requirePublicSearchErrorKind(value, label) {
     return kind;
 }
 
-function _normalizeFilePart(value, index) {
-    const item = _requireObject(value, `files[${index}]`);
-    return {
-        name: _requireNonEmptyString(item.name, `files[${index}].name`),
-        mimeType: _requireNonEmptyString(item.mimeType, `files[${index}].mimeType`),
-        data: _requireNonEmptyString(item.data, `files[${index}].data`),
-    };
-}
-
-function _normalizeFileParts(value) {
-    return _requireArray(value, 'files').map((item, index) => _normalizeFilePart(item, index));
+function _normalizeRunPayload(payload) {
+    const body = _requireObject(payload, 'frontend/public_search_run payload');
+    const runId = _requireNonEmptyString(body.run_id, 'run_id');
+    if (!RUN_ID_PATTERN.test(runId)) {
+        throw new Error('run_id must contain only latin letters, digits, underscore or dash');
+    }
+    const query = _requireNonEmptyString(body.query, 'query');
+    const mode = _requireSearchRunMode(body.mode, 'mode');
+    if (Object.prototype.hasOwnProperty.call(body, 'files')) {
+        throw new Error(
+            'frontend/public_search_run: files payload removed; use pending browser Files + chunked upload',
+        );
+    }
+    return { run_id: runId, query, mode };
 }
 
 function _normalizeResult(value, index) {
@@ -294,20 +301,6 @@ function _normalizeResearchSource(value, index) {
 
 function _normalizeResearchSources(value) {
     return _requireArray(value, 'research_sources').map((item, index) => _normalizeResearchSource(item, index));
-}
-
-function _normalizeRunPayload(payload) {
-    const body = _requireObject(payload, 'frontend/public_search_run payload');
-    const runId = _requireNonEmptyString(body.run_id, 'run_id');
-    if (!RUN_ID_PATTERN.test(runId)) {
-        throw new Error('run_id must contain only latin letters, digits, underscore or dash');
-    }
-    const query = _requireNonEmptyString(body.query, 'query');
-    const mode = _requireSearchRunMode(body.mode, 'mode');
-    const files = Object.prototype.hasOwnProperty.call(body, 'files')
-        ? _normalizeFileParts(body.files)
-        : [];
-    return { run_id: runId, query, mode, files };
 }
 
 function _normalizeFailedRunPayload(event) {
@@ -876,6 +869,13 @@ async function _runPublicSearch({ payload, ctx, event }) {
     }
     const request = _normalizeRunPayload(payload);
     const session = await _issuePublicSearchSession(request.mode, { force: true, consumeSearchQuota: true });
+    const pendingFiles = takePendingPublicSearchRunFiles();
+    const a2aFiles = pendingFiles.length > 0
+        ? await uploadPublicSearchFilesForA2a(pendingFiles, {
+            tokenType: session.token_type,
+            token: session.token,
+        })
+        : [];
     const stream = _streamFromRunPayload(request);
     const publisher = _createStreamPublisher(ctx, event.id, _publishStream);
     publisher.publish(stream, true);
@@ -923,7 +923,7 @@ async function _runPublicSearch({ payload, ctx, event }) {
                 message: request.query,
                 contextId: stream.context_id,
                 branchId: session.branch_id,
-                files: request.files,
+                files: a2aFiles,
                 metadata: { branch: session.branch_id },
             }),
             headers: { Authorization: `${session.token_type} ${session.token}` },

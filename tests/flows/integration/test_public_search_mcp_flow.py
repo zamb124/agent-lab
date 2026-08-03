@@ -791,7 +791,6 @@ async def test_web_search_builtin_returns_runet_results(
         state,
     )
     assert isinstance(raw, dict)
-    assert raw["success"] is True
     results = raw["results"]
     assert isinstance(results, list)
     assert len(results) >= 1

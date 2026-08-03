@@ -34,7 +34,7 @@ def test_require_device_id_reads_variables() -> None:
 async def test_device_tools_list_propagates_tunnel_error(
     container, unique_id: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import apps.flows.tools.device_tools as device_tools_module
+    from apps.flows.src.clients.device_client import DeviceClient
     from apps.flows.src.container_contracts import as_flow_runtime_container
     from apps.flows.src.container_state import (
         get_current_container,
@@ -42,10 +42,10 @@ async def test_device_tools_list_propagates_tunnel_error(
         set_current_container,
     )
 
-    async def _offline_send(*_args: object, **_kwargs: object) -> object:
+    async def _offline_tools_list(self: DeviceClient, *_args: object, **_kwargs: object) -> object:
         raise ValueError(f"Device tunnel offline: offline-device-{unique_id}")
 
-    monkeypatch.setattr(device_tools_module, "send_mcp_request_to_device", _offline_send)
+    monkeypatch.setattr(DeviceClient, "tools_list", _offline_tools_list)
 
     context_id = f"ctx-{unique_id}"
     state = ExecutionState.create(

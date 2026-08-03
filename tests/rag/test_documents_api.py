@@ -31,7 +31,6 @@ async def test_upload_document(
 
     content = b"Test document content for RAG testing. This is a sample document."
     data = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -72,7 +71,6 @@ async def test_upload_document_pdf(
     )
     pdf_content = pdf_path.read_bytes()
     data = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -99,7 +97,6 @@ async def test_list_documents(
     namespace_id = ns_response.json()["name"]
 
     await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -159,7 +156,6 @@ async def test_list_documents_with_limit(
 
     for i in range(3):
         await upload_rag_document_bytes(
-            frontend_client,
             rag_client,
             auth_headers_system,
             namespace_id=namespace_id,
@@ -194,7 +190,6 @@ async def test_delete_document(
     namespace_id = ns_response.json()["name"]
 
     doc_response = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -246,7 +241,6 @@ async def test_upload_multiple_documents(
     doc_ids = []
     for i in range(3):
         response = await upload_rag_document_bytes(
-            frontend_client,
             rag_client,
             auth_headers_system,
             namespace_id=namespace_id,

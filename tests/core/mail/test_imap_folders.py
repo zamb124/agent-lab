@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
+from core.files.registry import default_retention_for_source
 from core.mail.exceptions import MailMailboxNotFoundError
 from core.mail.imap_folders import (
     build_mail_folder_list_result,
@@ -377,9 +379,13 @@ async def test_send_appends_copy_to_sent_folder(
 async def test_send_multipart_html_and_attachment(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
+    mail_member_context,
+    container,
     unique_id: str,
 ) -> None:
     company_id = f"mailhtml_{unique_id}"
+    user_id = "test_user"
+    _ = await mail_member_context(company_id=company_id, user_id=user_id)
     _ = await mail_service.upsert_connection(
         CompanyMailConnectionUpsertPayload(
             mail_domain=f"{unique_id}.example.com",
@@ -398,12 +404,22 @@ async def test_send_multipart_html_and_attachment(
     binding = await mail_service.bind_mailbox(
         MailboxBindingCreatePayload(
             kind=MailboxBindingKind.USER,
-            user_id="test_user",
+            user_id=user_id,
             local_part=f"dave.{unique_id}",
             password="mailbox-pass-1",
             provision=True,
         ),
         company_id=company_id,
+    )
+    file_record = await container.files_service.create(
+        FileCreateSpec(
+            source_kind=FileSourceKind.PLATFORM_AUXILIARY,
+            source_ref=FileSourceRef(),
+            retention=default_retention_for_source(FileSourceKind.PLATFORM_AUXILIARY),
+        ),
+        b"hello-attach",
+        original_name="note.txt",
+        content_type="text/plain",
     )
     _ = await mail_service.send_message(
         MailSendPayload(
@@ -416,7 +432,7 @@ async def test_send_multipart_html_and_attachment(
                 MailAttachment(
                     filename="note.txt",
                     content_type="text/plain",
-                    content=b"hello-attach",
+                    file_id=file_record.file_id,
                 )
             ],
         ),
@@ -428,3 +444,4 @@ async def test_send_multipart_html_and_attachment(
     assert outbound.body_html == "<p><strong>html</strong> body</p>"
     assert len(outbound.attachments) == 1
     assert outbound.attachments[0].filename == "note.txt"
+    assert outbound.attachments[0].content == b"hello-attach"

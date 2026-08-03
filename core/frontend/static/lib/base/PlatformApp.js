@@ -57,6 +57,7 @@ import { setDefaultI18nNamespace } from '../utils/i18n-namespace.js';
 import { prefersReducedMotion } from '../utils/motion.js';
 import { resolveVoiceHttpOrigin } from '../voice/voice-http-origin.js';
 import { PLATFORM_LARA_TOGGLE_EVENT } from '../chat/chat-window-toggle.js';
+import { setPlatformFilesRouteSegment } from '../utils/platform-files-url.js';
 
 const AGENT_DEVICES_POLL_MS = 45000;
 import '../components/pwa-install-banner.js';
@@ -158,6 +159,7 @@ export class PlatformApp extends PlatformElement {
         // Bus поднимается в конструкторе до того как Lit активирует controllers.
         // Это инвариант: ни один SelectController, созданный в полях подкласса,
         // не должен встретить отсутствующий bus в hostConnected.
+        setPlatformFilesRouteSegment(this.getFilesRouteSegment());
         if (!hasPlatformBus()) {
             bootstrapPlatformBus({
                 baseUrl: this.getBaseUrl(),
@@ -215,6 +217,23 @@ export class PlatformApp extends PlatformElement {
     }
 
     getBaseUrl() { return ''; }
+    /**
+     * Ingress segment для Files API (`/crm` → `crm`). Frontend: getBaseUrl `/frontend`.
+     * @returns {string}
+     */
+    getFilesRouteSegment() {
+        const base = this.getBaseUrl();
+        if (typeof base !== 'string') {
+            throw new Error('PlatformApp.getFilesRouteSegment: getBaseUrl must return string');
+        }
+        const segment = base.trim().replace(/^\/+|\/+$/g, '');
+        if (segment === '') {
+            throw new Error(
+                'PlatformApp.getFilesRouteSegment: getBaseUrl must yield non-empty segment',
+            );
+        }
+        return segment;
+    }
     getRoutes() { return []; }
     getServiceSlices() { return {}; }
     getServiceEffects() { return []; }

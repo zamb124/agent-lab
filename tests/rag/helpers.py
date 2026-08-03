@@ -1,15 +1,17 @@
-"""Helpers для RAG API-тестов после миграции upload на Files API + index-file."""
+"""Helpers для RAG API-тестов: chunked Files API на rag + index-file."""
 
 from __future__ import annotations
 
 import asyncio
-import io
 from typing import Any
 
 from httpx import AsyncClient
 
 from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
 from core.files.registry import default_retention_for_source
+from tests.files.chunked_upload_helpers import chunked_upload_file
+
+RAG_FILES_API_PREFIX = "/rag/api/v1/files"
 
 
 def rag_document_upload_spec_json(namespace_id: str) -> str:
@@ -22,7 +24,6 @@ def rag_document_upload_spec_json(namespace_id: str) -> str:
 
 
 async def upload_rag_document_bytes(
-    frontend_client: AsyncClient,
     rag_client: AsyncClient,
     headers: dict[str, str],
     *,
@@ -32,12 +33,15 @@ async def upload_rag_document_bytes(
     content_type: str = "text/plain",
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Загружает байты через frontend Files API и ставит документ в очередь index-file."""
-    upload_response = await frontend_client.post(
-        "/frontend/api/v1/files/",
-        headers=headers,
-        data={"spec": rag_document_upload_spec_json(namespace_id)},
-        files={"file": (filename, io.BytesIO(content), content_type)},
+    """Загружает байты через chunked Files API на rag и ставит документ в очередь index-file."""
+    upload_response = await chunked_upload_file(
+        rag_client,
+        headers,
+        content=content,
+        original_name=filename,
+        content_type=content_type,
+        spec_json=rag_document_upload_spec_json(namespace_id),
+        files_api_prefix=RAG_FILES_API_PREFIX,
     )
     if upload_response.status_code != 200:
         raise AssertionError(
@@ -80,14 +84,12 @@ async def wait_rag_document_status(
         )
         if status_response.status_code != 200:
             raise AssertionError(
-                f"document status failed: {status_response.status_code} {status_response.text}"
+                f"RAG status failed: {status_response.status_code} {status_response.text}"
             )
-        status_data = status_response.json()
-        if status_data["status"] == "completed":
-            return status_data
-        if status_data["status"] == "failed":
-            error_message = status_data.get("error_message")
-            raise AssertionError(f"RAG document processing failed: {error_message}")
+        payload = status_response.json()
+        status = payload.get("status")
+        if status in ("ready", "failed", "error"):
+            return payload
         await asyncio.sleep(interval)
         elapsed += interval
-    raise TimeoutError(f"RAG document {document_id} did not complete within {max_wait}s")
+    raise AssertionError(f"RAG document {document_id} status timeout after {max_wait}s")

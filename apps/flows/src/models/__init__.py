@@ -103,6 +103,19 @@ from .resource import (
 )
 from .scheduled_task_payload import FlowScheduledTaskPayload
 from .session_config import SessionConfig
+from .tool_contracts import (
+    ConfirmationFloor,
+    ToolArgumentSource,
+    ToolBinding,
+    ToolDefinition,
+    ToolEffect,
+    ToolErrorBody,
+    ToolExecutorKind,
+    ToolGrantClaims,
+    ToolIdempotency,
+    ToolResultEnvelope,
+    ToolRevision,
+)
 from .tool_reference import ToolReference
 from .trigger_config import (
     CronTriggerConfig,
@@ -201,6 +214,17 @@ __all__ = [
     "TelegramTriggerConfig",
     "TelegramUpdate",
     "ToolReference",
+    "ToolArgumentSource",
+    "ToolEffect",
+    "ToolIdempotency",
+    "ConfirmationFloor",
+    "ToolExecutorKind",
+    "ToolDefinition",
+    "ToolBinding",
+    "ToolRevision",
+    "ToolGrantClaims",
+    "ToolErrorBody",
+    "ToolResultEnvelope",
     "FlowToolReference",
     "flow_tool_parameters_schema",
     "TriggerConfig",

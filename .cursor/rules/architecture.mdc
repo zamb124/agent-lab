@@ -129,7 +129,7 @@ async def list_items(container: ContainerDep):
 - `core/api/integrations.py::_resume_flow` зовёт зарегистрированный handler (`_flow_resume_handler`), без импорта `apps.*`.
 - `core/scheduler/` не импортирует `apps.*_worker`.
 - В docstring `core/app/factory.py` есть пример `from apps.flows...` — это не runtime-импорт.
-- `core/capabilities/source_sanitize.py` сравнивает строки исходника с префиксом `"from apps."` — не импорт.
+- `core/capabilities/source_sanitize.py` сравнивает строки исходника с префиксом `"from apps."` / `"from core."` и поднимает `ValueError` — это не runtime-импорт платформы.
 
 WebSocket: HTTP-хендлеры voice используют `ContainerDep` + `get_container()` в `apps/voice/dependencies.py`; WS session (`apps/voice/api/session.py`) берёт контейнер через `get_voice_container()` напрямую — см. «Допустимые исключения» выше (FastAPI `Depends()` ограничен на WS).
 

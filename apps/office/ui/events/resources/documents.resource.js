@@ -3,7 +3,7 @@
  *
  * Backend (`/documents/api/v1/documents` + nested):
  *   GET    /documents?catalog_ids=...        → OfficeDocumentListResponse { items }
- *   POST   /documents                        → OfficeDocumentCreateResponse (multipart: file, title?, catalog_id)
+ *   POST   /documents                        → OfficeDocumentCreateResponse (JSON: file_id, title?, catalog_id?)
  *   POST   /documents/empty                  → OfficeDocumentCreateResponse (JSON: title, document_type, catalog_id, spreadsheet_format?)
  *   PATCH  /documents/{file_id}              → OfficeDocumentRenameResponse (JSON: title)
  *   DELETE /documents/{file_id}              → 204
@@ -21,6 +21,8 @@ import { createAsyncOp, createForm } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { uploadPlatformFile } from '@platform/lib/utils/platform-file-upload.js';
+import { buildOfficeDocumentFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { nsHeader } from './_namespace-header.js';
 
 const RECENT_STORAGE_KEY = 'documents_explorer_recent_ids';
@@ -573,7 +575,7 @@ export const documentUploadOp = createAsyncOp({
     successToastKey: 'documents:toast.document_uploaded',
     errorToastKey: 'documents:toast.document_upload_failed',
     restMirror: { method: 'POST', path: '/documents/api/v1/documents' },
-    request: ({ payload, ctx }) => {
+    request: async ({ payload, ctx }) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('office/document_upload: payload required');
         }
@@ -583,17 +585,36 @@ export const documentUploadOp = createAsyncOp({
         if (typeof payload.catalogId !== 'string' || payload.catalogId.length === 0) {
             throw new Error('office/document_upload: payload.catalogId required');
         }
-        const fd = new FormData();
-        fd.append('file', payload.file);
-        if (typeof payload.title === 'string' && payload.title.length > 0) {
-            fd.append('title', payload.title);
+        const nsHeaders = nsHeader(ctx);
+        const namespaceId = nsHeaders['X-Platform-Namespace'];
+        if (typeof namespaceId !== 'string' || namespaceId.length === 0) {
+            throw new Error('office/document_upload: X-Platform-Namespace required');
         }
-        fd.append('catalog_id', payload.catalogId);
+        const file =
+            payload.file instanceof File
+                ? payload.file
+                : new File([payload.file], 'document.bin', {
+                    type: payload.file.type || 'application/octet-stream',
+                });
+        const uploaded = await uploadPlatformFile({
+            file,
+            spec: buildOfficeDocumentFileCreateSpecJson({ namespaceId }),
+        });
+        if (typeof uploaded.file_id !== 'string' || uploaded.file_id.length === 0) {
+            throw new Error('office/document_upload: upload result.file_id required');
+        }
+        const body = {
+            file_id: uploaded.file_id,
+            catalog_id: payload.catalogId,
+        };
+        if (typeof payload.title === 'string' && payload.title.length > 0) {
+            body.title = payload.title;
+        }
         return httpRequest({
             method: 'POST',
             url: '/documents/api/v1/documents',
-            body: fd,
-            headers: nsHeader(ctx),
+            body,
+            headers: nsHeaders,
         });
     },
     onSuccess: (ctx, result, event) => {

@@ -95,16 +95,13 @@ async def test_all_sheets_tools_via_run(
             state,
         )
     )
-    assert created["success"] is True
     sid = created["spreadsheet_id"]
     assert isinstance(sid, str)
 
     meta = _as_payload(await sheets_get_metadata.run({"spreadsheet_id": sid}, state))
-    assert meta["success"] is True
     assert meta["title"] == f"tool-sheet-{unique_id}"
 
     listed = _as_payload(await sheets_list_sheets.run({"spreadsheet_id": sid}, state))
-    assert listed["success"] is True
     assert "Main" in listed["titles"]
 
     updated = _as_payload(
@@ -118,7 +115,6 @@ async def test_all_sheets_tools_via_run(
             state,
         )
     )
-    assert updated["success"] is True
 
     got = _as_payload(
         await sheets_get_values.run(
@@ -134,7 +130,6 @@ async def test_all_sheets_tools_via_run(
             state,
         )
     )
-    assert batch_got["success"] is True
     assert len(batch_got["value_ranges"]) == 2
 
     batch_upd = _as_payload(
@@ -149,7 +144,6 @@ async def test_all_sheets_tools_via_run(
             state,
         )
     )
-    assert batch_upd["success"] is True
 
     appended = _as_payload(
         await sheets_append_rows.run(
@@ -162,7 +156,6 @@ async def test_all_sheets_tools_via_run(
             state,
         )
     )
-    assert appended["success"] is True
 
     cleared = _as_payload(
         await sheets_clear_values.run(
@@ -170,7 +163,6 @@ async def test_all_sheets_tools_via_run(
             state,
         )
     )
-    assert cleared["success"] is True
 
     batch_clear = _as_payload(
         await sheets_batch_clear_values.run(
@@ -178,7 +170,6 @@ async def test_all_sheets_tools_via_run(
             state,
         )
     )
-    assert batch_clear["success"] is True
 
     shared = _as_payload(
         await sheets_share.run(
@@ -186,12 +177,10 @@ async def test_all_sheets_tools_via_run(
             state,
         )
     )
-    assert shared["success"] is True
 
     added = _as_payload(
         await sheets_add_sheet.run({"spreadsheet_id": sid, "title": "Tab2"}, state)
     )
-    assert added["success"] is True
     sheet_id = added["sheet_id"]
     assert isinstance(sheet_id, int)
 
@@ -201,7 +190,6 @@ async def test_all_sheets_tools_via_run(
             state,
         )
     )
-    assert renamed["success"] is True
 
     deleted = _as_payload(
         await sheets_delete_sheet.run(
@@ -209,4 +197,3 @@ async def test_all_sheets_tools_via_run(
             state,
         )
     )
-    assert deleted["success"] is True

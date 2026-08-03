@@ -229,7 +229,7 @@ async def test_create_spreadsheet_via_llm_node(
     assert result["response"] == "Готово."
     payloads = _tool_payloads_from_state(state)
     assert len(payloads) == 1
-    assert payloads[0]["success"] is True
+    assert isinstance(payloads[0]["spreadsheet_id"], str)
     assert isinstance(payloads[0]["spreadsheet_id"], str)
     assert payloads[0]["spreadsheet_id"] != ""
 
@@ -253,7 +253,6 @@ async def test_get_metadata_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     assert payload["spreadsheet_id"] == book.spreadsheet_id
     assert payload["title"] == book.title
 
@@ -280,7 +279,6 @@ async def test_list_sheets_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     titles = payload["titles"]
     assert isinstance(titles, list)
     assert "Alpha" in titles
@@ -314,7 +312,6 @@ async def test_get_values_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     assert payload["values"] == [["hello", unique_id]]
 
 
@@ -345,7 +342,6 @@ async def test_batch_get_values_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     ranges = payload["value_ranges"]
     assert isinstance(ranges, list)
     assert len(ranges) == 2
@@ -375,7 +371,6 @@ async def test_update_values_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     read_back = await sheets_client.get_values(book.spreadsheet_id, "Sheet1!A1:B1")
     assert read_back.values[0][0] == "from-agent"
 
@@ -405,7 +400,6 @@ async def test_batch_update_values_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     read_back = await sheets_client.get_values(book.spreadsheet_id, "Sheet1!A1:B1")
     assert read_back.values[0] == ["a", "b"]
 
@@ -437,7 +431,6 @@ async def test_append_rows_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     read_back = await sheets_client.get_values(book.spreadsheet_id, "Sheet1!A1:B3")
     assert any(unique_id in [str(cell) for cell in row] for row in read_back.values)
 
@@ -467,7 +460,6 @@ async def test_clear_values_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     read_back = await sheets_client.get_values(book.spreadsheet_id, "Sheet1!A1")
     assert read_back.values == []
 
@@ -497,7 +489,6 @@ async def test_batch_clear_values_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     read_back = await sheets_client.get_values(book.spreadsheet_id, "Sheet1!A1:B1")
     assert read_back.values == []
 
@@ -525,7 +516,6 @@ async def test_share_anyone_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     assert payload["anyone"] is True
 
 
@@ -554,7 +544,6 @@ async def test_share_email_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     assert payload["email"] == email
     assert payload["anyone"] is False
 
@@ -656,7 +645,6 @@ async def test_create_then_update_then_get_via_llm_node(
         mock_llm_with_queue=mock_llm_with_queue,
     )
     assert update_result["response"] == "Готово."
-    assert _tool_payloads_from_state(update_state)[0]["success"] is True
 
     get_result, get_state = await _run_single_tool_flow(
         f"{unique_id}-g",

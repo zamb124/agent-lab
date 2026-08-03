@@ -18,6 +18,8 @@ from typing import Any
 
 import pytest
 
+from tests.files.chunked_upload_helpers import chunked_upload_file, platform_auxiliary_upload_spec_json
+
 from core.utils.tokens import get_token_service
 from tests.fixtures.audio_bytes import minimal_wav_silence
 from tests.sync.api._helpers import create_topic_channel_via_http, platform_auxiliary_file_spec_json
@@ -56,10 +58,13 @@ async def _upload_voice_and_send(
 ) -> tuple[str, dict[str, Any]]:
     wav = minimal_wav_silence(duration_sec=0.05)
     async with http_frontend(token) as frontend_http:
-        up = await frontend_http.post(
-            "/frontend/api/v1/files/",
-            data={"spec": platform_auxiliary_file_spec_json()},
-            files={"file": ("note.wav", io.BytesIO(wav), "audio/wav")},
+        up = await chunked_upload_file(
+            frontend_http,
+            {},
+            content=wav,
+            original_name="note.wav",
+            content_type="audio/wav",
+            spec_json=platform_auxiliary_file_spec_json(),
         )
         assert up.status_code == 200, up.text
         f = up.json()

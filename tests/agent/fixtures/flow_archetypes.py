@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from tests.agent._helpers import ensure_agent_test_toolkit
 
 ASK_USER_INLINE_CODE = (
-    "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\n"
+    "\n"
     "async def run(args, state):\n"
     '    question = args.get("question", "")\n'
     "    if not question:\n"

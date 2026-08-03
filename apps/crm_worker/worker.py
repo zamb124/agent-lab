@@ -8,11 +8,14 @@
 from apps.crm.config import CRMSettings
 from core.config import set_settings
 from core.config.loader import load_merged_config
+from core.files.urls import resolve_files_route_segment, set_files_route_segment
 from core.tasks.logging_init import setup_worker_logging_early
 
 _crm_worker_settings = CRMSettings.model_validate(load_merged_config(service_name="crm", silent=True))
 setup_worker_logging_early("crm_worker", logging_config=_crm_worker_settings.logging)
 set_settings(_crm_worker_settings)
+_segment = resolve_files_route_segment("crm_worker")
+set_files_route_segment(_segment)
 
 import importlib
 
@@ -36,6 +39,7 @@ broker = wire_worker("crm")
 
 async def _startup(state: TaskiqState) -> None:
     container = get_crm_container()
+    container.bind_files_route_segment(_segment)
     state.container = container
 
     reconciled = await container.task_service.reconcile_stale_worker_tasks()

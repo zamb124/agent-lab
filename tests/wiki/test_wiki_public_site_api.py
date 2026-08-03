@@ -177,7 +177,7 @@ async def _put_image_content(wiki_client: AsyncClient, wiki_page_id: str, file_i
                     {
                         "type": "image",
                         "attrs": {
-                            "src": f"/frontend/api/v1/files/download/{file_id}",
+                            "src": f"/wiki/api/v1/files/download/{file_id}",
                             "file_id": file_id,
                         },
                     }

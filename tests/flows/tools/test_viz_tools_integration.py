@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from apps.flows.src.services.platform_facades import get_file_bytes
 from apps.flows.tools.viz import create_viz, export_viz, update_viz, viz_open_file
+from core.clients.files_client import FilesClient
 from core.state import ExecutionState
 from core.types import require_json_object
 from core.viz.models import VIZ_CONTENT_TYPE, VizDocument, parse_viz_document_bytes
@@ -34,7 +34,7 @@ async def _assert_viz_on_s3(container, file_id: str) -> VizDocument:
     record = await container.files_service.get(file_id)
     assert record.content_type == VIZ_CONTENT_TYPE
     assert record.original_name.endswith(".viz")
-    raw = await get_file_bytes(file_id)
+    raw = await FilesClient().get_bytes(file_id)
     document = parse_viz_document_bytes(raw)
     assert document.schema_version == 1
     return document
@@ -106,16 +106,11 @@ async def test_create_viz_echarts_persists(app, container, unique_id: str) -> No
 async def test_create_viz_rejects_invalid(app, unique_id: str) -> None:
     _ = app
     state = _execution_state(unique_id)
-    out = require_json_object(
-        await create_viz.run(
+    with pytest.raises(ValueError, match="source|mermaid"):
+        _ = await create_viz.run(
             {"kind": "flowchart", "title": f"Bad {unique_id}", "source": ""},
             state,
-        ),
-        "create_viz.result",
-    )
-    assert out["success"] is False
-    assert "error" in out
-    assert "source" in str(out["error"]).lower() or "mermaid" in str(out["error"]).lower()
+        )
     assert state.files == []
 
 
@@ -154,8 +149,8 @@ async def test_update_viz_creates_new_version(app, container, unique_id: str) ->
     document = await _assert_viz_on_s3(container, new_file_id)
     assert document.title == f"V2 {unique_id}"
     assert document.spec.get("source") == new_source
-    old_body = await get_file_bytes(previous_file_id)
-    new_body = await get_file_bytes(new_file_id)
+    old_body = await FilesClient().get_bytes(previous_file_id)
+    new_body = await FilesClient().get_bytes(new_file_id)
     assert old_body != new_body
 
 
@@ -187,7 +182,7 @@ async def test_export_viz_svg_and_json(app, container, unique_id: str) -> None:
     svg_file_id = require_json_object(svg_out["file"], "export_viz.svg.file")["file_id"]
     assert isinstance(svg_file_id, str)
     assert svg_file_id in _file_ids(state)
-    svg_bytes = await get_file_bytes(svg_file_id)
+    svg_bytes = await FilesClient().get_bytes(svg_file_id)
     svg_text = svg_bytes.decode("utf-8")
     assert title in svg_text
     assert "<svg" in svg_text
@@ -200,7 +195,7 @@ async def test_export_viz_svg_and_json(app, container, unique_id: str) -> None:
     assert json_out["format"] == "json"
     json_file_id = require_json_object(json_out["file"], "export_viz.json.file")["file_id"]
     assert isinstance(json_file_id, str)
-    json_bytes = await get_file_bytes(json_file_id)
+    json_bytes = await FilesClient().get_bytes(json_file_id)
     document = VizDocument.model_validate(json.loads(json_bytes.decode("utf-8")))
     assert document.title == title
     _ = await container.files_service.get(json_file_id)

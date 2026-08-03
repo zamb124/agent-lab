@@ -1,17 +1,17 @@
 """
 Platform tools for Google Sheets API v4.
 
-Auth: resolve_google_workspace_auth (variables → user workspace OAuth →
+Auth: GoogleWorkspaceClient().resolve_auth (variables → user workspace OAuth →
 prior docs/sheets credentials → company SA → OAuthInterrupt Connect Google).
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from apps.flows.src.services.platform_facades import resolve_google_workspace_auth
+from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.tools.decorator import tool
 from core.clients.google_sheets_client import GoogleSheetsClient
 from core.clients.google_sheets_models import (
@@ -22,13 +22,8 @@ from core.clients.google_sheets_models import (
     ValueRangeWrite,
     ValueRenderOption,
 )
-from core.logging import get_logger
+from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
-
-if TYPE_CHECKING:
-    from core.state import ExecutionState
-
-logger = get_logger(__name__)
 
 _TAGS = ["google_sheets"]
 
@@ -41,7 +36,7 @@ def _require_state(state: ExecutionState | None) -> ExecutionState:
 
 async def _get_sheets_client(state: ExecutionState | None) -> GoogleSheetsClient:
     execution_state = _require_state(state)
-    material = await resolve_google_workspace_auth(execution_state)
+    material = await GoogleWorkspaceClient().resolve_auth(execution_state)
     return GoogleSheetsClient(
         credentials_json=material.credentials_json,
         access_token=material.access_token,
@@ -49,12 +44,11 @@ async def _get_sheets_client(state: ExecutionState | None) -> GoogleSheetsClient
     )
 
 
-def _tool_success(payload: BaseModel) -> JsonObject:
-    dumped = require_json_object(
+def _tool_payload(payload: BaseModel) -> JsonObject:
+    return require_json_object(
         payload.model_dump(mode="json"),
         "google_sheets.tool_payload",
     )
-    return {"success": True, **dumped}
 
 
 def _parse_value_input_option(raw: str) -> ValueInputOption:
@@ -263,7 +257,7 @@ async def sheets_create_spreadsheet(
 ) -> JsonObject:
     client = await _get_sheets_client(state)
     result = await client.create_spreadsheet(title, sheet_titles=sheet_titles)
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -281,7 +275,7 @@ async def sheets_get_metadata(
 ) -> JsonObject:
     client = await _get_sheets_client(state)
     result = await client.get_metadata(spreadsheet_id)
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -296,7 +290,7 @@ async def sheets_list_sheets(
 ) -> JsonObject:
     client = await _get_sheets_client(state)
     result = await client.list_sheets(spreadsheet_id)
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -320,7 +314,7 @@ async def sheets_get_values(
         range,
         value_render_option=_parse_value_render_option(value_render_option),
     )
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -341,7 +335,7 @@ async def sheets_batch_get_values(
         ranges,
         value_render_option=_parse_value_render_option(value_render_option),
     )
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -367,7 +361,7 @@ async def sheets_update_values(
         values,
         value_input_option=_parse_value_input_option(value_input_option),
     )
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -394,7 +388,7 @@ async def sheets_batch_update_values(
         writes,
         value_input_option=_parse_value_input_option(value_input_option),
     )
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -423,7 +417,7 @@ async def sheets_append_rows(
         value_input_option=_parse_value_input_option(value_input_option),
         insert_data_option=_parse_insert_data_option(insert_data_option),
     )
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -439,7 +433,7 @@ async def sheets_clear_values(
 ) -> JsonObject:
     client = await _get_sheets_client(state)
     result = await client.clear_values(spreadsheet_id, range)
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -455,7 +449,7 @@ async def sheets_batch_clear_values(
 ) -> JsonObject:
     client = await _get_sheets_client(state)
     result = await client.batch_clear_values(spreadsheet_id, ranges)
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -481,7 +475,7 @@ async def sheets_share(
         email=email,
         anyone=anyone,
     )
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -497,7 +491,7 @@ async def sheets_add_sheet(
 ) -> JsonObject:
     client = await _get_sheets_client(state)
     result = await client.add_sheet(spreadsheet_id, title)
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -514,7 +508,7 @@ async def sheets_rename_sheet(
 ) -> JsonObject:
     client = await _get_sheets_client(state)
     result = await client.rename_sheet(spreadsheet_id, sheet_id, title)
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 @tool(
@@ -530,7 +524,7 @@ async def sheets_delete_sheet(
 ) -> JsonObject:
     client = await _get_sheets_client(state)
     result = await client.delete_sheet(spreadsheet_id, sheet_id)
-    return _tool_success(result)
+    return _tool_payload(result)
 
 
 __all__ = [

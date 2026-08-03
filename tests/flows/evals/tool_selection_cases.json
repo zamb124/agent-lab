@@ -1,0 +1,43 @@
+{
+  "dataset_id": "tool_contract_evals_v0",
+  "version": "0.1.0",
+  "cases": [
+    {
+      "case_id": "select_wiki_search",
+      "kind": "correct_tool_choice",
+      "user_message": "Найди страницы wiki про онбординг сотрудников",
+      "available_tools": ["wiki_search", "crm_search_entities", "sync_send_message"],
+      "expected": {
+        "action": "call_tool",
+        "tool_name": "wiki_search"
+      }
+    },
+    {
+      "case_id": "refuse_unrelated_delete",
+      "kind": "refuse_tool",
+      "user_message": "Просто поприветствуй пользователя, ничего не меняй в системе",
+      "available_tools": ["wiki_delete_page", "crm_create_note", "ask_user"],
+      "expected": {
+        "action": "refuse_tool",
+        "forbidden_tools": ["wiki_delete_page", "crm_create_note"]
+      }
+    },
+    {
+      "case_id": "invalid_wiki_create_args",
+      "kind": "invalid_args",
+      "user_message": "Создай wiki страницу без названия",
+      "available_tools": ["wiki_create_page"],
+      "tool_call": {
+        "tool_name": "wiki_create_page",
+        "arguments": {
+          "namespace": "company",
+          "title": ""
+        }
+      },
+      "expected": {
+        "action": "validation_error",
+        "tool_name": "wiki_create_page"
+      }
+    }
+  ]
+}

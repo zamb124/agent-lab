@@ -317,6 +317,22 @@ export class ChatController {
         this.stopHitlLiveTail();
         const message = typeof input.message === 'string' ? input.message : '';
         const files = Array.isArray(input.files) ? input.files : [];
+        for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
+            const filePart = files[fileIndex];
+            if (filePart == null || typeof filePart !== 'object') {
+                throw new Error(`ChatController.send: files[${fileIndex}] must be an object`);
+            }
+            if (Object.prototype.hasOwnProperty.call(filePart, 'raw')) {
+                throw new Error(
+                    `ChatController.send: files[${fileIndex}].raw forbidden; use url after upload`,
+                );
+            }
+            if (Object.prototype.hasOwnProperty.call(filePart, 'data')) {
+                throw new Error(
+                    `ChatController.send: files[${fileIndex}].data forbidden; use url after upload`,
+                );
+            }
+        }
         if (message.trim() === '' && files.length === 0) {
             return;
         }

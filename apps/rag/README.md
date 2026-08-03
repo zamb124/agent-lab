@@ -35,11 +35,11 @@
 | Метод | Путь |
 |-------|------|
 | GET | `/rag/api/v1/namespaces/{namespace_id}/documents` — список документов и сводка (**summary**: чанки, счётчики по статусам); опционально `?provider=` |
-| POST | `/rag/api/v1/namespaces/{namespace_id}/documents` — **multipart**: поле файла **`file`**, опционально **`metadata`** (JSON-строка). Ответ **202** (принятие в очередь). Опционально `?provider=` |
+| POST | `/rag/api/v1/namespaces/{namespace_id}/documents/index-file` — JSON `{ file_id, … }` после chunked Files upload. Ответ **202**. Опционально `?provider=` |
 | DELETE | `/rag/api/v1/namespaces/{namespace_id}/documents/{document_id}` — опционально `?provider=` |
 | GET | `/rag/api/v1/documents/{document_id}/status` — статус индексации |
 
-Не смешивать загрузку **multipart** с телом **`application/json`** вместо поля `metadata`: для файла используется `FormData` с JSON внутри **`metadata`**.
+Не смешивать байты файла с RAG index: байты — только Files chunked API (`/{svc}/api/v1/files/uploads*`), индексация — `index-file` по `file_id`.
 
 ### Поиск
 

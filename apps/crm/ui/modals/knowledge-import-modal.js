@@ -9,7 +9,7 @@
  *   4. summary   — финальный обзор и запуск crm/task_knowledge_import_start.
  *
  * Шаг source:
- *   - upload файла идёт через POST /frontend/api/v1/files/ (platform/file_create),
+ *   - upload файла идёт через chunked `/{segment}/api/v1/files/uploads*` (platform/file_create),
  *     id-шники накапливаются в this._files и подставляются в payload как
  *     source_file_ids.
  *   - paste-area — обычный textarea, отдаётся в payload как source_text.

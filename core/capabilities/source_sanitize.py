@@ -3,15 +3,26 @@
 from __future__ import annotations
 
 
-def strip_forbidden_platform_import_lines(code: str) -> str:
-    """Удаляет строки import из apps.* и core.*: пользовательский код не импортирует платформу."""
-    lines = code.split("\n")
-    kept: list[str] = []
-    for line in lines:
+def reject_forbidden_platform_imports(code: str) -> str:
+    """Отклоняет source с import apps.* / core.*: пользовательский код не импортирует платформу.
+
+    Возвращает исходный code без изменений, если запрещённых строк нет.
+    """
+    forbidden_lines: list[str] = []
+    for line_number, line in enumerate(code.split("\n"), start=1):
         stripped = line.strip()
-        if stripped.startswith("from apps.") or stripped.startswith("from core."):
-            continue
-        if stripped.startswith("import apps") or stripped.startswith("import core"):
-            continue
-        kept.append(line)
-    return "\n".join(kept)
+        if (
+            stripped.startswith("from apps.")
+            or stripped.startswith("from core.")
+            or stripped.startswith("import apps")
+            or stripped.startswith("import core")
+        ):
+            forbidden_lines.append(f"{line_number}: {stripped}")
+
+    if forbidden_lines:
+        listed = "\n".join(forbidden_lines)
+        raise ValueError(
+            "User source must not import platform modules (apps.* / core.*). "
+            + f"Forbidden lines:\n{listed}"
+        )
+    return code

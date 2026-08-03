@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 import pytest
+from pydantic import ValidationError
 
 from core.mail.models import (
     MailAttachment,
@@ -297,7 +298,7 @@ async def test_prepare_send_local_creates_temp_sent_then_send_completes(
 
 
 @pytest.mark.asyncio
-async def test_send_rejects_empty_attachment_content(
+async def test_send_rejects_attachment_without_file_id(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
     mail_member_context: MailMemberSeed,
@@ -310,20 +311,32 @@ async def test_send_rejects_empty_attachment_content(
         unique_id=unique_id,
         prefix="attach",
     )
-    with pytest.raises(ValueError, match="outbound attachment content required"):
-        await mail_service.send_message(
-            MailSendPayload(
-                mailbox_binding_id=binding.mailbox_binding_id,
-                to_addresses=["peer@example.com"],
-                subject="bad",
-                body_text="x",
-                attachments=[
-                    MailAttachment(
-                        filename="empty.txt",
-                        content_type="text/plain",
-                        content=b"",
-                    )
-                ],
-            ),
-            company_id=company_id,
+    _ = company_id
+    with pytest.raises(ValidationError, match="file_id"):
+        _ = MailSendPayload(
+            mailbox_binding_id=binding.mailbox_binding_id,
+            to_addresses=["peer@example.com"],
+            subject="bad",
+            body_text="x",
+            attachments=[
+                MailAttachment(
+                    filename="empty.txt",
+                    content_type="text/plain",
+                    content=b"",
+                )
+            ],
+        )
+    with pytest.raises(ValidationError, match="file_id|content"):
+        _ = MailSendPayload(
+            mailbox_binding_id=binding.mailbox_binding_id,
+            to_addresses=["peer@example.com"],
+            subject="bad",
+            body_text="x",
+            attachments=[
+                MailAttachment(
+                    filename="raw.txt",
+                    content_type="text/plain",
+                    content=b"raw-bytes",
+                )
+            ],
         )

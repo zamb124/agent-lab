@@ -8,6 +8,7 @@
 from apps.sync.config import SyncSettings
 from core.config import set_settings
 from core.config.loader import load_merged_config
+from core.files.urls import resolve_files_route_segment, set_files_route_segment
 from core.tasks.logging_init import setup_worker_logging_early
 
 _sync_worker_settings = SyncSettings.model_validate(
@@ -15,6 +16,8 @@ _sync_worker_settings = SyncSettings.model_validate(
 )
 setup_worker_logging_early("sync_worker", logging_config=_sync_worker_settings.logging)
 set_settings(_sync_worker_settings)
+_segment = resolve_files_route_segment("sync_worker")
+set_files_route_segment(_segment)
 
 from taskiq import TaskiqState
 
@@ -38,6 +41,7 @@ broker = wire_worker("sync")
 async def _startup(state: TaskiqState) -> None:
     settings = _sync_worker_settings
     container = get_sync_container()
+    container.bind_files_route_segment(_segment)
     state.container = container
     initialize_default_processors(container.file_repository)
     set_billing_service(container.billing_service)

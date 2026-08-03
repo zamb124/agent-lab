@@ -65,11 +65,13 @@ async def test_apply_pending_http_creates_note(
         if propose_raw.content is None:
             raise AssertionError("crm_create_note propose: пустой content")
         propose_text = propose_raw.content
+        proposed = json.loads(propose_text)
     elif isinstance(propose_raw, str):
-        propose_text = propose_raw
+        proposed = json.loads(propose_raw)
+    elif isinstance(propose_raw, dict):
+        proposed = propose_raw
     else:
         raise AssertionError(f"crm_create_note propose: неожиданный тип {type(propose_raw).__name__}")
-    proposed = json.loads(propose_text)
     pid = proposed["pending_action_id"]
     facade = get_container().lara_facade
     applied = await facade.apply_pending_action_from_http(

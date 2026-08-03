@@ -42,7 +42,6 @@ async def test_full_rag_workflow(
     FastAPI is very fast and easy to use.
     """
     doc_response = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -145,7 +144,6 @@ async def test_multiple_namespaces_isolation(
 
     # Загружаем документ только в первый namespace
     await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=ns1_id,
@@ -206,7 +204,6 @@ async def test_large_document_processing(
     """
 
     doc_response = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -297,7 +294,6 @@ async def test_error_recovery(
 
     # Проверяем что namespace все еще работает
     upload_response = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,

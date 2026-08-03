@@ -267,7 +267,7 @@ class TestSubflowInterruptE2E:
         from apps.flows.src.models import FlowConfig
 
         flow_id = f"child_code_interrupt_{unique_id}"
-        code_with_interrupt = '\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    content = state.get("content", "")\n\n    # Первый вызов - content == "start", нужно спросить имя\n    if content == "start":\n        raise FlowInterrupt(question="Как вас зовут?")\n\n    # Resume - content содержит ответ пользователя\n    user_name = content\n    state["received_answer"] = user_name  # Записываем полученный ответ для проверки\n    state["user_name"] = user_name\n    state["response"] = f"Привет, {user_name}! Ответ получен в CodeNode."\n    return {"response": state["response"], "user_name": user_name, "received_answer": user_name}\n'
+        code_with_interrupt = '\nasync def run(args, state):\n    content = state.get("content", "")\n\n    # Первый вызов - content == "start", нужно спросить имя\n    if content == "start":\n        raise FlowInterrupt(question="Как вас зовут?")\n\n    # Resume - content содержит ответ пользователя\n    user_name = content\n    state["received_answer"] = user_name  # Записываем полученный ответ для проверки\n    state["user_name"] = user_name\n    state["response"] = f"Привет, {user_name}! Ответ получен в CodeNode."\n    return {"response": state["response"], "user_name": user_name, "received_answer": user_name}\n'
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Child Agent with Code Interrupt",
@@ -375,7 +375,7 @@ class TestSubflowInterruptE2E:
         from apps.flows.src.models import FlowConfig
 
         flow_id = f"child_react_ask_{unique_id}"
-        ask_user_code = '\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    question = args.get("question", "")\n    raise FlowInterrupt(question=question)\n'
+        ask_user_code = '\nasync def run(args, state):\n    question = args.get("question", "")\n    raise FlowInterrupt(question=question)\n'
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Child Agent with React and ask_user",
@@ -446,7 +446,7 @@ class TestSubflowInterruptE2E:
                                 {
                                     "tool_id": "ask_user",
                                     "description": "Задать вопрос пользователю",
-                                    "code": '\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    question = args.get("question", "")\n    raise FlowInterrupt(question=question)\n',
+                                    "code": '\nasync def run(args, state):\n    question = args.get("question", "")\n    raise FlowInterrupt(question=question)\n',
                                     "parameters_schema": {
                                         "type": "object",
                                         "properties": {

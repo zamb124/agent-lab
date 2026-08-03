@@ -1,31 +1,22 @@
 """
 Платформенные тулы Google Docs: создание, чтение, редактирование, шаринг.
 
-Auth: resolve_google_workspace_auth (variables → user workspace OAuth →
+Auth: GoogleWorkspaceClient().resolve_auth (variables → user workspace OAuth →
 prior docs/sheets credentials → company SA → OAuthInterrupt Connect Google).
-
-Безопасность: тулы НЕ используют get_container().
-Доступ к сервисам только через trusted-фасады flows-сервиса.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.services.platform_facades import get_file_bytes, resolve_google_workspace_auth
+from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.tools.decorator import tool
+from core.clients.files_client import FilesClient
 from core.clients.google_docs_client import GoogleDocsClient
-from core.logging import get_logger
+from core.state import ExecutionState
 from core.types import JsonObject, require_json_array, require_json_object
-
-if TYPE_CHECKING:
-    from core.state import ExecutionState
-
-logger = get_logger(__name__)
-JsonDict = JsonObject
-
 
 # ── описания ─────────────────────────────────────────────────────
 
@@ -167,7 +158,7 @@ def _require_state(state: ExecutionState | None) -> ExecutionState:
 
 async def _get_docs_client(state: ExecutionState | None) -> GoogleDocsClient:
     execution_state = _require_state(state)
-    material = await resolve_google_workspace_auth(execution_state)
+    material = await GoogleWorkspaceClient().resolve_auth(execution_state)
     return GoogleDocsClient(
         credentials_json=material.credentials_json,
         access_token=material.access_token,
@@ -188,17 +179,16 @@ async def gdocs_create_document(
     title: str,
     file_id: str | None = None,
     state: ExecutionState | None = None,
-) -> JsonDict:
+) -> JsonObject:
     client = await _get_docs_client(state)
 
     if file_id:
-        docx_bytes = await get_file_bytes(file_id)
+        docx_bytes = await FilesClient().get_bytes(file_id)
         result = require_json_object(
             await client.upload_docx(title, docx_bytes),
             "gdocs_create_document.upload_docx",
         )
         return {
-            "success": True,
             "document_id": result["id"],
             "title": result.get("name", title),
             "web_url": result.get("webViewLink", ""),
@@ -210,7 +200,6 @@ async def gdocs_create_document(
     )
     doc_id = str(result["documentId"])
     return {
-        "success": True,
         "document_id": doc_id,
         "title": result.get("title", title),
         "web_url": f"https://docs.google.com/document/d/{doc_id}/edit",
@@ -226,11 +215,11 @@ async def gdocs_create_document(
 async def gdocs_read_document(
     document_id: str,
     state: ExecutionState | None = None,
-) -> JsonDict:
+) -> JsonObject:
     client = await _get_docs_client(state)
 
     text = await client.read_as_text(document_id)
-    return {"success": True, "document_id": document_id, "text": text}
+    return {"document_id": document_id, "text": text}
 
 
 @tool(
@@ -243,11 +232,11 @@ async def gdocs_append_text(
     document_id: str,
     text: str,
     state: ExecutionState | None = None,
-) -> JsonDict:
+) -> JsonObject:
     client = await _get_docs_client(state)
 
     _ = await client.append_text(document_id, text)
-    return {"success": True, "document_id": document_id}
+    return {"document_id": document_id}
 
 
 @tool(
@@ -261,11 +250,11 @@ async def gdocs_insert_text(
     text: str,
     index: int,
     state: ExecutionState | None = None,
-) -> JsonDict:
+) -> JsonObject:
     client = await _get_docs_client(state)
 
     _ = await client.insert_text(document_id, text, index)
-    return {"success": True, "document_id": document_id}
+    return {"document_id": document_id}
 
 
 @tool(
@@ -280,7 +269,7 @@ async def gdocs_find_replace(
     replace: str,
     match_case: bool = True,
     state: ExecutionState | None = None,
-) -> JsonDict:
+) -> JsonObject:
     client = await _get_docs_client(state)
 
     result = require_json_object(
@@ -300,7 +289,6 @@ async def gdocs_find_replace(
             raise ValueError("gdocs_find_replace.occurrencesChanged must be an integer")
         changed = occurrences
     return {
-        "success": True,
         "document_id": document_id,
         "occurrences_changed": changed,
     }
@@ -317,11 +305,11 @@ async def gdocs_delete_range(
     start_index: int,
     end_index: int,
     state: ExecutionState | None = None,
-) -> JsonDict:
+) -> JsonObject:
     client = await _get_docs_client(state)
 
     _ = await client.delete_range(document_id, start_index, end_index)
-    return {"success": True, "document_id": document_id}
+    return {"document_id": document_id}
 
 
 @tool(
@@ -336,7 +324,7 @@ async def gdocs_share_document(
     role: str = "reader",
     anyone: bool = False,
     state: ExecutionState | None = None,
-) -> JsonDict:
+) -> JsonObject:
     client = await _get_docs_client(state)
 
     if anyone:
@@ -346,7 +334,7 @@ async def gdocs_share_document(
     else:
         raise ValueError("Укажите email или anyone=true для выдачи доступа.")
 
-    return {"success": True, "document_id": document_id}
+    return {"document_id": document_id}
 
 
 __all__ = [

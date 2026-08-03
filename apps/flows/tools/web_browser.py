@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from apps.flows.src.services.web_snapshot import BrowserSnapshotDescribe, DuckDuckGoBrowserSearch
+from apps.flows.src.clients.browser_client import BrowserClient
 from apps.flows.src.tools.decorator import tool
 from core.types import JsonObject, JsonValue
 
@@ -19,10 +19,9 @@ DEFAULT_BROWSER_MARKDOWN_MAX_CHARS = 12_000
 _BROWSER_DUCKDUCKGO_LINKS_DESCRIPTION = """
 Поиск HTTP(S) URL по текстовому запросу через DuckDuckGo в браузере (MCP `browser`).
 
-Поведение совпадает с `DuckDuckGoBrowserSearch.links` / нодой simple_crawler `search_duckduckgo_batch`.
+Поведение совпадает с нодой simple_crawler `search_duckduckgo_batch`.
 
-Ответ при успехе: `success=true`, `urls` (список строк, до `per_query_limit` штук).
-Ответ при ошибке: `success=false`, `error` (текст).
+Ответ: `urls` (список строк, до `per_query_limit` штук). Ошибки — исключение.
 
 Параметры:
 - `query` (строка): поисковая фраза.
@@ -35,10 +34,7 @@ _BROWSER_DUCKDUCKGO_LINKS_DESCRIPTION = """
 _BROWSER_DUCKDUCKGO_LINKS_BATCH_DESCRIPTION = """
 Несколько поисковых запросов параллельно; URL из всех запросов объединяются с дедупликацией (порядок первого появления).
 
-Поведение совпадает с `DuckDuckGoBrowserSearch.links_many`.
-
-Ответ при успехе: `success=true`, `urls`.
-Ответ при ошибке: `success=false`, `error`.
+Ответ: `urls`. Ошибки — исключение.
 
 Параметры:
 - `queries` (массив строк): хотя бы одна непустая строка после trim.
@@ -48,12 +44,9 @@ _BROWSER_DUCKDUCKGO_LINKS_BATCH_DESCRIPTION = """
 """.strip()
 
 _BROWSER_PAGE_MARKDOWN_DESCRIPTION = """
-Открывает URL в режиме crawl, сохраняет HTML в S3 через MCP, читает markdown через `FileReader` (как simple_crawler).
+Открывает URL в режиме crawl, сохраняет HTML в S3 через MCP, читает markdown через `FileReader`.
 
-Поведение совпадает с `BrowserSnapshotDescribe.page_markdown`.
-
-Ответ при успехе: `success=true`, `markdown` (строка), `truncated`, `original_chars`, `max_markdown_chars`.
-Ответ при ошибке: `success=false`, `error`.
+Ответ: `markdown`, `truncated`, `original_chars`, `max_markdown_chars`. Ошибки — исключение.
 
 Параметры:
 - `url` (строка): HTTP(S) адрес страницы.
@@ -68,10 +61,8 @@ _BROWSER_PAGE_MARKDOWN_DESCRIPTION = """
 _BROWSER_PAGE_SNAPSHOT_DESCRIPTION = """
 То же получение контента, что и `browser_page_markdown`, плюс идентификаторы артефакта в хранилище.
 
-Поведение совпадает с `BrowserSnapshotDescribe.page_snapshot`.
-
-Ответ при успехе: `success=true`, поля `url`, `file_id`, `s3_path`, `text` (markdown страницы), `truncated`, `original_chars`, `max_markdown_chars`.
-Ответ при ошибке: `success=false`, `error`.
+Ответ: `url`, `file_id`, `s3_path`, `text` (markdown), `truncated`, `original_chars`, `max_markdown_chars`.
+Ошибки — исключение.
 
 Параметры: как у `browser_page_markdown`.
 
@@ -161,12 +152,13 @@ async def browser_duckduckgo_links(
     *,
     state: "ExecutionState",
 ) -> JsonObject:
-    try:
-        search = DuckDuckGoBrowserSearch(server_id=server_id, per_query_limit=per_query_limit)
-        urls = await search.links(state, query)
-        return {"success": True, "urls": urls}
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+    urls = await BrowserClient().duckduckgo_links(
+        state,
+        query,
+        server_id=server_id,
+        per_query_limit=per_query_limit,
+    )
+    return {"urls": urls}
 
 
 @tool(
@@ -182,12 +174,13 @@ async def browser_duckduckgo_links_batch(
     *,
     state: "ExecutionState",
 ) -> JsonObject:
-    try:
-        search = DuckDuckGoBrowserSearch(server_id=server_id, per_query_limit=per_query_limit)
-        urls = await search.links_many(state, queries)
-        return {"success": True, "urls": urls}
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+    urls = await BrowserClient().duckduckgo_links_batch(
+        state,
+        queries,
+        server_id=server_id,
+        per_query_limit=per_query_limit,
+    )
+    return {"urls": urls}
 
 
 @tool(
@@ -205,23 +198,20 @@ async def browser_page_markdown(
     *,
     state: "ExecutionState",
 ) -> JsonObject:
-    try:
-        describe = BrowserSnapshotDescribe(
-            server_id=server_id,
-            navigation_timeout_ms=navigation_timeout_ms,
-            ingest_source=ingest_source,
-        )
-        markdown = await describe.page_markdown(state, url)
-        bounded_markdown, truncated = bound_browser_markdown(markdown, max_markdown_chars)
-        return {
-            "success": True,
-            "markdown": bounded_markdown,
-            "truncated": truncated,
-            "original_chars": len(markdown),
-            "max_markdown_chars": max_markdown_chars,
-        }
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+    markdown = await BrowserClient().page_markdown(
+        state,
+        url,
+        server_id=server_id,
+        navigation_timeout_ms=navigation_timeout_ms,
+        ingest_source=ingest_source,
+    )
+    bounded_markdown, truncated = bound_browser_markdown(markdown, max_markdown_chars)
+    return {
+        "markdown": bounded_markdown,
+        "truncated": truncated,
+        "original_chars": len(markdown),
+        "max_markdown_chars": max_markdown_chars,
+    }
 
 
 @tool(
@@ -239,24 +229,21 @@ async def browser_page_snapshot(
     *,
     state: "ExecutionState",
 ) -> JsonObject:
-    try:
-        describe = BrowserSnapshotDescribe(
-            server_id=server_id,
-            navigation_timeout_ms=navigation_timeout_ms,
-            ingest_source=ingest_source,
-        )
-        snap = await describe.page_snapshot(state, url)
-        raw_text = snap.get("text")
-        if not isinstance(raw_text, str):
-            raise TypeError("browser_page_snapshot: text must be string")
-        text, truncated = bound_browser_markdown(raw_text, max_markdown_chars)
-        return {
-            "success": True,
-            **snap,
-            "text": text,
-            "truncated": truncated,
-            "original_chars": len(raw_text),
-            "max_markdown_chars": max_markdown_chars,
-        }
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+    snap = await BrowserClient().page_snapshot(
+        state,
+        url,
+        server_id=server_id,
+        navigation_timeout_ms=navigation_timeout_ms,
+        ingest_source=ingest_source,
+    )
+    raw_text = snap.get("text")
+    if not isinstance(raw_text, str):
+        raise TypeError("browser_page_snapshot: text must be string")
+    text, truncated = bound_browser_markdown(raw_text, max_markdown_chars)
+    return {
+        **snap,
+        "text": text,
+        "truncated": truncated,
+        "original_chars": len(raw_text),
+        "max_markdown_chars": max_markdown_chars,
+    }

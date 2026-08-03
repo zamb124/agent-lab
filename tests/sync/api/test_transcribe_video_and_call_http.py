@@ -12,6 +12,8 @@ import uuid
 from pathlib import Path
 
 import pytest
+
+from tests.files.chunked_upload_helpers import chunked_upload_file, platform_auxiliary_upload_spec_json
 from httpx import AsyncClient
 
 from tests.fixtures.audio_bytes import minimal_wav_silence
@@ -91,11 +93,13 @@ async def test_transcribe_video_endpoint_marks_done_via_worker(
         channel_id = cr.json()["channel_id"]
 
     async with AsyncClient(base_url="http://127.0.0.1:9004", timeout=120.0) as frontend_client:
-        up = await frontend_client.post(
-            "/frontend/api/v1/files/",
-            headers=sync_auth_headers,
-            data={"spec": platform_auxiliary_file_spec_json()},
-            files={"file": ("clip.mp4", io.BytesIO(mp4), "video/mp4")},
+        up = await chunked_upload_file(
+            frontend_client,
+            sync_auth_headers,
+            content=mp4,
+            original_name="clip.mp4",
+            content_type="video/mp4",
+            spec_json=platform_auxiliary_upload_spec_json(),
         )
         assert up.status_code == 200
         f = up.json()
@@ -265,11 +269,13 @@ async def test_transcribe_call_aggregate_includes_guest_line(
 
         wav = minimal_wav_silence(duration_sec=0.05)
         async with AsyncClient(base_url="http://127.0.0.1:9004", timeout=120.0) as frontend_client:
-            up = await frontend_client.post(
-                "/frontend/api/v1/files/",
-                headers=sync_auth_headers,
-                data={"spec": platform_auxiliary_file_spec_json()},
-                files={"file": ("g.wav", io.BytesIO(wav), "audio/wav")},
+            up = await chunked_upload_file(
+                frontend_client,
+                sync_auth_headers,
+                content=wav,
+                original_name="g.wav",
+                content_type="audio/wav",
+                spec_json=platform_auxiliary_upload_spec_json(),
             )
             assert up.status_code == 200
             f = up.json()

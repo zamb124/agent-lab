@@ -8,12 +8,15 @@
 from apps.flows.config import FlowSettings
 from apps.flows.config import set_settings as set_flow_settings
 from core.config.loader import load_merged_config
+from core.files.urls import resolve_files_route_segment, set_files_route_segment
 from core.tasks.logging_init import setup_worker_logging_early
 
 _merged_flows = load_merged_config(service_name="flows", silent=True)
 _flow_worker_settings = FlowSettings.model_validate(_merged_flows)
 setup_worker_logging_early("flows_worker", logging_config=_flow_worker_settings.logging)
 set_flow_settings(_flow_worker_settings)
+_segment = resolve_files_route_segment("flows_worker")
+set_files_route_segment(_segment)
 
 import os
 import socket
@@ -61,6 +64,7 @@ async def _startup(state: TaskiqState) -> None:
     set_core_settings(settings)
 
     container = get_container()
+    container.bind_files_route_segment(_segment)
     state.container = container
 
     set_billing_service(container.billing_service)

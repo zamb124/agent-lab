@@ -1,11 +1,27 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { filesReducer, initialFilesState, FILES_EVENTS, buildFileDownloadUrl } from '@platform/lib/events/reducers/files.js';
+import { installDomShim } from '../../helpers/dom-shim.js';
 
 const ev = (type, payload, meta = {}) => ({
     id: `id_${type}`,
     type,
     payload,
     meta: { ts: 0, source: 'local', correlation_id: null, ...meta },
+});
+
+let dom;
+
+beforeEach(() => {
+    dom = installDomShim();
+    dom.window.location.pathname = '/crm/dashboard';
+    Object.defineProperty(globalThis.location, 'pathname', {
+        value: '/crm/dashboard',
+        configurable: true,
+    });
+});
+
+afterEach(() => {
+    dom.uninstall();
 });
 
 describe('filesReducer', () => {
@@ -43,8 +59,8 @@ describe('filesReducer', () => {
 });
 
 describe('buildFileDownloadUrl', () => {
-    it('собирает URL с encode', () => {
-        expect(buildFileDownloadUrl('file id with space')).toBe('/frontend/api/v1/files/download/file%20id%20with%20space');
+    it('собирает URL с encode для segment текущего SPA', () => {
+        expect(buildFileDownloadUrl('file id with space')).toBe('/crm/api/v1/files/download/file%20id%20with%20space');
     });
 
     it('пустой fileId — throw', () => {

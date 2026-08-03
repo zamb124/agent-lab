@@ -11,9 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from apps.flows.src.files.state_file_refs import upsert_state_file
 from apps.flows.src.runtime_helpers.state_utils import find_file, push_ui_event
-from apps.flows.src.services.platform_facades import get_file_bytes
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
+from core.clients.files_client import FilesClient
 from core.files.file_ref import FileRef
 from core.files.models import FileResponse
 from core.files.writer import FileWriteError, FileWriter
@@ -233,24 +233,18 @@ async def create_viz(
     *,
     state: ExecutionState,
 ) -> JsonDict:
-    try:
-        document = _build_viz_document(
-            kind=kind,
-            title=title,
-            engine=engine,
-            source=source,
-            option=option,
-            spec=spec,
-        )
-    except ValueError as exc:
-        return {"success": False, "error": str(exc)}
+    document = _build_viz_document(
+        kind=kind,
+        title=title,
+        engine=engine,
+        source=source,
+        option=option,
+        spec=spec,
+    )
     name = original_name.strip() if original_name and original_name.strip() else _slug_filename(document.title)
     if not name.lower().endswith(VIZ_EXTENSION):
         name = f"{name}{VIZ_EXTENSION}"
-    try:
-        response = await _write_viz_file(document, name)
-    except ValueError as exc:
-        return {"success": False, "error": str(exc)}
+    response = await _write_viz_file(document, name)
     file_item = FileRef.from_response(response)
     upsert_state_file(state, file_item)
     _ = push_ui_event(
@@ -290,12 +284,9 @@ async def update_viz(
 ) -> JsonDict:
     item = _pick_state_file(list(state.files), file_id=file_id, file_name=None)
     if item is None or not item.file_id:
-        return {"success": False, "error": f"Файл file_id={file_id} не найден в state.files"}
-    try:
-        raw_bytes = await get_file_bytes(item.file_id)
-        current = parse_viz_document_bytes(raw_bytes)
-    except ValueError as exc:
-        return {"success": False, "error": str(exc)}
+        raise ValueError(f"Файл file_id={file_id} не найден в state.files")
+    raw_bytes = await FilesClient().get_bytes(item.file_id)
+    current = parse_viz_document_bytes(raw_bytes)
     next_title = title.strip() if title and title.strip() else current.title
     if spec is not None:
         next_spec = dict(spec)
@@ -305,19 +296,13 @@ async def update_viz(
             next_spec["source"] = source
         if option is not None:
             next_spec["option"] = option
-    try:
-        document = VizDocument(
-            kind=current.kind,
-            engine=current.engine,
-            title=next_title,
-            spec=require_json_object(next_spec, "viz.spec"),
-        )
-    except ValueError as exc:
-        return {"success": False, "error": str(exc)}
-    try:
-        response = await _write_viz_file(document, item.original_name or _slug_filename(document.title))
-    except ValueError as exc:
-        return {"success": False, "error": str(exc)}
+    document = VizDocument(
+        kind=current.kind,
+        engine=current.engine,
+        title=next_title,
+        spec=require_json_object(next_spec, "viz.spec"),
+    )
+    response = await _write_viz_file(document, item.original_name or _slug_filename(document.title))
     file_item = FileRef.from_response(response)
     upsert_state_file(state, file_item)
     _ = push_ui_event(
@@ -355,12 +340,9 @@ async def export_viz(
     item = _pick_state_file(list(state.files), file_id=file_id, file_name=None)
     target_id = item.file_id if item is not None and item.file_id else file_id.strip()
     if not target_id:
-        return {"success": False, "error": "file_id обязателен"}
-    try:
-        raw_bytes = await get_file_bytes(target_id)
-        document = parse_viz_document_bytes(raw_bytes)
-    except ValueError as exc:
-        return {"success": False, "error": str(exc)}
+        raise ValueError("file_id обязателен")
+    raw_bytes = await FilesClient().get_bytes(target_id)
+    document = parse_viz_document_bytes(raw_bytes)
     base_name = _slug_filename(document.title).removesuffix(VIZ_EXTENSION)
     if format == "json":
         content = json.dumps(document.model_dump(mode="json"), ensure_ascii=False, indent=2)
@@ -371,15 +353,12 @@ async def export_viz(
         out_name = f"{base_name}.svg"
         content_mode = "raw"
     writer = FileWriter()
-    try:
-        record = await writer.write(
-            content=content,
-            original_name=out_name,
-            content_mode=content_mode,
-            public=True,
-        )
-    except FileWriteError as exc:
-        return {"success": False, "error": str(exc)}
+    record = await writer.write(
+        content=content,
+        original_name=out_name,
+        content_mode=content_mode,
+        public=True,
+    )
     response = FileResponse.from_record(record)
     file_item = FileRef.from_response(response)
     upsert_state_file(state, file_item)
@@ -417,15 +396,11 @@ async def viz_open_file(
 ) -> JsonDict:
     item = _pick_state_file(list(state.files), file_id=file_id, file_name=file_name)
     if item is None or not item.file_id:
-        return {
-            "success": False,
-            "error": f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in state.files]}",
-        }
-    try:
-        raw_bytes = await get_file_bytes(item.file_id)
-        document = parse_viz_document_bytes(raw_bytes)
-    except ValueError as exc:
-        return {"success": False, "error": str(exc)}
+        raise ValueError(
+            f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in state.files]}"
+        )
+    raw_bytes = await FilesClient().get_bytes(item.file_id)
+    document = parse_viz_document_bytes(raw_bytes)
     return {
         "success": True,
         "file": item.to_json_object(),

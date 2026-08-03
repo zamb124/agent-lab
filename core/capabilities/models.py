@@ -236,6 +236,11 @@ class CapabilityExecutionContext(BaseModel):
     durable_superstep_sequence: int | None = Field(default=None, ge=0)
     source_node_id: str | None = Field(default=None, min_length=1)
     source_tool_call_id: str | None = Field(default=None, min_length=1)
+    namespace: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Active platform namespace for ServiceClient X-Platform-Namespace (wiki, documents, …).",
+    )
 
 
 class CapabilityCallRequest(BaseModel):

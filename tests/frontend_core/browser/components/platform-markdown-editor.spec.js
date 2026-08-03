@@ -490,7 +490,13 @@ describe('platform-markdown-editor fail-closed', () => {
 
     it('invalid attachment index throws', async () => {
         const editor = await mountDocument({ value: '' });
-        editor.attachments = [{ filename: 'a.txt', content_type: 'text/plain', content_base64: '', size: 1 }];
+        editor.attachments = [{
+            filename: 'a.txt',
+            content_type: 'text/plain',
+            file_id: 'file_md_test_1',
+            url: '/frontend/api/v1/files/download/file_md_test_1',
+            size: 1,
+        }];
         expect(() => editor._removeAttachment(-1)).to.throw(/invalid attachment index/);
         expect(() => editor._removeAttachment(3)).to.throw(/invalid attachment index/);
     });

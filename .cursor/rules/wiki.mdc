@@ -88,7 +88,7 @@ SPA `/wiki`, `defaultI18nNamespace = 'wiki'`, ассистент `serviceId/bran
 - Контент справа лежит в `platform-island` (`padding="none"`, `content-no-scroll`) как в остальных сервисах: скролл держат сами страницы. Публичный маршрут `wiki_public_preview` — без острова и без сайдбара.
 - Дерево страниц — общий `platform-tree` (перетаскивание, контекстное меню, клавиатура). Отдельного дерева у сервиса нет. У узла с детьми шеврон (twisty) всегда видим и контрастный: клик по шеврону раскрывает/сворачивает, клик по строке открывает страницу.
 - Страница — `wiki-page-view`: обложка, иконка через `platform-emoji-picker`, заголовок как первый элемент документа (`:host input.title-input` — иначе `:host input { font: inherit }` из baseStyles съедает font-size), `platform-rich-editor` с подсказкой `platform:editor.placeholder`.
-- Медиа страницы (обложка, `/image`, `/file`) — только через модалку `platform.file_picker` и `platform/file_create` со `FileSourceKind.WIKI_PAGE` (`buildWikiPageFileCreateSpecJson`). Путь в Documents: `Wiki/{namespace}/{wiki_page_id}`. `window.prompt` и `platform_auxiliary` для wiki page media запрещены. Browse Documents из wiki — фабрики `wiki/catalogs`, `wiki/documents`, `wiki/documents_search` (`createAsyncOp`, REST Office BFF с `restMirror.service: 'office'`, не `office/*`). Обложка — `acceptMimePrefix: 'image/'`, `cover_url` = `/frontend/api/v1/files/download/{file_id}`; на обложке overlay Change/Remove. Узел `platform_file` в редакторе — `.pm-file-attachment` + `openFile` (не голый download-chip).
+- Медиа страницы (обложка, `/image`, `/file`) — только через модалку `platform.file_picker` и `platform/file_create` со `FileSourceKind.WIKI_PAGE` (`buildWikiPageFileCreateSpecJson`). Путь в Documents: `Wiki/{namespace}/{wiki_page_id}`. `window.prompt` и `platform_auxiliary` для wiki page media запрещены. Browse Documents из wiki — фабрики `wiki/catalogs`, `wiki/documents`, `wiki/documents_search` (`createAsyncOp`, REST Office BFF с `restMirror.service: 'office'`, не `office/*`). Обложка — `acceptMimePrefix: 'image/'`, `cover_url` = `/{segment}/api/v1/files/download/{file_id}` (обычно `/wiki/...`); на обложке overlay Change/Remove. Узел `platform_file` в редакторе — `.pm-file-attachment` + `openFile` (не голый download-chip).
 - Крошки страницы получают полный путь вложенности: `wiki-page-view` собирает `.trail` для `platform-breadcrumbs` из `wiki/pages` по `parent_page_id` от текущей страницы к корню.
 - В шапке вместо голого статуса — «Изменено ‹кто› ‹когда›» (`platform-user-chip` по `last_edited_by_user_id`); клик открывает вкладку истории.
 - Шапка (`.topbar`) — по всей ширине рабочей области и `position: sticky`, а не внутри колонки текста: путь начинается от левого края области, действия прижаты к правому. В `.paper` шапки нет.
@@ -102,6 +102,10 @@ SPA `/wiki`, `defaultI18nNamespace = 'wiki'`, ассистент `serviceId/bran
 - Маршруты: `wiki_home` (`''`), `wiki_page` (`p/:pageId`), `wiki_page_history` (`p/:pageId/history`), `wiki_search` (`search`), `wiki_public_preview` (`s/:token`), `wiki_public_page` (`s/:token/p/:pageId`, parent `wiki_public_preview`).
 
 Wiki входит в `FACTORY_CANON_SERVICES` (`scripts/check_ui_canon.sh`, `scripts/check_command_rest_mirror.py`) — pages и modals ходят в состояние только через helpers `PlatformElement`, у каждой операции есть REST-зеркало.
+
+## Lara
+
+Tier-1 skill `wiki-platform` (children `wiki-pages`, `wiki-access`, `wiki-discovery`). Builtins `wiki_*` в `apps/flows/tools/wiki_tools.py` — тонкие обёртки над `core.clients.wiki_client.WikiClient` (не прямой REST в теле тула). Eval / `code_node`: `await wiki.create_page(...)` через capability-gateway (`wiki.*`, `sdk_namespace="wiki"`). Тело страницы для агента — markdown (`wiki_get_markdown` / `wiki_update_markdown` / `wiki_import_markdown`), не ProseMirror JSON. Visibility — через участников, не PATCH. Публичная ссылка — `wiki_rotate_public_link` (raw URL один раз).
 
 ## Тесты
 

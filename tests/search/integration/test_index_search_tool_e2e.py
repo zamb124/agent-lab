@@ -68,13 +68,11 @@ async def test_index_search_tool_calls_real_search_service(
         make_test_state(),
     )
 
-    assert payload["success"] is True
-    response = payload["response"]
-    assert response["query"] == doc_text
-    assert response["providers"]["index"]["ok"] is True
-    assert response["results"]
-    assert response["results"][0]["search_index_id"] == search_index_id
-    assert marker in strip_snippet_highlight(response["results"][0].get("snippet", ""))
+    assert payload["query"] == doc_text
+    assert payload["providers"]["index"]["ok"] is True
+    assert payload["results"]
+    assert payload["results"][0]["search_index_id"] == search_index_id
+    assert marker in strip_snippet_highlight(payload["results"][0].get("snippet", ""))
 
 
 @pytest.mark.asyncio
@@ -119,8 +117,6 @@ async def test_index_search_tool_fail_closed_empty_index(
         make_test_state(),
     )
 
-    assert payload["success"] is True
-    response = payload["response"]
-    assert response["providers"]["index"]["ok"] is False
-    assert response["providers"]["index"]["error"] == "index returned no results"
-    assert response["results"] == []
+    assert payload["providers"]["index"]["ok"] is False
+    assert payload["providers"]["index"]["error"] == "index returned no results"
+    assert payload["results"] == []

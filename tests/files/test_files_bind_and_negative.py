@@ -4,7 +4,6 @@ HTTP bind и негативные сценарии unified Files API.
 
 from __future__ import annotations
 
-import io
 import json
 
 import pytest
@@ -61,9 +60,13 @@ async def test_get_metadata_missing_file_404(frontend_client, auth_headers_syste
 @pytest.mark.asyncio
 async def test_upload_missing_spec_422(frontend_client, auth_headers_system):
     response = await frontend_client.post(
-        "/frontend/api/v1/files/",
-        headers=auth_headers_system,
-        files={"file": ("x.txt", io.BytesIO(b"x"), "text/plain")},
+        "/frontend/api/v1/files/uploads",
+        headers={**auth_headers_system, "Content-Type": "application/json"},
+        json={
+            "original_name": "x.txt",
+            "content_type": "text/plain",
+            "file_size": 1,
+        },
     )
     assert response.status_code == 422
 

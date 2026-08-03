@@ -8,6 +8,7 @@ import pytest
 
 from apps.flows.tools.docx_template import fill_docx_template
 from core.files.file_ref import FileRef
+from core.files.writer.exceptions import FileWriteError
 from core.state import ExecutionState
 from core.types import require_json_object
 
@@ -32,15 +33,11 @@ async def test_fill_docx_template_no_files() -> None:
         session_id="flow:c1",
         files=[],
     )
-    out = require_json_object(
-        await fill_docx_template.run(
+    with pytest.raises(ValueError, match="state.files пуст"):
+        _ = await fill_docx_template.run(
             {"variables": {}, "output_original_name": "out.docx"},
             state,
-        ),
-        "fill_docx_template.result",
-    )
-    assert out["success"] is False
-    assert "state.files пуст" in str(out["error"])
+        )
 
 
 @pytest.mark.asyncio
@@ -61,15 +58,12 @@ async def test_fill_docx_template_bad_output_name(tmp_path: Path) -> None:
             )
         ],
     )
-    out = require_json_object(
-        await fill_docx_template.run(
+    with pytest.raises(FileWriteError, match=r"\.docx"):
+        _ = await fill_docx_template.run(
             {
                 "variables": {},
                 "output_original_name": "bad.txt",
                 "file_name": "t.docx",
             },
             state,
-        ),
-        "fill_docx_template.result",
-    )
-    assert out["success"] is False
+        )

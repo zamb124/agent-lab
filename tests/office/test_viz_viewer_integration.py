@@ -33,7 +33,7 @@ def _viz_bytes(*, title: str, source: str) -> bytes:
 
 
 async def _upload_viz(
-    frontend_client,
+    office_client,
     auth_headers_system: dict[str, str],
     *,
     unique_id: str,
@@ -42,7 +42,7 @@ async def _upload_viz(
 ) -> str:
     require_s3_configured()
     uploaded = await upload_office_file_bytes(
-        frontend_client,
+        office_client,
         auth_headers_system,
         filename=f"{title.replace(' ', '-')}-{unique_id}.viz",
         content=_viz_bytes(title=title, source=source),
@@ -55,14 +55,13 @@ async def _upload_viz(
 
 async def test_viz_file_editor_config(
     office_client,
-    frontend_client,
     auth_headers_system,
     unique_id: str,
 ) -> None:
     title = f"EditorConfig {unique_id}"
     source = "flowchart TD\n  A-->B"
     file_id = await _upload_viz(
-        frontend_client,
+        office_client,
         auth_headers_system,
         unique_id=unique_id,
         title=title,
@@ -96,14 +95,13 @@ async def test_viz_file_editor_config(
 
 async def test_viz_viewer_stream_roundtrip(
     office_client,
-    frontend_client,
     auth_headers_system,
     unique_id: str,
 ) -> None:
     title = f"Stream {unique_id}"
     source = "flowchart TD\n  Start-->Finish"
     file_id = await _upload_viz(
-        frontend_client,
+        office_client,
         auth_headers_system,
         unique_id=f"{unique_id}-stream",
         title=title,
@@ -126,13 +124,12 @@ async def test_viz_viewer_stream_roundtrip(
 
 async def test_viz_editor_config_cross_company_forbidden(
     office_client,
-    frontend_client,
     auth_headers_system,
     auth_headers_company2,
     unique_id: str,
 ) -> None:
     file_id = await _upload_viz(
-        frontend_client,
+        office_client,
         auth_headers_system,
         unique_id=f"{unique_id}-xco",
         title=f"Private {unique_id}",
@@ -149,13 +146,12 @@ async def test_viz_editor_config_cross_company_forbidden(
 
 async def test_viz_invalid_json_editor_config_422(
     office_client,
-    frontend_client,
     auth_headers_system,
     unique_id: str,
 ) -> None:
     require_s3_configured()
     uploaded = await upload_office_file_bytes(
-        frontend_client,
+        office_client,
         auth_headers_system,
         filename=f"broken-{unique_id}.viz",
         content=b"{not-json",

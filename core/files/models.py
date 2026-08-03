@@ -9,6 +9,7 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from core.files.urls import files_download_url
 from core.types import JsonObject
 
 
@@ -59,8 +60,8 @@ class FileRecord(BaseModel):
     download_url: str | None = Field(
         default=None,
         description=(
-            "Same-origin URL для скачивания через API (устанавливается сервисом при загрузке). "
-            "Если не задан, используется /frontend/api/v1/files/download/{file_id}."
+            "Same-origin download URL сервиса, который создал FileRecord "
+            "(`/{segment}/api/v1/files/download/{file_id}`)."
         ),
     )
     created_at: datetime = Field(
@@ -89,14 +90,14 @@ class FileRecord(BaseModel):
     @property
     def url(self) -> str:
         """
-        Same-origin URL для доступа к файлу через API.
+        Same-origin URL для доступа к файлу через Files API текущего или создавшего сервиса.
 
-        Если сервис задал download_url при загрузке — возвращает его.
-        Иначе возвращает путь /frontend/api/v1/files/download/{file_id}.
+        Если `download_url` задан при создании — возвращает его.
+        Иначе строит URL по `files_route_segment` процесса.
         """
         if self.download_url:
             return self.download_url
-        return f"/frontend/api/v1/files/download/{self.file_id}"
+        return files_download_url(self.file_id)
 
 
 class FileResponse(BaseModel):
@@ -117,13 +118,22 @@ class FileResponse(BaseModel):
     created_at: datetime
 
     @classmethod
-    def from_record(cls, record: "FileRecord") -> "FileResponse":
+    def from_record(
+        cls,
+        record: "FileRecord",
+        *,
+        route_segment: str | None = None,
+    ) -> "FileResponse":
+        if record.download_url:
+            url = record.download_url
+        else:
+            url = files_download_url(record.file_id, route_segment=route_segment)
         return cls(
             file_id=record.file_id,
             original_name=record.original_name,
             content_type=record.content_type,
             file_size=record.file_size,
-            url=record.url,
+            url=url,
             checksum=record.checksum,
             is_public=record.is_public,
             created_at=record.created_at,

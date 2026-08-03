@@ -36,6 +36,7 @@ from core.models.identity_models import Company, User
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from tests.flows.durable_runtime_harness import ensure_workflow_started
+from tests.office.helpers import upload_office_file_bytes
 
 pytestmark = [
     pytest.mark.real_taskiq,
@@ -129,17 +130,25 @@ async def _upload_document(
     content: bytes,
     content_type: str,
 ) -> str:
-    response = await office_client_http.post(
+    uploaded = await upload_office_file_bytes(
+        office_client_http,
+        headers,
+        filename=filename,
+        content=content,
+        content_type=content_type,
+    )
+    file_id = uploaded["file_id"]
+    if not isinstance(file_id, str) or file_id == "":
+        raise AssertionError("_upload_document: file_id required")
+    bind = await office_client_http.post(
         "/documents/api/v1/documents",
         headers=headers,
-        data={"title": title, "catalog_id": catalog_id},
-        files={"file": (filename, content, content_type)},
+        json={"file_id": file_id, "title": title, "catalog_id": catalog_id},
     )
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    file_id = payload["file_id"]
-    assert isinstance(file_id, str) and file_id
-    return file_id
+    assert bind.status_code == 200, bind.text
+    bound_file_id = bind.json()["file_id"]
+    assert isinstance(bound_file_id, str) and bound_file_id
+    return bound_file_id
 
 
 async def _enable_rag_index(
@@ -307,7 +316,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         await documents_list_catalog.run({}, state),
         "list.root",
     )
-    assert root["success"] is True
     root_catalogs = _catalog_ids(root)
     assert l0 in root_catalogs
     assert l1 not in root_catalogs
@@ -319,7 +327,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         await documents_list_catalog.run({"catalog_id": l0}, state),
         "list.l0",
     )
-    assert at_l0["success"] is True
     assert _catalog_ids(at_l0) == {l1}
     assert _file_ids(at_l0) == {decoy_file_id}
 
@@ -327,7 +334,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         await documents_list_catalog.run({"catalog_id": l1}, state),
         "list.l1",
     )
-    assert at_l1["success"] is True
     assert _catalog_ids(at_l1) == {l2}
     assert _file_ids(at_l1) == {image_file_id}
 
@@ -335,7 +341,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         await documents_list_catalog.run({"catalog_id": l2}, state),
         "list.l2",
     )
-    assert at_l2["success"] is True
     assert _catalog_ids(at_l2) == {l3}
     assert _file_ids(at_l2) == {mid_file_id}
 
@@ -343,7 +348,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         await documents_list_catalog.run({"catalog_id": l3}, state),
         "list.l3",
     )
-    assert at_l3["success"] is True
     assert _catalog_ids(at_l3) == set()
     assert _file_ids(at_l3) == {leaf_file_id}
 
@@ -355,7 +359,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         ),
         "find.lexical_scoped",
     )
-    assert lexical_scoped["success"] is True
     assert lexical_scoped["mode_used"] == "lexical"
     assert _file_ids(lexical_scoped, "items") == {leaf_file_id}
 
@@ -366,7 +369,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         ),
         "find.lexical_global",
     )
-    assert lexical_global["success"] is True
     assert leaf_file_id in _file_ids(lexical_global, "items")
 
     auto_before_rag = require_json_object(
@@ -376,29 +378,20 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         ),
         "find.auto_before_rag",
     )
-    assert auto_before_rag["success"] is True
     assert auto_before_rag["mode_used"] == "lexical"
     assert leaf_file_id in _file_ids(auto_before_rag, "items")
 
-    semantic_disabled = require_json_object(
+    with pytest.raises(ValueError, match="rag_index_disabled"):
         await documents_find.run(
             {"query": leaf_marker, "catalog_id": l3, "mode": "semantic"},
             state,
-        ),
-        "find.semantic_disabled",
-    )
-    assert semantic_disabled["success"] is False
-    assert semantic_disabled["error_code"] == "rag_index_disabled"
+        )
 
-    semantic_needs_catalog = require_json_object(
+    with pytest.raises(ValueError, match="catalog_id_required"):
         await documents_find.run(
             {"query": leaf_marker, "mode": "semantic"},
             state,
-        ),
-        "find.semantic_needs_catalog",
-    )
-    assert semantic_needs_catalog["success"] is False
-    assert semantic_needs_catalog["error_code"] == "catalog_id_required"
+        )
 
     # --- documents_find: semantic + auto after real catalog RAG index ---
     await _enable_rag_index(office_client_http, headers, l3)
@@ -414,7 +407,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         ),
         "find.semantic_ok",
     )
-    assert semantic_ok["success"] is True
     assert semantic_ok["mode_used"] == "semantic"
     assert leaf_file_id in _file_ids(semantic_ok, "items")
 
@@ -425,7 +417,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         ),
         "find.auto_after_rag",
     )
-    assert auto_after_rag["success"] is True
     assert auto_after_rag["mode_used"] == "semantic"
     assert leaf_file_id in _file_ids(auto_after_rag, "items")
 
@@ -434,7 +425,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         await documents_read.run({"file_id": leaf_file_id}, state),
         "read.leaf",
     )
-    assert read_leaf["success"] is True
     assert read_leaf["file_id"] == leaf_file_id
     assert leaf_marker in str(read_leaf["envelope"])
 
@@ -442,7 +432,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         await documents_read.run({"file_id": mid_file_id}, state),
         "read.file_id",
     )
-    assert read_file["success"] is True
     assert read_file["file_id"] == mid_file_id
     assert mid_marker in str(read_file["envelope"])
 
@@ -454,7 +443,6 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         ),
         "link.editor",
     )
-    assert editor["success"] is True
     assert editor["kind"] == "editor"
     assert f"/documents/edit/{leaf_file_id}" in str(editor["url"])
     assert "namespace=default" in str(editor["url"])
@@ -466,20 +454,14 @@ async def test_documents_catalog_tools_deep_tree_all_modes(
         ),
         "link.preview_image",
     )
-    assert preview_image["success"] is True
     assert preview_image["kind"] == "preview"
     assert isinstance(preview_image["url"], str) and preview_image["url"].strip() != ""
 
-    preview_text = require_json_object(
+    with pytest.raises(ValueError, match="preview"):
         await documents_get_link.run(
             {"file_id": leaf_file_id, "kind": "preview"},
             state,
-        ),
-        "link.preview_text",
-    )
-    assert preview_text["success"] is False
-    assert "preview" in str(preview_text.get("error", "")).lower()
-    assert preview_text.get("editor_url")
+        )
 
 
 def _message_plain_text(message: Message) -> str:
@@ -518,7 +500,7 @@ def _successful_tool_payloads_from_messages(state: ExecutionState) -> list[dict[
         if "tool_call_id" not in metadata:
             continue
         parsed = _json_object_from_tool_result(_message_plain_text(message))
-        if parsed is not None and parsed.get("success") is True:
+        if parsed is not None:
             payloads.append(parsed)
     return payloads
 

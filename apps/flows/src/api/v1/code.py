@@ -41,6 +41,7 @@ from apps.flows.src.runtime.nodes import create_node
 from apps.flows.src.runtime.state_diff import DiffItem as StateDiffItem
 from apps.flows.src.runtime.state_diff import compute_state_diff
 from apps.flows.src.state import collect_flow_node_files
+from apps.flows.src.tools.decorator import FunctionTool
 from core.capabilities import (
     CAPABILITY_LANGUAGE_SET,
     CapabilityDocumentation,
@@ -49,7 +50,7 @@ from core.capabilities import (
     CapabilitySdkMethodDocumentation,
     CodeExecutionKind,
 )
-from core.clients.service_client import ServiceClient
+from core.clients.capability_gateway_client import CapabilityGatewayClient
 from core.context import get_context
 from core.docs.models import (
     CodeTemplate,
@@ -76,7 +77,6 @@ type SourceObject = (
     ModuleType | type[object] | MethodType | FunctionType | TracebackType | FrameType
 )
 
-CAPABILITY_DOCUMENTATION_PATH = "/capability-gateway/api/v1/capabilities/documentation"
 CODE_RUNNER_SERVICE_BY_LANGUAGE = {
     "python": "code_runner_python",
     "javascript": "code_runner_node",
@@ -108,15 +108,7 @@ def _require_capability_language(language: str) -> CapabilityLanguage:
 
 
 async def _capability_documentation(language: CapabilityLanguage) -> CapabilityDocumentation:
-    raw = await ServiceClient().get(
-        "capability_gateway",
-        CAPABILITY_DOCUMENTATION_PATH,
-        params={"language": language},
-        timeout=30.0,
-    )
-    if not isinstance(raw, dict):
-        raise RuntimeError("capability documentation response must be an object")
-    return CapabilityDocumentation.model_validate(raw)
+    return await CapabilityGatewayClient().get_documentation(language)
 
 
 async def _capability_markdown(language: CapabilityLanguage) -> str:
@@ -735,15 +727,27 @@ async def get_flow_functions(container: ContainerDep, flow_id: str) -> FlowFunct
 @router.get("/tool-source")
 async def get_tool_source(container: ContainerDep, tool_path: str) -> SourceResponse:
     """
-    Возвращает исходный код tool класса по его пути.
+    Возвращает исходный код builtin tool по tool_id (имя в ToolRegistry).
 
-    Пример: apps.flows.tools.math_tools.calculator
+    Пример: calculator
     """
-    _ = container
     if not tool_path:
         raise HTTPException(status_code=400, detail="tool_path is required")
 
-    return _get_source_by_path(tool_path)
+    registry = container.tool_registry
+    registry.register_builtin_tools()
+    tool = registry.get(tool_path)
+    if tool is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown builtin tool_id: {tool_path}",
+        )
+    if not isinstance(tool, FunctionTool):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Source not available for tool_id: {tool_path}",
+        )
+    return SourceResponse(path=tool_path, source=tool.get_source_code())
 
 
 def _get_source_by_path(path: str) -> SourceResponse:
@@ -1362,20 +1366,46 @@ def _graph_node_config_allowed_keys() -> frozenset[str]:
 
 _GRAPH_NODE_CONFIG_ALLOWED_KEYS: frozenset[str] = _graph_node_config_allowed_keys()
 
+# Catalog-поля ToolReference, которых нет в GraphNodeConfig: UI может прислать их
+# вместе с node execute payload. Остальные неизвестные ключи оставляем — их отвергнет
+# GraphNodeConfig(extra=forbid).
+_TOOL_REFERENCE_EXECUTE_STRIP_KEYS: frozenset[str] = frozenset(
+    {
+        "code_mode",
+        "mcp_annotations",
+        "mcp_execution",
+        "mcp_output_schema",
+        "mcp_schema_hash",
+        "mcp_schema_version",
+        "mcp_server_id",
+        "mcp_tool_name",
+        "params",
+        "permission",
+        "public_fields",
+        "react_role",
+        "tags",
+        "title",
+        "tool_id",
+    }
+)
+
 
 def _graph_node_config_for_execute(config: JsonObject) -> JsonObject:
     """
     Проекция editor/tool payload в GraphNodeConfig.
 
-    UI редактор tool может прислать catalog-поля ToolReference
-    (tags/title/params/code_mode/permission/react_role) — для execute они
-    не нужны и запрещены GraphNodeConfig(extra=forbid).
+    Снимает только известные catalog-поля ToolReference
+    (tags/title/params/code_mode/permission/react_role/…).
+    Неизвестные ключи не глотаются — GraphNodeConfig(extra=forbid) их отклонит.
     """
-    cleaned: JsonObject = {
-        key: value
-        for key, value in config.items()
-        if key in _GRAPH_NODE_CONFIG_ALLOWED_KEYS
-    }
+    cleaned: JsonObject = {}
+    for key, value in config.items():
+        if key in _GRAPH_NODE_CONFIG_ALLOWED_KEYS:
+            cleaned[key] = value
+            continue
+        if key in _TOOL_REFERENCE_EXECUTE_STRIP_KEYS:
+            continue
+        cleaned[key] = value
     raw_name = cleaned.get("name")
     name_empty = not isinstance(raw_name, str) or not raw_name.strip()
     if name_empty:

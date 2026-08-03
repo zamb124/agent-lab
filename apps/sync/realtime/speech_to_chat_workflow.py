@@ -309,7 +309,7 @@ async def _normalize_egress_audio_for_upload_pipeline(
     """
     Форматы сегментов egress (ADTS AAC, MPEG-TS, fMP4 .m4s) приводим к M4A+faststart,
     как после перекодирования в обычной загрузке голосового для Safari.
-    Остальное оставляем — дальше тот же FilesService, что и POST .../files/.
+    Остальное оставляем — дальше тот же FilesService.create (server-side).
     """
     base_content_type = content_type.split(";")[0].strip().lower()
     suf = Path(original_name).suffix.lower()

@@ -10,12 +10,15 @@ import importlib
 from apps.flows.config import FlowSettings
 from apps.flows.config import set_settings as set_flow_settings
 from core.config.loader import load_merged_config
+from core.files.urls import resolve_files_route_segment, set_files_route_segment
 from core.tasks.logging_init import setup_worker_logging_early
 
 _merged_flows = load_merged_config(service_name="flows", silent=True)
 _idle_worker_flow_settings = FlowSettings.model_validate(_merged_flows)
 setup_worker_logging_early("idle_worker", logging_config=_idle_worker_flow_settings.logging)
 set_flow_settings(_idle_worker_flow_settings)
+_segment = resolve_files_route_segment("idle_worker")
+set_files_route_segment(_segment)
 
 from taskiq import TaskiqState
 
@@ -47,6 +50,7 @@ broker = wire_worker("idle")
 
 async def _startup(state: TaskiqState) -> None:
     container = get_container()
+    container.bind_files_route_segment(_segment)
     state.container = container
 
     await connect_redis_with_backoff(container.redis_client, service_name="idle_worker")

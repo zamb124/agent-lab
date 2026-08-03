@@ -2796,6 +2796,11 @@ export class CRMNoteCardView extends PlatformElement {
                 this._attachmentUpload.run({
                     entity_id: this.note.entity_id,
                     file,
+                    entity_type: 'note',
+                    entity_title:
+                        typeof this.note.name === 'string' && this.note.name.length > 0
+                            ? this.note.name
+                            : this.note.entity_id,
                 });
             }
         } else {

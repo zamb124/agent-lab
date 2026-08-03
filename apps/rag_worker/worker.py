@@ -9,11 +9,14 @@ import importlib
 from apps.rag_worker.config import RAGWorkerSettings
 from core.config import set_settings
 from core.config.loader import load_merged_config
+from core.files.urls import resolve_files_route_segment, set_files_route_segment
 from core.tasks.logging_init import setup_worker_logging_early
 
 _settings = RAGWorkerSettings.model_validate(load_merged_config(service_name="rag_worker", silent=True))
 setup_worker_logging_early("rag_worker", logging_config=_settings.logging)
 set_settings(_settings)
+_segment = resolve_files_route_segment("rag_worker")
+set_files_route_segment(_segment)
 
 from taskiq import TaskiqState
 
@@ -35,6 +38,7 @@ broker = wire_worker("rag")
 
 async def _startup(state: TaskiqState) -> None:
     container = get_rag_container()
+    container.bind_files_route_segment(_segment)
     state.container = container
     initialize_default_processors(container.file_repository)
     set_billing_service(container.billing_service)

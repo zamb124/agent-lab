@@ -19,15 +19,23 @@ from core.files.file_repository import FileRepository
 from core.files.models import FileRecord, FileStatus
 from core.files.retention import FileRetentionKind, FileRetentionSpec, resolve_retention_ttl_seconds
 from core.files.s3_client import S3Client, S3ClientFactory
+from core.files.urls import files_download_url
 from core.logging import get_logger
 from core.types import JsonObject
 
 logger = get_logger(__name__)
 
-CANONICAL_DOWNLOAD_URL_PREFIX = "/frontend/api/v1/files/download"
+
+def original_name_with_extension(original_name: str, content_type: str) -> str:
+    if Path(original_name).suffix:
+        return original_name
+    ext = mimetypes.guess_extension(content_type.strip(), strict=False)
+    if ext and not original_name.endswith(ext):
+        return f"{original_name}{ext}"
+    return original_name
 
 
-def _to_ascii_s3_metadata(metadata: JsonObject) -> dict[str, str]:
+def to_ascii_s3_metadata(metadata: JsonObject) -> dict[str, str]:
     out: dict[str, str] = {}
     for raw_key, raw_value in metadata.items():
         key = raw_key.strip()
@@ -41,13 +49,12 @@ def _to_ascii_s3_metadata(metadata: JsonObject) -> dict[str, str]:
     return out
 
 
+def _to_ascii_s3_metadata(metadata: JsonObject) -> dict[str, str]:
+    return to_ascii_s3_metadata(metadata)
+
+
 def _original_name_with_extension(original_name: str, content_type: str) -> str:
-    if Path(original_name).suffix:
-        return original_name
-    ext = mimetypes.guess_extension(content_type.strip(), strict=False)
-    if ext and not original_name.endswith(ext):
-        return f"{original_name}{ext}"
-    return original_name
+    return original_name_with_extension(original_name, content_type)
 
 
 class FileStorage:
@@ -84,6 +91,7 @@ class FileStorage:
         tags: list[str] | None = None,
         content_sha256_hex: str | None = None,
         existing_file_id: str | None = None,
+        route_segment: str | None = None,
     ) -> FileRecord:
         if len(data) == 0:
             raise ValueError("Пустой файл.")
@@ -140,7 +148,7 @@ class FileStorage:
             checksum=checksum,
             retention_kind=retention_kind,
             expires_at=expires_at,
-            download_url=f"{CANONICAL_DOWNLOAD_URL_PREFIX}/{file_id}",
+            download_url=files_download_url(file_id, route_segment=route_segment),
         )
         _ = await self._file_repository.set(file_record)
         logger.info(
@@ -166,8 +174,13 @@ class FileStorage:
         ttl_seconds: int,
         metadata: JsonObject | None = None,
         tags: list[str] | None = None,
+        existing_file_id: str | None = None,
+        content_sha256_hex: str | None = None,
+        route_segment: str | None = None,
     ) -> FileRecord:
-        file_id = f"file_{uuid.uuid4().hex[:12]}"
+        file_id = existing_file_id if existing_file_id else f"file_{uuid.uuid4().hex[:12]}"
+        if file_id == "":
+            raise ValueError("existing_file_id не может быть пустым")
         s3_client = S3ClientFactory.create_client_for_bucket(s3_bucket)
         try:
             provider_name = s3_client.provider_name
@@ -197,9 +210,10 @@ class FileStorage:
             status=FileStatus.READY,
             metadata=metadata or {},
             tags=tags or [],
+            checksum=content_sha256_hex,
             retention_kind=retention_kind,
             expires_at=expires_at,
-            download_url=f"{CANONICAL_DOWNLOAD_URL_PREFIX}/{file_id}",
+            download_url=files_download_url(file_id, route_segment=route_segment),
         )
         _ = await self._file_repository.set(file_record)
         return file_record

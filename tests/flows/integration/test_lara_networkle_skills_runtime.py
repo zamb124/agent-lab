@@ -282,7 +282,6 @@ async def test_lara_networkle_entity_update_delete(
 
     assert result1.interrupt is None
     created = _tool_json(result1.tool_results["crm_create_entity"])
-    assert created["success"] is True
     entity_id = created["entity"]["entity_id"]
     assert isinstance(entity_id, str) and entity_id
 
@@ -302,12 +301,11 @@ async def test_lara_networkle_entity_update_delete(
 
     assert result2.interrupt is None
     got = _tool_json(result2.tool_results["crm_get_entity"])
-    assert got["success"] is True
+    assert isinstance(got.get("entity"), dict)
     updated = _tool_json(result2.tool_results["crm_update_entity"])
-    assert updated["success"] is True
     assert updated["entity"]["name"] == updated_name
     deleted = _tool_json(result2.tool_results["crm_delete_entity"])
-    assert deleted["success"] is True
+    assert deleted.get("entity_id") == entity_id
 
 
 @pytest.mark.asyncio
@@ -351,10 +349,8 @@ async def test_lara_networkle_note_list_and_discard_draft_path(
 
     assert result.interrupt is None
     created = _tool_json(result.tool_results["crm_create_entity"])
-    assert created["success"] is True
     note_id = created["entity"]["entity_id"]
     listed = _tool_json(result.tool_results["crm_list_notes"])
-    assert listed["success"] is True
     assert listed["count"] >= 1
     assert any(
         isinstance(row, dict) and row.get("entity_id") == note_id for row in listed["items"]
@@ -373,8 +369,8 @@ async def test_lara_networkle_note_list_and_discard_draft_path(
 
     assert result2.interrupt is None
     discarded = _tool_json(result2.tool_results["crm_discard_analysis_draft"])
-    # No draft → CRM may 404; tool returns success=False with error, or success if 204.
-    assert "success" in discarded
+    assert discarded.get("note_id") == note_id
+    assert discarded.get("status") == "draft_discarded"
 
 
 @pytest.mark.asyncio
@@ -410,7 +406,7 @@ async def test_lara_networkle_graph_relationships(
 
     assert result1.interrupt is None
     types = _tool_json(result1.tool_results["crm_list_relationship_types"])
-    assert types["success"] is True and types["count"] >= 1
+    assert types["count"] >= 1
     type_id = types["items"][0]["type_id"]
     assert isinstance(type_id, str)
     src_id = _tool_json(result1.tool_results["crm_create_entity"])["entity"]["entity_id"]
@@ -448,11 +444,10 @@ async def test_lara_networkle_graph_relationships(
 
     assert result3.interrupt is None
     rel = _tool_json(result3.tool_results["crm_create_relationship"])
-    assert rel["success"] is True
     relationship_id = rel["relationship"]["relationship_id"]
-    assert _tool_json(result3.tool_results["crm_list_relationships"])["success"] is True
-    assert _tool_json(result3.tool_results["crm_entity_related"])["success"] is True
-    assert _tool_json(result3.tool_results["crm_shortest_path"])["success"] is True
+    assert isinstance(_tool_json(result3.tool_results["crm_list_relationships"]).get("items"), list)
+    assert isinstance(_tool_json(result3.tool_results["crm_entity_related"]).get("related"), dict)
+    assert isinstance(_tool_json(result3.tool_results["crm_shortest_path"]).get("path"), dict)
 
     _ = mock_llm_with_queue(
         [
@@ -465,7 +460,9 @@ async def test_lara_networkle_graph_relationships(
     with _employee_context(employee, company, namespace=namespace):
         result4 = await _run_lara(container, state=state4)
     assert result4.interrupt is None
-    assert _tool_json(result4.tool_results["crm_delete_relationship"])["success"] is True
+    deleted_rel = _tool_json(result4.tool_results["crm_delete_relationship"])
+    assert deleted_rel.get("relationship_id") == relationship_id
+    assert deleted_rel.get("status") == "deleted"
 
 
 @pytest.mark.asyncio
@@ -507,8 +504,9 @@ async def test_lara_networkle_activity_and_ops(
 
     assert result.interrupt is None
     activity = _tool_json(result.tool_results["crm_create_activity_task"])
-    assert activity["success"] is True
     assert isinstance(activity["work_item_id"], str) and activity["work_item_id"]
-    assert _tool_json(result.tool_results["crm_list_activity_tasks"])["success"] is True
-    assert _tool_json(result.tool_results["crm_list_suggests"])["success"] is True
-    assert _tool_json(result.tool_results["crm_knowledge_import_status"])["success"] is True
+    assert isinstance(_tool_json(result.tool_results["crm_list_activity_tasks"]).get("items"), list)
+    assert isinstance(_tool_json(result.tool_results["crm_list_suggests"]).get("items"), list)
+    assert isinstance(
+        _tool_json(result.tool_results["crm_knowledge_import_status"]).get("items"), list
+    )

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -134,21 +133,12 @@ def _tool_json(value: JsonValue) -> JsonObject:
     return _JSON_OBJECT_ADAPTER.validate_python(value)
 
 
-def _tool_text(value: JsonValue) -> str:
-    if not isinstance(value, str):
-        raise AssertionError(f"expected tool string result, got {type(value).__name__}")
-    return value
-
-
-_SCHEDULE_TASK_ID_RE = re.compile(r"schedule_task_id:\s*([^\s).]+)")
-
-
 def _schedule_task_id_from_tool_result(value: JsonValue) -> str:
-    text = _tool_text(value)
-    match = _SCHEDULE_TASK_ID_RE.search(text)
-    if match is None:
-        raise AssertionError(f"schedule_task_id missing in tool result: {text!r}")
-    return match.group(1)
+    payload = _tool_json(value)
+    schedule_task_id = payload.get("schedule_task_id")
+    if not isinstance(schedule_task_id, str) or not schedule_task_id.strip():
+        raise AssertionError(f"schedule_task_id missing in tool result: {payload!r}")
+    return schedule_task_id
 
 
 def _captured_tool_names(call: JsonObject) -> set[str]:
@@ -779,9 +769,15 @@ async def test_lara_worktracker_create_self_and_schedules(
     schedule_task_id = _schedule_task_id_from_tool_result(
         result_sched.tool_results["schedule_one_time_task"]
     )
-    listed = _tool_text(result_sched.tool_results["list_scheduled_tasks"])
-    assert schedule_task_id[:8] in listed
-    assert f"reminder {unique_id}" in listed
+    listed = _tool_json(result_sched.tool_results["list_scheduled_tasks"])
+    items = listed.get("items")
+    assert isinstance(items, list)
+    assert any(
+        isinstance(item, dict)
+        and item.get("schedule_task_id") == schedule_task_id
+        and item.get("content") == f"reminder {unique_id}"
+        for item in items
+    )
 
     _ = mock_llm_with_queue(
         [
@@ -810,9 +806,9 @@ async def test_lara_worktracker_create_self_and_schedules(
             result2 = await _run_lara(container, state=state2)
 
     assert result2.interrupt is None
-    cancelled = _tool_text(result2.tool_results["cancel_scheduled_task"])
-    assert "отменена" in cancelled
-    assert schedule_task_id in cancelled
+    cancelled = _tool_json(result2.tool_results["cancel_scheduled_task"])
+    assert cancelled.get("cancelled") is True
+    assert cancelled.get("schedule_task_id") == schedule_task_id
     cron_id = _schedule_task_id_from_tool_result(result2.tool_results["schedule_cron_task"])
     interval_id = _schedule_task_id_from_tool_result(
         result2.tool_results["schedule_interval_task"]

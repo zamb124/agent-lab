@@ -51,6 +51,7 @@ from apps.flows.src.services.mcp_branding_service import MCPServerBrandingServic
 from apps.flows.src.services.platform_event_consumer import PlatformEventConsumerService
 from apps.flows.src.services.resource_loader import ResourceLoader
 from apps.flows.src.services.schedule_service import ScheduleService
+from apps.flows.src.services.tool_approval import ToolApprovalStore
 from apps.flows.src.services.tool_tag_group_service import ToolTagGroupService
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
@@ -348,6 +349,10 @@ class FlowContainer(BaseContainer):
     @lazy
     def lara_action_engine(self) -> LaraActionEngine:
         return LaraActionEngine(redis_client=self.redis_client)
+
+    @lazy
+    def tool_approval_store(self) -> ToolApprovalStore:
+        return ToolApprovalStore(redis_client=self.redis_client)
 
     @lazy
     def lara_facade(self) -> LaraFacade:

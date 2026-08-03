@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.tools.decorator import tool
 from core.clients.rag_client import RagClient
-from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.docs.assistant import (
     DOCS_RAG_NAMESPACE_ID,
@@ -19,12 +18,8 @@ from core.docs.assistant import (
 )
 from core.rag.models import RAGSearchOptions
 from core.rag.search_options_resolver import resolve_platform_search_options
+from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_array, require_json_object
-
-if TYPE_CHECKING:
-    from core.state import ExecutionState
-
-JsonDict = JsonObject
 
 _DOCS_SEARCH_DESCRIPTION = """
 Ищет только по публичной документации Humanitec/NetWorkle и возвращает найденные
@@ -35,11 +30,11 @@ _DOCS_SEARCH_DESCRIPTION = """
 - когда пользователь просит ссылку, раздел, страницу, пример или пошаговую инструкцию.
 
 Ответ:
-- success=true;
 - results: фрагменты документации с title, url, content, score;
 - blocks: карточки страниц для embed-чата, чтобы пользователь мог открыть нужные страницы.
 
 Не используй этот tool для поиска вне документации.
+Ошибки HTTP/ServiceClient пробрасываются.
 """.strip()
 
 
@@ -67,7 +62,7 @@ class DocsPrepareContextArgs(DocsSearchArgs):
     """Аргументы детерминированного поиска по docs перед LLM-вызовом ответа."""
 
 
-def _state_variables(state: "ExecutionState") -> JsonObject:
+def _state_variables(state: ExecutionState) -> JsonObject:
     return state.variables
 
 
@@ -142,8 +137,8 @@ async def _search_docs(
     query: str,
     limit: int,
     language: str | None,
-    state: "ExecutionState",
-) -> JsonDict:
+    state: ExecutionState,
+) -> JsonObject:
     variables = _state_variables(state)
     current_page_url = str(variables.get("page_url") or "").strip()
     resolved_language = normalize_docs_language(
@@ -159,35 +154,20 @@ async def _search_docs(
         per_channel_top_k=max(limit * 3, 8),
         overrides=RAGSearchOptions(rerank=False),
     )
-    client = RagClient()
-    try:
-        raw = await client.search(
-            DOCS_RAG_NAMESPACE_ID,
-            query.strip(),
-            limit=limit,
-            filters={"collection_id": collection_id},
-            channels=resolved_search_options.channels,
-            rrf_k=resolved_search_options.rrf_k,
-            per_channel_top_k=resolved_search_options.per_channel_top_k,
-            rerank=resolved_search_options.rerank,
-            rerank_max_candidates=resolved_search_options.rerank_max_candidates,
-            retrieval=resolved_search_options.retrieval,
-            freshness_weight=resolved_search_options.freshness_weight,
-            freshness_half_life_days=resolved_search_options.freshness_half_life_days,
-        )
-    except ServiceClientError as exc:
-        return {
-            "success": False,
-            "error": str(exc),
-            "query": query.strip(),
-            "language": resolved_language,
-            "namespace_id": DOCS_RAG_NAMESPACE_ID,
-            "collection_id": collection_id,
-            "results": [],
-            "blocks": [],
-            "prompt_context": str(exc),
-            "prompt_links": "",
-        }
+    raw = await RagClient().search(
+        DOCS_RAG_NAMESPACE_ID,
+        query.strip(),
+        limit=limit,
+        filters={"collection_id": collection_id},
+        channels=resolved_search_options.channels,
+        rrf_k=resolved_search_options.rrf_k,
+        per_channel_top_k=resolved_search_options.per_channel_top_k,
+        rerank=resolved_search_options.rerank,
+        rerank_max_candidates=resolved_search_options.rerank_max_candidates,
+        retrieval=resolved_search_options.retrieval,
+        freshness_weight=resolved_search_options.freshness_weight,
+        freshness_half_life_days=resolved_search_options.freshness_half_life_days,
+    )
 
     raw_results: list[JsonValue]
     raw_results_value = raw.get("results")
@@ -217,7 +197,6 @@ async def _search_docs(
         language=resolved_language,
     )
     return {
-        "success": True,
         "query": query.strip(),
         "language": resolved_language,
         "namespace_id": DOCS_RAG_NAMESPACE_ID,
@@ -240,8 +219,8 @@ async def docs_search(
     limit: int = 5,
     language: str | None = None,
     *,
-    state: "ExecutionState",
-) -> JsonDict:
+    state: ExecutionState,
+) -> JsonObject:
     return await _search_docs(query=query, limit=limit, language=language, state=state)
 
 
@@ -259,6 +238,6 @@ async def docs_prepare_context(
     limit: int = 5,
     language: str | None = None,
     *,
-    state: "ExecutionState",
-) -> JsonDict:
+    state: ExecutionState,
+) -> JsonObject:
     return await _search_docs(query=query, limit=limit, language=language, state=state)

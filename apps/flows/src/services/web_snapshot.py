@@ -9,7 +9,8 @@ from collections.abc import Awaitable
 from typing import override
 from urllib.parse import urlparse
 
-from apps.flows.src.services.platform_facades import call_mcp_tool
+from apps.flows.src.clients.mcp_client import get_mcp_client
+from apps.flows.src.container_state import require_current_container
 from core.files.reader import FileReader
 from core.files.reader.models import ReadFileArgs
 from core.state import ExecutionState
@@ -102,12 +103,18 @@ async def _mcp_json(
     tool_name: str,
     arguments: JsonObject,
 ) -> JsonObject:
-    result = await call_mcp_tool(
-        server_id=server_id,
-        tool_name=tool_name,
-        arguments=arguments,
-        state=state,
+    cleaned_server_id = server_id.strip()
+    if cleaned_server_id == "":
+        raise ValueError("server_id обязателен")
+    config = await require_current_container().mcp_server_repository.get(cleaned_server_id)
+    if config is None:
+        raise ValueError(f"MCP server not found: {cleaned_server_id}")
+    client = await get_mcp_client(
+        config=config,
+        variables=state.variables,
+        timeout=60.0,
     )
+    result = await client.call_tool(tool_name, arguments)
     if result.is_error:
         raise ValueError(f"MCP {tool_name} вернул is_error=true")
     if len(result.content) == 0:

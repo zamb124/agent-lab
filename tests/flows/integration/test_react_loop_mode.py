@@ -57,7 +57,7 @@ INLINE_ASK_USER = {
         "properties": {"question": {"type": "string"}},
         "required": ["question"],
     },
-    "code": 'async def execute(args: dict, state: dict = None):\n    from apps.flows.src.runtime.exceptions import FlowInterrupt\n    q = args.get("question")\n    if not q or not str(q).strip():\n        raise ValueError("ask_user: question обязателен")\n    raise FlowInterrupt(question=str(q).strip())\n',
+    "code": 'async def execute(args: dict, state: dict = None):\n    q = args.get("question")\n    if not q or not str(q).strip():\n        raise ValueError("ask_user: question обязателен")\n    raise FlowInterrupt(question=str(q).strip())\n',
 }
 
 

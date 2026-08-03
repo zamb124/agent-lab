@@ -208,7 +208,6 @@ async def test_create_document_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     assert isinstance(payload["document_id"], str)
 
 
@@ -377,4 +376,4 @@ async def test_share_anyone_via_llm_node(
         mock_llm_with_queue=mock_llm_with_queue,
     )
     assert result["response"] == "Готово."
-    assert _tool_payloads_from_state(state)[0]["success"] is True
+    assert _tool_payloads_from_state(state)[0]["document_id"] == doc_id

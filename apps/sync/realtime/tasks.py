@@ -46,6 +46,7 @@ from apps.sync.realtime.task_names import (
 )
 from apps.sync.sender_display import guest_display_name_from_sender_id, sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
+from core.clients.files_client import FilesClient
 from core.config import get_settings
 from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import transcribe_audio_with_chunking
@@ -57,13 +58,11 @@ from core.files.models import (
     VideoAttachmentContent,
 )
 from core.files.s3_client import S3ClientFactory
-from core.http import get_httpx_client
 from core.logging import get_logger
 from core.models.identity_models import User
 from core.tasks import enqueue, platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import parse_json_object
-from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
 
@@ -117,15 +116,6 @@ def _sync_call_aggregate_empty_body() -> str:
     if not isinstance(text, str) or text.strip() == "":
         raise ValueError(f"i18n ru/sync.json: обязательный корневой ключ {key!r}.")
     return text.strip()
-
-
-def _build_interservice_auth_headers(actor_user_id: str, company_id: str) -> dict[str, str]:
-    """Authorization + компания. Без X-User-Id: в httpx заголовки — latin-1, guest id может содержать Unicode."""
-    token = get_token_service().create_token(actor_user_id, company_id=company_id)
-    return {
-        "Authorization": f"Bearer {token}",
-        "X-Company-Id": company_id,
-    }
 
 
 def _egress_item_failure_match_text(item: EgressInfo) -> str:
@@ -439,7 +429,7 @@ async def _register_platform_file_record_for_call_recording(
     raw_storage_url: str,
 ) -> int:
     """
-    GET /frontend/api/v1/files/download/{id} читает FileRepository (shared).
+    GET /{segment}/api/v1/files/download/{id} на любом mount читает FileRepository (shared).
     Без записи здесь — 404 для плеера, скачивания и transcribe_video.
     """
     settings = get_settings()
@@ -688,21 +678,6 @@ async def transcribe_audio_message_core(
     if redis_url.strip() == "":
         raise ValueError("database.redis_url обязателен для sync_transcribe_audio_message_task.")
 
-    timeout_seconds = settings.media_transcriber.batch_download_timeout_s
-    if timeout_seconds <= 0:
-        raise ValueError("media_transcriber.batch_download_timeout_s должен быть больше 0.")
-
-    frontend_base_url = settings.server.get_service_url("frontend")
-    if frontend_base_url == "":
-        raise ValueError("URL frontend сервиса не задан.")
-    file_download_url = (
-        f"{frontend_base_url.rstrip('/')}/frontend/api/v1/files/download/{audio_info.file_id}"
-    )
-    auth_headers = _build_interservice_auth_headers(
-        actor_user_id=actor_user_id,
-        company_id=company_id,
-    )
-
     redis_from_url = cast(Callable[[str], _TranscribeAudioRedis], Redis.from_url)
     r = redis_from_url(redis_url)
     lock_key = f"sync:transcribe_audio:{company_id}:{message_id}"
@@ -730,18 +705,16 @@ async def transcribe_audio_message_core(
                     trace_attributes.ATTR_CHANNEL_ID: channel_id,
                 },
             ) as stt_span:
-                async with get_httpx_client(timeout=timeout_seconds) as client:
-                    response = await client.get(file_download_url, headers=auth_headers)
-                _ = response.raise_for_status()
-                if not response.content:
+                audio_bytes = await FilesClient(service="sync").get_bytes(audio_info.file_id)
+                if not audio_bytes:
                     raise ValueError("Файл аудиосообщения пустой.")
-                audio_len = len(response.content)
+                audio_len = len(audio_bytes)
                 stt_span.set_attribute(trace_attributes.ATTR_STT_AUDIO_BYTES, audio_len)
 
                 transcript_text, used_provider = await transcribe_audio_with_chunking(
                     job_id=message_id,
                     company_id=company_id,
-                    audio_bytes=response.content,
+                    audio_bytes=audio_bytes,
                     file_name=audio_info.original_name,
                     content_type=audio_info.content_type,
                     language=settings.voice.stt.default_language,
@@ -858,20 +831,6 @@ async def transcribe_video_message_core(
         raise ValueError("file/video.original_name обязателен.")
 
     settings = get_settings()
-    timeout_seconds = settings.media_transcriber.batch_download_timeout_s
-    if timeout_seconds <= 0:
-        raise ValueError("media_transcriber.batch_download_timeout_s должен быть больше 0.")
-
-    frontend_base_url = settings.server.get_service_url("frontend")
-    if frontend_base_url == "":
-        raise ValueError("URL frontend сервиса не задан.")
-    file_download_url = (
-        f"{frontend_base_url.rstrip('/')}/frontend/api/v1/files/download/{video_info.file_id}"
-    )
-    auth_headers = _build_interservice_auth_headers(
-        actor_user_id=actor_user_id,
-        company_id=company_id,
-    )
 
     try:
         async with traced_operation(
@@ -886,16 +845,14 @@ async def transcribe_video_message_core(
                 trace_attributes.ATTR_CHANNEL_ID: channel_id,
             },
         ) as video_stt_span:
-            async with get_httpx_client(timeout=timeout_seconds) as client:
-                response = await client.get(file_download_url, headers=auth_headers)
-            _ = response.raise_for_status()
-            if not response.content:
+            video_bytes = await FilesClient(service="sync").get_bytes(video_info.file_id)
+            if not video_bytes:
                 raise ValueError("Файл видеосообщения пустой.")
-            video_stt_span.set_attribute(trace_attributes.ATTR_STT_AUDIO_BYTES, len(response.content))
+            video_stt_span.set_attribute(trace_attributes.ATTR_STT_AUDIO_BYTES, len(video_bytes))
 
             audio_bytes, audio_name = await asyncio.to_thread(
                 extract_audio_from_video,
-                video_bytes=response.content,
+                video_bytes=video_bytes,
                 base_name=video_info.original_name,
             )
 

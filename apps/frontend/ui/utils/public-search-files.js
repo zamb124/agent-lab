@@ -1,8 +1,17 @@
+/**
+ * Файлы публичного поиска: валидация + pending для upload после выдачи session JWT.
+ * Байты → chunked Files API (`uploadPlatformFile`), в A2A только Part.url.
+ */
+
+import { uploadPlatformFile } from '@platform/lib/utils/platform-file-upload.js';
+import { buildPlatformAuxiliaryFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
+
 const PUBLIC_SEARCH_FALLBACK_MIME_TYPE = 'application/octet-stream';
 
 export const PUBLIC_SEARCH_MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 let pendingPublicSearchFiles = [];
+let pendingPublicSearchRunFiles = [];
 
 function _isFile(value) {
     return typeof File !== 'undefined' && value instanceof File;
@@ -54,37 +63,79 @@ export function takePendingPublicSearchFiles() {
     return files;
 }
 
-export function fileToPublicSearchA2aPart(file) {
-    const item = validatePublicSearchFile(file);
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error(`Could not read file: ${item.name}`));
-        reader.onload = () => {
-            const result = reader.result;
-            if (typeof result !== 'string') {
-                reject(new Error(`FileReader returned non-string result: ${item.name}`));
-                return;
-            }
-            const marker = 'base64,';
-            const markerIndex = result.indexOf(marker);
-            if (markerIndex < 0) {
-                reject(new Error(`FileReader result is not base64 data URL: ${item.name}`));
-                return;
-            }
-            resolve({
-                name: item.name,
-                mimeType: _mimeType(item),
-                size: item.size,
-                data: result.slice(markerIndex + marker.length),
-            });
-        };
-        reader.readAsDataURL(item);
-    });
+/**
+ * Browser File[] для текущего run: забираются в resource после issue session.
+ * @param {File[]} files
+ */
+export function setPendingPublicSearchRunFiles(files) {
+    if (!Array.isArray(files)) {
+        throw new Error('setPendingPublicSearchRunFiles: files must be array');
+    }
+    pendingPublicSearchRunFiles = files.map((file) => validatePublicSearchFile(file));
 }
 
-export async function filesToPublicSearchA2aParts(files) {
+export function takePendingPublicSearchRunFiles() {
+    const files = pendingPublicSearchRunFiles;
+    pendingPublicSearchRunFiles = [];
+    return files;
+}
+
+/**
+ * Chunked upload под JWT публичной search-сессии → A2A file parts `{ url, filename, mediaType }`.
+ *
+ * @param {File[]} files
+ * @param {{
+ *   tokenType: string,
+ *   token: string,
+ *   fetchImpl?: typeof fetch,
+ * }} auth
+ */
+export async function uploadPublicSearchFilesForA2a(files, auth) {
     if (!Array.isArray(files)) {
-        throw new Error('filesToPublicSearchA2aParts: files must be array');
+        throw new Error('uploadPublicSearchFilesForA2a: files must be array');
     }
-    return Promise.all(files.map((file) => fileToPublicSearchA2aPart(file)));
+    if (!auth || typeof auth !== 'object') {
+        throw new Error('uploadPublicSearchFilesForA2a: auth required');
+    }
+    if (typeof auth.tokenType !== 'string' || auth.tokenType.trim() === '') {
+        throw new Error('uploadPublicSearchFilesForA2a: auth.tokenType required');
+    }
+    if (typeof auth.token !== 'string' || auth.token.trim() === '') {
+        throw new Error('uploadPublicSearchFilesForA2a: auth.token required');
+    }
+    const headers = {
+        Authorization: `${auth.tokenType.trim()} ${auth.token.trim()}`,
+    };
+    const fetchImpl = typeof auth.fetchImpl === 'function' ? auth.fetchImpl : fetch;
+    /** @type {Array<{ url: string, filename: string, mediaType: string }>} */
+    const parts = [];
+    for (const file of files) {
+        const item = validatePublicSearchFile(file);
+        const uploaded = await uploadPlatformFile({
+            file: item,
+            spec: buildPlatformAuxiliaryFileCreateSpecJson({
+                metadata: { public_search: true },
+            }),
+            credentials: 'include',
+            headers,
+            fetchImpl,
+            filesApiBase: '/frontend/api/v1/files',
+            maxUploadBytes: PUBLIC_SEARCH_MAX_FILE_SIZE,
+        });
+        if (typeof uploaded.url !== 'string' || uploaded.url.trim() === '') {
+            throw new Error('uploadPublicSearchFilesForA2a: uploaded.url required');
+        }
+        parts.push({
+            url: uploaded.url,
+            filename:
+                typeof uploaded.original_name === 'string' && uploaded.original_name.trim() !== ''
+                    ? uploaded.original_name
+                    : item.name,
+            mediaType:
+                typeof uploaded.content_type === 'string' && uploaded.content_type.trim() !== ''
+                    ? uploaded.content_type
+                    : _mimeType(item),
+        });
+    }
+    return parts;
 }

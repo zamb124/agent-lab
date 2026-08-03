@@ -17,7 +17,7 @@ from typing import Annotated, Literal
 from urllib.parse import quote
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from httpx import HTTPError, HTTPStatusError
 from sqlalchemy.exc import IntegrityError
@@ -1630,114 +1630,7 @@ async def list_documents(
 
 
 @router.post("/documents", response_model=OfficeDocumentCreateResponse)
-async def upload_document(
-    container: ContainerDep,
-    file: Annotated[UploadFile, File()],
-    title: Annotated[str | None, Form()] = None,
-    catalog_id: Annotated[str | None, Form()] = None,
-) -> OfficeDocumentCreateResponse:
-    namespace = await _require_explicit_namespace(container)
-    ctx = _require_office_context()
-
-    settings = get_settings()
-    if not settings.s3.enabled or not settings.s3.default_bucket:
-        raise HTTPException(status_code=503, detail="S3 не настроен")
-
-    raw_name = file.filename or "document"
-    doc_title = (title or "").strip() or Path(raw_name).stem or "Документ"
-    data = await file.read()
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="Пустой файл")
-    guessed_ct = file.content_type or "application/octet-stream"
-    normalized_ct = guessed_ct.split(";", 1)[0].strip()
-    file_category, onlyoffice_document_type = resolve_binding_metadata(raw_name, normalized_ct)
-    spec = FileCreateSpec(
-        source_kind=FileSourceKind.OFFICE_DOCUMENT,
-        source_ref=FileSourceRef(entity_id=namespace),
-        retention=default_retention_for_source(FileSourceKind.OFFICE_DOCUMENT),
-        post_create=FilePostCreate(is_public=False),
-    )
-    meta = await container.files_service.create(
-        spec=spec,
-        data=data,
-        original_name=raw_name,
-        content_type=guessed_ct.split(";")[0].strip(),
-    )
-    resolved_catalog_id = await _resolve_catalog_for_create(
-        container,
-        company_id=ctx.active_company.company_id,
-        namespace=namespace,
-        user_id=ctx.user.user_id,
-        catalog_id=catalog_id,
-    )
-    row = await container.document_binding_repository.create(
-        company_id=ctx.active_company.company_id,
-        namespace=namespace,
-        catalog_id=resolved_catalog_id,
-        file_id=meta.file_id,
-        file_category=file_category,
-        onlyoffice_document_type=onlyoffice_document_type,
-        title=doc_title,
-        created_by_user_id=ctx.user.user_id,
-    )
-    try:
-        await _index_binding_if_catalog_enabled(container, row)
-    except ServiceClientError as exc:
-        raise _http_exception_from_service_client("rag", exc) from exc
-    except ValueError as exc:
-        raise _http_exception_from_catalog_rag_value_error(exc) from exc
-    return OfficeDocumentCreateResponse(
-        file_id=row.file_id,
-        catalog_id=row.catalog_id,
-        file_category=row.file_category,
-        onlyoffice_document_type=row.onlyoffice_document_type,
-        title=row.title,
-        editor_url=_editor_embed_url(row.file_id, namespace),
-    )
-
-
-@router.post("/documents/bind", response_model=DocsBindResult)
-async def bind_file_to_catalog(
-    body: DocsPlacement,
-    container: ContainerDep,
-) -> DocsBindResult:
-    ctx = _require_office_context()
-    return await container.docs_placement_service.bind(
-        body,
-        company_id=ctx.active_company.company_id,
-        user_id=ctx.user.user_id,
-    )
-
-
-@router.post(
-    "/documents/rag-index-statuses",
-    response_model=OfficeDocumentsRagIndexStatusesResponse,
-)
-async def documents_rag_index_statuses(
-    body: OfficeDocumentsRagIndexStatusesRequest,
-    container: ContainerDep,
-) -> OfficeDocumentsRagIndexStatusesResponse:
-    """Лёгкий batch-статус RAG для UI-poll без перезагрузки списка документов."""
-    _ = await _require_explicit_namespace(container)
-    _ = _require_office_context()
-    normalized_ids: list[str] = []
-    seen: set[str] = set()
-    for raw_id in body.file_ids:
-        file_id = raw_id.strip()
-        if file_id == "":
-            raise HTTPException(status_code=422, detail="file_ids не должен содержать пустые значения")
-        if file_id in seen:
-            continue
-        seen.add(file_id)
-        normalized_ids.append(file_id)
-    if not normalized_ids:
-        raise HTTPException(status_code=422, detail="file_ids обязателен")
-    statuses = await container.catalog_rag_index_service.batch_status_buckets(normalized_ids)
-    return OfficeDocumentsRagIndexStatusesResponse(statuses=statuses)
-
-
-@router.post("/documents/from-file", response_model=OfficeDocumentCreateResponse)
-async def open_existing_file_as_document(
+async def create_document_from_uploaded_file(
     body: OfficeDocumentFromFileRequest,
     container: ContainerDep,
 ) -> OfficeDocumentCreateResponse:
@@ -1819,6 +1712,46 @@ async def open_existing_file_as_document(
         title=row.title,
         editor_url=_editor_embed_url(row.file_id, namespace),
     )
+
+
+@router.post("/documents/bind", response_model=DocsBindResult)
+async def bind_file_to_catalog(
+    body: DocsPlacement,
+    container: ContainerDep,
+) -> DocsBindResult:
+    ctx = _require_office_context()
+    return await container.docs_placement_service.bind(
+        body,
+        company_id=ctx.active_company.company_id,
+        user_id=ctx.user.user_id,
+    )
+
+
+@router.post(
+    "/documents/rag-index-statuses",
+    response_model=OfficeDocumentsRagIndexStatusesResponse,
+)
+async def documents_rag_index_statuses(
+    body: OfficeDocumentsRagIndexStatusesRequest,
+    container: ContainerDep,
+) -> OfficeDocumentsRagIndexStatusesResponse:
+    """Лёгкий batch-статус RAG для UI-poll без перезагрузки списка документов."""
+    _ = await _require_explicit_namespace(container)
+    _ = _require_office_context()
+    normalized_ids: list[str] = []
+    seen: set[str] = set()
+    for raw_id in body.file_ids:
+        file_id = raw_id.strip()
+        if file_id == "":
+            raise HTTPException(status_code=422, detail="file_ids не должен содержать пустые значения")
+        if file_id in seen:
+            continue
+        seen.add(file_id)
+        normalized_ids.append(file_id)
+    if not normalized_ids:
+        raise HTTPException(status_code=422, detail="file_ids обязателен")
+    statuses = await container.catalog_rag_index_service.batch_status_buckets(normalized_ids)
+    return OfficeDocumentsRagIndexStatusesResponse(statuses=statuses)
 
 
 @router.post("/documents/empty", response_model=OfficeDocumentCreateResponse)

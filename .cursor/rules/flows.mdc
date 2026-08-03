@@ -295,7 +295,7 @@ Runtime (`lab_service`): harness-owned structured call (`record_evaluation_judgm
 - `code_node`, inline `CodeTool`, evaluation inline-code и edge `condition.type="code"` идут через `RemoteCodeRunner`.
 - Языки: `python`, `javascript`, `typescript`, `go`, `csharp`.
 - Доступ к платформе из пользовательского кода — только через `capability(...)` / `Capability(...)`, backed by `capability-gateway`.
-- `apps.*`/`core.*` imports в пользовательском source удаляются `core/capabilities/source_sanitize.py`.
+- `apps.*`/`core.*` imports в пользовательском source отклоняются `reject_forbidden_platform_imports` (`core/capabilities/source_sanitize.py`) с `ValueError` и списком строк.
 
 ## REST для редактора
 

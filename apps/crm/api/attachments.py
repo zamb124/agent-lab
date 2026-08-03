@@ -1,32 +1,35 @@
 """
 API для работы с вложениями (attachments).
+
+Байты файла — только через chunked Files API. Сюда приходит уже существующий file_id.
 """
 
-from typing import Annotated
-
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException
 
 from apps.crm.dependencies import ContainerDep
+from core.models import StrictBaseModel
 
 router = APIRouter(tags=["Attachments"])
 
 
+class AttachExistingFileRequest(StrictBaseModel):
+    file_id: str
+
+
 @router.post("/entities/{entity_id}/attachments")
-async def upload_attachment(
+async def attach_file(
     entity_id: str,
+    body: AttachExistingFileRequest,
     container: ContainerDep,
-    file: Annotated[UploadFile, File()],
 ):
-    """Загрузить вложение для entity"""
-    if file.filename is None or not file.filename.strip():
-        raise HTTPException(status_code=422, detail="filename is required")
-    file_content = await file.read()
+    """Привязать уже загруженный файл к entity."""
+    if body.file_id.strip() == "":
+        raise HTTPException(status_code=422, detail="file_id is required")
 
     try:
         result = await container.attachment_service.add_attachment(
             entity_id=entity_id,
-            file_data=file_content,
-            filename=file.filename,
+            file_id=body.file_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

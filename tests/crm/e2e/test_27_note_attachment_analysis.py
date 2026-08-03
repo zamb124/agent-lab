@@ -30,6 +30,7 @@ from httpx import AsyncClient, Response
 from apps.crm.config import get_crm_settings
 from apps.crm.container import CRMContainer
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
+from tests.crm.e2e.attachment_upload_helpers import upload_and_attach_crm_file
 
 MockLlmRedisFactory = Callable[[list[object]], Awaitable[None]]
 
@@ -200,11 +201,12 @@ class TestResolveNoteText:
     ) -> None:
         """Малое вложение (ниже лимита): полный текст файла попадает в результат без суммаризации."""
         description = f"Описание встречи {unique_id}."
+        note_name = f"Малый файл {unique_id}"
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
                 "entity_type": "note",
-                "name": f"Малый файл {unique_id}",
+                "name": note_name,
                 "description": description,
                 "namespace": "default",
                 "note_date": _isolated_note_date(unique_id),
@@ -215,11 +217,15 @@ class TestResolveNoteText:
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
         file_text = f"Протокол совещания {unique_id}. Присутствовали: Иван Иванов, Петр Петров."
-        files = {"file": ("protocol.txt", file_text.encode(), "text/plain")}
-        upload = await crm_client.post(
-            f"/crm/api/v1/entities/{note_id}/attachments",
-            files=files,
-            headers=auth_headers_system,
+        upload = await upload_and_attach_crm_file(
+            crm_client,
+            auth_headers_system,
+            entity_id=note_id,
+            entity_type="note",
+            entity_title=note_name,
+            filename="protocol.txt",
+            content=file_text.encode(),
+            content_type="text/plain",
         )
         assert upload.status_code == 200, upload.text
 
@@ -243,11 +249,12 @@ class TestResolveNoteText:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Несколько малых вложений: тексты всех файлов присутствуют в результате."""
+        note_name = f"Несколько файлов {unique_id}"
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
                 "entity_type": "note",
-                "name": f"Несколько файлов {unique_id}",
+                "name": note_name,
                 "description": f"Основная заметка {unique_id}.",
                 "namespace": "default",
                 "note_date": _isolated_note_date(unique_id),
@@ -259,11 +266,15 @@ class TestResolveNoteText:
 
         signatures = [f"МАРКЕР_{i}_{unique_id}" for i in range(3)]
         for i, sig in enumerate(signatures):
-            files = {"file": (f"doc{i}.txt", f"Содержимое {sig}.".encode(), "text/plain")}
-            upload = await crm_client.post(
-                f"/crm/api/v1/entities/{note_id}/attachments",
-                files=files,
-                headers=auth_headers_system,
+            upload = await upload_and_attach_crm_file(
+                crm_client,
+                auth_headers_system,
+                entity_id=note_id,
+                entity_type="note",
+                entity_title=note_name,
+                filename=f"doc{i}.txt",
+                content=f"Содержимое {sig}.".encode(),
+                content_type="text/plain",
             )
             assert upload.status_code == 200, upload.text
 
@@ -287,11 +298,12 @@ class TestResolveNoteText:
         """include_attachments=False: файл не читается, в результате только description."""
         file_marker = f"МАРКЕР_ФАЙЛА_{unique_id}"
         description = f"Только описание {unique_id}."
+        note_name = f"Флаг attachments {unique_id}"
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
                 "entity_type": "note",
-                "name": f"Флаг attachments {unique_id}",
+                "name": note_name,
                 "description": description,
                 "namespace": "default",
                 "note_date": _isolated_note_date(unique_id),
@@ -301,11 +313,15 @@ class TestResolveNoteText:
         assert note_resp.status_code in (200, 201), note_resp.text
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
-        files = {"file": ("marker.txt", f"Содержимое {file_marker}.".encode(), "text/plain")}
-        upload = await crm_client.post(
-            f"/crm/api/v1/entities/{note_id}/attachments",
-            files=files,
-            headers=auth_headers_system,
+        upload = await upload_and_attach_crm_file(
+            crm_client,
+            auth_headers_system,
+            entity_id=note_id,
+            entity_type="note",
+            entity_title=note_name,
+            filename="marker.txt",
+            content=f"Содержимое {file_marker}.".encode(),
+            content_type="text/plain",
         )
         assert upload.status_code == 200, upload.text
 
@@ -355,11 +371,15 @@ class TestAnalyzeWithAttachments:
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
         small_content = f"Встреча с Иваном {unique_id}. Обсудили проект."
-        files = {"file": ("small.txt", small_content.encode(), "text/plain")}
-        upload = await crm_client.post(
-            f"/crm/api/v1/entities/{note_id}/attachments",
-            files=files,
-            headers=auth_headers_system,
+        upload = await upload_and_attach_crm_file(
+            crm_client,
+            auth_headers_system,
+            entity_id=note_id,
+            entity_type="note",
+            entity_title=note_name,
+            filename="small.txt",
+            content=small_content.encode(),
+            content_type="text/plain",
         )
         assert upload.status_code == 200, upload.text
 
@@ -401,11 +421,15 @@ class TestAnalyzeWithAttachments:
         # 42 000 символов — превышает дефолтный порог 40 000
         phrase = f"Иван Иванов из компании Рога и Копыта обсуждал проект {unique_id}. "
         large_content = (phrase * (42_000 // len(phrase) + 1))[:42_000]
-        files = {"file": ("large_report.txt", large_content.encode(), "text/plain")}
-        upload = await crm_client.post(
-            f"/crm/api/v1/entities/{note_id}/attachments",
-            files=files,
-            headers=auth_headers_system,
+        upload = await upload_and_attach_crm_file(
+            crm_client,
+            auth_headers_system,
+            entity_id=note_id,
+            entity_type="note",
+            entity_title=note_name,
+            filename="large_report.txt",
+            content=large_content.encode(),
+            content_type="text/plain",
         )
         assert upload.status_code == 200, upload.text
 
@@ -460,11 +484,15 @@ class TestAnalyzeWithAttachments:
         # 6 000 символов — больше лимита 5 000, но меньше дефолта 40 000
         phrase = f"Протокол совещания {unique_id}. Присутствовал Алексей Смирнов из ООО Ромашка. "
         medium_content = (phrase * (6_000 // len(phrase) + 1))[:6_000]
-        files = {"file": ("medium.txt", medium_content.encode(), "text/plain")}
-        upload = await crm_client.post(
-            f"/crm/api/v1/entities/{note_id}/attachments",
-            files=files,
-            headers=auth_headers_system,
+        upload = await upload_and_attach_crm_file(
+            crm_client,
+            auth_headers_system,
+            entity_id=note_id,
+            entity_type="note",
+            entity_title=note_name,
+            filename="medium.txt",
+            content=medium_content.encode(),
+            content_type="text/plain",
         )
         assert upload.status_code == 200, upload.text
 
@@ -507,11 +535,15 @@ class TestAnalyzeWithAttachments:
 
         phrase = f"Данные из файла {unique_id}. "
         large_content = (phrase * (50_000 // len(phrase) + 1))[:50_000]
-        files = {"file": ("ignored.txt", large_content.encode(), "text/plain")}
-        upload = await crm_client.post(
-            f"/crm/api/v1/entities/{note_id}/attachments",
-            files=files,
-            headers=auth_headers_system,
+        upload = await upload_and_attach_crm_file(
+            crm_client,
+            auth_headers_system,
+            entity_id=note_id,
+            entity_type="note",
+            entity_title=note_name,
+            filename="ignored.txt",
+            content=large_content.encode(),
+            content_type="text/plain",
         )
         assert upload.status_code == 200, upload.text
 
@@ -530,16 +562,16 @@ class TestAttachmentGuarantee:
     async def test_empty_attachment_raises_in_resolve_note_text(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """Пустой файл отклоняется на upload через Files API."""
+        """Пустой файл отклоняется на chunked upload."""
+        note_name = f"Пустой файл {unique_id}"
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
                 "entity_type": "note",
-                "name": f"Пустой файл {unique_id}",
+                "name": note_name,
                 "description": f"Описание заметки {unique_id}.",
                 "namespace": "default",
                 "note_date": _isolated_note_date(unique_id),
@@ -549,14 +581,17 @@ class TestAttachmentGuarantee:
         assert note_resp.status_code in (200, 201), note_resp.text
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
-        files = {"file": ("empty.txt", b"", "text/plain")}
-        upload = await crm_client.post(
-            f"/crm/api/v1/entities/{note_id}/attachments",
-            files=files,
-            headers=auth_headers_system,
-        )
-        assert upload.status_code == 400, upload.text
-        assert "Пустой" in upload.json()["detail"]
+        with pytest.raises(ValueError, match="empty content"):
+            _ = await upload_and_attach_crm_file(
+                crm_client,
+                auth_headers_system,
+                entity_id=note_id,
+                entity_type="note",
+                entity_title=note_name,
+                filename="empty.txt",
+                content=b"",
+                content_type="text/plain",
+            )
 
     @pytest.mark.asyncio
     async def test_whitespace_only_attachment_raises(
@@ -567,11 +602,12 @@ class TestAttachmentGuarantee:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Файл только из пробелов → тоже не допускается в анализ."""
+        note_name = f"Пробельный файл {unique_id}"
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
                 "entity_type": "note",
-                "name": f"Пробельный файл {unique_id}",
+                "name": note_name,
                 "description": f"Описание {unique_id}.",
                 "namespace": "default",
                 "note_date": _isolated_note_date(unique_id),
@@ -581,11 +617,15 @@ class TestAttachmentGuarantee:
         assert note_resp.status_code in (200, 201), note_resp.text
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
-        files = {"file": ("spaces.txt", b"   \n\t\n   ", "text/plain")}
-        upload = await crm_client.post(
-            f"/crm/api/v1/entities/{note_id}/attachments",
-            files=files,
-            headers=auth_headers_system,
+        upload = await upload_and_attach_crm_file(
+            crm_client,
+            auth_headers_system,
+            entity_id=note_id,
+            entity_type="note",
+            entity_title=note_name,
+            filename="spaces.txt",
+            content=b"   \n\t\n   ",
+            content_type="text/plain",
         )
         assert upload.status_code == 200, upload.text
 
@@ -604,12 +644,13 @@ class TestAttachmentGuarantee:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """Непустой файл проходит resolve_note_text; пустой отклоняется на upload."""
+        """Непустой файл проходит resolve_note_text; пустой отклоняется на chunked upload."""
+        note_name = f"Смешанные файлы {unique_id}"
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
                 "entity_type": "note",
-                "name": f"Смешанные файлы {unique_id}",
+                "name": note_name,
                 "description": f"Описание {unique_id}.",
                 "namespace": "default",
                 "note_date": _isolated_note_date(unique_id),
@@ -620,19 +661,29 @@ class TestAttachmentGuarantee:
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
         good_content = f"Контент с информацией {unique_id}.".encode()
-        upload_good = await crm_client.post(
-            f"/crm/api/v1/entities/{note_id}/attachments",
-            files={"file": ("good.txt", good_content, "text/plain")},
-            headers=auth_headers_system,
+        upload_good = await upload_and_attach_crm_file(
+            crm_client,
+            auth_headers_system,
+            entity_id=note_id,
+            entity_type="note",
+            entity_title=note_name,
+            filename="good.txt",
+            content=good_content,
+            content_type="text/plain",
         )
         assert upload_good.status_code == 200, upload_good.text
 
-        upload_empty = await crm_client.post(
-            f"/crm/api/v1/entities/{note_id}/attachments",
-            files={"file": ("empty.txt", b"", "text/plain")},
-            headers=auth_headers_system,
-        )
-        assert upload_empty.status_code == 400, upload_empty.text
+        with pytest.raises(ValueError, match="empty content"):
+            _ = await upload_and_attach_crm_file(
+                crm_client,
+                auth_headers_system,
+                entity_id=note_id,
+                entity_type="note",
+                entity_title=note_name,
+                filename="empty.txt",
+                content=b"",
+                content_type="text/plain",
+            )
 
         text = await crm_container.note_processing_service.resolve_note_text(
             note_id,
@@ -653,13 +704,14 @@ class TestAnalyzeBlockedByEmptyAttachment:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """Пустой txt → upload 400, analyze не ставится в очередь с вложением."""
+        """Пустой txt → chunked upload отклоняет до attach."""
 
+        note_name = f"HTTP пустой файл {unique_id}"
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
                 "entity_type": "note",
-                "name": f"HTTP пустой файл {unique_id}",
+                "name": note_name,
                 "description": f"Описание {unique_id}.",
                 "namespace": "default",
                 "note_date": _isolated_note_date(unique_id),
@@ -669,11 +721,14 @@ class TestAnalyzeBlockedByEmptyAttachment:
         assert note_resp.status_code in (200, 201), note_resp.text
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
-        files = {"file": ("empty.txt", b"", "text/plain")}
-        upload = await crm_client.post(
-            f"/crm/api/v1/entities/{note_id}/attachments",
-            files=files,
-            headers=auth_headers_system,
-        )
-        assert upload.status_code == 400, upload.text
-        assert "Пустой" in upload.json()["detail"]
+        with pytest.raises(ValueError, match="empty content"):
+            _ = await upload_and_attach_crm_file(
+                crm_client,
+                auth_headers_system,
+                entity_id=note_id,
+                entity_type="note",
+                entity_title=note_name,
+                filename="empty.txt",
+                content=b"",
+                content_type="text/plain",
+            )

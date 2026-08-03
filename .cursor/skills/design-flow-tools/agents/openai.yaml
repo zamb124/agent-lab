@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Flow Tools"
+  short_description: "Design secure, transparent LLM tools"
+  default_prompt: "Use $design-flow-tools to design or review a flow tool contract, UI, runtime boundary, and security policy."

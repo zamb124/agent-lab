@@ -22,6 +22,8 @@ import {
 import { createVariableExtensions, refreshVariableDecorations } from '../codemirror/variable-extensions.js';
 import { lookupPreviewValue } from '../variables/variable-refs.js';
 import { variableRefsStyles } from '../styles/shared/variable-refs.styles.js';
+import { uploadPlatformFile } from '../utils/platform-file-upload.js';
+import { buildPlatformAuxiliaryFileCreateSpecJson } from '../utils/file-create-spec.js';
 
 export { sanitizeMarkdownEditorHtml, htmlToMarkdown, MARKDOWN_EDITOR_MAX_ATTACHMENT_BYTES } from '../utils/markdown-html.js';
 
@@ -1498,18 +1500,37 @@ export class PlatformMarkdownEditor extends PlatformElement {
                 });
                 continue;
             }
-            const buffer = await file.arrayBuffer();
-            const bytes = new Uint8Array(buffer);
-            let binary = '';
-            for (let i = 0; i < bytes.length; i += 1) {
-                binary += String.fromCharCode(bytes[i]);
+            if (file.size <= 0) {
+                throw new Error(`platform-markdown-editor: empty file ${file.name}`);
             }
-            const contentType = file.type && file.type.length > 0 ? file.type : 'application/octet-stream';
+            const uploaded = await uploadPlatformFile({
+                file,
+                spec: buildPlatformAuxiliaryFileCreateSpecJson({
+                    metadata: { mail_compose_attachment: true },
+                }),
+                maxUploadBytes: MARKDOWN_EDITOR_MAX_ATTACHMENT_BYTES,
+            });
+            if (typeof uploaded.file_id !== 'string' || uploaded.file_id.trim() === '') {
+                throw new Error('platform-markdown-editor: uploaded.file_id required');
+            }
+            if (typeof uploaded.url !== 'string' || uploaded.url.trim() === '') {
+                throw new Error('platform-markdown-editor: uploaded.url required');
+            }
+            const contentType =
+                typeof uploaded.content_type === 'string' && uploaded.content_type.trim() !== ''
+                    ? uploaded.content_type
+                    : file.type && file.type.length > 0
+                      ? file.type
+                      : 'application/octet-stream';
             current.push({
-                filename: file.name,
+                filename:
+                    typeof uploaded.original_name === 'string' && uploaded.original_name.trim() !== ''
+                        ? uploaded.original_name
+                        : file.name,
                 content_type: contentType,
-                content_base64: btoa(binary),
-                size: file.size,
+                file_id: uploaded.file_id,
+                url: uploaded.url,
+                size: typeof uploaded.file_size === 'number' ? uploaded.file_size : file.size,
             });
         }
         this.attachments = current;

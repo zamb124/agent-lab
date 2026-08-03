@@ -38,7 +38,9 @@ from core.capabilities.models import (
     locked_down_code_sandbox_policy,
 )
 from core.capabilities.tokens import (
+    CAPABILITY_GATEWAY_TOKEN_AUDIENCE,
     CapabilityExecutionTokenClaims,
+    assert_capability_allowed,
     execution_token_exp,
     issue_execution_token,
     verify_execution_context,
@@ -77,6 +79,8 @@ __all__ = [
     "JsonScalar",
     "JsonValue",
     "CapabilityExecutionTokenClaims",
+    "CAPABILITY_GATEWAY_TOKEN_AUDIENCE",
+    "assert_capability_allowed",
     "code_execution_failed_response",
     "code_validation_failed_response",
     "execution_token_exp",

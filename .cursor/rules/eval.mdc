@@ -108,11 +108,13 @@ async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, obj
 
 ## Добавление platform capability
 
-1. Добавить `CapabilityDefinition` в `apps/capability_gateway/services/registry.py`.
+1. Добавить `CapabilityDefinition` в `apps/capability_gateway/services/registry.py` (или выделенный модуль вроде `wiki_capabilities.py`).
 2. Добавить handler там же.
 3. Проверить, что capability использует `CAPABILITY_LANGUAGES`, если capability должна быть общей.
 4. Не добавлять language-specific SDK вручную: SDK namespace строится из manifest в каждом runner.
-5. Обновить tests для manifest/docs и выполнения через каждый runner.
+5. Обновить tests для manifest/docs и выполнения через каждый runner (или dedicated smoke, если namespace не входит в multi-language static suite).
+
+SDK namespaces (as-is): `tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, `platform`, `channel`, `flow`, `wiki`.
 
 ## Трассировка и ошибки
 

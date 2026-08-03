@@ -14,6 +14,10 @@ import {
     consumeA2aStream,
 } from './a2a-stream.js';
 import { buildWorkItemFileCreateSpecJson } from '../../utils/file-create-spec.js';
+import {
+    isPlatformFileRef,
+    uploadPlatformFile,
+} from '../../utils/platform-file-upload.js';
 
 /** origin+префикс flows без завершающего слэша; пустая строка — same-origin `/flows`. */
 function _flowsRoot(baseUrl) {
@@ -56,22 +60,6 @@ function _randomIdempotencyKey() {
  */
 function _isBrowserFile(file) {
     return typeof File !== 'undefined' && file instanceof File;
-}
-
-/**
- * @param {unknown} file
- * @returns {file is { file_id: string, original_name: string, content_type: string, file_size: number }}
- */
-function _isFileRefLike(file) {
-    return Boolean(
-        file
-        && typeof file === 'object'
-        && typeof /** @type {{ file_id?: unknown }} */ (file).file_id === 'string'
-        && /** @type {{ file_id: string }} */ (file).file_id.length > 0
-        && typeof /** @type {{ original_name?: unknown }} */ (file).original_name === 'string'
-        && typeof /** @type {{ content_type?: unknown }} */ (file).content_type === 'string'
-        && typeof /** @type {{ file_size?: unknown }} */ (file).file_size === 'number',
-    );
 }
 
 export class OperatorConversationTransport {
@@ -289,7 +277,7 @@ export class OperatorConversationTransport {
         /** @type {Array<{ file_id: string, original_name: string, content_type: string, file_size: number, url?: string|null }>} */
         const refs = [];
         for (const file of list) {
-            if (_isFileRefLike(file)) {
+            if (isPlatformFileRef(file)) {
                 refs.push({
                     file_id: file.file_id,
                     original_name: file.original_name,
@@ -312,19 +300,13 @@ export class OperatorConversationTransport {
      */
     async _uploadBrowserFile(file) {
         const headers = await this._getHeaders();
-        const formData = new FormData();
-        formData.append('file', file, file.name);
-        formData.append('spec', buildWorkItemFileCreateSpecJson({ workItemId: this._workItemId }));
-        const response = await this._fetch('/frontend/api/v1/files/', {
-            method: 'POST',
-            headers: { ...headers },
+        const result = await uploadPlatformFile({
+            file,
+            spec: buildWorkItemFileCreateSpecJson({ workItemId: this._workItemId }),
             credentials: this._credentials,
-            body: formData,
+            headers,
+            fetchImpl: this._fetch,
         });
-        if (!response.ok) {
-            throw new Error(`operator-transport: file upload HTTP ${response.status}`);
-        }
-        const result = await response.json();
         if (!result || typeof result !== 'object' || typeof result.file_id !== 'string') {
             throw new Error('operator-transport: file upload result.file_id required');
         }

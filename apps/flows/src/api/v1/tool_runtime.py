@@ -108,7 +108,10 @@ async def _with_system_context_if_missing(container: ContainerDep) -> tuple[Cont
 
 
 @router.get("/manifest", response_model=CapabilityManifest)
-async def get_tool_runtime_manifest(container: ContainerDep) -> CapabilityManifest:
+async def get_tool_runtime_manifest(
+    container: ContainerDep,
+    allowed_capabilities: str | None = None,
+) -> CapabilityManifest:
     """Возвращает каждый platform tool как first-class capability ``tools.<tool_id>``."""
     previous_context, installed_context = await _with_system_context_if_missing(container)
     try:
@@ -136,9 +139,22 @@ async def get_tool_runtime_manifest(container: ContainerDep) -> CapabilityManife
                 tags=tool.tags or ["misc"],
             )
 
+        capability_list = [capabilities[name] for name in sorted(capabilities)]
+        if allowed_capabilities:
+            allowed_names = {
+                item.strip()
+                for item in allowed_capabilities.split(",")
+                if item.strip()
+            }
+            capability_list = [
+                capability
+                for capability in capability_list
+                if capability.name in allowed_names
+            ]
+
         return CapabilityManifest(
             version="capabilities.v1",
-            capabilities=[capabilities[name] for name in sorted(capabilities)],
+            capabilities=capability_list,
         )
     finally:
         if installed_context:
@@ -276,4 +292,7 @@ async def _build_context(container: ContainerDep, execution_context: CapabilityE
         session_id=execution_context.session_id,
         channel=execution_context.channel,
     )
-    return job_context.model_copy(update={"flow_id": execution_context.flow_id})
+    updates: dict[str, object] = {"flow_id": execution_context.flow_id}
+    if execution_context.namespace is not None:
+        updates["active_namespace"] = execution_context.namespace
+    return job_context.model_copy(update=updates)

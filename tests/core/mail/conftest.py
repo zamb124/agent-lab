@@ -103,6 +103,8 @@ def mail_service(
         user_repository=container.user_repository,
         mail_config=MailConfig(),
         port_override=recording_mail_port,
+        files_service=container.files_service,
+        attachment_file_index=container.mail_attachment_file_index,
     )
 
 

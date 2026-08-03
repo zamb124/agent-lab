@@ -269,7 +269,6 @@ async def test_lara_documents_lifecycle(
 
     assert listed.interrupt is None
     roots = _tool_json(listed.tool_results["documents_list_catalog"])
-    assert roots.get("success") is True
     catalogs = roots["catalogs"]
     assert isinstance(catalogs, list)
     by_title = {
@@ -299,7 +298,6 @@ async def test_lara_documents_lifecycle(
 
     assert result2.interrupt is None
     created = _tool_json(result2.tool_results["documents_create_empty"])
-    assert created.get("success") is True
     file_id = created["file_id"]
     assert isinstance(file_id, str)
 
@@ -328,7 +326,6 @@ async def test_lara_documents_lifecycle(
     moved = _tool_json(result3.tool_results["documents_move"])
     assert moved.get("catalog_id") == catalog_b
     copied = _tool_json(result3.tool_results["documents_copy"])
-    assert copied.get("success") is True
     copy_id = copied["file_id"]
     assert isinstance(copy_id, str) and copy_id != file_id
     link = _tool_json(result3.tool_results["documents_get_link"])
@@ -421,7 +418,6 @@ async def test_lara_documents_catalog_access_and_rag_status(
     updated = _tool_json(result2.tool_results["documents_update_catalog"])
     assert updated.get("title") == f"acl-renamed-{unique_id}"
     members = _tool_json(result2.tool_results["documents_list_catalog_members"])
-    assert members.get("success") is True
     member_ids = {
         item.get("user_id")
         for item in members["items"]
@@ -429,7 +425,6 @@ async def test_lara_documents_catalog_access_and_rag_status(
     }
     assert system_user_id in member_ids
     access = _tool_json(result2.tool_results["documents_get_access"])
-    assert access.get("success") is True
 
     _ = mock_llm_with_queue(
         [
@@ -456,9 +451,7 @@ async def test_lara_documents_catalog_access_and_rag_status(
 
     assert result3.interrupt is None
     rotated = _tool_json(result3.tool_results["documents_rotate_public_link"])
-    assert rotated.get("success") is True
     public_url = rotated.get("public_url")
     assert isinstance(public_url, str) and "/documents/p/" in public_url
     rag_status = _tool_json(result3.tool_results["documents_catalog_rag_status"])
-    assert rag_status.get("success") is True
     assert rag_status.get("enabled") is False

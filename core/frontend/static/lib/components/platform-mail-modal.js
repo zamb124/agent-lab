@@ -3260,7 +3260,8 @@ export class PlatformMailModal extends PlatformModal {
             ? mail.compose.attachments.map((item) => ({
                 filename: item.filename,
                 content_type: item.content_type,
-                content: item.content_base64,
+                file_id: item.file_id,
+                size: item.size,
             }))
             : [];
         const bodyHtml = typeof mail.compose.body_html === 'string' ? mail.compose.body_html.trim() : '';
@@ -3298,21 +3299,27 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _downloadAttachment(att) {
-        if (!att || typeof att.content_base64 !== 'string' || att.content_base64.length === 0) {
-            throw new Error('platform-mail-modal: attachment content_base64 required for download');
+        if (att && typeof att.url === 'string' && att.url.trim() !== '') {
+            const anchor = document.createElement('a');
+            anchor.href = att.url;
+            anchor.download =
+                typeof att.filename === 'string' && att.filename.length > 0
+                    ? att.filename
+                    : 'attachment';
+            anchor.rel = 'noopener';
+            anchor.click();
+            return;
         }
-        const binary = atob(att.content_base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i += 1) {
-            bytes[i] = binary.charCodeAt(i);
+        if (att && typeof att.file_id === 'string' && att.file_id.trim() !== '') {
+            const refs = this._attachmentFileRefs([att]);
+            if (refs.length === 1) {
+                this.openFileViewer({ files: refs, index: 0 });
+                return;
+            }
         }
-        const blob = new Blob([bytes], { type: att.content_type || 'application/octet-stream' });
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = att.filename;
-        anchor.click();
-        URL.revokeObjectURL(url);
+        throw new Error(
+            'platform-mail-modal: attachment url or file_id required for download',
+        );
     }
 
     _attachmentFileRefs(attachments) {
@@ -3350,7 +3357,9 @@ export class PlatformMailModal extends PlatformModal {
         const sizeLabel = typeof att.size === 'number' && att.size > 0
             ? formatFileSize(att.size)
             : '';
-        const canDownload = typeof att.content_base64 === 'string' && att.content_base64.length > 0;
+        const canDownload =
+            (typeof att.url === 'string' && att.url.length > 0)
+            || (typeof att.file_id === 'string' && att.file_id.length > 0);
         return html`
             <div class="inline-att-row">
                 <platform-icon

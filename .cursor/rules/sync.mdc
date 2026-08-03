@@ -109,7 +109,7 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 ### Запись звонка
 
 - LiveKit egress с прямым S3 upload (`EncodedFileOutput.s3`), не локальный `/egress`. `provider_job_id` обязателен: `call.recording.stop` останавливает по нему, `sync_finalize_recording_task` ищет результат по нему же.
-- Файл записи в shared `FileRepository` (`s3_key = sync-recordings/{company_id}/{call_id}/{recording_id}.mp4`, `s3_bucket` = `s3.default_bucket`); метаданные в `sync_files` дополнительно. **`GET /frontend/api/v1/files/download/{file_id}` читает `FileRepository`** — без `FileRecord` 404 для плеера/скачивания/`transcribe_video`.
+- Файл записи в shared `FileRepository` (`s3_key = sync-recordings/{company_id}/{call_id}/{recording_id}.mp4`, `s3_bucket` = `s3.default_bucket`); метаданные в `sync_files` дополнительно. **`GET /{segment}/api/v1/files/download/{file_id}` на любом сервисе с mount читает `FileRepository`** — без `FileRecord` 404 для плеера/скачивания/`transcribe_video`.
 - `started_by_user_id` у записи: `call.hangup` автозавершает запись только если выходит инициатор записи. Выход других не останавливает.
 - Одна активная запись на звонок (`get_active_for_call` по `requested|recording`). История завершённых — `list_for_call`.
 - WS ack: `call.recording.{start,stop}` через WS-фабрики `callRecordingStart/StopOp` (`commandType: 'sync/calls/recording_{start,stop}_requested'`). Reply в Promise `useOp().run()`; UI overlay (`sync.call_overlay`) меняет `recordingStatus` через action `setRecordingStatus` (`createSlice('sync/call_ui')`).

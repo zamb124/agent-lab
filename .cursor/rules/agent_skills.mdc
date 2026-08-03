@@ -66,9 +66,9 @@ alwaysApply: false
 ## Lara (канон)
 
 - `flow_id: lara` — единый ассистент SPA **и** LinnexAgent desktop.
-- Service roots полного Tier-1 catalog: `console-platform`, `networkle`, `flows-platform`, `sync-platform`, `documents-platform`, `worktracker-platform`, `litserve-platform`.
+- Service roots полного Tier-1 catalog: `console-platform`, `networkle`, `flows-platform`, `sync-platform`, `documents-platform`, `wiki-platform`, `worktracker-platform`, `litserve-platform`.
 - Дополнительные roots: `flows-code` (node helper entry), `docs-knowledge` (docs portal), `platform-workspace` (shared capabilities).
-- Branches `console`, `crm`, `flows`, `sync`, `documents`, `worktracker`, `litserve`, `docs`, node-helper и **`linnex_agent`** (desktop entry) отличаются focus prompt / standing tools. Каждый наследует один Tier-1 catalog; branch не режет skill catalog.
+- Branches `console`, `crm`, `flows`, `sync`, `documents`, `wiki`, `worktracker`, `litserve`, `docs`, node-helper и **`linnex_agent`** (desktop entry) отличаются focus prompt / standing tools. Каждый наследует один Tier-1 catalog; branch не режет skill catalog.
 - Branch **`linnex_agent`**: Platform MCP / LinnexAgent; standing `ask_user` + `device_tools_list` + `device_tools_call` (tunnel → local PC). Канон desktop → **`humanitec_agent.mdc`** (LaraOnly).
 - Standing tools на base и во всех branches: только `ask_user`. Domain/shared tools появляются только после `load_agent_skill`.
 - Standing UI context — только IDs/скаляры (не `*_payload_json`). Flows: тела нод через `flows_get_node` / `flows_list_nodes` / лёгкий `flows_read_context` после load skill.
@@ -76,6 +76,7 @@ alwaysApply: false
 - Catalog browse/search/read/link + folder/members/ACL/public link + catalog RAG admin — child `documents-catalog` под `documents-platform` (те же platform builtins, что и на любом Flows `llm_node`).
 - `document-workspace` — create/open/mutate + empty/rename/move/copy/trash; `depends_on: docx-templates`.
 - Documents methodology — `documents-platform/references/documents-employee-methodology.md`.
+- Wiki — Tier-1 `wiki-platform`; children `wiki-pages` (tree/markdown/CRUD/revisions/comments), `wiki-access` (members/public link + `team-directory`), `wiki-discovery` (search/backlinks). Methodology — `wiki-platform/references/wiki-employee-methodology.md` (LLM tools `wiki_*` vs eval `await wiki.*`). Builtins `wiki_*` tag `wiki` — thin wrappers over `WikiClient`. Documents builtins `documents_*` — thin wrappers over `DocumentsClient` (eval `await documents.*`).
 - Methodology бывших Lara prompts — в skill bodies + `references/*-lara-methodology.md`.
 - Skill Library CTA → `flow_chat` / `lara`. `platform_assistant` — deprecated alias с теми же roots.
 - Seed: `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` / `ensure-seed`.

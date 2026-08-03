@@ -244,7 +244,6 @@ async def test_universal_agent_with_rag_create_namespace(
     assert result.interrupt is None
     out = result.tool_results["rag_create_namespace"]
     body = _tool_result_json_object(out)
-    assert body.get("success") is True
     assert body.get("name") == ns
 
 
@@ -301,11 +300,10 @@ async def test_universal_agent_with_rag_ingest_and_search(
     assert result.interrupt is None
     assert "rag_add_text" in result.tool_results
     add_body = _tool_result_json_object(result.tool_results["rag_add_text"])
-    assert add_body.get("success") is True
+    assert add_body.get("document_id")
 
     assert "rag_search" in result.tool_results
     search_body = _tool_result_json_object(result.tool_results["rag_search"])
-    assert search_body.get("success") is True
     results = _required_json_array(search_body, "results")
     assert len(results) >= 1
     first = _JSON_OBJECT_ADAPTER.validate_python(results[0])

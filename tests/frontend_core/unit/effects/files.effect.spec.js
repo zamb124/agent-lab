@@ -3,24 +3,46 @@ import { createFilesEffect } from '@platform/lib/events/effects/files.effect.js'
 import { FILES_EVENTS } from '@platform/lib/events/reducers/files.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { installFetchMock } from '../../helpers/mock-fetch.js';
+import { installDomShim } from '../../helpers/dom-shim.js';
 import { buildCtx } from '../../helpers/bus-fixtures.js';
 
-const FILES_UPLOAD_URL = '/frontend/api/v1/files/';
-const FILES_META_URL = '/frontend/api/v1/files/f1';
+const FILES_BASE = '/sync/api/v1/files';
+const FILES_META_URL = `${FILES_BASE}/f1`;
+const UPLOADS_URL = `${FILES_BASE}/uploads`;
 
 let fetchMock;
+let dom;
+
 beforeEach(() => {
+    dom = installDomShim();
+    dom.window.location.pathname = '/sync/dashboard';
+    Object.defineProperty(globalThis.location, 'pathname', {
+        value: '/sync/dashboard',
+        configurable: true,
+    });
     fetchMock = installFetchMock();
-    if (typeof globalThis.FormData === 'undefined') {
-        globalThis.FormData = class FormData {
-            constructor() { this._data = {}; }
-            append(k, v) { this._data[k] = v; }
-        };
-    }
 });
-afterEach(() => fetchMock.uninstall());
+
+afterEach(() => {
+    fetchMock.uninstall();
+    dom.uninstall();
+});
 
 const ev = (type, payload, meta = {}) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local', ...meta } });
+
+function _pngFile(name = 'a.png') {
+    return new File([new Uint8Array([1, 2, 3, 4])], name, { type: 'image/png' });
+}
+
+function _mockChunkedUploadSuccess(filePayload) {
+    fetchMock.respondJson('POST', UPLOADS_URL, {
+        upload_id: 'u1',
+        file_id: filePayload.file_id,
+        chunk_size_bytes: 5 * 1024 * 1024,
+    });
+    fetchMock.respondJson('PUT', `${UPLOADS_URL}/u1/parts/1`, { part_number: 1, etag: 'e1' });
+    fetchMock.respondJson('POST', `${UPLOADS_URL}/u1/complete`, filePayload);
+}
 
 describe('filesEffect: UPLOAD_REQUESTED', () => {
     it('требует payload.file', async () => {
@@ -29,33 +51,40 @@ describe('filesEffect: UPLOAD_REQUESTED', () => {
 
     it('требует payload.spec', async () => {
         await expect(
-            createFilesEffect()(ev(FILES_EVENTS.UPLOAD_REQUESTED, { file: { name: 'a.png' } }), buildCtx(() => ({}), [])),
+            createFilesEffect()(ev(FILES_EVENTS.UPLOAD_REQUESTED, { file: _pngFile() }), buildCtx(() => ({}), [])),
         ).rejects.toThrow(/spec/);
     });
 
     it('успех → UPLOAD_COMPLETED с file', async () => {
-        fetchMock.respondJson('POST', FILES_UPLOAD_URL, { file_id: 'f1', original_name: 'a.png' });
+        const filePayload = { file_id: 'f1', original_name: 'a.png' };
+        _mockChunkedUploadSuccess(filePayload);
         const dispatched = [];
         await createFilesEffect()(
             ev(
                 FILES_EVENTS.UPLOAD_REQUESTED,
-                { file: { name: 'a.png' }, spec: '{"source_kind":"platform_auxiliary","source_ref":{},"retention":{"kind":"platform_default"}}' },
+                {
+                    file: _pngFile(),
+                    spec: '{"source_kind":"platform_auxiliary","source_ref":{},"retention":{"kind":"platform_default"}}',
+                },
                 { correlation_id: 'cid1' },
             ),
             buildCtx(() => ({}), dispatched),
         );
         const completed = dispatched.find((d) => d.type === FILES_EVENTS.UPLOAD_COMPLETED);
-        expect(completed.payload.file).toEqual({ file_id: 'f1', original_name: 'a.png' });
+        expect(completed.payload.file).toEqual(filePayload);
         expect(completed.meta.correlation_id).toBe('cid1');
     });
 
     it('ошибка → UPLOAD_FAILED', async () => {
-        fetchMock.respondStatus('POST', FILES_UPLOAD_URL, 500);
+        fetchMock.respondStatus('POST', UPLOADS_URL, 500);
         const dispatched = [];
         await createFilesEffect()(
             ev(
                 FILES_EVENTS.UPLOAD_REQUESTED,
-                { file: { name: 'a.png' }, spec: '{"source_kind":"platform_auxiliary","source_ref":{},"retention":{"kind":"platform_default"}}' },
+                {
+                    file: _pngFile(),
+                    spec: '{"source_kind":"platform_auxiliary","source_ref":{},"retention":{"kind":"platform_default"}}',
+                },
             ),
             buildCtx(() => ({}), dispatched),
         );

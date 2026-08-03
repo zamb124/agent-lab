@@ -32,7 +32,7 @@ globs:
 ## Правила (обязательно)
 
 1. **Префикс** `/rag/api/v1/` — всегда. Без префикса — запрещено.
-2. **При отправке файла НЕ передавать `Content-Type: application/json`** — `ServiceClient`/`RagClient` сами выставят `multipart`. `data={"metadata": json.dumps(...)}` — единственный канон. `json={...}` рядом с `files=` запрещено.
+2. **Загрузка байтов** — только Files chunked API (`/{svc}/api/v1/files/uploads*`); индексация — `POST .../documents/index-file` JSON `{ file_id, metadata? }`. Multipart FormData upload в RAG **запрещён**.
 3. **NamespaceManager для scope** (`core/rag/namespace_manager.py::NamespaceManager.resolve_namespace(scope, context_id?, session_id?) -> str`); `scope ∈ {"flow","company","session"}`. Хардкод `f"flow:{...}"` запрещён.
 4. **Async-индексация** — mutating-операции в воркере через TaskIQ (`process_document_upload`, `index_rag_document_s3_task`, `delete_document_task` в `apps/rag_worker/tasks/indexing_tasks.py` и связанные задачи). Синхронный `parse_document` в API — запрещён. В индекс только категории из `core/rag/indexable.py::RAG_INDEXABLE_FILE_CATEGORIES`; `signature`/archive/unknown — skip (не `failed`).
 5. **Доступ к namespace** — для `ingest-text` и `search` обязательна проверка `namespace_repository.get(id)` + совпадение `company_id` с контекстом; иначе 404/403. Для `POST /rag/api/v1/search` проверка для каждого `namespace_ids[i]`.
@@ -85,10 +85,10 @@ globs:
 
 ## Workflow загрузки
 
-1. `POST /rag/api/v1/namespaces/{id}/documents` (multipart `file` + `data.metadata`).
-2. Файл → S3/MinIO (`{namespace_id}/{document_id}/{filename}` в bucket из конфига).
+1. Chunked Files upload → `FileRecord` (`/{svc}/api/v1/files/uploads*`).
+2. `POST /rag/api/v1/namespaces/{id}/documents/index-file` JSON `{ file_id, metadata? }` → **202**.
 3. `DocumentProcessingStatus.create(status="pending")`.
-4. TaskIQ `enqueue(RAG_INDEX_DOCUMENT_S3, namespace_id=..., document_id=..., document_name=..., s3_key=..., s3_bucket=..., metadata=...)`.
+4. TaskIQ `enqueue(RAG_INDEX_DOCUMENT_S3, …)` по уже существующему S3-объекту `FileRecord`.
 5. Worker: `FileReader.read` → чанкинг → embeddings → `vector_documents` → `status="completed"` (или `"failed"` с `error_message`).
 
 Статус индексации: push `rag/document/status_updated` → UI
@@ -121,7 +121,7 @@ Peer-сервис (Office и т.п.), у которого `FileRecord` уже в
 | `rag/namespaces` | `createResourceCollection` (list/create/remove, idField=`name`) | `/rag/api/v1/namespaces` |
 | `rag/namespace_create_form` | `createForm` | submit → `rag/namespaces` CREATE_REQUESTED |
 | `rag/documents` | `createAsyncOp` | `GET /rag/api/v1/namespaces/:namespace_id/documents` |
-| `rag/document_upload` | `createAsyncOp` (multipart) | `POST /rag/api/v1/namespaces/:namespace_id/documents` |
+| `rag/document_upload` | `createAsyncOp` (chunked Files + index-file) | `uploadPlatformFile` → `POST /rag/api/v1/namespaces/:namespace_id/documents/index-file` |
 | `rag/document_remove` | `createAsyncOp` | `DELETE /rag/api/v1/namespaces/:namespace_id/documents/:document_id` |
 | `rag/document_ingest_text` | `createAsyncOp` | `POST /rag/api/v1/namespaces/:namespace_id/ingest-text` |
 | `rag/document_status` | `createAsyncOp` + push `rag/document/status_updated` (`extraReducer`) | `GET /rag/api/v1/documents/:document_id/status` (снимок); poll удалён |

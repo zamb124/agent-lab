@@ -9,9 +9,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.services.platform_facades import resolve_google_workspace_auth
 from core.ai.company_settings import decrypt_secret
 from core.clients.google_workspace_auth import GoogleAuthMaterial
 from core.config.models import (
@@ -315,7 +315,7 @@ class TestResolveGoogleWorkspaceAuthOrder:
         try:
             state = _make_state(user_id)
             state.variables = {"google_access_token": "vars-token"}
-            material = await resolve_google_workspace_auth(state)
+            material = await GoogleWorkspaceClient().resolve_auth(state)
             assert material == GoogleAuthMaterial(access_token="vars-token")
         finally:
             clear_context()
@@ -366,7 +366,7 @@ class TestResolveGoogleWorkspaceAuthOrder:
             state = _make_state(user_id)
 
             with pytest.raises(FlowInterrupt) as exc_info:
-                _ = await resolve_google_workspace_auth(state)
+                _ = await GoogleWorkspaceClient().resolve_auth(state)
             interrupt = exc_info.value.body
             assert isinstance(interrupt, OAuthInterrupt)
             assert interrupt.kind == InterruptKind.OAUTH_REQUIRED
@@ -379,7 +379,7 @@ class TestResolveGoogleWorkspaceAuthOrder:
                     impersonate_email="imp@example.com",
                 ),
             )
-            company_material = await resolve_google_workspace_auth(state)
+            company_material = await GoogleWorkspaceClient().resolve_auth(state)
             assert company_material.credentials_json == _MINIMAL_SA_JSON
             assert company_material.subject == "imp@example.com"
 
@@ -397,7 +397,7 @@ class TestResolveGoogleWorkspaceAuthOrder:
                     updated_at=now,
                 )
             )
-            prior_material = await resolve_google_workspace_auth(state)
+            prior_material = await GoogleWorkspaceClient().resolve_auth(state)
             assert prior_material.access_token == "prior-docs-token"
 
             await credential_repository.upsert(
@@ -414,7 +414,7 @@ class TestResolveGoogleWorkspaceAuthOrder:
                     updated_at=now,
                 )
             )
-            user_material = await resolve_google_workspace_auth(state)
+            user_material = await GoogleWorkspaceClient().resolve_auth(state)
             assert user_material.access_token == "user-workspace-token"
         finally:
             clear_context()

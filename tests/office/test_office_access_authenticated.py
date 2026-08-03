@@ -20,6 +20,7 @@ pytestmark = [pytest.mark.timeout(120)]
 @pytest.mark.asyncio
 async def test_catalog_access_owner_get_returns_defaults(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -39,6 +40,7 @@ async def test_catalog_access_owner_get_returns_defaults(
 @pytest.mark.asyncio
 async def test_catalog_access_non_owner_get_forbidden(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     unique_id,
@@ -55,6 +57,7 @@ async def test_catalog_access_non_owner_get_forbidden(
 @pytest.mark.asyncio
 async def test_catalog_access_missing_catalog_returns_forbidden_for_non_owner(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -70,6 +73,7 @@ async def test_catalog_access_missing_catalog_returns_forbidden_for_non_owner(
 @pytest.mark.asyncio
 async def test_catalog_access_patch_company_visible_private_blocks_peer(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     unique_id,
@@ -94,6 +98,7 @@ async def test_catalog_access_patch_company_visible_private_blocks_peer(
 @pytest.mark.asyncio
 async def test_catalog_access_patch_company_visible_public_allows_peer(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     unique_id,
@@ -118,6 +123,7 @@ async def test_catalog_access_patch_company_visible_public_allows_peer(
 @pytest.mark.asyncio
 async def test_catalog_access_patch_link_enabled_returns_public_url(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -137,6 +143,7 @@ async def test_catalog_access_patch_link_enabled_returns_public_url(
 @pytest.mark.asyncio
 async def test_catalog_access_disable_link_invalidates_token(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -158,6 +165,7 @@ async def test_catalog_access_disable_link_invalidates_token(
 @pytest.mark.asyncio
 async def test_catalog_access_patch_link_permission_edit_reflected_in_resolve(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -176,6 +184,7 @@ async def test_catalog_access_patch_link_permission_edit_reflected_in_resolve(
 @pytest.mark.asyncio
 async def test_catalog_access_patch_member_user_ids_grants_peer_access(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     system_user2_id,
@@ -202,6 +211,7 @@ async def test_catalog_access_patch_member_user_ids_grants_peer_access(
 @pytest.mark.asyncio
 async def test_catalog_access_patch_members_on_public_catalog_rejected(
     office_client,
+    frontend_client,
     auth_headers_system,
     system_user2_id,
     unique_id,
@@ -219,6 +229,7 @@ async def test_catalog_access_patch_members_on_public_catalog_rejected(
 @pytest.mark.asyncio
 async def test_catalog_access_rotate_without_link_rejected(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -233,6 +244,7 @@ async def test_catalog_access_rotate_without_link_rejected(
 @pytest.mark.asyncio
 async def test_catalog_access_rotate_invalidates_old_token(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -254,6 +266,7 @@ async def test_catalog_access_rotate_invalidates_old_token(
 @pytest.mark.asyncio
 async def test_catalog_access_reenable_link_preserves_token_hash(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -280,6 +293,7 @@ async def test_catalog_access_reenable_link_preserves_token_hash(
 @pytest.mark.asyncio
 async def test_binding_access_owner_get_returns_viewer_scope(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -301,6 +315,7 @@ async def test_binding_access_owner_get_returns_viewer_scope(
 @pytest.mark.asyncio
 async def test_binding_access_catalog_member_can_get(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     system_user2_id,
@@ -328,6 +343,7 @@ async def test_binding_access_catalog_member_can_get(
 @pytest.mark.asyncio
 async def test_binding_access_binding_only_member_can_get_not_catalog_access(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     system_user2_id,
@@ -363,6 +379,7 @@ async def test_binding_access_binding_only_member_can_get_not_catalog_access(
 @pytest.mark.asyncio
 async def test_binding_access_peer_without_access_forbidden(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     unique_id,
@@ -384,6 +401,7 @@ async def test_binding_access_peer_without_access_forbidden(
 @pytest.mark.asyncio
 async def test_binding_access_patch_link_enable_returns_public_url(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     system_user2_id,
@@ -413,6 +431,7 @@ async def test_binding_access_patch_link_enable_returns_public_url(
 @pytest.mark.asyncio
 async def test_binding_access_patch_member_user_ids_sync(
     office_client,
+    frontend_client,
     auth_headers_system,
     system_user2_id,
     unique_id,
@@ -446,6 +465,7 @@ async def test_binding_access_patch_member_user_ids_sync(
 @pytest.mark.asyncio
 async def test_binding_access_patch_link_permission_edit(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -470,6 +490,7 @@ async def test_binding_access_patch_link_permission_edit(
 @pytest.mark.asyncio
 async def test_binding_access_rotate_invalidates_old_token(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -497,6 +518,7 @@ async def test_binding_access_rotate_invalidates_old_token(
 @pytest.mark.asyncio
 async def test_binding_access_non_member_patch_forbidden(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     unique_id,
@@ -519,6 +541,7 @@ async def test_binding_access_non_member_patch_forbidden(
 @pytest.mark.asyncio
 async def test_binding_access_soft_deleted_binding_not_found(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -545,6 +568,7 @@ async def test_binding_access_soft_deleted_binding_not_found(
 @pytest.mark.asyncio
 async def test_cross_axis_private_catalog_binding_public_link_anonymous_open(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -571,6 +595,7 @@ async def test_cross_axis_private_catalog_binding_public_link_anonymous_open(
 @pytest.mark.asyncio
 async def test_cross_axis_public_catalog_binding_without_link_hidden_in_browse(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     unique_id,
@@ -599,6 +624,7 @@ async def test_cross_axis_public_catalog_binding_without_link_hidden_in_browse(
 @pytest.mark.asyncio
 async def test_cross_axis_catalog_and_binding_tokens_resolve_different_kinds(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -625,6 +651,7 @@ async def test_cross_axis_catalog_and_binding_tokens_resolve_different_kinds(
 @pytest.mark.asyncio
 async def test_cross_axis_disable_catalog_link_binding_token_still_works(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -655,6 +682,7 @@ async def test_cross_axis_disable_catalog_link_binding_token_still_works(
 @pytest.mark.asyncio
 async def test_cross_axis_disable_binding_link_removed_from_catalog_items(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -685,6 +713,7 @@ async def test_cross_axis_disable_binding_link_removed_from_catalog_items(
 @pytest.mark.asyncio
 async def test_cross_axis_nested_public_parent_allows_peer_list_child_docs(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     unique_id,
@@ -714,6 +743,7 @@ async def test_cross_axis_nested_public_parent_allows_peer_list_child_docs(
 @pytest.mark.asyncio
 async def test_cross_axis_nested_catalog_peer_without_binding_membership_forbidden(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     unique_id,
@@ -743,6 +773,7 @@ async def test_cross_axis_nested_catalog_peer_without_binding_membership_forbidd
 @pytest.mark.asyncio
 async def test_catalog_access_owner_cannot_remove_self_from_members(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):

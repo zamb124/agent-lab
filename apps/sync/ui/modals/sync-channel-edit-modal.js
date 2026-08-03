@@ -17,11 +17,10 @@ import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import { buildSyncChannelAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
+import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
 import { compressImageFileToJpeg } from '../_helpers/sync-avatar-image-compress.js';
 import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
 import { resolveChannelTitle } from '../_helpers/sync-id-resolvers.js';
-
-const FILE_DOWNLOAD_BASE = '/frontend/api/v1/files/download';
 
 export class SyncChannelEditModal extends PlatformFormModal {
     static modalKind = 'sync.channel_edit';
@@ -317,7 +316,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
                 this.toast('sync:channel_settings.err_upload_response', { type: 'error' });
                 return;
             }
-            const url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(result.file_id)}`;
+            const url = buildPlatformFileDownloadUrl(result.file_id);
             this._avatarDraftUrl = url;
             this._avatarIntent = 'replaced';
             this.isDirty = true;

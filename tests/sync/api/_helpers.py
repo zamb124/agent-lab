@@ -142,13 +142,15 @@ async def upload_platform_file(
     content_type: str,
     is_public: bool = True,
 ):
-    import io
+    from tests.files.chunked_upload_helpers import chunked_upload_file
 
-    return await frontend_client.post(
-        "/frontend/api/v1/files/",
-        headers=auth_headers,
-        data={"spec": platform_auxiliary_file_spec_json(is_public=is_public)},
-        files={"file": (filename, io.BytesIO(content), content_type)},
+    return await chunked_upload_file(
+        frontend_client,
+        auth_headers,
+        content=content,
+        original_name=filename,
+        content_type=content_type,
+        spec_json=platform_auxiliary_file_spec_json(is_public=is_public),
     )
 
 
@@ -164,15 +166,17 @@ async def upload_platform_file_http(
     is_public: bool = True,
 ):
     """Upload через реальный frontend_service — нужен sync_worker и transcribe/STT."""
-    import io
-
     from httpx import AsyncClient
+
+    from tests.files.chunked_upload_helpers import chunked_upload_file
 
     headers = {"Authorization": f"Bearer {auth_token}"}
     async with AsyncClient(base_url=_FRONTEND_HTTP_BASE_URL, timeout=60.0) as client:
-        return await client.post(
-            "/frontend/api/v1/files/",
-            headers=headers,
-            data={"spec": platform_auxiliary_file_spec_json(is_public=is_public)},
-            files={"file": (filename, io.BytesIO(content), content_type)},
+        return await chunked_upload_file(
+            client,
+            headers,
+            content=content,
+            original_name=filename,
+            content_type=content_type,
+            spec_json=platform_auxiliary_file_spec_json(is_public=is_public),
         )

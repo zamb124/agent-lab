@@ -42,7 +42,7 @@ describe('PlatformApp: factories', () => {
         class App extends PlatformApp {
             static defaultI18nNamespace = 'platform';
             static factories = [op];
-            getBaseUrl() { return ''; }
+            getBaseUrl() { return '/frontend'; }
             getRoutes() { return []; }
             rendersUnauthenticated() { return true; }
             renderRoute() { return litHtml`<div class="content">app</div>`; }
@@ -67,7 +67,7 @@ describe('PlatformApp: factories', () => {
         class App extends PlatformApp {
             static defaultI18nNamespace = 'platform';
             static factories = [op];
-            getBaseUrl() { return ''; }
+            getBaseUrl() { return '/frontend'; }
             getRoutes() { return []; }
             rendersUnauthenticated() { return true; }
             getServiceSlices() {
@@ -104,7 +104,7 @@ describe('PlatformApp: render', () => {
                 branchId: 'console',
                 showLauncher: false,
             };
-            getBaseUrl() { return ''; }
+            getBaseUrl() { return '/frontend'; }
             getRoutes() { return []; }
             renderRoute() { return litHtml`<div class="route-content">route</div>`; }
         }
@@ -125,7 +125,7 @@ describe('PlatformApp: render', () => {
                 branchId: 'console',
                 showLauncher: false,
             };
-            getBaseUrl() { return ''; }
+            getBaseUrl() { return '/frontend'; }
             getRoutes() { return []; }
             renderRoute() { return litHtml`<div class="route-content">route</div>`; }
         }
@@ -151,7 +151,7 @@ describe('PlatformApp: render', () => {
                 branchId: 'console',
                 showLauncher: true,
             };
-            getBaseUrl() { return ''; }
+            getBaseUrl() { return '/frontend'; }
             getRoutes() { return []; }
             shouldRenderPlatformAssistant() { return false; }
             renderRoute() { return litHtml`<div class="public-route">public</div>`; }
@@ -191,7 +191,7 @@ for (const entry of PLATFORM_ASSISTANT_BRANCH_MATRIX) {
                     branchId: entry.branchId,
                     showLauncher: true,
                 };
-                getBaseUrl() { return ''; }
+                getBaseUrl() { return '/frontend'; }
                 getRoutes() { return []; }
                 renderRoute() { return litHtml`<div class="route-content">${entry.serviceId}</div>`; }
             }

@@ -2067,7 +2067,21 @@ class FilesRetentionConfig(BaseModel):
 
 class FilesConfig(BaseModel):
     retention: FilesRetentionConfig = Field(default_factory=FilesRetentionConfig)
-    max_upload_bytes: int = Field(default=25 * 1024 * 1024, ge=1024)
+    max_upload_bytes: int = Field(
+        default=512 * 1024 * 1024,
+        ge=1024,
+        description="Максимальный размер одного файла (chunked upload).",
+    )
+    chunk_size_bytes: int = Field(
+        default=5 * 1024 * 1024,
+        ge=5 * 1024 * 1024,
+        description="Размер части chunked upload (S3 multipart min 5 MiB кроме последней).",
+    )
+    upload_session_ttl_seconds: int = Field(
+        default=86400,
+        ge=60,
+        description="TTL Redis-сессии незавершённого chunked upload.",
+    )
 
 
 class MCPBrandingConfig(BaseModel):

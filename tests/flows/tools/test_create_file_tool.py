@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.tools.files import create_file
+from core.files.writer import FileWriteError
 from core.state import ExecutionState
 from core.types import require_json_object
 
@@ -25,12 +26,8 @@ async def test_create_file_rejects_name_without_extension_before_upload() -> Non
         user_id="u1",
         session_id="flow:c1",
     )
-    out = require_json_object(
-        await create_file.run(
+    with pytest.raises(FileWriteError, match="расширение"):
+        _ = await create_file.run(
             {"content": "report", "original_name": "report", "content_mode": "raw"},
             state,
-        ),
-        "create_file.result",
-    )
-    assert out["success"] is False
-    assert "расширение" in str(out["error"])
+        )

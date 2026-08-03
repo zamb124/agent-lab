@@ -215,16 +215,22 @@ function normalizeAttachments(raw) {
         if (typeof item.content_type !== 'string' || item.content_type.length === 0) {
             throw new Error('mail.compose: attachment.content_type required');
         }
-        if (typeof item.content_base64 !== 'string' || item.content_base64.length === 0) {
-            throw new Error('mail.compose: attachment.content_base64 required');
+        if (typeof item.file_id !== 'string' || item.file_id.length === 0) {
+            throw new Error('mail.compose: attachment.file_id required');
+        }
+        if (Object.prototype.hasOwnProperty.call(item, 'content_base64')) {
+            throw new Error('mail.compose: attachment.content_base64 forbidden; use file_id');
         }
         if (typeof item.size !== 'number') {
             throw new Error('mail.compose: attachment.size required');
         }
+        const url =
+            typeof item.url === 'string' && item.url.length > 0 ? item.url : null;
         return Object.freeze({
             filename: item.filename,
             content_type: item.content_type,
-            content_base64: item.content_base64,
+            file_id: item.file_id,
+            url,
             size: item.size,
         });
     }));

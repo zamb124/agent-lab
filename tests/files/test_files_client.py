@@ -1,5 +1,5 @@
 """
-FilesClient — HTTP-обёртка над frontend /frontend/api/v1/files/*.
+FilesClient — HTTP-обёртка над /{segment}/api/v1/files/* целевого сервиса.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ async def test_files_client_create_via_frontend(frontend_client, auth_headers_sy
     require_s3_configured()
     payload = f"client-{unique_id}".encode("utf-8")
 
-    client = FilesClient()
+    client = FilesClient(service="frontend")
     with service_client_asgi_auth_context(auth_headers_system):
         response = await client.create(
             _platform_auxiliary_spec(),
@@ -64,7 +64,7 @@ async def test_files_client_register_s3(
     payload = b"files client register"
     _ = await s3_client.upload_bytes(payload, s3_key, content_type="application/octet-stream")
 
-    client = FilesClient()
+    client = FilesClient(service="frontend")
     with service_client_asgi_auth_context(auth_headers_system):
         response = await client.register_s3(
             _platform_auxiliary_spec(),
@@ -75,6 +75,7 @@ async def test_files_client_register_s3(
             file_size=len(payload),
         )
     assert response.file_id
+    assert response.url.startswith("/frontend/api/v1/files/download/")
     meta = await frontend_client.get(
         f"/frontend/api/v1/files/{response.file_id}",
         headers=auth_headers_system,

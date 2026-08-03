@@ -20,6 +20,7 @@ import { platformConfirm } from '@platform/lib/components/platform-confirm-modal
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 import { buildWikiPageFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
+import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-button.js';
@@ -34,7 +35,6 @@ import { WIKI_PANEL_TABS } from '../components/wiki-page-panel.js';
 import '../components/wiki-page-panel.js';
 
 const SAVE_DEBOUNCE_MS = 900;
-const PLATFORM_DOWNLOAD_PREFIX = '/frontend/api/v1/files/download/';
 
 const PANEL_STORAGE_KEY = platformStorageKey('wiki', 'page.panel');
 const PANEL_DEFAULT_TAB = 'outline';
@@ -196,13 +196,13 @@ export class WikiPageView extends PlatformPage {
                 align-items: center;
                 justify-content: center;
                 flex-shrink: 0;
-                width: 52px;
-                height: 52px;
+                width: 104px;
+                height: 104px;
                 margin: 0;
                 border: none;
                 border-radius: var(--radius-md);
                 background: transparent;
-                font-size: 40px;
+                font-size: 80px;
                 line-height: 1;
                 cursor: pointer;
             }
@@ -274,9 +274,9 @@ export class WikiPageView extends PlatformPage {
                     font-size: 32px;
                 }
                 .icon-btn {
-                    width: 40px;
-                    height: 40px;
-                    font-size: 28px;
+                    width: 80px;
+                    height: 80px;
+                    font-size: 56px;
                 }
             }
         `,
@@ -626,7 +626,7 @@ export class WikiPageView extends PlatformPage {
         if (!file || typeof file.file_id !== 'string' || file.file_id.length === 0) {
             throw new Error('wiki-page-view: cover file_id required');
         }
-        const coverUrl = `${PLATFORM_DOWNLOAD_PREFIX}${file.file_id}`;
+        const coverUrl = buildPlatformFileDownloadUrl(file.file_id);
         await this._properties.run({ wiki_page_id: this.pageId, cover_url: coverUrl });
         this._page = { ...this._page, cover_url: coverUrl };
     }
@@ -658,7 +658,7 @@ export class WikiPageView extends PlatformPage {
         if (kind === 'image') {
             editor.insertImage({
                 fileId: file.file_id,
-                src: `${PLATFORM_DOWNLOAD_PREFIX}${file.file_id}`,
+                src: buildPlatformFileDownloadUrl(file.file_id),
                 alt: file.original_name,
             });
             return;
@@ -996,7 +996,7 @@ export class WikiPageView extends PlatformPage {
                 @click=${(event) => { this._iconAnchor = event.currentTarget; }}
             >
                 ${this._page.icon === ''
-                    ? html`<platform-icon name="smile" size="24"></platform-icon>`
+                    ? html`<platform-icon name="smile" size="48"></platform-icon>`
                     : this._page.icon}
             </button>
         `;

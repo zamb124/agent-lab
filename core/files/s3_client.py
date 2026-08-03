@@ -320,6 +320,113 @@ class S3Client:
         logger.info(f"Данные загружены в S3: {target_bucket}/{key} ({len(data)} байт)")
         return True
 
+    async def create_multipart_upload(
+        self,
+        key: str,
+        *,
+        content_type: str,
+        bucket: str | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> str:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
+            raise ValueError("Bucket не указан")
+        if content_type == "":
+            raise ValueError("content_type не может быть пустым")
+        await self._ensure_minio_bucket_exists(target_bucket)
+        client = await self._get_client()
+        params: aioboto3.S3CreateMultipartUploadRequest = {
+            "Bucket": target_bucket,
+            "Key": key,
+            "ContentType": content_type,
+        }
+        if metadata is not None:
+            params["Metadata"] = metadata
+        response = await client.create_multipart_upload(**params)
+        upload_id = response["UploadId"]
+        if upload_id == "":
+            raise RuntimeError("S3 create_multipart_upload не вернул UploadId")
+        return upload_id
+
+    async def upload_part(
+        self,
+        key: str,
+        *,
+        upload_id: str,
+        part_number: int,
+        data: bytes,
+        bucket: str | None = None,
+    ) -> str:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
+            raise ValueError("Bucket не указан")
+        if upload_id == "":
+            raise ValueError("upload_id обязателен")
+        if part_number < 1:
+            raise ValueError("part_number must be >= 1")
+        if len(data) == 0:
+            raise ValueError("пустая часть multipart upload")
+        client = await self._get_client()
+        response = await client.upload_part(
+            Bucket=target_bucket,
+            Key=key,
+            UploadId=upload_id,
+            PartNumber=part_number,
+            Body=data,
+        )
+        etag = response["ETag"]
+        if etag == "":
+            raise RuntimeError("S3 upload_part не вернул ETag")
+        return etag
+
+    async def complete_multipart_upload(
+        self,
+        key: str,
+        *,
+        upload_id: str,
+        parts: list[tuple[int, str]],
+        bucket: str | None = None,
+    ) -> None:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
+            raise ValueError("Bucket не указан")
+        if upload_id == "":
+            raise ValueError("upload_id обязателен")
+        if len(parts) == 0:
+            raise ValueError("multipart complete требует хотя бы одну часть")
+        client = await self._get_client()
+        sorted_parts = sorted(parts, key=lambda item: item[0])
+        await client.complete_multipart_upload(
+            Bucket=target_bucket,
+            Key=key,
+            UploadId=upload_id,
+            MultipartUpload={
+                "Parts": [
+                    {"PartNumber": part_number, "ETag": etag}
+                    for part_number, etag in sorted_parts
+                ]
+            },
+        )
+
+    async def abort_multipart_upload(
+        self,
+        key: str,
+        *,
+        upload_id: str,
+        bucket: str | None = None,
+    ) -> None:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
+            raise ValueError("Bucket не указан")
+        if upload_id == "":
+            raise ValueError("upload_id обязателен")
+        client = await self._get_client()
+        await client.abort_multipart_upload(
+            Bucket=target_bucket,
+            Key=key,
+            UploadId=upload_id,
+        )
+
     async def download_file(
         self,
         key: str,

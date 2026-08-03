@@ -17068,17 +17068,6 @@
               }
             ],
             "title": "File Id"
-          },
-          "content_base64": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Content Base64"
           }
         },
         "additionalProperties": false,

@@ -9,11 +9,11 @@ from typing import cast, override
 from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.constants.execution_limits import get_remote_code_runner_http_timeout_seconds
 from apps.flows.src.runners.base import BaseCodeRunner
+from apps.flows.src.runners.tool_context_view import build_tool_context_view
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
 from core.capabilities import (
     CapabilityExecutionContext,
-    CapabilityExecutionTokenClaims,
     CapabilityLanguage,
     CapabilityManifest,
     CodeExecutionKind,
@@ -24,11 +24,15 @@ from core.capabilities import (
     CodeValidationResponse,
     JsonObject,
     JsonValue,
-    execution_token_exp,
-    issue_execution_token,
     locked_down_code_sandbox_policy,
 )
-from core.capabilities.source_sanitize import strip_forbidden_platform_import_lines
+from core.capabilities.source_sanitize import reject_forbidden_platform_imports
+from core.capabilities.tokens import (
+    CapabilityExecutionTokenClaims,
+    execution_token_exp,
+    issue_execution_token,
+    verify_execution_token,
+)
 from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.errors import CodeExecutionRuntimeError, FrozenStateFieldError
@@ -68,10 +72,15 @@ logger = get_logger(__name__)
 def _frozen_fields_differ(
     returned_state: ExecutionState,
     frozen_snapshot: dict[str, object],
+    *,
+    returned_keys: frozenset[str],
 ) -> list[str]:
+    """Сравнивает только ключи, которые runner реально вернул в response.state."""
     state_fields = dict(vars(returned_state))
     changed_fields: list[str] = []
     for field_name, snapshot_value in frozen_snapshot.items():
+        if field_name not in returned_keys:
+            continue
         if state_fields.get(field_name) != snapshot_value:
             changed_fields.append(field_name)
     return changed_fields
@@ -88,8 +97,13 @@ def _restore_frozen_fields_from_snapshot(
 def _merge_returned_state_fields(
     state: ExecutionState,
     returned_state: ExecutionState,
+    *,
+    returned_keys: frozenset[str],
 ) -> None:
+    """Мержит только ключи из response.state — без дефолтов model_validate для отсутствующих полей."""
     for field_name in returned_state.__class__.model_fields:
+        if field_name not in returned_keys:
+            continue
         if should_skip_field_on_user_returned_state_copy(field_name):
             continue
         state[field_name] = returned_state[field_name]
@@ -165,12 +179,13 @@ class RemoteCodeRunner(BaseCodeRunner):
         branch_id: str | None = None,
     ) -> CodeValidationResponse:
         runner_service, runner_path = self._runner_validation_endpoint()
-        manifest = await self._load_manifest()
         context = self._validation_context(flow_id=flow_id, branch_id=branch_id)
+        claims = verify_execution_token(context.execution_token)
+        manifest = await self._load_manifest(allowed_capabilities=claims.allowed_capabilities)
         request = CodeValidationRequest(
             kind=kind,
             language=self._language,
-            code=strip_forbidden_platform_import_lines(code),
+            code=reject_forbidden_platform_imports(code),
             entrypoint=entrypoint,
             wall_time_limit_seconds=get_flows_settings().node_execution_wall_time_cap_seconds,
             sandbox=self._sandbox_policy(),
@@ -201,7 +216,7 @@ class RemoteCodeRunner(BaseCodeRunner):
             raw_response = await self._client.post(
                 runner_service,
                 runner_path,
-                json=request.model_dump(mode="json"),
+                json=request.model_dump(mode="json", exclude_none=True),
                 timeout=get_remote_code_runner_http_timeout_seconds(),
             )
         return CodeValidationResponse.model_validate(raw_response)
@@ -216,17 +231,18 @@ class RemoteCodeRunner(BaseCodeRunner):
         kind: CodeExecutionKind,
     ) -> CodeExecutionResponse:
         runner_service, runner_path = self._runner_endpoint()
-        manifest = await self._load_manifest()
         context = self._execution_context(state)
+        claims = verify_execution_token(context.execution_token)
+        manifest = await self._load_manifest(allowed_capabilities=claims.allowed_capabilities)
         request = CodeExecutionRequest(
             kind=kind,
             language=self._language,
-            code=strip_forbidden_platform_import_lines(code),
+            code=reject_forbidden_platform_imports(code),
             entrypoint=entrypoint,
             wall_time_limit_seconds=get_flows_settings().node_execution_wall_time_cap_seconds,
             sandbox=self._sandbox_policy(),
             args=args,
-            state=cast(JsonObject, state.model_dump(mode="json", exclude_none=False)),
+            state=build_tool_context_view(state),
             context=context,
             capability_manifest=manifest,
         )
@@ -255,7 +271,7 @@ class RemoteCodeRunner(BaseCodeRunner):
             raw_response = await self._client.post(
                 runner_service,
                 runner_path,
-                json=request.model_dump(mode="json"),
+                json=request.model_dump(mode="json", exclude_none=True),
                 timeout=get_remote_code_runner_http_timeout_seconds(),
             )
         response = CodeExecutionResponse.model_validate(raw_response)
@@ -266,7 +282,11 @@ class RemoteCodeRunner(BaseCodeRunner):
             self._raise_interrupted(response)
         return response
 
-    async def _load_manifest(self) -> CapabilityManifest:
+    async def _load_manifest(
+        self,
+        *,
+        allowed_capabilities: list[str] | None = None,
+    ) -> CapabilityManifest:
         # Манифест включает динамические tools.<tool_id>, которые меняются при создании/удалении
         # tool'ов, поэтому он берётся из capability_gateway на каждый вызов без процессного кэша:
         # устаревший снимок привёл бы к "capability is not declared in manifest" для свежих tool'ов.
@@ -275,7 +295,18 @@ class RemoteCodeRunner(BaseCodeRunner):
             CAPABILITY_MANIFEST_PATH,
             timeout=30.0,
         )
-        return CapabilityManifest.model_validate(raw_manifest)
+        manifest = CapabilityManifest.model_validate(raw_manifest)
+        if allowed_capabilities:
+            allowed = set(allowed_capabilities)
+            manifest = CapabilityManifest(
+                version=manifest.version,
+                capabilities=[
+                    capability
+                    for capability in manifest.capabilities
+                    if capability.name in allowed
+                ],
+            )
+        return manifest
 
     def _sandbox_policy(self) -> CodeSandboxPolicy:
         wall_time_limit_seconds = get_flows_settings().node_execution_wall_time_cap_seconds
@@ -300,6 +331,8 @@ class RemoteCodeRunner(BaseCodeRunner):
         tool_context = get_active_tool_call_context()
         source_node_id = tool_context.node_id if tool_context is not None else None
         source_tool_call_id = tool_context.tool_call_id if tool_context is not None else None
+        namespace_raw = (context.active_namespace or "").strip()
+        namespace = namespace_raw if namespace_raw and namespace_raw != "default" else None
         claims = CapabilityExecutionTokenClaims(
             company_id=company_id,
             user_id=user_id,
@@ -315,6 +348,7 @@ class RemoteCodeRunner(BaseCodeRunner):
             durable_superstep_sequence=state.durable_superstep_sequence,
             source_node_id=source_node_id,
             source_tool_call_id=source_tool_call_id,
+            namespace=namespace,
             exp=execution_token_exp(settings.capability_execution_token_ttl_seconds),
         )
         token = issue_execution_token(claims)
@@ -335,6 +369,7 @@ class RemoteCodeRunner(BaseCodeRunner):
             durable_superstep_sequence=state.durable_superstep_sequence,
             source_node_id=source_node_id,
             source_tool_call_id=source_tool_call_id,
+            namespace=namespace,
         )
 
     def _validation_context(
@@ -357,6 +392,8 @@ class RemoteCodeRunner(BaseCodeRunner):
         context_id = str(uuid.uuid4())
         task_id = str(uuid.uuid4())
         session_id = f"{flow_id_value}:validation:{context_id}"
+        namespace_raw = (context.active_namespace or "").strip()
+        namespace = namespace_raw if namespace_raw and namespace_raw != "default" else None
         claims = CapabilityExecutionTokenClaims(
             company_id=company_id,
             user_id=user_id,
@@ -367,6 +404,7 @@ class RemoteCodeRunner(BaseCodeRunner):
             context_id=context_id,
             channel="code_validation",
             request_id=request_id_value,
+            namespace=namespace,
             exp=execution_token_exp(settings.capability_execution_token_ttl_seconds),
         )
         token = issue_execution_token(claims)
@@ -382,6 +420,7 @@ class RemoteCodeRunner(BaseCodeRunner):
             channel="code_validation",
             request_id=request_id_value,
             trace_id=context.trace_id,
+            namespace=namespace,
         )
 
     def _runner_endpoint(self) -> tuple[str, str]:
@@ -402,8 +441,13 @@ class RemoteCodeRunner(BaseCodeRunner):
         response: CodeExecutionResponse,
         frozen_snapshot: dict[str, object],
     ) -> None:
+        returned_keys = frozenset(response.state.keys())
         returned_state = ExecutionState.model_validate(response.state)
-        changed_frozen = _frozen_fields_differ(returned_state, frozen_snapshot)
+        changed_frozen = _frozen_fields_differ(
+            returned_state,
+            frozen_snapshot,
+            returned_keys=returned_keys,
+        )
         forbidden_changes = [
             field_name
             for field_name in changed_frozen
@@ -421,7 +465,11 @@ class RemoteCodeRunner(BaseCodeRunner):
                 language=self._language,
             )
             _restore_frozen_fields_from_snapshot(returned_state, frozen_snapshot)
-        _merge_returned_state_fields(state, returned_state)
+        _merge_returned_state_fields(
+            state,
+            returned_state,
+            returned_keys=returned_keys,
+        )
 
     def _raise_execution_failed(self, response: CodeExecutionResponse) -> None:
         error = response.error

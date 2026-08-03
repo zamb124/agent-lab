@@ -1,5 +1,5 @@
 """
-Интеграционные тесты Lara CRM tools: реальный ServiceClient -> CRM HTTP (9003), без monkeypatch.
+Интеграционные тесты Lara CRM tools: реальный ServiceClient -> CRM HTTP, без monkeypatch.
 
 Вызов _run_impl обходит decorator mock при TESTING=true.
 """
@@ -18,6 +18,7 @@ from apps.flows.tools.crm_tools import (
     crm_search_entities,
 )
 from core.state import ExecutionState
+from core.types import JsonObject, JsonValue, require_json_object
 
 pytestmark = [
     pytest.mark.timeout(120, func_only=True),
@@ -35,6 +36,8 @@ async def lara_crm_tool_context(
     from core.models.context_models import Context
     from core.models.identity_models import Company, User
 
+    _ = crm_client
+    _ = unique_id
     ctx = Context(
         user=User(user_id=system_user_id, name="Lara CRM tools"),
         active_company=Company(company_id="system", name="System"),
@@ -56,6 +59,12 @@ def _tool_state(*, unique_id: str, system_user_id: str) -> ExecutionState:
     )
 
 
+def _as_object(raw: JsonValue) -> JsonObject:
+    if isinstance(raw, str):
+        return require_json_object(json.loads(raw), "crm.tool.result")
+    return require_json_object(raw, "crm.tool.result")
+
+
 @pytest.mark.asyncio
 async def test_crm_create_note_tool_returns_blocks_for_chat(
     crm_service,
@@ -64,12 +73,15 @@ async def test_crm_create_note_tool_returns_blocks_for_chat(
     unique_id: str,
     system_user_id: str,
 ) -> None:
+    _ = crm_service
+    _ = crm_client
+    _ = lara_crm_tool_context
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
     propose_raw = await crm_create_note._run_impl(
         {"name": f"Lara note {unique_id}", "description": "Тело заметки для теста тула.", "mode": "propose"},
         state,
     )
-    proposed = json.loads(propose_raw)
+    proposed = _as_object(propose_raw)
     pending_events = state.ui_events_pending
     assert pending_events[-1].event_type == "action_previewed"
     preview_buttons = pending_events[-1].payload["blocks"][1]["buttons"]
@@ -82,8 +94,7 @@ async def test_crm_create_note_tool_returns_blocks_for_chat(
         },
         state,
     )
-    data = json.loads(raw)
-    assert data["success"] is True, f"crm_create_note failed: {data}"
+    data = _as_object(raw)
     assert isinstance(data.get("entity_id"), str) and data["entity_id"]
     assert isinstance(data["blocks"], list)
     types = {b.get("type") for b in data["blocks"]}
@@ -102,7 +113,8 @@ async def test_crm_search_entities_tool(
 ) -> None:
     from tests.fixtures.crm_test_setup import wait_for_crm_semantic_search_hit
 
-    # Вектор для поиска пишется в RAG с namespace_id=default (entity_repository.create).
+    _ = crm_service
+    _ = lara_crm_tool_context
     marker = f"lara_tool_search_marker_{unique_id}"
     create = await crm_client.post(
         "/crm/api/v1/entities",
@@ -129,8 +141,7 @@ async def test_crm_search_entities_tool(
         {"query": marker, "entity_type": "organization", "namespace": "default", "limit": 5},
         state,
     )
-    data = json.loads(raw)
-    assert data["success"] is True, f"crm_search_entities failed: {data}"
+    data = _as_object(raw)
     assert len(data["hits"]) >= 1
     hit = data["hits"][0]
     assert hit.get("entity_id")
@@ -151,6 +162,10 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     mock_llm_redis,
     auth_headers_system: dict,
 ) -> None:
+    _ = crm_service
+    _ = crm_client
+    _ = lara_crm_tool_context
+    _ = auth_headers_system
     note_title = f"Lara analyze {unique_id}"
     _analyze_body = {
                         "note": {
@@ -192,7 +207,7 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
         },
         state,
     )
-    create_proposed = json.loads(create_propose_raw)
+    create_proposed = _as_object(create_propose_raw)
     create_raw = await crm_create_note._run_impl(
         {
             "mode": "apply",
@@ -200,14 +215,12 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
         },
         state,
     )
-    created = json.loads(create_raw)
-    assert created["success"] is True
+    created = _as_object(create_raw)
     note_id = created["entity_id"]
     assert isinstance(note_id, str) and note_id
 
     analyze_raw = await crm_analyze_note_text._run_impl({"note_id": note_id}, state)
-    analyzed = json.loads(analyze_raw)
-    assert analyzed["success"] is True, f"crm_analyze_note_text failed: {analyzed}"
+    analyzed = _as_object(analyze_raw)
     blocks_out = analyzed.get("blocks")
     assert isinstance(blocks_out, list) and len(blocks_out) >= 1
 
@@ -231,6 +244,10 @@ async def test_crm_create_note_and_analyze_tool_chains(
     mock_llm_redis,
     auth_headers_system: dict,
 ) -> None:
+    _ = crm_service
+    _ = crm_client
+    _ = lara_crm_tool_context
+    _ = auth_headers_system
     note_title = f"Lara combo {unique_id}"
     _combo_body = {
                         "note": {
@@ -271,8 +288,7 @@ async def test_crm_create_note_and_analyze_tool_chains(
         },
         state,
     )
-    combo = json.loads(combo_raw)
-    assert combo["success"] is True, combo
+    combo = _as_object(combo_raw)
     note_id = combo["entity_id"]
     assert isinstance(note_id, str) and note_id
     ao = combo.get("analyze")

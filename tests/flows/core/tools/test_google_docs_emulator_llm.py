@@ -155,7 +155,6 @@ async def test_create_document_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     assert isinstance(payload["document_id"], str)
 
 
@@ -192,7 +191,7 @@ async def test_read_append_insert_find_delete_share_via_llm_node(
         mock_llm_with_queue,
         google_api_emulator,
     )
-    assert _tool_payloads_from_state(state)[0]["success"] is True
+    assert _tool_payloads_from_state(state)[0]["document_id"] == doc_id
 
     _, state = await _run_single_tool_flow(
         f"{unique_id}-in",
@@ -203,7 +202,7 @@ async def test_read_append_insert_find_delete_share_via_llm_node(
         mock_llm_with_queue,
         google_api_emulator,
     )
-    assert _tool_payloads_from_state(state)[0]["success"] is True
+    assert _tool_payloads_from_state(state)[0]["document_id"] == doc_id
 
     _, state = await _run_single_tool_flow(
         f"{unique_id}-fr",
@@ -225,7 +224,7 @@ async def test_read_append_insert_find_delete_share_via_llm_node(
         mock_llm_with_queue,
         google_api_emulator,
     )
-    assert _tool_payloads_from_state(state)[0]["success"] is True
+    assert _tool_payloads_from_state(state)[0]["document_id"] == doc_id
 
     _, state = await _run_single_tool_flow(
         f"{unique_id}-sh",
@@ -236,4 +235,4 @@ async def test_read_append_insert_find_delete_share_via_llm_node(
         mock_llm_with_queue,
         google_api_emulator,
     )
-    assert _tool_payloads_from_state(state)[0]["success"] is True
+    assert _tool_payloads_from_state(state)[0]["document_id"] == doc_id

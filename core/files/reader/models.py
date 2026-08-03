@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import ClassVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from core.files.file_ref import FileRef, file_id_from_download_url
 
@@ -117,6 +118,8 @@ class Continuation(BaseModel):
 
 class ReadFileArgs(BaseModel):
     """Единые аргументы канонического FileReader.read (extract + render)."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     page_start: int = Field(default=0, ge=0)
     page_end: int = Field(default=-1, description="-1 = до конца.")

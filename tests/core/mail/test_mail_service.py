@@ -281,8 +281,12 @@ async def test_list_and_get_message_with_attachment_and_stub(
     assert opened.body_text == "see attach"
     assert len(opened.attachments) == 2
     assert opened.attachments[0].filename == "ok.txt"
+    assert opened.attachments[0].file_id is not None
+    assert opened.attachments[0].available is True
+    assert "content_base64" not in opened.attachments[0].model_dump()
     assert opened.attachments[1].filename == "broken.bin"
     assert opened.attachments[1].available is False
+    assert opened.attachments[1].file_id is None
     assert opened.attachments[1].parse_error == "payload_decode_failed:ValueError"
     assert opened.unread is False
 

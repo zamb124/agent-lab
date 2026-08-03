@@ -232,6 +232,29 @@ export function registryToolItemToNode(t) {
             state_mapping: {},
         };
     }
+    if (t.builtin === true) {
+        const effects = Array.isArray(t.effects)
+            ? t.effects.filter((effect) => typeof effect === 'string')
+            : [];
+        const confirmationFloor =
+            typeof t.confirmation_floor === 'string' && t.confirmation_floor.length > 0
+                ? t.confirmation_floor
+                : 'none';
+        return {
+            node_id: toolId,
+            type: 'builtin',
+            builtin: true,
+            tool_id: toolId,
+            name: displayTitle,
+            description: typeof t.description === 'string' ? t.description : '',
+            parameters_schema: isPlainObject(t.parameters_schema)
+                ? t.parameters_schema
+                : { type: 'object', properties: {}, required: [] },
+            output_schema: isPlainObject(t.output_schema) ? t.output_schema : null,
+            effects,
+            confirmation_floor: confirmationFloor,
+        };
+    }
     const out = {
         node_id: toolId,
         type: 'code',
@@ -346,6 +369,9 @@ export function nodeConfigToToolRef(node) {
         return out;
     }
     const nodeType = asString(node.type);
+    if (nodeType === 'builtin' || node.builtin === true) {
+        return { tool_id: nid };
+    }
     if (nodeType === 'code' || (typeof node.code === 'string' && node.code.length > 0 && nodeType.length === 0)) {
         const out = { tool_id: nid };
         for (const key of CODE_TOOL_REF_KEYS) {

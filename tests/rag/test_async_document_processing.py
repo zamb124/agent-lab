@@ -31,7 +31,6 @@ async def test_async_document_upload_returns_202(
     namespace_id = ns_response.json()["name"]
 
     data = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -64,7 +63,6 @@ async def test_document_status_endpoint(
     namespace_id = ns_response.json()["name"]
 
     upload_response = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -109,7 +107,6 @@ async def test_async_document_processing_completes(
     namespace_id = ns_response.json()["name"]
 
     upload_response = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -143,7 +140,6 @@ async def test_list_documents_includes_processing_status(
     namespace_id = ns_response.json()["name"]
 
     await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -201,7 +197,6 @@ async def test_documents_statuses_batch_returns_found_and_null(
     namespace_id = ns_response.json()["name"]
 
     upload = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -247,7 +242,6 @@ async def test_multiple_documents_processing(
     document_ids = []
     for i in range(3):
         response = await upload_rag_document_bytes(
-            frontend_client,
             rag_client,
             auth_headers_system,
             namespace_id=namespace_id,

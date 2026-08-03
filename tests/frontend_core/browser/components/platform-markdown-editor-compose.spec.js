@@ -135,7 +135,8 @@ describe('platform-markdown-editor compose / wysiwyg', () => {
             attachments: [{
                 filename: 'a.txt',
                 content_type: 'text/plain',
-                content_base64: btoa('x'),
+                file_id: 'file_compose_test_1',
+                url: '/frontend/api/v1/files/download/file_compose_test_1',
                 size: 1,
             }],
         });
@@ -201,40 +202,82 @@ describe('platform-markdown-editor compose / wysiwyg', () => {
         const input = editor.shadowRoot.querySelector('.file-input');
         expect(input).to.exist;
 
-        const okFile = new File(['hello'], 'note.txt', { type: 'text/plain' });
-        const dt = new DataTransfer();
-        dt.items.add(okFile);
-        Object.defineProperty(input, 'files', { configurable: true, value: dt.files });
+        const originalFetch = window.fetch;
+        window.fetch = async (inputUrl, init = {}) => {
+            const url = typeof inputUrl === 'string' ? inputUrl : String(inputUrl);
+            const method = (init.method || 'GET').toUpperCase();
+            if (method === 'POST' && url.endsWith('/frontend/api/v1/files/uploads')) {
+                return new Response(JSON.stringify({
+                    upload_id: 'up_md_1',
+                    file_id: 'file_md_note',
+                    chunk_size_bytes: 5 * 1024 * 1024,
+                }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+            if (method === 'PUT' && url.includes('/frontend/api/v1/files/uploads/up_md_1/parts/')) {
+                return new Response(JSON.stringify({ part_number: 1, etag: 'etag-1' }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                });
+            }
+            if (method === 'POST' && url.endsWith('/frontend/api/v1/files/uploads/up_md_1/complete')) {
+                return new Response(JSON.stringify({
+                    file_id: 'file_md_note',
+                    original_name: 'note.txt',
+                    content_type: 'text/plain',
+                    file_size: 5,
+                    url: '/frontend/api/v1/files/download/file_md_note',
+                    checksum: 'sha256:test',
+                    is_public: false,
+                    metadata: {},
+                    created_at: '2026-01-01T00:00:00Z',
+                }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+            throw new Error(`unexpected fetch ${method} ${url}`);
+        };
 
-        const attachPromise = oneEvent(editor, 'attachments-change');
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-        const attached = await attachPromise;
-        expect(attached.detail.attachments).to.have.length(1);
-        expect(attached.detail.attachments[0].filename).to.equal('note.txt');
-        expect(attached.detail.attachments[0].content_base64).to.equal(btoa('hello'));
-        expect(attached.detail.attachments[0].content_type).to.equal('text/plain');
-        await elementUpdated(editor);
-        expect(editor.shadowRoot.querySelector('.att-chip-name').textContent).to.equal('note.txt');
+        try {
+            const okFile = new File(['hello'], 'note.txt', { type: 'text/plain' });
+            const dt = new DataTransfer();
+            dt.items.add(okFile);
+            Object.defineProperty(input, 'files', { configurable: true, value: dt.files });
 
-        const removePromise = oneEvent(editor, 'attachments-change');
-        editor.shadowRoot.querySelector('.att-chip-remove').click();
-        const removed = await removePromise;
-        expect(removed.detail.attachments).to.have.length(0);
+            const attachPromise = oneEvent(editor, 'attachments-change');
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            const attached = await attachPromise;
+            expect(attached.detail.attachments).to.have.length(1);
+            expect(attached.detail.attachments[0].filename).to.equal('note.txt');
+            expect(attached.detail.attachments[0].file_id).to.equal('file_md_note');
+            expect(attached.detail.attachments[0].url).to.equal(
+                '/frontend/api/v1/files/download/file_md_note',
+            );
+            expect(attached.detail.attachments[0].content_type).to.equal('text/plain');
+            expect(Object.prototype.hasOwnProperty.call(attached.detail.attachments[0], 'content_base64'))
+                .to.equal(false);
+            await elementUpdated(editor);
+            expect(editor.shadowRoot.querySelector('.att-chip-name').textContent).to.equal('note.txt');
 
-        const events = captureBusEvents();
-        const big = new File(
-            [new Uint8Array(MARKDOWN_EDITOR_MAX_ATTACHMENT_BYTES + 1)],
-            'huge.bin',
-            { type: 'application/octet-stream' },
-        );
-        const dt2 = new DataTransfer();
-        dt2.items.add(big);
-        Object.defineProperty(input, 'files', { configurable: true, value: dt2.files });
-        await editor._onFilesSelected({ target: input });
-        const toast = events.find((e) => e.type === CoreEvents.UI_TOAST_SHOW);
-        expect(toast).to.exist;
-        expect(String(toast.payload.i18n_key)).to.include('attach_too_large');
-        expect(editor.attachments).to.have.length(0);
+            const removePromise = oneEvent(editor, 'attachments-change');
+            editor.shadowRoot.querySelector('.att-chip-remove').click();
+            const removed = await removePromise;
+            expect(removed.detail.attachments).to.have.length(0);
+
+            const events = captureBusEvents();
+            const big = new File(
+                [new Uint8Array(MARKDOWN_EDITOR_MAX_ATTACHMENT_BYTES + 1)],
+                'huge.bin',
+                { type: 'application/octet-stream' },
+            );
+            const dt2 = new DataTransfer();
+            dt2.items.add(big);
+            Object.defineProperty(input, 'files', { configurable: true, value: dt2.files });
+            await editor._onFilesSelected({ target: input });
+            const toast = events.find((e) => e.type === CoreEvents.UI_TOAST_SHOW);
+            expect(toast).to.exist;
+            expect(String(toast.payload.i18n_key)).to.include('attach_too_large');
+            expect(editor.attachments).to.have.length(0);
+        } finally {
+            window.fetch = originalFetch;
+        }
     });
 
     it('compose link insert uses createLink with allowlisted href', async () => {

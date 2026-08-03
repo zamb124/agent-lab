@@ -57,10 +57,12 @@ from core.db.repositories.usage_repository import UsageRepository
 from core.db.repositories.user_repository import UserRepository
 from core.db.storage import Storage
 from core.documents.placement import DocsBindResult, DocsPlacement
+from core.files.chunked_upload import ChunkedUploadService
 from core.files.file_repository import FileRepository
 from core.files.purge import FilePurgeService
 from core.files.s3_client import S3ClientFactory
 from core.files.service import FilesService
+from core.files.urls import normalize_files_route_segment, resolve_files_route_segment
 from core.identity.auth_service import AuthService
 from core.identity.integration_external_author import IntegrationExternalAuthorService
 from core.integrations.company_credentials import CompanyIntegrationCredentialService
@@ -192,6 +194,17 @@ class BaseContainer:
 
         self._crud_routers: dict[str, APIRouter] = {}
         self._service_name: str | None = None
+        self._files_route_segment: str | None = None
+
+    def bind_files_route_segment(self, route_segment: str) -> None:
+        """Публичный HTTP-сегмент Files API этого процесса (`crm`, `documents`, …)."""
+        self._files_route_segment = normalize_files_route_segment(route_segment)
+
+    @property
+    def files_route_segment(self) -> str:
+        if self._files_route_segment is not None:
+            return self._files_route_segment
+        return resolve_files_route_segment(self.service_name)
 
     @property
     def service_name(self) -> str:
@@ -325,6 +338,33 @@ class BaseContainer:
             file_repository=self.file_repository,
             docs_bind_hook=docs_bind_hook,
             rag_index_hook=rag_index_hook,
+            files_route_segment=self.files_route_segment,
+        )
+
+    @lazy
+    def chunked_upload_service(self) -> ChunkedUploadService:
+        """Chunked multipart upload sessions поверх FilesService."""
+
+        async def docs_bind_hook(placement: DocsPlacement) -> DocsBindResult:
+            return await DocumentsClient().bind_file(placement)
+
+        async def rag_index_hook(
+            file_id: str,
+            namespace_id: str,
+            metadata: RAGMetadata | None,
+        ) -> None:
+            rag_metadata: RAGMetadata = metadata if metadata is not None else {}
+            _ = await RagClient().index_file(
+                namespace_id,
+                file_id,
+                metadata=rag_metadata,
+            )
+
+        return ChunkedUploadService(
+            file_repository=self.file_repository,
+            docs_bind_hook=docs_bind_hook,
+            rag_index_hook=rag_index_hook,
+            files_route_segment=self.files_route_segment,
         )
 
     @lazy

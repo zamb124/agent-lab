@@ -39,7 +39,6 @@ async def test_search_documents(
         "It is used for web development and data science."
     ).encode()
     doc_response = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -95,7 +94,6 @@ async def test_search_documents_with_filters(
     # Загружаем документ
     content = b"FastAPI is a web framework for building APIs with Python."
     await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -168,7 +166,6 @@ async def test_search_with_limit(
     for i in range(3):
         content = f"Document {i} about Python programming and web development.".encode()
         await upload_rag_document_bytes(
-            frontend_client,
             rag_client,
             auth_headers_system,
             namespace_id=namespace_id,
@@ -209,7 +206,6 @@ async def test_search_relevance_score(
     # Загружаем документ
     content = b"Machine learning is a subset of artificial intelligence."
     await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,
@@ -265,7 +261,6 @@ async def test_global_search(
 
     # Загружаем документы в оба namespace
     await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=ns1_id,
@@ -275,7 +270,6 @@ async def test_global_search(
     )
 
     await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=ns2_id,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from core.models.base import StrictBaseModel
 from core.models.calendar_models import CalendarAutolinkStatus
@@ -381,7 +381,6 @@ class MailAttachmentPublic(StrictBaseModel):
     available: bool = True
     parse_error: str | None = None
     file_id: str | None = None
-    content_base64: str | None = None
 
 
 class InboundMailMessagePublic(StrictBaseModel):
@@ -458,7 +457,11 @@ class MailServerHealth(StrictBaseModel):
 
 
 class MailAttachment(StrictBaseModel):
-    """Вложение письма (MIME part). content может быть пустым при list/ошибке разбора."""
+    """Вложение письма (MIME part). content может быть пустым при list/ошибке разбора.
+
+    Outbound MailSendPayload: только ``file_id`` (байты уже в Files через chunked upload).
+    Inbound MIME / SMTP после resolve: ``content`` in-process.
+    """
 
     filename: str = Field(min_length=1)
     content_type: str = Field(min_length=1)
@@ -466,6 +469,18 @@ class MailAttachment(StrictBaseModel):
     size: int = Field(default=0, ge=0)
     available: bool = True
     parse_error: str | None = None
+    file_id: str | None = None
+
+    @model_validator(mode="after")
+    def _content_xor_file_id(self) -> MailAttachment:
+        has_file_id = self.file_id is not None and self.file_id.strip() != ""
+        has_content = len(self.content) > 0
+        if has_file_id and has_content:
+            raise ValueError(
+                "MailAttachment: content and file_id are mutually exclusive "
+                + f"filename={self.filename!r}"
+            )
+        return self
 
 
 class MailSendPayload(StrictBaseModel):
@@ -478,6 +493,24 @@ class MailSendPayload(StrictBaseModel):
     in_reply_to: str | None = None
     references: str | None = None
     attachments: list[MailAttachment] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _attachments_require_file_id(self) -> MailSendPayload:
+        for attachment in self.attachments:
+            has_file_id = (
+                attachment.file_id is not None and attachment.file_id.strip() != ""
+            )
+            if not has_file_id:
+                raise ValueError(
+                    "MailSendPayload: attachment.file_id required "
+                    + f"filename={attachment.filename!r}"
+                )
+            if len(attachment.content) > 0:
+                raise ValueError(
+                    "MailSendPayload: attachment.content forbidden; use file_id "
+                    + f"filename={attachment.filename!r}"
+                )
+        return self
 
 
 class OutboundMailMessage(StrictBaseModel):

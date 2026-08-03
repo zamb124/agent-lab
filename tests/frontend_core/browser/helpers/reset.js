@@ -17,6 +17,10 @@ import {
 import { _resetResourceRegistryForTests } from '@platform/lib/events/factories/_internal.js';
 import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
 import { setPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
+import {
+    clearPlatformFilesRouteSegment,
+    setPlatformFilesRouteSegment,
+} from '@platform/lib/utils/platform-files-url.js';
 
 /** Канонический brand для browser/unit тестов без SSR bootstrap. */
 const TEST_PLATFORM_BRAND = {
@@ -49,6 +53,9 @@ export function resetPlatformState() {
     // в "cannot resolve i18n namespace".
     setDefaultI18nNamespace('platform');
     bootstrapTestPlatformBrand();
+    clearPlatformFilesRouteSegment();
+    // Изолированные компоненты без PlatformApp: Files API как у frontend SPA.
+    setPlatformFilesRouteSegment('frontend');
 }
 
 /**

@@ -10,7 +10,6 @@ from typing import Any, cast
 
 import pytest
 
-from core.a2a import mapping_from_struct
 from core.viz.models import VIZ_CONTENT_TYPE, parse_viz_document_bytes
 from tests.office.access_helpers import parse_viz_stream_url
 
@@ -311,13 +310,30 @@ async def test_agent_create_viz_rejects_invalid_args(
     )
     await _create_flow(flows_client_http, headers, flow_id)
     try:
-        await _send_text(
-            flows_client_http,
-            headers,
-            flow_id=flow_id,
-            context_id=context_id,
-            text="Create a flowchart without source.",
+        response = await flows_client_http.post(
+            f"/flows/api/v1/{flow_id}",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": f"test-{uuid.uuid4().hex}",
+                "method": "SendMessage",
+                "params": {
+                    "message": {
+                        "messageId": str(uuid.uuid4()),
+                        "role": "ROLE_USER",
+                        "contextId": context_id,
+                        "parts": [{"text": "Create a flowchart without source."}],
+                    }
+                },
+            },
         )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        task = data.get("result", {})
+        assert task.get("status", {}).get("state") == "TASK_STATE_FAILED", data
+        error_text = json.dumps(data, ensure_ascii=False).lower()
+        assert "source" in error_text or "mermaid" in error_text
+
         session_id = f"{flow_id}:{context_id}"
         state = await container.workflow_runtime.get_state(session_id)
         assert state is not None
@@ -329,30 +345,5 @@ async def test_agent_create_viz_rejects_invalid_args(
                 continue
             name = file_obj.get("original_name")
             assert not (isinstance(name, str) and name.endswith(".viz"))
-
-        failed = None
-        for value in _tool_results(state).values():
-            parsed = _json_object_from_tool_result(value)
-            if parsed is not None and parsed.get("success") is False:
-                failed = parsed
-                break
-        if failed is None:
-            messages = getattr(state, "messages", None) or []
-            for message in messages:
-                metadata = getattr(message, "metadata", None)
-                if metadata is not None and hasattr(message, "HasField") and message.HasField("metadata"):
-                    meta = mapping_from_struct(message.metadata)
-                    if "tool_call_id" not in meta:
-                        continue
-                    text_parts = []
-                    for part in message.parts:
-                        if getattr(part, "text", None):
-                            text_parts.append(part.text)
-                    parsed = _json_object_from_tool_result("".join(text_parts))
-                    if parsed is not None and parsed.get("success") is False:
-                        failed = parsed
-                        break
-        assert failed is not None, f"tool_results={_tool_results(state)!r}"
-        assert "error" in failed
     finally:
         await flows_client_http.delete(f"/flows/api/v1/flows/{flow_id}", headers=headers)

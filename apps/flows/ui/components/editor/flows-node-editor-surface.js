@@ -7,6 +7,7 @@ import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 import '../nodes/flows-llm-node-editor.js';
 import '../nodes/flows-code-node-editor.js';
+import '../nodes/flows-builtin-tool-editor.js';
 import '../nodes/flows-channel-node-editor.js';
 import '../nodes/flows-flow-node-editor.js';
 import '../nodes/flows-mcp-node-editor.js';
@@ -92,6 +93,17 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-code-node-editor>`;
+        case 'builtin':
+            return html`<flows-builtin-tool-editor
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
+                .nodeConfig=${node} .nodeType=${node.type}
+                .flowVariables=${flowVariables} .graphNodes=${graphNodes}
+                .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
+                ?embedded=${embedded}
+                @change=${onChange}
+                @delete-node=${onDelete} @duplicate-node=${onDuplicate}
+            ></flows-builtin-tool-editor>`;
         case 'resource':
             return html`<flows-resource-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}

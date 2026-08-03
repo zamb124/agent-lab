@@ -72,7 +72,6 @@ async def test_all_gdocs_tools_via_run(
             state,
         )
     )
-    assert created["success"] is True
     doc_id = created["document_id"]
     assert isinstance(doc_id, str)
 
@@ -82,12 +81,10 @@ async def test_all_gdocs_tools_via_run(
             state,
         )
     )
-    assert appended["success"] is True
 
     read = _as_payload(
         await gdocs_read_document.run({"document_id": doc_id}, state)
     )
-    assert read["success"] is True
     assert "Hello world." in str(read["text"])
 
     inserted = _as_payload(
@@ -96,7 +93,6 @@ async def test_all_gdocs_tools_via_run(
             state,
         )
     )
-    assert inserted["success"] is True
 
     replaced = _as_payload(
         await gdocs_find_replace.run(
@@ -104,7 +100,6 @@ async def test_all_gdocs_tools_via_run(
             state,
         )
     )
-    assert replaced["success"] is True
 
     deleted = _as_payload(
         await gdocs_delete_range.run(
@@ -112,7 +107,6 @@ async def test_all_gdocs_tools_via_run(
             state,
         )
     )
-    assert deleted["success"] is True
 
     shared = _as_payload(
         await gdocs_share_document.run(
@@ -120,7 +114,6 @@ async def test_all_gdocs_tools_via_run(
             state,
         )
     )
-    assert shared["success"] is True
 
     anyone = _as_payload(
         await gdocs_share_document.run(
@@ -128,4 +121,3 @@ async def test_all_gdocs_tools_via_run(
             state,
         )
     )
-    assert anyone["success"] is True

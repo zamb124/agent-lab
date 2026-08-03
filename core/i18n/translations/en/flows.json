@@ -1367,6 +1367,8 @@
     "kind_flow": "Flow",
     "kind_mcp": "MCP",
     "kind_tool": "Tool",
+    "confirmation_preview": "preview",
+    "confirmation_approval": "approval",
     "selected_count": "Selected: {{n}}",
     "clear_selection": "Clear",
     "add_selected": "Add selected",
@@ -1408,6 +1410,12 @@
     "cancel": "Cancel",
     "save": "Save",
     "toast_cannot_delete": "You cannot remove the tool from here — use the parent node tool list."
+  },
+  "builtin_tool_editor": {
+    "parameters": "Parameters (JSON Schema)",
+    "confirmation_none": "no confirmation",
+    "confirmation_preview": "preview",
+    "confirmation_approval": "approval"
   },
   "code_modal": {
     "title": "Agent code"

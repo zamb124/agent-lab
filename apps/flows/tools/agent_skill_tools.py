@@ -6,14 +6,15 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.src.clients.agent_skill_client import AgentSkillClient
 from apps.flows.src.runtime.agent_skill_runtime import (
     AgentSkillRuntimeHost,
     require_agent_skill_runtime_host,
 )
 from apps.flows.src.runtime_helpers.state_utils import push_ui_event
-from apps.flows.src.services.platform_facades import get_agent_skill_service, get_file_bytes
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
+from core.clients.files_client import FilesClient
 from core.files.file_ref import FileRef
 from core.llm_context.models import LLMContextBlock
 from core.types import JsonObject
@@ -81,7 +82,7 @@ async def load_agent_skill(agent_skill_id: str, *, state: "ExecutionState") -> J
         return payload
 
     depth = _resolve_load_depth(host, skill_id)
-    skill = await get_agent_skill_service().get(skill_id)
+    skill = await AgentSkillClient().get(skill_id)
     body_key = f"agent_skills.body.{skill_id}"
     if not any(block.stable_key == body_key for block in host.context_blocks):
         host.context_blocks.append(
@@ -190,7 +191,7 @@ async def read_agent_skill_reference(
         raise ValueError(
             f"AgentSkill {skill_id} file {matched.original_name!r} has no file_id"
         )
-    raw = await get_file_bytes(matched.file_id)
+    raw = await FilesClient().get_bytes(matched.file_id)
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:

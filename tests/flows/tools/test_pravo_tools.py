@@ -20,7 +20,7 @@ async def test_pravo_document_rag_search_uses_index_when_results_present() -> No
         "namespace_id": "law",
         "provider": "pgvector",
     }
-    with patch("apps.flows.tools.pravo.RagClient") as rc:
+    with patch("core.clients.pravo.RagClient") as rc:
         inst = rc.return_value
         inst.search = AsyncMock(return_value=search_payload)
         inst.ingest_text = AsyncMock()
@@ -32,7 +32,6 @@ async def test_pravo_document_rag_search_uses_index_when_results_present() -> No
             limit=3,
             force_refresh=False,
         )
-    assert out["success"] is True
     assert out["document_ingested"] is False
     assert out["pravo_document_hash"] == H64
     assert len(out["documents"]) == 1
@@ -56,7 +55,7 @@ async def test_pravo_document_rag_search_ingests_when_empty_then_searches() -> N
         document_hash=H64,
         title="Тестовый документ",
     )
-    with patch("apps.flows.tools.pravo.RagClient") as rc:
+    with patch("core.clients.pravo.RagClient") as rc:
         inst = rc.return_value
         inst.search = AsyncMock(side_effect=[{"results": []}, final_search])
         inst.ingest_text = AsyncMock(return_value={"document_id": "z", "status": "completed"})
@@ -73,7 +72,6 @@ async def test_pravo_document_rag_search_ingests_when_empty_then_searches() -> N
                 limit=5,
                 force_refresh=False,
             )
-    assert out["success"] is True
     assert out["document_ingested"] is True
     assert out["results"]
     assert len(out["documents"]) == 1

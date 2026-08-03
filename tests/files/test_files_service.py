@@ -4,8 +4,6 @@ Unit/integration tests FilesService и контракта FileCreateSpec.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
@@ -151,13 +149,19 @@ def test_file_create_spec_json_roundtrip():
 
 @pytest.mark.asyncio
 async def test_frontend_upload_invalid_spec_422(frontend_client, auth_headers_system):
-    import io
-
     r = await frontend_client.post(
-        "/frontend/api/v1/files/",
-        headers=auth_headers_system,
-        data={"spec": json.dumps({"source_kind": "flow_session", "source_ref": {}, "retention": {"kind": "flow_session"}})},
-        files={"file": ("x.txt", io.BytesIO(b"x"), "text/plain")},
+        "/frontend/api/v1/files/uploads",
+        headers={**auth_headers_system, "Content-Type": "application/json"},
+        json={
+            "spec": {
+                "source_kind": "flow_session",
+                "source_ref": {},
+                "retention": {"kind": "flow_session"},
+            },
+            "original_name": "x.txt",
+            "content_type": "text/plain",
+            "file_size": 1,
+        },
     )
     assert r.status_code == 422
 

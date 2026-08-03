@@ -513,6 +513,8 @@ applications:
       limits:
         cpu: "1"
         memory: 1Gi
+  # Isolated code runners: минимальный env без доступа к platform secrets.
+  # Дополнительные runner env vars — через values.services.<name>.env при необходимости.
   code-runner-python:
     nodeName: master
     enabled: true

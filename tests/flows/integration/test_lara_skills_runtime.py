@@ -221,7 +221,6 @@ async def test_lara_crm_branch_load_then_search_entities(
 
     assert result.interrupt is None
     search_body = _tool_result_json_object(result.tool_results["crm_search_entities"])
-    assert search_body.get("success") is True
     hits = search_body.get("hits")
     assert isinstance(hits, list) and hits
     calls = await mock_llm_capture()

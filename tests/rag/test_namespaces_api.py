@@ -100,7 +100,6 @@ async def test_delete_namespace(
     from tests.rag.helpers import upload_rag_document_bytes
 
     await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,

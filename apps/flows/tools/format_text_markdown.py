@@ -6,9 +6,9 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.services.platform_facades import get_text_transform_service
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
+from core.clients.text_client import TextClient
 from core.state import ExecutionState
 from core.types import JsonObject
 
@@ -34,6 +34,5 @@ async def format_text_markdown(
     state: ExecutionState | None = None,
 ) -> JsonObject:
     del state
-    svc = get_text_transform_service()
-    markdown = await svc.format_markdown(text)
+    markdown = await TextClient().format_markdown(text)
     return {"markdown": markdown}

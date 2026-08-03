@@ -32,6 +32,7 @@ async def test_create_durable_source_auto_binds(app, unique_id: str) -> None:
     container = get_frontend_container()
     service = FilesService(
         file_repository=container.file_repository,
+        files_route_segment="frontend",
         docs_bind_hook=recording_bind,
     )
 
@@ -64,6 +65,7 @@ async def test_create_durable_source_soft_fails_office_bind(app, unique_id: str)
     container = get_frontend_container()
     service = FilesService(
         file_repository=container.file_repository,
+        files_route_segment="frontend",
         docs_bind_hook=failing_bind,
     )
 
@@ -106,6 +108,7 @@ async def test_create_exempt_source_skips_bind(app, unique_id: str) -> None:
     container = get_frontend_container()
     service = FilesService(
         file_repository=container.file_repository,
+        files_route_segment="frontend",
         docs_bind_hook=recording_bind,
     )
     _ = await service.create(

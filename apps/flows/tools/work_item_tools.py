@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import Field
 
-from apps.flows.src.services.platform_facades import get_work_item_service
+from apps.flows.src.clients.worktracker_client import WorktrackerClient
 from apps.flows.src.tools.decorator import tool
 from core.context import require_active_company, require_context
 from core.files.file_ref import FileRef
@@ -347,7 +347,7 @@ async def _build_assignment(
     if normalized == "queue":
         if not assignee_queue_slug:
             raise ValueError("assignee_type=queue требует assignee_queue_slug")
-        queue = await get_work_item_service().get_queue_by_slug(company_id, assignee_queue_slug)
+        queue = await WorktrackerClient().get_queue_by_slug(company_id, assignee_queue_slug)
         return QueueAssignment(work_queue_id=queue.work_queue_id)
     if normalized == "unassigned":
         return UnassignedAssignment()
@@ -438,7 +438,7 @@ async def work_item_create(
     else:
         resolved_kind = WorkItemKind.GENERIC
     attachments = _file_refs_from_ids(args.attachment_file_ids, state)
-    work_item = await get_work_item_service().create_manual_task(
+    work_item = await WorktrackerClient().create_manual_task(
         company_id=company_id,
         title=args.title,
         created_by=created_by,
@@ -490,7 +490,7 @@ async def work_item_complete(
     )
     company_id = require_active_company().company_id
     files = _file_refs_from_ids(args.resolution_file_ids, state)
-    completion = await get_work_item_service().complete(
+    completion = await WorktrackerClient().complete(
         company_id=company_id,
         work_item_id=args.work_item_id,
         resolution=WorkItemResolution(text=args.resolution_text, files=files),
@@ -548,7 +548,7 @@ async def work_item_list(
     company_id = require_active_company().company_id
     parsed_item_state = WorkItemState(args.state_filter) if args.state_filter else None
     parsed_kind = WorkItemKind(args.kind) if args.kind else None
-    items = await get_work_item_service().list(
+    items = await WorktrackerClient().list(
         company_id,
         board_id=args.board_id,
         namespace=args.namespace,
@@ -599,7 +599,7 @@ async def work_item_list_mine(
     company_id = require_active_company().company_id
     user_id = require_context().user.user_id
     parsed_item_state = WorkItemState(args.state_filter) if args.state_filter else None
-    items = await get_work_item_service().list(
+    items = await WorktrackerClient().list(
         company_id,
         assignee_user_id=user_id,
         state=parsed_item_state,
@@ -632,7 +632,7 @@ async def work_item_get(
 ) -> JsonObject:
     _ = state
     args = WorkItemGetArgs(work_item_id=work_item_id)
-    item = await get_work_item_service().get(
+    item = await WorktrackerClient().get(
         require_active_company().company_id,
         args.work_item_id,
     )
@@ -651,7 +651,7 @@ async def work_item_get(
 )
 async def work_item_mine_summary(*, state: "ExecutionState") -> JsonObject:
     _ = state
-    summary = await get_work_item_service().mine_summary(
+    summary = await WorktrackerClient().mine_summary(
         require_active_company().company_id,
         require_context().user.user_id,
     )
@@ -694,7 +694,7 @@ async def work_item_update(
     due_value = (
         _parse_optional_due_date(args.due_date) if args.due_date is not None else None
     )
-    item = await get_work_item_service().update(
+    item = await WorktrackerClient().update(
         company_id=require_active_company().company_id,
         work_item_id=args.work_item_id,
         title=args.title,
@@ -739,7 +739,7 @@ async def work_item_assign(
         assignee_queue_slug=args.assignee_queue_slug,
         state=state,
     )
-    item = await get_work_item_service().reassign(
+    item = await WorktrackerClient().reassign(
         company_id=require_active_company().company_id,
         work_item_id=args.work_item_id,
         assignment=assignment,
@@ -775,7 +775,7 @@ async def work_item_move(
     )
     if args.board_column_id is None and args.item_state is None:
         raise ValueError("Нужен board_column_id и/или item_state")
-    item = await get_work_item_service().move(
+    item = await WorktrackerClient().move(
         company_id=require_active_company().company_id,
         work_item_id=args.work_item_id,
         board_column_id=args.board_column_id,
@@ -801,7 +801,7 @@ async def work_item_claim(
 ) -> JsonObject:
     _ = state
     args = WorkItemClaimArgs(work_item_id=work_item_id)
-    item = await get_work_item_service().claim(
+    item = await WorktrackerClient().claim(
         company_id=require_active_company().company_id,
         work_item_id=args.work_item_id,
         user_id=require_context().user.user_id,
@@ -825,7 +825,7 @@ async def work_item_cancel(
 ) -> JsonObject:
     _ = state
     args = WorkItemCancelArgs(work_item_id=work_item_id)
-    completion = await get_work_item_service().cancel(
+    completion = await WorktrackerClient().cancel(
         company_id=require_active_company().company_id,
         work_item_id=args.work_item_id,
     )
@@ -860,7 +860,7 @@ async def work_item_add_comment(
         if user_id.startswith("flow_employee_")
         else WorkItemCommentRole.USER
     )
-    comment = await get_work_item_service().add_comment(
+    comment = await WorktrackerClient().add_comment(
         company_id=require_active_company().company_id,
         work_item_id=args.work_item_id,
         author=UserActor(user_id=user_id),
@@ -886,7 +886,7 @@ async def work_item_list_comments(
 ) -> JsonObject:
     _ = state
     args = WorkItemCommentsListArgs(work_item_id=work_item_id)
-    comments = await get_work_item_service().list_comments(
+    comments = await WorktrackerClient().list_comments(
         require_active_company().company_id,
         args.work_item_id,
     )

@@ -2472,8 +2472,17 @@ export class CRMEntityCard extends PlatformElement {
     _uploadAttachment(file, entityId) {
         if (!(file instanceof File)) return;
         if (typeof entityId !== 'string' || entityId.length === 0) return;
+        const entity = this.entity;
+        if (!entity || typeof entity.entity_type !== 'string' || entity.entity_type.length === 0) {
+            throw new Error('entity-card: entity.entity_type required for attachment upload');
+        }
         this._uploading = true;
-        this._attachmentUploadOp.run({ entity_id: entityId, file });
+        this._attachmentUploadOp.run({
+            entity_id: entityId,
+            file,
+            entity_type: entity.entity_type,
+            entity_title: typeof entity.name === 'string' ? entity.name : entityId,
+        });
     }
 
     _onRemoveAttachment(att) {

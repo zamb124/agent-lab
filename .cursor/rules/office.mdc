@@ -202,7 +202,7 @@ Slice `office/documents` хранит `items`, `loadedCatalogIds`, `activeCatalo
 - `tests/office/test_office_access_viewer.py` — anonymous `viewer-stream|viewer-frame|viewer-save`, `office-download` через real S3.
 - `tests/office/test_office_access_legacy.py` — legacy `POST /documents/{id}/shares` → `/documents/p/…`.
 - `tests/office/test_office_documents_service_coverage.py` — `is_public`, список/деталь каталога, ACL приватного, публичный в списке у коллеги, запрет `PATCH is_public` не-владельцу, запрет `POST …/members` для публичного.
-- `tests/office/test_office_bff_integration.py` — нескольких доступных каталогов в `POST /documents/empty` и multipart требуют явный `catalog_id` (`_first_accessible_catalog_id`).
+- `tests/office/test_office_bff_integration.py` — нескольких доступных каталогов в `POST /documents/empty` и upload через chunked Files API требуют явный `catalog_id` (`_first_accessible_catalog_id`).
 - `tests/office/test_catalog_rag_index.py` — enable/disable/rebuild/status, nested semantic search, PATCH settings, upload → index enqueue, skip `.sig` (`rag_service` + `rag_worker`).
 - `tests/office/test_office_document_type.py` — типы / MIME.
 - `tests/office/test_onlyoffice_document_server.py` (`@pytest.mark.integration`) — `GET …/healthcheck` к `OFFICE__DOCUMENT_SERVER_PUBLIC_URL`. После `make test-up`: `OFFICE__DOCUMENT_SERVER_PUBLIC_URL=http://localhost:18088` (`tests/conftest.py setdefault`).

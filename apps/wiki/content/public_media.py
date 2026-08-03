@@ -13,15 +13,11 @@
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
-
 from apps.wiki.content.prosemirror import ProseMirrorAttrValue, ProseMirrorNode, iter_nodes
 from apps.wiki.content.schema import FILE_NODE
+from core.files.file_ref import file_id_from_download_url
 
 IMAGE_NODE: str = "image"
-
-PLATFORM_DOWNLOAD_PREFIX: str = "/frontend/api/v1/files/download/"
-"""Единственный платформенный путь скачивания файла (`core/files`)."""
 
 
 def public_file_url(link_token: str, file_id: str) -> str:
@@ -32,16 +28,16 @@ def public_file_url(link_token: str, file_id: str) -> str:
 def platform_file_id_from_url(url: str) -> str:
     """`file_id` из платформенной ссылки скачивания.
 
-    Ссылка бывает и относительной, и абсолютной, поэтому смотрим только путь.
-    Пустая строка означает, что адрес ведёт не в платформенное хранилище —
-    внешние картинки и data URI переписывать не нужно.
+    Ссылка бывает и относительной, и абсолютной. Пустая строка означает, что
+    адрес ведёт не в платформенное хранилище — внешние картинки и data URI
+    переписывать не нужно.
     """
     if url == "":
         return ""
-    path = urlparse(url).path
-    if not path.startswith(PLATFORM_DOWNLOAD_PREFIX):
+    parsed = file_id_from_download_url(url)
+    if parsed is None:
         return ""
-    return path[len(PLATFORM_DOWNLOAD_PREFIX) :].split("/", 1)[0]
+    return parsed
 
 
 def _string_attr(attrs: dict[str, ProseMirrorAttrValue], name: str) -> str:
@@ -109,7 +105,6 @@ def rewrite_cover_for_public(cover_url: str, link_token: str) -> str:
 
 __all__ = [
     "IMAGE_NODE",
-    "PLATFORM_DOWNLOAD_PREFIX",
     "collect_file_ids",
     "platform_file_id_from_url",
     "public_file_url",

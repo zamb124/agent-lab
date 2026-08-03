@@ -17,6 +17,7 @@ pytestmark = [pytest.mark.timeout(120)]
 @pytest.mark.asyncio
 async def test_legacy_share_create_returns_documents_p_url(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -41,6 +42,7 @@ async def test_legacy_share_create_returns_documents_p_url(
 @pytest.mark.asyncio
 async def test_legacy_share_second_create_rotates_token(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -75,6 +77,7 @@ async def test_legacy_share_second_create_rotates_token(
 @pytest.mark.asyncio
 async def test_legacy_share_edit_permission_reflected_in_resolve(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -101,6 +104,7 @@ async def test_legacy_share_edit_permission_reflected_in_resolve(
 @pytest.mark.asyncio
 async def test_legacy_share_create_without_access_forbidden(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     unique_id,
@@ -123,6 +127,7 @@ async def test_legacy_share_create_without_access_forbidden(
 @pytest.mark.asyncio
 async def test_legacy_share_after_access_enable_still_works(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):

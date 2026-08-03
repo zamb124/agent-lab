@@ -7,7 +7,8 @@ import { readEmbedChatUrlParams, applyEmbedChatDrawerSizeVars } from './chat-url
 import { resolveEmbedChatTheme } from './chat-theme.js';
 import { mergeBlocksFromToolResult } from './tool-result-blocks.js';
 import { normalizeChatAuthor } from './chat-author.js';
-import { normalizeFlowChatBlockForPlatformUrls, CANONICAL_FILES_DOWNLOAD_PREFIX } from './flows-url-rewrite.js';
+import { normalizeFlowChatBlockForPlatformUrls } from './flows-url-rewrite.js';
+import { buildPlatformFileDownloadUrl } from '../utils/platform-files-url.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import {
     readTtsOutputEnabled,
@@ -33,6 +34,11 @@ import './chat-message.js';
 import './chat-files-panel.js';
 import './chat-input.js';
 import { getActivePlatformNamespaceName } from '../utils/platform-namespace.js';
+import { buildFlowSessionFileCreateSpecJson } from '../utils/file-create-spec.js';
+import {
+    PLATFORM_FILES_UPLOAD_DEFAULTS,
+    resolvePlatformFileRefs,
+} from '../utils/platform-file-upload.js';
 import { getPlatformBus, hasPlatformBus } from '../events/bus-singleton.js';
 import { bootstrapPlatformBus, completeBootstrap } from '../events/bootstrap.js';
 import { CoreEvents } from '../events/contract.js';
@@ -3339,16 +3345,49 @@ export class PlatformChat extends LitElement {
         void this._sendUserTurn(message, files);
     }
 
-    /** @param {File} file @returns {Promise<{ data: string, name: string, mimeType: string }>} */
-    _fileToBase64Part(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                const base64 = String(reader.result).split(',')[1];
-                resolve({ data: base64, name: file.name, mimeType: file.type });
+    /**
+     * Browser File → upload once; FileRef → Part.url without re-upload.
+     * @param {unknown[]} files
+     */
+    async _resolveOutboundFileParts(files) {
+        const flowId = typeof this.flowId === 'string' ? this.flowId.trim() : '';
+        if (flowId === '' && !this.embedId) {
+            throw new Error('platform-chat: flowId required to upload chat files');
+        }
+        let contextId = this._runtimeState.currentContextId;
+        if (typeof contextId !== 'string' || contextId.length === 0) {
+            this._controller.initSession({});
+            contextId = this._runtimeState.currentContextId;
+        }
+        if (typeof contextId !== 'string' || contextId.length === 0) {
+            throw new Error('platform-chat: contextId required to upload chat files');
+        }
+        const sessionId = `${flowId || 'embed'}:${contextId}`;
+        const resolvedFlowId = flowId !== '' ? flowId : 'embed';
+        const refs = await resolvePlatformFileRefs(files, {
+            credentials: this._requestCredentials(),
+            buildSpec: () =>
+                buildFlowSessionFileCreateSpecJson({
+                    flowId: resolvedFlowId,
+                    sessionId,
+                }),
+            maxUploadBytes: PLATFORM_FILES_UPLOAD_DEFAULTS.maxUploadBytes,
+            singleShotMaxBytes: PLATFORM_FILES_UPLOAD_DEFAULTS.singleShotMaxBytes,
+            chunkSizeBytes: PLATFORM_FILES_UPLOAD_DEFAULTS.chunkSizeBytes,
+        });
+        return refs.map((ref) => {
+            if (typeof ref.url !== 'string' || ref.url.length === 0) {
+                throw new Error(`platform-chat: file ${ref.file_id} missing canonical url`);
+            }
+            return {
+                url: ref.url,
+                filename: ref.original_name,
+                mediaType: ref.content_type,
+                file_id: ref.file_id,
+                original_name: ref.original_name,
+                content_type: ref.content_type,
+                file_size: ref.file_size,
             };
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
         });
     }
 
@@ -3443,7 +3482,7 @@ export class PlatformChat extends LitElement {
             this._ttsOnly.primeFromUserGesture();
             await this._ttsOnly.awaitReady();
         }
-        const fileParts = await Promise.all(files.map((f) => this._fileToBase64Part(f)));
+        const fileParts = await this._resolveOutboundFileParts(files);
         const { metadata, variables } = await this._composeSendMetadata();
         this._emitAssistantEvent('context_requested', {
             flow_id: this.flowId || null,
@@ -3465,8 +3504,19 @@ export class PlatformChat extends LitElement {
                     role: 'user',
                     content: message,
                     timestamp: new Date().toISOString(),
-                    files: [],
-                    filesMeta: files.map((f) => ({ name: f.name, size: f.size })),
+                    files: fileParts.map((part) => ({
+                        file_id: part.file_id,
+                        original_name: part.original_name,
+                        content_type: part.content_type,
+                        file_size: part.file_size,
+                        url: part.url,
+                    })),
+                    filesMeta: fileParts.map((part) => ({
+                        name: part.filename,
+                        size: part.file_size,
+                        url: part.url,
+                        file_id: part.file_id,
+                    })),
                 },
             });
         } catch (err) {
@@ -3689,7 +3739,7 @@ export class PlatformChat extends LitElement {
                 files = _upsertPanelFiles(files, [{
                     file_id: id,
                     original_name: this._lb('operator_files', 'Attached files'),
-                    url: `${CANONICAL_FILES_DOWNLOAD_PREFIX}/${encodeURIComponent(id)}`,
+                    url: buildPlatformFileDownloadUrl(id),
                 }]);
             }
             for (const block of Array.isArray(message.blocks) ? message.blocks : []) {

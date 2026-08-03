@@ -24,22 +24,19 @@ from core.files.reader.models import (
     PageLayout,
     PageLayoutKind,
     ReadFileArgs,
-    ReadFileEnvelope,
     ReadLane,
     StopReason,
 )
-from core.files.writer import FileWriteError, FileWriter
+from core.files.writer import FileWriter
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
-
-JsonDict = JsonObject
 
 _CREATE_FILE_TOOL_DESCRIPTION = """
 Создаёт файл в хранилище платформы и возвращает ссылку на скачивание.
 
-Ответ при успехе: success=true, file_id, url (путь для скачивания), original_name, content_type,
+Ответ: file_id, url (путь для скачивания), original_name, content_type,
 file_size, checksum (если есть), is_public.
-Ответ при ошибке: success=false, error (текст причины: нет компании в контексте, неверный base64, нет расширения в имени и т.д.).
+Ошибки (нет компании в контексте, неверный base64, нет расширения в имени и т.д.) — исключение.
 
 Параметры вызова:
 - content (строка): всегда передаётся как текст в JSON. Содержимое зависит от content_mode.
@@ -156,7 +153,7 @@ async def read_file(
 ) -> JsonObject:
     all_files = state.files
     if not all_files:
-        return {"success": False, "error": "Нет файлов для чтения"}
+        raise ValueError("Нет файлов для чтения")
 
     if names:
         file_refs, errors = _resolve_file_refs_for_read(state, names)
@@ -194,21 +191,23 @@ async def read_file(
         )
 
     if not file_refs and errors:
-        envelope = ReadFileEnvelope(
-            success=True,
-            tool="read_file",
-            files_processed=len(errors),
-            names=args.names,
-            budget=args.budget,
-            result_chars_returned=0,
-            files=errors,
+        raise ValueError(
+            "; ".join(
+                err.error if err.error else f"Файл '{err.file_name}' не найден"
+                for err in errors
+            )
         )
-    elif file_refs:
-        envelope = await read_files_to_envelope(file_refs, args, tool_name="read_file")
-        if errors:
-            envelope = envelope.model_copy(update={"files": errors + envelope.files, "files_processed": envelope.files_processed + len(errors)})
-    else:
-        return {"success": False, "error": "Нет файлов для чтения"}
+    if not file_refs:
+        raise ValueError("Нет файлов для чтения")
+
+    envelope = await read_files_to_envelope(file_refs, args, tool_name="read_file")
+    if errors:
+        envelope = envelope.model_copy(
+            update={
+                "files": errors + envelope.files,
+                "files_processed": envelope.files_processed + len(errors),
+            }
+        )
 
     return require_json_object(envelope.model_dump(mode="json"), "read_file.result")
 
@@ -226,18 +225,15 @@ async def create_file(
     content_mode: Literal["auto", "markdown", "base64", "raw"] = "auto",
     *,
     state: ExecutionState,
-) -> JsonDict:
+) -> JsonObject:
     """Создаёт файл в хранилище. Подробное описание и примеры JSON — в description tool (см. _CREATE_FILE_TOOL_DESCRIPTION)."""
     writer = FileWriter()
-    try:
-        record = await writer.write(
-            content=content,
-            original_name=original_name,
-            content_mode=content_mode,
-            public=True,
-        )
-    except FileWriteError as exc:
-        return {"success": False, "error": str(exc)}
+    record = await writer.write(
+        content=content,
+        original_name=original_name,
+        content_mode=content_mode,
+        public=True,
+    )
 
     response = FileResponse.from_record(record)
     payload = require_json_object(response.model_dump(mode="json"), "create_file.response")
@@ -250,4 +246,4 @@ async def create_file(
         source="files",
         correlation_id=response.file_id,
     )
-    return {"success": True, **payload}
+    return payload

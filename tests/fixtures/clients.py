@@ -126,6 +126,10 @@ def patch_service_clients_asgi(
                 from apps.worktracker.main import app
 
                 _apps_cache[service] = app
+            elif service == "wiki":
+                from apps.wiki.main import app
+
+                _apps_cache[service] = app
             elif service == "secrets":
                 from apps.secrets.main import app
 
@@ -191,7 +195,9 @@ def patch_service_clients_asgi(
                 from core.clients.service_client import ServiceClientError
 
                 raise ServiceClientError(
-                    f"HTTP {response.status_code} при запросе к {service} (ASGI): {response.text}"
+                    f"HTTP {response.status_code} при запросе к {service} (ASGI): {response.text}",
+                    status_code=response.status_code,
+                    response_text=response.text,
                 )
 
             if response.content:

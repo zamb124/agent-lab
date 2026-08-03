@@ -38,6 +38,7 @@ def build_test_facade(view: BrowserRuntimeSettingsView) -> BrowserRuntimeFacade:
     storage = Storage(db_url=shared_url, get_context_func=get_context)
     files_service = FilesService(
         file_repository=FileRepository(storage=storage),
+        files_route_segment="browser",
         docs_bind_hook=_test_docs_bind_hook,
     )
     return BrowserRuntimeFacade(view, redis_client=redis_client, files_service=files_service)

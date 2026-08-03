@@ -6,6 +6,8 @@
  *   uploads: { [correlationId]: { name, status: 'pending'|'completed'|'failed', fileId?, error? } }
  */
 
+import { buildPlatformFileDownloadUrl } from '../../utils/platform-files-url.js';
+
 export const FILES_EVENTS = Object.freeze({
     UPLOAD_REQUESTED: 'files/upload/requested',
     UPLOAD_COMPLETED: 'files/upload/completed',
@@ -65,13 +67,7 @@ export function filesReducer(state = initialFilesState, event) {
 
 export const filesSlice = { reducer: filesReducer, initial: initialFilesState };
 
-/** Канонический same-origin URL скачивания файла. */
-export const CANONICAL_FILES_DOWNLOAD_PREFIX = '/frontend/api/v1/files/download';
-
 /** @param {string} fileId */
 export function buildFileDownloadUrl(fileId) {
-    if (typeof fileId !== 'string' || fileId === '') {
-        throw new Error('buildFileDownloadUrl: fileId required');
-    }
-    return `${CANONICAL_FILES_DOWNLOAD_PREFIX}/${encodeURIComponent(fileId)}`;
+    return buildPlatformFileDownloadUrl(fileId);
 }

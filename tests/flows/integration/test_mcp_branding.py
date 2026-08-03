@@ -89,7 +89,8 @@ async def test_mcp_branding_upsert_list_servers_and_delete(client, unique_id: st
     put_data = put_resp.json()
     assert put_data["server_id"] == server_id
     assert put_data["icon_file_id"] == record.file_id
-    assert put_data["icon_url"].startswith("/frontend/api/v1/files/download/")
+    assert put_data["icon_url"].startswith("/")
+    assert "/api/v1/files/download/" in put_data["icon_url"]
 
     list_branding = await client.get(
         "/flows/api/v1/mcp/branding",

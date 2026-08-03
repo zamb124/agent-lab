@@ -293,7 +293,7 @@ class TestTaskIQInterruptResume:
             nodes={
                 "ask": {
                     "type": "code",
-                    "code": "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    if 'name' in state:\n        return state\n    if state.get('asked_name'):\n        state['name'] = state.get('content', '')\n        return state\n    state['asked_name'] = True\n    raise FlowInterrupt(question='What is your name?')\n",
+                    "code": "\nasync def run(args, state):\n    if 'name' in state:\n        return state\n    if state.get('asked_name'):\n        state['name'] = state.get('content', '')\n        return state\n    state['asked_name'] = True\n    raise FlowInterrupt(question='What is your name?')\n",
                 },
                 "greet": {
                     "type": "code",

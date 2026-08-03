@@ -1,4 +1,4 @@
-"""Тул суммаризации текста через ``get_text_transform_service`` и canonical AI runtime."""
+"""Тул суммаризации текста через TextClient и canonical AI runtime."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.services.platform_facades import get_text_transform_service
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
+from core.clients.text_client import TextClient
 from core.state import ExecutionState
 from core.types import JsonObject
 
@@ -55,8 +55,7 @@ async def summarize_text(
     state: ExecutionState | None = None,
 ) -> JsonObject:
     del state
-    svc = get_text_transform_service()
-    summary = await svc.summarize(
+    summary = await TextClient().summarize(
         text,
         max_output_tokens=max_output_tokens,
         instruction=instruction,

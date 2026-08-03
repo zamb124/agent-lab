@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import re
 import secrets
 import uuid
@@ -18,6 +17,7 @@ from core.context import get_context
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.user_repository import UserRepository
 from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
+from core.files.reader.service import read_stored_file_by_id
 from core.files.registry import default_retention_for_source
 from core.files.service import FilesService
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
@@ -45,6 +45,7 @@ from core.mail.models import (
     InboundMailMessage,
     InboundMailMessagePublic,
     IspmanagerProvisionConfig,
+    MailAttachment,
     MailAttachmentPublic,
     MailboxBinding,
     MailboxBindingCreatePayload,
@@ -221,48 +222,6 @@ def to_public_binding(
         use_ssl=connection.use_ssl if connection is not None else None,
         created_at=binding.created_at,
         updated_at=binding.updated_at,
-    )
-
-
-def to_public_inbound(
-    message: InboundMailMessage,
-    *,
-    include_attachment_content: bool,
-    file_ids_by_index: dict[int, str] | None = None,
-) -> InboundMailMessagePublic:
-    attachments: list[MailAttachmentPublic] = []
-    for index, item in enumerate(message.attachments):
-        size = item.size if item.size > 0 else len(item.content)
-        file_id: str | None = None
-        if file_ids_by_index is not None and index in file_ids_by_index:
-            file_id = file_ids_by_index[index]
-        content_base64: str | None = None
-        if include_attachment_content and item.available and item.content:
-            content_base64 = base64.b64encode(item.content).decode("ascii")
-        attachments.append(
-            MailAttachmentPublic(
-                filename=item.filename,
-                content_type=item.content_type,
-                size=size,
-                available=item.available and (file_id is not None or bool(item.content)),
-                parse_error=item.parse_error,
-                file_id=file_id,
-                content_base64=content_base64 if file_id is None else None,
-            )
-        )
-    return InboundMailMessagePublic(
-        uid=message.uid,
-        message_id=message.message_id,
-        subject=message.subject,
-        from_address=message.from_address,
-        to_addresses=list(message.to_addresses),
-        body_text=message.body_text,
-        body_html=message.body_html,
-        unread=message.unread,
-        date=message.date,
-        in_reply_to=message.in_reply_to,
-        references=message.references,
-        attachments=attachments,
     )
 
 
@@ -1775,7 +1734,6 @@ class MailService:
                     available=ref.available and ref.file_id is not None,
                     parse_error=ref.parse_error,
                     file_id=ref.file_id,
-                    content_base64=None,
                 )
             )
         return InboundMailMessagePublic(
@@ -2411,6 +2369,41 @@ class MailService:
         if not deleted:
             raise MailBindingNotFoundError(mailbox_binding_id)
 
+    async def _resolve_outbound_attachments(
+        self,
+        attachments: list[MailAttachment],
+    ) -> list[MailAttachment]:
+        """file_id (chunked upload) → content bytes for SMTP / local Sent."""
+        resolved: list[MailAttachment] = []
+        for attachment in attachments:
+            file_id = attachment.file_id
+            if file_id is None or file_id.strip() == "":
+                raise ValueError(
+                    "outbound attachment file_id required "
+                    + f"filename={attachment.filename!r}"
+                )
+            if len(attachment.content) > 0:
+                raise ValueError(
+                    "outbound attachment content forbidden; use file_id "
+                    + f"filename={attachment.filename!r}"
+                )
+            data, _original_name = await read_stored_file_by_id(file_id.strip())
+            if len(data) == 0:
+                raise ValueError(
+                    "outbound attachment empty after file_id resolve "
+                    + f"filename={attachment.filename!r} file_id={file_id!r}"
+                )
+            resolved.append(
+                attachment.model_copy(
+                    update={
+                        "content": data,
+                        "size": len(data),
+                        "file_id": None,
+                    }
+                )
+            )
+        return resolved
+
     async def _materialize_attachments(
         self,
         message: InboundMailMessage,
@@ -2537,11 +2530,6 @@ class MailService:
         if binding is None:
             raise MailBindingNotFoundError(payload.mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        for attachment in payload.attachments:
-            if not attachment.content:
-                raise ValueError(
-                    f"outbound attachment content required filename={attachment.filename!r}"
-                )
         message_id = payload.message_id
         if message_id is None or not message_id.strip():
             message_id = await self.allocate_outbound_message_id(
@@ -2633,11 +2621,7 @@ class MailService:
         if binding is None:
             raise MailBindingNotFoundError(payload.mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        for attachment in payload.attachments:
-            if not attachment.content:
-                raise ValueError(
-                    f"outbound attachment content required filename={attachment.filename!r}"
-                )
+        resolved_attachments = await self._resolve_outbound_attachments(payload.attachments)
         result = await self.send_from_binding(
             payload.mailbox_binding_id,
             OutboundMailMessage(
@@ -2648,7 +2632,7 @@ class MailService:
                 message_id=payload.message_id,
                 in_reply_to=payload.in_reply_to,
                 references=payload.references,
-                attachments=payload.attachments,
+                attachments=resolved_attachments,
             ),
             company_id=resolved_company_id,
         )
@@ -3296,9 +3280,7 @@ class MailService:
                         content_type=attachment.content_type,
                         size=attachment.size if attachment.size > 0 else len(attachment.content),
                         file_id=file_id,
-                        available=attachment.available and (
-                            file_id is not None or bool(attachment.content)
-                        ),
+                        available=attachment.available and file_id is not None,
                         parse_error=attachment.parse_error,
                     )
                 )

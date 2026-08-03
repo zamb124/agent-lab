@@ -1,40 +1,19 @@
 /**
- * Канонические URL файлов платформы: /frontend/api/v1/files/download/{file_id}
- * Нормализует исторические same-origin пути вида .../api/v1/files/download/... в канон frontend.
+ * Same-origin URL файлов: `/{segment}/api/v1/files/download/{file_id}`.
+ * Segment — текущий сервис SPA; исторические пути других сервисов
+ * переписываются на текущий (shared FileRepository).
  */
 
-export const CANONICAL_FILES_DOWNLOAD_PREFIX = '/frontend/api/v1/files/download';
+import {
+    buildPlatformFileDownloadUrl,
+    extractPlatformFileDownloadId,
+    resolvePlatformFilesApiBase,
+} from '../utils/platform-files-url.js';
 
-const PLATFORM_DOWNLOAD_FILE_ID_RE =
-    /\/(?:frontend|flows|sync|crm|rag|worktracker|office|browser)?\/api\/v1\/files\/download\/([^/?#]+)/;
-
-/**
- * @param {string|null|undefined} raw
- * @returns {string|null} file_id
- */
-export function extractPlatformFileDownloadId(raw) {
-    if (raw == null || raw === '') {
-        return null;
-    }
-    let s = String(raw).trim();
-    if (s.toLowerCase().startsWith('sandbox:')) {
-        s = s.slice(8).trim();
-    }
-    if (s.toLowerCase().startsWith('vscode-file:')) {
-        return null;
-    }
-    try {
-        if (/^https?:\/\//i.test(s)) {
-            const u = new URL(s);
-            const m = (u.pathname || '').match(PLATFORM_DOWNLOAD_FILE_ID_RE);
-            return m ? m[1] : null;
-        }
-    } catch {
-        /* ignore */
-    }
-    const m = s.match(PLATFORM_DOWNLOAD_FILE_ID_RE);
-    return m ? m[1] : null;
-}
+export {
+    extractPlatformFileDownloadId,
+    resolvePlatformFilesApiBase,
+} from '../utils/platform-files-url.js';
 
 /**
  * @param {string|null|undefined} raw
@@ -48,7 +27,7 @@ export function resolvePlatformFileDownloadUrl(raw) {
     if (!fileId) {
         return String(raw).trim();
     }
-    return `${CANONICAL_FILES_DOWNLOAD_PREFIX}/${encodeURIComponent(fileId)}`;
+    return buildPlatformFileDownloadUrl(fileId);
 }
 
 /**

@@ -24,6 +24,7 @@ from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
+from apps.flows.src.tools.provider_schema import compile_openai_strict_parameters
 from core.auth import permission_checker
 from core.logging import get_logger
 from core.state import parse_interrupt_body_from_external_dict
@@ -91,6 +92,11 @@ class BaseTool(ABC):
     react_role: ReactToolRole = ReactToolRole.STANDARD
     container: ToolContainerRef | None = None
     is_nested_flow_tool: bool = False
+    output_schema: JsonObject | None = None
+    effects: list[str] = []
+    confirmation_floor: str = "none"
+    idempotency: str = "none"
+    argument_sources: dict[str, str] = {}
 
     def get_tags(self) -> list[str]:
         """Возвращает теги/группы тула."""
@@ -158,8 +164,8 @@ class BaseTool(ABC):
         """
         Единственная точка входа для выполнения tool.
 
-        Наследники переопределяют этот метод.
-        Для стандартных проверок permissions вызывайте _check_before_run().
+        Не переопределять: реализуйте только _run_impl.
+        run всегда вызывает _check_before_run, затем _run_impl.
 
         Аргументы:
             args: Аргументы вызова
@@ -222,7 +228,8 @@ class BaseTool(ABC):
             "function": {
                 "name": sanitize_tool_name(self.name),
                 "description": self.description,
-                "parameters": self.parameters,
+                "parameters": compile_openai_strict_parameters(self.parameters),
+                "strict": True,
             },
         }
         return schema

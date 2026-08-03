@@ -15,6 +15,7 @@ TOOL_TAG_WHITELIST: frozenset[str] = frozenset(
         "files",
         "sync",
         "worktracker",
+        "wiki",
         "web",
         "knowledge",
         "scheduling",

@@ -208,18 +208,18 @@ async def test_office_list_documents_search_and_sort(
 @pytest.mark.asyncio
 async def test_office_upload_csv_cell_type(office_client, auth_headers_system, unique_id):
     catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
-    files = {
-        "file": (
-            f"sheet-{unique_id}.csv",
-            b"col1,col2\n1,2\n",
-            "text/csv",
-        )
-    }
+    uploaded = await upload_office_file_bytes(
+        office_client,
+        auth_headers_system,
+        filename=f"sheet-{unique_id}.csv",
+        content=b"col1,col2\n1,2\n",
+        content_type="text/csv",
+    )
+    file_id = str(uploaded["file_id"])
     r = await office_client.post(
         "/documents/api/v1/documents",
         headers=auth_headers_system,
-        files=files,
-        data={"title": f"CSV {unique_id}", "catalog_id": catalog_id},
+        json={"file_id": file_id, "title": f"CSV {unique_id}", "catalog_id": catalog_id},
     )
     assert r.status_code == 200
     j = r.json()
@@ -231,14 +231,13 @@ async def test_office_upload_csv_cell_type(office_client, auth_headers_system, u
 @pytest.mark.asyncio
 async def test_open_existing_file_as_document_is_same_file_and_idempotent(
     office_client,
-    frontend_client,
     auth_headers_system,
     unique_id,
 ):
     catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
 
     uploaded = await upload_office_file_bytes(
-        frontend_client,
+        office_client,
         auth_headers_system,
         filename=f"flow-table-{unique_id}.csv",
         content=b"a,b\n1,2\n",
@@ -247,7 +246,7 @@ async def test_open_existing_file_as_document_is_same_file_and_idempotent(
     file_id = str(uploaded["file_id"])
 
     first = await office_client.post(
-        "/documents/api/v1/documents/from-file",
+        "/documents/api/v1/documents",
         headers=auth_headers_system,
         json={"file_id": file_id, "catalog_id": catalog_id, "title": f"Flow table {unique_id}"},
     )
@@ -260,7 +259,7 @@ async def test_open_existing_file_as_document_is_same_file_and_idempotent(
     assert first_body["editor_url"].startswith("/documents/embed/edit/")
 
     second = await office_client.post(
-        "/documents/api/v1/documents/from-file",
+        "/documents/api/v1/documents",
         headers=auth_headers_system,
         json={"file_id": file_id, "catalog_id": catalog_id},
     )

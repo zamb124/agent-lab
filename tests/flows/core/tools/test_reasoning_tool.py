@@ -111,9 +111,8 @@ class TestReasonTool:
         assert reason.react_role == ReactToolRole.REASON
 
     def test_tool_has_tags(self):
-        """Tool имеет теги reasoning и internal."""
-        assert "reasoning" in reason.tags
-        assert "internal" in reason.tags
+        """Tool имеет whitelist tag misc."""
+        assert reason.tags == ["misc"]
 
     def test_tool_parameters_generated(self):
         """Parameters генерируются из функции."""

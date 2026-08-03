@@ -466,10 +466,12 @@ async def office_api_upload_txt(
 ) -> str:
     return await upload_txt_document(
         office_client_http,
+        office_client_http,
         office_e2e_namespace_headers(auth_headers, namespace),
         catalog_id=catalog_id,
         title=title,
         content=content,
+        namespace=namespace,
     )
 
 
@@ -482,22 +484,34 @@ async def office_api_upload_txt_auth(
     title: str,
     content: bytes = b"office e2e content",
 ) -> str:
-    """Upload txt через тот же cookie-клиент, что create_catalog (без drift headers)."""
+    """Upload txt: chunked Files API + POST /documents JSON bind."""
+    from tests.office.helpers import upload_office_file_bytes
+
     async with _office_client(origin, auth_token, namespace=namespace) as client:
+        file_payload = await upload_office_file_bytes(
+            client,
+            {},
+            filename=f"{title}.txt",
+            content=content,
+            content_type="text/plain",
+            namespace=namespace,
+        )
+        file_id = file_payload.get("file_id")
+        if not isinstance(file_id, str) or file_id == "":
+            raise AssertionError("file_id required after chunked upload")
         response = await client.post(
             "/documents/api/v1/documents",
-            files={"file": (f"{title}.txt", content, "text/plain")},
-            data={"title": title, "catalog_id": catalog_id},
+            json={"file_id": file_id, "title": title, "catalog_id": catalog_id},
         )
         if response.status_code != 200:
             raise AssertionError(
                 f"upload txt failed: {response.status_code} {response.text}"
             )
         body = response.json()
-        file_id = body.get("file_id")
-        if not isinstance(file_id, str) or file_id == "":
+        bound_id = body.get("file_id")
+        if not isinstance(bound_id, str) or bound_id == "":
             raise AssertionError("file_id required in upload response")
-        return file_id
+        return bound_id
 
 
 async def office_api_delete_document_auth(

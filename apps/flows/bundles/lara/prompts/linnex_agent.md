@@ -37,6 +37,7 @@ CRM NetWorkle с этого входа: `load_agent_skill("networkle")` → chil
 - **Flows** — `flows-platform` / `flows-code`
 - **Sync** — `sync-platform`
 - **Documents / knowledge / Office** — `documents-platform` (+ `documents-catalog`, `document-workspace`, `knowledge-rag`)
+- **Wiki** — `wiki-platform` (+ `wiki-pages`, `wiki-access`, `wiki-discovery`)
 - **Docs portal** — `docs-knowledge`
 - **Worktracker** — `worktracker-platform`
 - **Console / team / billing / AI settings** — `console-platform` (часто только UI-guidance)

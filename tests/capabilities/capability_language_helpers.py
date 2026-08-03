@@ -87,6 +87,9 @@ def sdk_stable_capability_names_from_manifest(manifest: Mapping[str, object]) ->
         name
         for name in names
         if name in STATIC_PLATFORM_CAPABILITIES | INTERRUPT_PLATFORM_CAPABILITIES
+        or name.startswith("wiki.")
+        or name.startswith("documents.")
+        or name.startswith("crm.")
         or (name.startswith("tools.") and not is_ephemeral_tool_capability_name(name))
     }
 
@@ -1030,7 +1033,19 @@ async def assert_language_runs_static_platform_capabilities(
         for item in manifest["capabilities"]
         if isinstance(item, dict) and isinstance(item.get("name"), str) and not item["name"].startswith("tools.")
     }
-    assert static_names == STATIC_PLATFORM_CAPABILITIES | INTERRUPT_PLATFORM_CAPABILITIES
+    core_static = STATIC_PLATFORM_CAPABILITIES | INTERRUPT_PLATFORM_CAPABILITIES
+    wiki_static = {name for name in static_names if name.startswith("wiki.")}
+    documents_static = {name for name in static_names if name.startswith("documents.")}
+    crm_static = {name for name in static_names if name.startswith("crm.")}
+    sync_static = {name for name in static_names if name.startswith("sync.")}
+    assert core_static <= static_names
+    assert static_names == (
+        core_static | wiki_static | documents_static | crm_static | sync_static
+    )
+    assert wiki_static  # wiki.* SDK namespace registered for eval/code_node
+    assert documents_static  # documents.* SDK namespace registered for eval/code_node
+    assert crm_static  # crm.* SDK namespace registered for eval/code_node
+    assert sync_static  # sync.* SDK namespace registered for eval/code_node
 
     response = await flows_client_http.post(
         "/flows/api/v1/code/execute",

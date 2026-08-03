@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import Field
 
-from apps.flows.src.services.platform_facades import get_work_item_service
+from apps.flows.src.clients.worktracker_client import WorktrackerClient
 from apps.flows.src.tools.decorator import tool
 from core.context import require_active_company, require_context
 from core.models import StrictBaseModel
@@ -107,7 +107,7 @@ def _queue_brief(queue_id: str, name: str, slug: str, description: str | None) -
 )
 async def work_queue_list(*, state: "ExecutionState") -> JsonObject:
     _ = state
-    queues = await get_work_item_service().list_queues(require_active_company().company_id)
+    queues = await WorktrackerClient().list_queues(require_active_company().company_id)
     return {
         "items": [
             _queue_brief(q.work_queue_id, q.name, q.work_queue_slug, q.description)
@@ -133,7 +133,7 @@ async def work_queue_get_by_slug(
 ) -> JsonObject:
     _ = state
     args = WorkQueueGetBySlugArgs(work_queue_slug=work_queue_slug)
-    queue = await get_work_item_service().get_queue_by_slug(
+    queue = await WorktrackerClient().get_queue_by_slug(
         require_active_company().company_id,
         args.work_queue_slug,
     )
@@ -164,7 +164,7 @@ async def work_queue_create(
         work_queue_slug=work_queue_slug,
         description=description,
     )
-    queue = await get_work_item_service().create_queue(
+    queue = await WorktrackerClient().create_queue(
         company_id=require_active_company().company_id,
         name=args.name,
         slug=args.work_queue_slug,
@@ -198,7 +198,7 @@ async def work_queue_update(
         name=name,
         description=description,
     )
-    queue = await get_work_item_service().update_queue(
+    queue = await WorktrackerClient().update_queue(
         company_id=require_active_company().company_id,
         work_queue_id=args.work_queue_id,
         name=args.name,
@@ -226,7 +226,7 @@ async def work_queue_list_members(
 ) -> JsonObject:
     _ = state
     args = WorkQueueMembersListArgs(work_queue_id=work_queue_id)
-    members = await get_work_item_service().list_queue_members(args.work_queue_id)
+    members = await WorktrackerClient().list_queue_members(args.work_queue_id)
     items: list[JsonObject] = []
     for member in members:
         actor: WorkActor = member.member
@@ -265,7 +265,7 @@ async def work_queue_add_member(
         user_id=user_id,
         role=role,
     )
-    member = await get_work_item_service().add_queue_member(
+    member = await WorktrackerClient().add_queue_member(
         company_id=require_active_company().company_id,
         work_queue_id=args.work_queue_id,
         member=UserActor(user_id=args.user_id),
@@ -298,7 +298,7 @@ async def work_queue_remove_member(
 ) -> JsonObject:
     _ = state
     args = WorkQueueMemberRemoveArgs(work_queue_id=work_queue_id, user_id=user_id)
-    removed = await get_work_item_service().remove_queue_member(
+    removed = await WorktrackerClient().remove_queue_member(
         work_queue_id=args.work_queue_id,
         member=UserActor(user_id=args.user_id),
     )

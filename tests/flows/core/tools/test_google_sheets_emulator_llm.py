@@ -157,7 +157,6 @@ async def test_create_spreadsheet_via_llm_node(
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
-    assert payload["success"] is True
     assert isinstance(payload["spreadsheet_id"], str)
 
 
@@ -275,7 +274,7 @@ async def test_update_batch_update_append_clear_via_llm_node(
         mock_llm_with_queue,
         google_api_emulator,
     )
-    assert _tool_payloads_from_state(state)[0]["success"] is True
+    assert _tool_payloads_from_state(state)[0]["spreadsheet_id"] == sid
 
     _, state = await _run_single_tool_flow(
         f"{unique_id}-bu",
@@ -290,7 +289,7 @@ async def test_update_batch_update_append_clear_via_llm_node(
         mock_llm_with_queue,
         google_api_emulator,
     )
-    assert _tool_payloads_from_state(state)[0]["success"] is True
+    assert _tool_payloads_from_state(state)[0]["spreadsheet_id"] == sid
 
     _, state = await _run_single_tool_flow(
         f"{unique_id}-ap",
@@ -306,7 +305,7 @@ async def test_update_batch_update_append_clear_via_llm_node(
         mock_llm_with_queue,
         google_api_emulator,
     )
-    assert _tool_payloads_from_state(state)[0]["success"] is True
+    assert _tool_payloads_from_state(state)[0]["spreadsheet_id"] == sid
 
     _, state = await _run_single_tool_flow(
         f"{unique_id}-cl",
@@ -317,7 +316,7 @@ async def test_update_batch_update_append_clear_via_llm_node(
         mock_llm_with_queue,
         google_api_emulator,
     )
-    assert _tool_payloads_from_state(state)[0]["success"] is True
+    assert _tool_payloads_from_state(state)[0]["spreadsheet_id"] == sid
 
     _, state = await _run_single_tool_flow(
         f"{unique_id}-bc",
@@ -328,7 +327,7 @@ async def test_update_batch_update_append_clear_via_llm_node(
         mock_llm_with_queue,
         google_api_emulator,
     )
-    assert _tool_payloads_from_state(state)[0]["success"] is True
+    assert _tool_payloads_from_state(state)[0]["spreadsheet_id"] == sid
 
 
 @pytest.mark.asyncio

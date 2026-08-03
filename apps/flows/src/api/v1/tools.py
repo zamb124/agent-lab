@@ -12,10 +12,17 @@ from pydantic import Field
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import FlowConfig, ToolReference, flow_tool_parameters_schema
 from apps.flows.src.models.enums import CodeMode, ReactToolRole
+from apps.flows.src.models.tool_contracts import ToolDefinition
 from apps.flows.src.services.agent_toolkit_service import (
     get_toolkit_ids_for_flow,
     get_toolkit_ids_for_tool,
     set_tool_toolkit_membership,
+)
+from apps.flows.src.services.tool_definition_builder import build_tool_definition_from_base_tool
+from apps.flows.src.services.tool_preview import (
+    ToolPreviewRequest,
+    ToolPreviewResponse,
+    build_tool_preview,
 )
 from apps.flows.src.tools.base import BaseTool
 from core.logging import get_logger
@@ -53,6 +60,10 @@ class ToolResponse(StrictBaseModel):
     language: str = "python"
     entrypoint: str | None = None
     parameters_schema: JsonObject | None = None
+    output_schema: JsonObject | None = None
+    effects: list[str] = Field(default_factory=list)
+    confirmation_floor: str | None = None
+    builtin: bool = False
     tags: list[str] = Field(default_factory=list)
     permission: str | list[str] | None = None
     item_type: str = "tool"  # tool или flow (запись из репозитория flows)
@@ -109,6 +120,29 @@ def _tool_response_from_reference(t: ToolReference, *, agent_toolkit_ids: list[s
     )
 
 
+def _enrich_tool_response_from_registry(
+    container: ContainerDep,
+    response: ToolResponse,
+) -> ToolResponse:
+    """Attach contract fields when tool_id matches a process builtin."""
+    registry_tool = _resolve_registry_tool(container, response.tool_id)
+    if registry_tool is None:
+        return response
+    return response.model_copy(
+        update={
+            "builtin": True,
+            "effects": list(registry_tool.effects),
+            "confirmation_floor": registry_tool.confirmation_floor,
+            "output_schema": registry_tool.output_schema
+            if response.output_schema is None
+            else response.output_schema,
+            "parameters_schema": registry_tool.parameters
+            if response.parameters_schema is None
+            else response.parameters_schema,
+        }
+    )
+
+
 def _tool_response_from_registry_tool(tool: BaseTool) -> ToolResponse:
     return ToolResponse(
         tool_id=tool.name,
@@ -118,6 +152,10 @@ def _tool_response_from_registry_tool(tool: BaseTool) -> ToolResponse:
         language="python",
         entrypoint=None,
         parameters_schema=tool.parameters,
+        output_schema=tool.output_schema,
+        effects=list(tool.effects),
+        confirmation_floor=tool.confirmation_floor,
+        builtin=True,
         tags=tool.get_tags(),
         permission=tool.permission,
         item_type="tool",
@@ -126,6 +164,12 @@ def _tool_response_from_registry_tool(tool: BaseTool) -> ToolResponse:
         mcp_server_id=None,
         mcp_tool_name=None,
     )
+
+
+def _resolve_registry_tool(container: ContainerDep, tool_id: str) -> BaseTool | None:
+    registry = container.tool_registry
+    registry.register_builtin_tools()
+    return registry.get(tool_id)
 
 
 def _flow_response(flow_row: FlowConfig) -> ToolResponse:
@@ -190,7 +234,12 @@ async def _collect_picker_tool_items(
             continue
         if not include_mcp and is_mcp:
             continue
-        items.append(_tool_response_from_reference(tool_row, agent_toolkit_ids=[]))
+        items.append(
+            _enrich_tool_response_from_registry(
+                container,
+                _tool_response_from_reference(tool_row, agent_toolkit_ids=[]),
+            )
+        )
         seen_tool_ids.add(tool_row.tool_id)
 
     if not mcp_only:
@@ -298,7 +347,10 @@ async def list_tools(
     for tool_row in tools:
         toolkit_ids = await _toolkit_ids_for_tool(container, tool_row.tool_id)
         response_items.append(
-            _tool_response_from_reference(tool_row, agent_toolkit_ids=toolkit_ids)
+            _enrich_tool_response_from_registry(
+                container,
+                _tool_response_from_reference(tool_row, agent_toolkit_ids=toolkit_ids),
+            )
         )
     return OffsetPage[ToolResponse](
         items=response_items,
@@ -378,13 +430,41 @@ async def list_tool_tag_groups(
     )
 
 
+@router.post("/preview", response_model=ToolPreviewResponse)
+async def preview_tool(request: ToolPreviewRequest, container: ContainerDep) -> ToolPreviewResponse:
+    """Dual preview: model-visible schema and server execution plan."""
+    tool = _resolve_registry_tool(container, request.tool_id)
+    if tool is None:
+        raise HTTPException(status_code=404, detail=f"Tool '{request.tool_id}' not found")
+    return build_tool_preview(
+        tool,
+        binding_overrides=request.binding_overrides,
+        model_args=request.model_args,
+    )
+
+
+@router.get("/{tool_id}/contract", response_model=ToolDefinition)
+async def get_tool_contract(tool_id: str, container: ContainerDep) -> ToolDefinition:
+    """ToolDefinition-shaped contract built from builtin BaseTool metadata."""
+    tool = _resolve_registry_tool(container, tool_id)
+    if tool is None:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found in registry")
+    return build_tool_definition_from_base_tool(tool)
+
+
 @router.get("/{tool_id}", response_model=ToolResponse)
 async def get_tool(tool_id: str, container: ContainerDep) -> ToolResponse:
-    """Получает tool по ID; при отсутствии в репозитории — flow с тем же id."""
+    """Получает tool по ID; при отсутствии в репозитории — flow или builtin registry."""
     tool = await container.tool_repository.get(tool_id)
     if tool is not None:
         toolkit_ids = await _toolkit_ids_for_tool(container, tool.tool_id)
-        return _tool_response_from_reference(tool, agent_toolkit_ids=toolkit_ids)
+        return _enrich_tool_response_from_registry(
+            container,
+            _tool_response_from_reference(tool, agent_toolkit_ids=toolkit_ids),
+        )
+    registry_tool = _resolve_registry_tool(container, tool_id)
+    if registry_tool is not None:
+        return _tool_response_from_registry_tool(registry_tool)
     flow_cfg = await container.flow_repository.get(tool_id)
     if flow_cfg is None:
         raise HTTPException(status_code=404, detail="Tool not found")
@@ -427,9 +507,12 @@ async def create_tool(request: ToolCreateRequest, container: ContainerDep) -> To
         toolkit_ids=list(request.agent_toolkit_ids),
     )
 
-    return _tool_response_from_reference(
-        ref,
-        agent_toolkit_ids=list(request.agent_toolkit_ids),
+    return _enrich_tool_response_from_registry(
+        container,
+        _tool_response_from_reference(
+            ref,
+            agent_toolkit_ids=list(request.agent_toolkit_ids),
+        ),
     )
 
 

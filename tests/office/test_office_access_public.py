@@ -18,6 +18,7 @@ pytestmark = [pytest.mark.timeout(120)]
 @pytest.mark.asyncio
 async def test_patch_binding_access_enables_public_link(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -44,6 +45,7 @@ async def test_patch_binding_access_enables_public_link(
 @pytest.mark.asyncio
 async def test_public_file_open_without_session(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -73,6 +75,7 @@ async def test_public_file_open_without_session(
 @pytest.mark.asyncio
 async def test_rotate_link_invalidates_old_token(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -103,6 +106,7 @@ async def test_rotate_link_invalidates_old_token(
 @pytest.mark.asyncio
 async def test_public_catalog_hides_binding_without_own_link(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -132,6 +136,7 @@ async def test_public_catalog_hides_binding_without_own_link(
 @pytest.mark.asyncio
 async def test_public_catalog_binding_open_without_session(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -157,6 +162,7 @@ async def test_public_catalog_binding_open_without_session(
 @pytest.mark.asyncio
 async def test_get_binding_access_reflects_catalog_company_visibility(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -178,6 +184,7 @@ async def test_get_binding_access_reflects_catalog_company_visibility(
 @pytest.mark.asyncio
 async def test_public_resolve_catalog_token_returns_catalog_kind(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -195,6 +202,7 @@ async def test_public_resolve_catalog_token_returns_catalog_kind(
 @pytest.mark.asyncio
 async def test_public_resolve_garbage_token_not_found(
     office_client,
+    frontend_client,
     unique_id,
 ):
     response = await office_client.get(f"/documents/api/v1/public/resolve/not-a-valid-token-{unique_id}")
@@ -205,6 +213,7 @@ async def test_public_resolve_garbage_token_not_found(
 @pytest.mark.asyncio
 async def test_public_open_catalog_token_rejected(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -219,6 +228,7 @@ async def test_public_open_catalog_token_rejected(
 @pytest.mark.asyncio
 async def test_public_catalog_items_with_binding_token_rejected(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -239,6 +249,7 @@ async def test_public_catalog_items_with_binding_token_rejected(
 @pytest.mark.asyncio
 async def test_public_catalog_binding_open_wrong_file_id_not_found(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -262,6 +273,7 @@ async def test_public_catalog_binding_open_wrong_file_id_not_found(
 @pytest.mark.asyncio
 async def test_public_catalog_binding_open_without_binding_link_not_found(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -283,6 +295,7 @@ async def test_public_catalog_binding_open_without_binding_link_not_found(
 @pytest.mark.asyncio
 async def test_public_catalog_binding_open_binding_from_other_catalog_not_found(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -316,6 +329,7 @@ async def test_public_catalog_binding_open_binding_from_other_catalog_not_found(
 @pytest.mark.asyncio
 async def test_public_open_soft_deleted_binding_not_found(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -341,6 +355,7 @@ async def test_public_open_soft_deleted_binding_not_found(
 @pytest.mark.asyncio
 async def test_public_routes_work_without_authorization_header(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -372,6 +387,7 @@ async def test_public_routes_work_without_authorization_header(
 @pytest.mark.asyncio
 async def test_access_routes_require_authentication(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -393,6 +409,7 @@ async def test_access_routes_require_authentication(
 @pytest.mark.asyncio
 async def test_public_open_after_disable_link_not_found(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -422,6 +439,7 @@ async def test_public_open_after_disable_link_not_found(
 @pytest.mark.asyncio
 async def test_catalog_access_peer_patch_forbidden(
     office_client,
+    frontend_client,
     auth_headers_system,
     auth_headers_system_user2,
     unique_id,

@@ -314,7 +314,8 @@ Composer / mention / inline-edit / search-as-you-type / combobox: `data-canon="c
 | `@platform/lib/utils/storage-keys.js` | `platformStorageKey(scope, key)` — единый префикс `platform:<scope>:<key>` |
 | `@platform/lib/utils/platform-namespace-header.js` | `platformNamespaceHeader(ctx, explicit?)` — заголовок `X-Platform-Namespace` для сервисов с жёсткой привязкой к пространству (Documents, Wiki) |
 | `@platform/lib/utils/floating-position.js` | `computeFloatingPosition(...)`, `resolveAnchorRect(anchor)`, `readViewportSize()` — расчёт положения плавающего слоя |
-| `@platform/lib/events/factories/_multipart-upload.js` | `createMultipartFileUploadOp({ name, url, extraFields?, restMirror? })` |
+| `@platform/lib/utils/platform-file-upload.js` | `uploadPlatformFile`, `resolvePlatformFileRefs`, `isPlatformFileRef`, `fetchPlatformFilesUploadConfig` — только chunked |
+| `@platform/lib/events/factories/platform-file-create.js` | `platform/file_create` → `uploadPlatformFile` |
 
 ### Локаль для форматтеров
 
@@ -328,7 +329,7 @@ Composer / mention / inline-edit / search-as-you-type / combobox: `data-canon="c
 - Локальный `formatFileSize` / `_formatBytes` / `_formatFileSize` цикл (свой). Допустима тонкая обёртка-метод компонента, делегирующая в core `formatFileSize`.
 - `Intl.NumberFormat('ru-RU', ...)`, `Intl.DateTimeFormat('ru-RU', ...)`, `toLocaleDateString('ru-RU', ...)`, `toLocaleString('ru-RU', ...)`.
 - Свободный префикс ключа localStorage (`<brand>.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')`.
-- Свой multipart-upload `createAsyncOp` без обёртки `createMultipartFileUploadOp` — копипаста запрещена.
+- Свой FormData/`UploadFile` upload байтов минуя `uploadPlatformFile` / `platform/file_create` — запрещён.
 
 CI: `scripts/check_ui_canon.sh` п.19 — детекторы `'ru-RU'`, `EMAIL_RE`/`_digitsOnly`, `escapeHtml`, hash×31.
 

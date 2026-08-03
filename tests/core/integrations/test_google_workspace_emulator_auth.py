@@ -9,9 +9,9 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 
+from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.services.platform_facades import resolve_google_workspace_auth
 from core.clients.google_sheets_client import GoogleSheetsClient
 from core.clients.google_workspace_auth import GoogleAuthMaterial
 from core.config import get_settings
@@ -168,7 +168,7 @@ async def test_resolve_user_workspace_then_create(
     )
     set_context(_admin_context(company_id, user_id))
     try:
-        material = await resolve_google_workspace_auth(_make_state(user_id))
+        material = await GoogleWorkspaceClient().resolve_auth(_make_state(user_id))
         assert material.access_token == google_api_emulator.oauth_token
         client = GoogleSheetsClient(access_token=material.access_token)
         created = await client.create_spreadsheet(f"ws-cred-{unique_id}")
@@ -210,7 +210,7 @@ async def test_resolve_prior_docs_then_create(
     )
     set_context(_admin_context(company_id, user_id))
     try:
-        material = await resolve_google_workspace_auth(_make_state(user_id))
+        material = await GoogleWorkspaceClient().resolve_auth(_make_state(user_id))
         assert material.access_token == google_api_emulator.oauth_token
         client = GoogleSheetsClient(access_token=material.access_token)
         created = await client.create_spreadsheet(f"docs-prior-{unique_id}")
@@ -245,7 +245,7 @@ async def test_resolve_company_sa_then_create(
                 impersonate_email="user@example.com",
             ),
         )
-        material = await resolve_google_workspace_auth(_make_state(user_id))
+        material = await GoogleWorkspaceClient().resolve_auth(_make_state(user_id))
         assert material.credentials_json is not None
         assert material.subject == "user@example.com"
         assert material.access_token is None
@@ -282,7 +282,7 @@ async def test_resolve_empty_raises_oauth_interrupt(
     set_context(_admin_context(company_id, user_id))
     try:
         with pytest.raises(FlowInterrupt) as exc_info:
-            _ = await resolve_google_workspace_auth(_make_state(user_id))
+            _ = await GoogleWorkspaceClient().resolve_auth(_make_state(user_id))
         body = exc_info.value.body
         assert body.kind == InterruptKind.OAUTH_REQUIRED
         assert isinstance(body, OAuthInterrupt)

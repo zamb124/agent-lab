@@ -1,7 +1,7 @@
 /**
  * Файлы Sync — метаданные после REST upload.
  *
- * Бинарный upload — platform/file_create → POST /frontend/api/v1/files/.
+ * Бинарный upload — platform/file_create → chunked `/{segment}/api/v1/files/uploads*`.
  * После upload UI шлёт WS-команду `sync/files/upload_completed_requested`.
  */
 

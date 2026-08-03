@@ -6,13 +6,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import Field
 
-from apps.flows.src.container_state import require_current_container
+from apps.flows.src.clients.team_client import TeamClient
 from apps.flows.src.tools.decorator import tool
-from core.context import require_active_company
-from core.identity.flow_employee import (
-    is_flow_employee,
-    require_flow_employee_flow_id,
-)
 from core.models import StrictBaseModel
 from core.types import JsonObject
 
@@ -43,55 +38,6 @@ class TeamResolveUserArgs(StrictBaseModel):
     )
 
 
-def _member_brief(
-    *,
-    user_id: str,
-    name: str,
-    email: str | None,
-    roles: list[str],
-    is_employee: bool,
-    flow_id: str | None,
-) -> JsonObject:
-    return {
-        "user_id": user_id,
-        "name": name,
-        "email": email,
-        "roles": roles,
-        "is_flow_employee": is_employee,
-        "flow_id": flow_id,
-    }
-
-
-async def _company_member_rows() -> list[JsonObject]:
-    company_id = require_active_company().company_id
-    container = require_current_container()
-    stored_company = await container.company_repository.get(company_id)
-    if stored_company is None:
-        raise ValueError(f"Company {company_id!r} не найдена")
-    rows: list[JsonObject] = []
-    for user_id, roles in stored_company.members.items():
-        member_user = await container.user_repository.get(user_id)
-        if member_user is None:
-            continue
-        member_email = member_user.emails[0] if member_user.emails else None
-        member_is_employee = is_flow_employee(member_user)
-        rows.append(
-            _member_brief(
-                user_id=user_id,
-                name=member_user.name,
-                email=member_email,
-                roles=list(roles),
-                is_employee=member_is_employee,
-                flow_id=(
-                    require_flow_employee_flow_id(member_user)
-                    if member_is_employee
-                    else None
-                ),
-            )
-        )
-    return rows
-
-
 @tool(
     name="team_list_members",
     description=(
@@ -102,10 +48,11 @@ async def _company_member_rows() -> list[JsonObject]:
     ),
     tags=_TAGS,
     parameters_model=TeamListMembersArgs,
+    effects=["read"],
 )
 async def team_list_members(*, state: "ExecutionState") -> JsonObject:
     _ = state
-    return {"items": await _company_member_rows()}
+    return {"items": await TeamClient().list_members()}
 
 
 @tool(
@@ -118,6 +65,7 @@ async def team_list_members(*, state: "ExecutionState") -> JsonObject:
     ),
     tags=_TAGS,
     parameters_model=TeamResolveUserArgs,
+    effects=["read"],
 )
 async def team_resolve_user(
     query: str,
@@ -127,18 +75,7 @@ async def team_resolve_user(
 ) -> JsonObject:
     _ = state
     args = TeamResolveUserArgs(query=query, limit=limit)
-    needle = args.query.strip().casefold()
-    if needle == "":
-        raise ValueError("query обязателен (имя или email)")
-    matches: list[JsonObject] = []
-    for row in await _company_member_rows():
-        name = str(row["name"]).casefold()
-        email_raw = row["email"]
-        email = str(email_raw).casefold() if isinstance(email_raw, str) else ""
-        if needle in name or (email != "" and needle in email):
-            matches.append(row)
-        if len(matches) >= args.limit:
-            break
+    matches = await TeamClient().resolve_user(args.query, limit=args.limit)
     return {
         "query": args.query,
         "matches": matches,

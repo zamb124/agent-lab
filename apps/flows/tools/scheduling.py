@@ -2,6 +2,7 @@
 Tools для управления scheduled tasks.
 
 Позволяют агентам создавать и управлять отложенными задачами.
+Тонкие обёртки над FlowScheduleClient.
 """
 
 from datetime import datetime
@@ -9,16 +10,20 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.services.platform_facades import get_schedule_service
+from apps.flows.src.clients.flow_schedule_client import FlowScheduleClient
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.scheduling_ids import extract_ids_from_state
-from core.scheduler.models import ContentType
+from core.scheduler.models import ContentType, ScheduledTaskInfo
 from core.state import ExecutionState
-from core.types import JsonObject
+from core.types import JsonObject, require_json_object
 
 
 def _extract_ids_from_state(state: ExecutionState) -> tuple[str, str, str]:
     return extract_ids_from_state(state)
+
+
+def _task_json(task: ScheduledTaskInfo) -> JsonObject:
+    return require_json_object(task.model_dump(mode="json"), "scheduled_task")
 
 
 class _ScheduledTaskContentArgs(BaseModel):
@@ -90,6 +95,8 @@ class ListScheduledTasksArgs(BaseModel):
     description="Создает периодическую задачу по cron расписанию. Примеры cron: '0 10 * * *' (каждый день в 10:00), '*/5 * * * *' (каждые 5 минут), '0 9 * * 1' (каждый понедельник в 9:00)",
     tags=["scheduling"],
     parameters_model=ScheduleCronArgs,
+    effects=["create"],
+    confirmation_floor="preview",
 )
 async def schedule_cron_task(
     cron: str,
@@ -99,24 +106,12 @@ async def schedule_cron_task(
     description: str | None = None,
     *,
     state: ExecutionState,
-) -> str:
-    """
-    Создает периодическую задачу по cron.
-
-    Аргументы:
-        cron: Cron выражение
-        content_type: "message" или "tool_call"
-        content: Текст сообщения или имя tool
-        tool_args: Аргументы для tool_call
-        description: Описание задачи
-        state: Состояние агента
-    """
-    service = get_schedule_service()
-
+) -> JsonObject:
+    client = FlowScheduleClient()
     ct = ContentType(content_type)
     flow_id, session_id, user_id = _extract_ids_from_state(state)
 
-    task = await service.schedule_cron_task(
+    task = await client.schedule_cron_task(
         flow_id=flow_id,
         session_id=session_id,
         user_id=user_id,
@@ -127,9 +122,9 @@ async def schedule_cron_task(
         description=description,
     )
 
-    state.scheduled_tasks.append(task.model_dump(mode="json"))
-
-    return f"Периодическая задача создана (schedule_task_id: {task.schedule_task_id}). Расписание: {cron}"
+    payload = _task_json(task)
+    state.scheduled_tasks.append(payload)
+    return payload
 
 
 @tool(
@@ -137,6 +132,8 @@ async def schedule_cron_task(
     description="Создает периодическую задачу с интервалом в минутах",
     tags=["scheduling"],
     parameters_model=ScheduleIntervalArgs,
+    effects=["create"],
+    confirmation_floor="preview",
 )
 async def schedule_interval_task(
     interval_minutes: int,
@@ -146,24 +143,12 @@ async def schedule_interval_task(
     description: str | None = None,
     *,
     state: ExecutionState,
-) -> str:
-    """
-    Создает периодическую задачу с интервалом.
-
-    Аргументы:
-        interval_minutes: Интервал в минутах
-        content_type: "message" или "tool_call"
-        content: Текст сообщения или имя tool
-        tool_args: Аргументы для tool_call
-        description: Описание задачи
-        state: Состояние агента
-    """
-    service = get_schedule_service()
-
+) -> JsonObject:
+    client = FlowScheduleClient()
     ct = ContentType(content_type)
     flow_id, session_id, user_id = _extract_ids_from_state(state)
 
-    task = await service.schedule_interval_task(
+    task = await client.schedule_interval_task(
         flow_id=flow_id,
         session_id=session_id,
         user_id=user_id,
@@ -174,12 +159,9 @@ async def schedule_interval_task(
         description=description,
     )
 
-    state.scheduled_tasks.append(task.model_dump(mode="json"))
-
-    return (
-        "Периодическая задача создана "
-        f"(schedule_task_id: {task.schedule_task_id}). Интервал: каждые {interval_minutes} минут"
-    )
+    payload = _task_json(task)
+    state.scheduled_tasks.append(payload)
+    return payload
 
 
 @tool(
@@ -187,6 +169,8 @@ async def schedule_interval_task(
     description="Создает одноразовую задачу на конкретное время. Формат времени: ISO 8601 (например '2025-01-15T10:00:00')",
     tags=["scheduling"],
     parameters_model=ScheduleOneTimeArgs,
+    effects=["create"],
+    confirmation_floor="preview",
 )
 async def schedule_one_time_task(
     run_at: str,
@@ -196,25 +180,13 @@ async def schedule_one_time_task(
     description: str | None = None,
     *,
     state: ExecutionState,
-) -> str:
-    """
-    Создает одноразовую задачу.
-
-    Аргументы:
-        run_at: Время запуска в формате ISO 8601
-        content_type: "message" или "tool_call"
-        content: Текст сообщения или имя tool
-        tool_args: Аргументы для tool_call
-        description: Описание задачи
-        state: Состояние агента
-    """
-    service = get_schedule_service()
-
+) -> JsonObject:
+    client = FlowScheduleClient()
     ct = ContentType(content_type)
     run_at_dt = datetime.fromisoformat(run_at)
     flow_id, session_id, user_id = _extract_ids_from_state(state)
 
-    task = await service.schedule_one_time_task(
+    task = await client.schedule_one_time_task(
         flow_id=flow_id,
         session_id=session_id,
         user_id=user_id,
@@ -225,9 +197,9 @@ async def schedule_one_time_task(
         description=description,
     )
 
-    state.scheduled_tasks.append(task.model_dump(mode="json"))
-
-    return f"Одноразовая задача создана (schedule_task_id: {task.schedule_task_id}). Запуск: {run_at}"
+    payload = _task_json(task)
+    state.scheduled_tasks.append(payload)
+    return payload
 
 
 @tool(
@@ -235,48 +207,18 @@ async def schedule_one_time_task(
     description="Показывает список запланированных задач текущей сессии",
     tags=["scheduling"],
     parameters_model=ListScheduledTasksArgs,
+    effects=["read"],
 )
 async def list_scheduled_tasks(
     *,
     state: ExecutionState,
-) -> str:
-    """
-    Получает список scheduled tasks.
-
-    Аргументы:
-        state: Состояние агента
-    """
-    service = get_schedule_service()
-
+) -> JsonObject:
+    client = FlowScheduleClient()
     _, session_id, _ = _extract_ids_from_state(state)
-
-    tasks = await service.list_tasks(session_id=session_id)
-
-    if not tasks:
-        return "Нет запланированных задач"
-
-    lines = ["Запланированные задачи:"]
-    for task in tasks:
-        schedule_info = ""
-        schedule_type = task.schedule_type
-        content_type = task.content_type
-        status = task.status
-
-        if schedule_type == "cron":
-            schedule_info = f"cron: {task.cron}"
-        elif schedule_type == "interval":
-            schedule_info = f"каждые {task.interval_minutes} мин"
-        elif schedule_type == "one_time":
-            schedule_info = f"запуск: {task.run_at}"
-
-        content_info = f"{content_type}: {task.content}"
-        desc = f" - {task.description}" if task.description else ""
-
-        lines.append(
-            f"- [{task.schedule_task_id[:8]}] {schedule_info}, {content_info}, статус: {status}{desc}"
-        )
-
-    return "\n".join(lines)
+    tasks = await client.list_tasks(session_id=session_id)
+    return {
+        "items": [_task_json(task) for task in tasks],
+    }
 
 
 @tool(
@@ -284,30 +226,26 @@ async def list_scheduled_tasks(
     description="Отменяет запланированную задачу по её ID",
     tags=["scheduling"],
     parameters_model=CancelScheduledTaskArgs,
+    effects=["delete"],
+    confirmation_floor="preview",
 )
 async def cancel_scheduled_task(
     schedule_task_id: str,
     *,
     state: ExecutionState,
-) -> str:
-    """
-    Отменяет задачу.
-
-    Аргументы:
-        schedule_task_id: ID записи платформенного scheduler
-        state: Состояние агента
-    """
-    service = get_schedule_service()
-
-    success = await service.cancel_task(schedule_task_id)
-
-    if success:
-        state.scheduled_tasks = [
-            t for t in state.scheduled_tasks if t.get("schedule_task_id") != schedule_task_id
-        ]
-        return f"Задача {schedule_task_id} отменена"
-    else:
-        return (
+) -> JsonObject:
+    client = FlowScheduleClient()
+    success = await client.cancel_task(schedule_task_id)
+    if not success:
+        raise ValueError(
             f"Не удалось отменить задачу {schedule_task_id}. "
-            "Возможно она уже выполнена или не существует."
+            + "Возможно она уже выполнена или не существует."
         )
+
+    state.scheduled_tasks = [
+        t for t in state.scheduled_tasks if t.get("schedule_task_id") != schedule_task_id
+    ]
+    return {
+        "schedule_task_id": schedule_task_id,
+        "cancelled": True,
+    }

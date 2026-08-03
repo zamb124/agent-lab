@@ -18,8 +18,8 @@ from apps.crm.services.note_attachment_description import (
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
-from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
-from core.files.registry import default_retention_for_source
+from core.files.models import FileRecord
+from core.files.s3_client import S3ClientFactory
 from core.files.service import FilesService
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
@@ -96,10 +96,13 @@ class AttachmentService:
     async def add_attachment(
         self,
         entity_id: str,
-        file_data: bytes,
-        filename: str,
+        file_id: str,
     ) -> JsonObject:
-        """Загружает attachment для entity"""
+        """Привязывает уже загруженный FileRecord к entity."""
+        cleaned_file_id = file_id.strip()
+        if cleaned_file_id == "":
+            raise ValueError("file_id is required")
+
         context = get_context()
         if context is None:
             raise ValueError("Нет контекста запроса")
@@ -112,7 +115,11 @@ class AttachmentService:
             raise ValueError(f"Entity not found: {entity_id}")
 
         namespace = namespace_name
+        record = await self._files_service.get(cleaned_file_id)
+        if record.company_id != company_id:
+            raise ValueError(f"file {cleaned_file_id} belongs to another company")
 
+        filename = record.original_name
         metadata: JsonObject = {
             "entity_id": entity_id,
             "entity_type": entity.entity_type,
@@ -122,28 +129,6 @@ class AttachmentService:
             "ttl_seconds": 0,
         }
 
-        content_type = "application/octet-stream"
-        spec = FileCreateSpec(
-            source_kind=FileSourceKind.CRM_ENTITY,
-            source_ref=FileSourceRef(
-                entity_id=entity_id,
-                entity_type=entity.entity_type,
-                entity_title=entity.name,
-            ),
-            retention=default_retention_for_source(FileSourceKind.CRM_ENTITY),
-            post_create=FilePostCreate(
-                rag_index_namespace=namespace,
-                rag_metadata=metadata,
-                is_public=False,
-            ),
-            metadata=metadata,
-        )
-        record = await self._files_service.create(
-            spec,
-            file_data,
-            original_name=filename,
-            content_type=content_type,
-        )
         document_id = record.file_id
 
         index_response = self._as_json_object(
@@ -164,6 +149,7 @@ class AttachmentService:
 
         attachment_had_extractable_text = False
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
+            file_data = await self._download_file_bytes(record)
             try:
                 raw_text = await load_text_from_bytes(file_data, filename)
             except Exception as exc:
@@ -220,6 +206,16 @@ class AttachmentService:
             "task_id": index_response.get("task_id"),
             "markdown_format_queued": markdown_format_queued,
         }
+
+    async def _download_file_bytes(self, record: FileRecord) -> bytes:
+        if record.s3_bucket == "" or record.s3_key == "":
+            raise ValueError(f"file {record.file_id} has no s3 location")
+        s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
+        try:
+            return await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
+        finally:
+            await s3.close()
+
 
     async def remove_attachment(
         self,

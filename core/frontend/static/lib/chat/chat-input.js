@@ -361,7 +361,7 @@ export class FlowsChatInput extends LitElement {
         this.placeholder = '';
         this.accept = '';
         this.maxLength = 10000;
-        this.maxFileSize = 10 * 1024 * 1024;
+        this.maxFileSize = 512 * 1024 * 1024;
         this.showVoice = false;
         this.voiceDuplex = false;
         this.speechDictation = false;

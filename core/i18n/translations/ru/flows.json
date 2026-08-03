@@ -1366,6 +1366,8 @@
     "kind_flow": "Flow",
     "kind_mcp": "MCP",
     "kind_tool": "Tool",
+    "confirmation_preview": "preview",
+    "confirmation_approval": "approval",
     "selected_count": "Выбрано: {{n}}",
     "clear_selection": "Сбросить",
     "add_selected": "Добавить выбранные",
@@ -1407,6 +1409,12 @@
     "cancel": "Отмена",
     "save": "Сохранить",
     "toast_cannot_delete": "Удаление из этой модалки недоступно — используйте список tools в родительской ноде."
+  },
+  "builtin_tool_editor": {
+    "parameters": "Параметры (JSON Schema)",
+    "confirmation_none": "без подтверждения",
+    "confirmation_preview": "preview",
+    "confirmation_approval": "approval"
   },
   "code_modal": {
     "title": "Код агента"

@@ -8,10 +8,9 @@ from pydantic import Field
 
 from apps.flows.src.tools.decorator import tool
 from core.clients.search_client import SearchClient
-from core.clients.service_client import ServiceClientError
 from core.models import StrictBaseModel
 from core.search.models import MetaSearchRequest, SearchMode
-from core.types import JsonObject
+from core.types import JsonObject, require_json_object
 
 
 class IndexSearchToolArgs(StrictBaseModel):
@@ -25,19 +24,15 @@ async def _index_search_impl(
     search_index_ids: list[str],
     limit: int = 8,
 ) -> JsonObject:
-    client = SearchClient()
-    try:
-        response = await client.search(
-            MetaSearchRequest(
-                query=query,
-                limit=limit,
-                providers=["index"],
-                index_ids=search_index_ids,
-            )
+    response = await SearchClient().search(
+        MetaSearchRequest(
+            query=query,
+            limit=limit,
+            providers=["index"],
+            index_ids=search_index_ids,
         )
-    except ServiceClientError as exc:
-        return {"success": False, "error": str(exc)}
-    return {"success": True, "response": response.model_dump(mode="json")}
+    )
+    return require_json_object(response.model_dump(mode="json"), "index_search")
 
 
 @tool(
@@ -106,45 +101,15 @@ async def web_search(
     mode: SearchMode = "research",
     limit: int = 10,
 ) -> JsonObject:
-    client = SearchClient()
-    try:
-        response = await client.search(
-            MetaSearchRequest(
-                query=query,
-                limit=limit,
-                providers=providers,
-                provider_strategy=provider_strategy,
-                language=language,
-                region=region,
-                mode=mode,
-            )
+    response = await SearchClient().search(
+        MetaSearchRequest(
+            query=query,
+            limit=limit,
+            providers=providers,
+            provider_strategy=provider_strategy,
+            language=language,
+            region=region,
+            mode=mode,
         )
-    except ServiceClientError as exc:
-        return {"success": False, "error": str(exc)}
-    results: list[JsonObject] = [
-        {
-            "title": item.title,
-            "url": item.url,
-            "snippet": item.snippet,
-            "display_url": item.display_url,
-            "provider": item.provider,
-            "provider_rank": item.provider_rank,
-            "site_name": item.site_name,
-            "published_at": item.published_at,
-        }
-        for item in response.results
-    ]
-    providers_status: JsonObject = {
-        name: {
-            "ok": status.ok,
-            "results_count": status.results_count,
-            "error": status.error,
-        }
-        for name, status in response.providers.items()
-    }
-    return {
-        "success": True,
-        "results": results,
-        "providers": providers_status,
-        "total_count": response.total_count,
-    }
+    )
+    return require_json_object(response.model_dump(mode="json"), "web_search")

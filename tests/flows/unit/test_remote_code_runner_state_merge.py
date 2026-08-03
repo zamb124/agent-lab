@@ -36,13 +36,29 @@ def test_merge_returned_state_fields_ignores_node_history_echo() -> None:
         "build_search_artifact": {"type": "code", "calls": []},
     }
     returned_payload["search_markdown_sources"] = "1. [Example](https://example.com)"
+    returned_keys = frozenset(returned_payload.keys())
     returned_state = ExecutionState.model_validate(returned_payload)
 
-    assert _frozen_fields_differ(returned_state, frozen_snapshot) == ["node_history"]
+    assert _frozen_fields_differ(
+        returned_state,
+        frozen_snapshot,
+        returned_keys=returned_keys,
+    ) == ["node_history"]
     _restore_frozen_fields_from_snapshot(returned_state, frozen_snapshot)
-    assert _frozen_fields_differ(returned_state, frozen_snapshot) == []
+    assert (
+        _frozen_fields_differ(
+            returned_state,
+            frozen_snapshot,
+            returned_keys=returned_keys,
+        )
+        == []
+    )
 
     before_history = deepcopy(state.node_history)
-    _merge_returned_state_fields(state, returned_state)
+    _merge_returned_state_fields(
+        state,
+        returned_state,
+        returned_keys=returned_keys,
+    )
     assert state.node_history == before_history
     assert state["search_markdown_sources"] == "1. [Example](https://example.com)"

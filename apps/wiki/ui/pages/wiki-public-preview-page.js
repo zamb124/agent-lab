@@ -120,7 +120,7 @@ export class WikiPublicPreviewPage extends PlatformPage {
 
             .icon {
                 flex-shrink: 0;
-                font-size: 40px;
+                font-size: 80px;
                 line-height: 1;
             }
 
@@ -160,6 +160,9 @@ export class WikiPublicPreviewPage extends PlatformPage {
                 }
                 .title {
                     font-size: 32px;
+                }
+                .icon {
+                    font-size: 56px;
                 }
             }
         `,

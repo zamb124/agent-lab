@@ -7,11 +7,15 @@
  */
 
 import { resolveFileIconKey } from '../utils/file-icons.js';
+import { resolvePlatformFilesApiBase } from '../utils/platform-files-url.js';
 import '../components/platform-icon.js';
 
 export const CODEMIRROR_BUNDLE_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
 
-export const DEFAULT_FILE_URL_BASE = '/frontend/api/v1/files/download/';
+/** Base path `/{segment}/api/v1/files/download/` для текущего SPA. */
+export function resolveDefaultFileUrlBase() {
+    return `${resolvePlatformFilesApiBase()}/download/`;
+}
 
 export const CODE_BLOCK_LANGUAGES = Object.freeze([
     { id: '', label: 'plain' },

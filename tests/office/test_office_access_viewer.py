@@ -29,6 +29,7 @@ UPLOAD_CONTENT = b"office-access-download-bytes"
 @pytest.mark.asyncio
 async def test_public_open_download_url_returns_file_bytes(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -52,6 +53,7 @@ async def test_public_open_download_url_returns_file_bytes(
 @pytest.mark.asyncio
 async def test_public_open_view_permission_stream_without_save_url(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -84,6 +86,7 @@ async def test_public_open_view_permission_stream_without_save_url(
 @pytest.mark.asyncio
 async def test_public_open_view_permission_viewer_save_forbidden(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -118,6 +121,7 @@ async def test_public_open_view_permission_viewer_save_forbidden(
 @pytest.mark.asyncio
 async def test_public_open_edit_permission_viewer_save_updates_content(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -151,6 +155,7 @@ async def test_public_open_edit_permission_viewer_save_updates_content(
 @pytest.mark.asyncio
 async def test_viewer_stream_without_token_unprocessable(
     office_client,
+    frontend_client,
 ):
     response = await office_client.get("/documents/api/v1/viewer-stream")
     assert response.status_code == 422
@@ -159,6 +164,7 @@ async def test_viewer_stream_without_token_unprocessable(
 @pytest.mark.asyncio
 async def test_viewer_stream_bad_jwt_unauthorized(
     office_client,
+    frontend_client,
 ):
     response = await office_client.get("/documents/api/v1/viewer-stream?token=not-a-jwt")
     assert response.status_code == 401
@@ -167,6 +173,7 @@ async def test_viewer_stream_bad_jwt_unauthorized(
 @pytest.mark.asyncio
 async def test_viewer_stream_old_token_after_rotate_forbidden(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -194,6 +201,7 @@ async def test_viewer_stream_old_token_after_rotate_forbidden(
 @pytest.mark.asyncio
 async def test_viewer_frame_returns_html_with_stream_url(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -220,6 +228,7 @@ async def test_viewer_frame_returns_html_with_stream_url(
 @pytest.mark.asyncio
 async def test_viewer_stream_tampered_file_id_forbidden(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -252,6 +261,7 @@ async def test_viewer_stream_tampered_file_id_forbidden(
 @pytest.mark.asyncio
 async def test_office_download_after_soft_delete_binding_still_allowed_regression(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
@@ -281,6 +291,7 @@ async def test_office_download_after_soft_delete_binding_still_allowed_regressio
 @pytest.mark.asyncio
 async def test_office_download_still_works_after_link_disabled_regression(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):

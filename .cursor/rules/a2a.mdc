@@ -54,8 +54,9 @@ Capabilities согласованы с кодом: `streaming=true`, `pushNotifi
 
 ## Files
 
-- Inbound `Part.raw` → S3 + `FileRecord`.
-- Inbound `Part.url`: platform download → reuse `file_id`; external → SSRF-safe fetch (`apps/flows/src/files/ssrf_fetch.py`) → persist. Fail closed.
+- Inbound `Part.raw` → S3 + `FileRecord` (external/conformance; platform chat **не** шлёт raw).
+- Inbound `Part.url`: platform download → reuse `file_id` (без повторной записи bytes); external → SSRF-safe fetch (`apps/flows/src/files/ssrf_fetch.py`) → persist. Fail closed.
+- Platform UI (`platform-chat`): upload через Files API → A2A только `Part.url`; уже `FileRef` — без re-upload.
 
 ## Historical ledger / Redis projections
 

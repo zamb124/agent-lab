@@ -20,7 +20,7 @@ from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.mcp_wrapper import MCPTool
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS, builtin_tool_ids
-from core.capabilities.source_sanitize import strip_forbidden_platform_import_lines
+from core.capabilities.source_sanitize import reject_forbidden_platform_imports
 from core.logging import get_logger
 from core.types import JsonObject
 
@@ -275,7 +275,7 @@ class ToolRegistry:
         code = config.code
         if not code:
             raise ValueError(f"Code tool '{tool_id}' requires 'code' field")
-        code = strip_forbidden_platform_import_lines(code)
+        code = reject_forbidden_platform_imports(code)
 
         tool = CodeTool(
             tool_id=tool_id,

@@ -9,6 +9,7 @@
 import base64
 import uuid
 from typing import Any, Dict
+from tests.files.chunked_upload_helpers import chunked_upload_file, platform_auxiliary_upload_spec_json
 
 import pytest
 
@@ -130,7 +131,8 @@ class TestA2AFilesHandling:
         assert file_info.file_size == len(test_content)
         assert file_info.file_id is not None
         assert file_info.url is not None
-        assert "/frontend/api/v1/files/download/" in file_info.url
+        assert "/api/v1/files/download/" in file_info.url
+        assert file_info.url.startswith("/")
         stored = await get_container().files_service.get(file_info.file_id)
         assert stored is not None
         assert stored.file_size == len(test_content)
@@ -148,11 +150,13 @@ class TestA2AFilesHandling:
         """Part.url из chat upload остаётся тем же FileRecord, без повторной записи bytes."""
         mock_llm_with_queue([{"type": "text", "content": "I received your linked file"}])
 
-        upload = await frontend_client.post(
-            "/frontend/api/v1/files/",
-            headers=auth_headers_system,
-            data={"spec": platform_auxiliary_file_spec_json(is_public=False)},
-            files={"file": ("linked.csv", b"a,b\n1,2\n", "text/csv")},
+        upload = await chunked_upload_file(
+            frontend_client,
+            auth_headers_system,
+            content=b"a,b\n1,2\n",
+            original_name="linked.csv",
+            content_type="text/csv",
+            spec_json=platform_auxiliary_upload_spec_json(is_public=False),
         )
         assert upload.status_code == 200, upload.text
         uploaded = upload.json()

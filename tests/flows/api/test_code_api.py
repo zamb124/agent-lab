@@ -362,14 +362,30 @@ class TestCodeToolSource:
 
     @pytest.mark.asyncio
     async def test_get_tool_source_json_loads(self, client, app):
-        """Существующий путь к функции: path + source, либо error для C-реализации."""
+        """Arbitrary module paths больше не принимаются — только builtin tool_id."""
         response = await client.get(
             "/flows/api/v1/code/tool-source", params={"tool_path": "json.loads"}
         )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_get_tool_source_arbitrary_module_path_rejected(self, client, app):
+        response = await client.get(
+            "/flows/api/v1/code/tool-source", params={"tool_path": "core.config"}
+        )
+        assert response.status_code == 404
+        assert "Unknown builtin tool_id" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_get_tool_source_builtin_tool_id(self, client, app):
+        response = await client.get(
+            "/flows/api/v1/code/tool-source", params={"tool_path": "calculator"}
+        )
         assert response.status_code == 200
         data = response.json()
-        assert data["path"] == "json.loads"
-        assert data.get("source") is not None or data.get("error") is not None
+        assert data["path"] == "calculator"
+        assert data["source"] is not None
+        assert "async def calculator" in data["source"]
 
 
 class TestFlowWithInlineCodeAPI:

@@ -8,17 +8,16 @@ from pydantic import Field
 
 from apps.flows.src.tools.decorator import tool
 from core.clients.rag_client import RagClient
-from core.clients.service_client import ServiceClientError
 from core.models import StrictBaseModel
 from core.rag.models import RAGMetadata, RAGMetadataFilter
 from core.rag_indexing_schema import SearchChannelsDefaults
-from core.types import JsonObject
+from core.types import JsonObject, require_json_object
 
 _RAG_CREATE_NAMESPACE_DESCRIPTION = """
 Регистрирует новое пространство имён (namespace) для документов RAG в текущей компании.
 
-Ответ при успехе: success=true плюс поля ответа API (name, company_id, description, is_default и т.д. — как в POST /rag/api/v1/namespaces).
-Ответ при ошибке: success=false, error (текст из HTTP/ServiceClient).
+Ответ: поля API (name, company_id, description, is_default и т.д. — как в POST /rag/api/v1/namespaces).
+Ошибки HTTP/ServiceClient пробрасываются.
 
 Параметры:
 - name (строка): уникальное имя namespace внутри компании (как правило латиница, цифры, подчёркивание).
@@ -32,8 +31,8 @@ _RAG_ADD_TEXT_DESCRIPTION = """
 
 Компания и права проверяются на сервере: namespace должен быть создан для текущей компании (например через rag_create_namespace или UI RAG).
 
-Ответ при успехе: success=true, document_id, document_name, namespace_id, status, provider.
-Ответ при ошибке: success=false, error.
+Ответ: document_id, document_name, namespace_id, status, provider.
+Ошибки HTTP/ServiceClient пробрасываются.
 
 Параметры:
 - namespace_id (строка): имя существующего namespace (то же значение, что поле name при создании).
@@ -49,8 +48,8 @@ _RAG_ADD_TEXT_DESCRIPTION = """
 _RAG_SEARCH_DESCRIPTION = """
 Семантический поиск по уже проиндексированным документам в указанном namespace.
 
-Ответ при успехе: success=true, results (массив фрагментов: content, score, document_id, document_name, metadata, namespace), query, namespace_id, provider.
-Ответ при ошибке: success=false, error.
+Ответ: results (массив фрагментов: content, score, document_id, document_name, metadata, namespace), query, namespace_id, provider.
+Ошибки HTTP/ServiceClient пробрасываются.
 
 Параметры:
 - namespace_id (строка): имя namespace, зарегистрированного для компании.
@@ -157,12 +156,7 @@ async def rag_create_namespace(
     name: str,
     description: str | None = None,
 ) -> JsonObject:
-    client = RagClient()
-    try:
-        raw = await client.create_namespace(name, description)
-    except ServiceClientError as exc:
-        return {"success": False, "error": str(exc)}
-    return {"success": True, **raw}
+    return await RagClient().create_namespace(name, description)
 
 
 @tool(
@@ -185,25 +179,14 @@ async def rag_add_text(
             "metadata.collection_id не совпадает с аргументом collection_id",
         )
     merged_meta["collection_id"] = collection_id
-    client = RagClient()
-    try:
-        raw = await client.ingest_text(
-            namespace_id,
-            text,
-            document_name=document_name,
-            metadata=merged_meta,
-            document_id=document_id,
-        )
-    except ServiceClientError as exc:
-        return {"success": False, "error": str(exc)}
-    return {
-        "success": True,
-        "document_id": raw.document_id,
-        "document_name": raw.document_name,
-        "namespace_id": raw.namespace_id,
-        "status": raw.status,
-        "provider": raw.provider,
-    }
+    raw = await RagClient().ingest_text(
+        namespace_id,
+        text,
+        document_name=document_name,
+        metadata=merged_meta,
+        document_id=document_id,
+    )
+    return require_json_object(raw.model_dump(mode="json"), "rag_add_text")
 
 
 @tool(
@@ -233,22 +216,17 @@ async def rag_search(
             "filters.collection_id не совпадает с аргументом collection_id",
         )
     merged_filters["collection_id"] = collection_id
-    client = RagClient()
-    try:
-        raw = await client.search(
-            namespace_id,
-            query,
-            limit=limit,
-            filters=merged_filters,
-            channels=channels,
-            rrf_k=rrf_k,
-            per_channel_top_k=per_channel_top_k,
-            rerank=rerank,
-            rerank_max_candidates=rerank_max_candidates,
-            retrieval=retrieval,
-            freshness_weight=freshness_weight,
-            freshness_half_life_days=freshness_half_life_days,
-        )
-    except ServiceClientError as exc:
-        return {"success": False, "error": str(exc)}
-    return {"success": True, **raw}
+    return await RagClient().search(
+        namespace_id,
+        query,
+        limit=limit,
+        filters=merged_filters,
+        channels=channels,
+        rrf_k=rrf_k,
+        per_channel_top_k=per_channel_top_k,
+        rerank=rerank,
+        rerank_max_candidates=rerank_max_candidates,
+        retrieval=retrieval,
+        freshness_weight=freshness_weight,
+        freshness_half_life_days=freshness_half_life_days,
+    )

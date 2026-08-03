@@ -191,3 +191,34 @@ export function buildRagDocumentFileCreateSpecJson({ namespaceId, ragMetadata })
         postCreate,
     });
 }
+
+export function buildCrmEntityFileCreateSpecJson({ entityId, entityType, entityTitle }) {
+    if (typeof entityId !== 'string' || entityId.length === 0) {
+        throw new Error('buildCrmEntityFileCreateSpecJson: entityId required');
+    }
+    if (typeof entityType !== 'string' || entityType.length === 0) {
+        throw new Error('buildCrmEntityFileCreateSpecJson: entityType required');
+    }
+    const title =
+        typeof entityTitle === 'string' && entityTitle.length > 0 ? entityTitle : entityId;
+    return buildFileCreateSpecJson({
+        sourceKind: 'crm_entity',
+        sourceRef: {
+            entity_id: entityId,
+            entity_type: entityType,
+            entity_title: title,
+        },
+        postCreate: { is_public: false },
+    });
+}
+
+export function buildOfficeDocumentFileCreateSpecJson({ namespaceId }) {
+    if (typeof namespaceId !== 'string' || namespaceId.length === 0) {
+        throw new Error('buildOfficeDocumentFileCreateSpecJson: namespaceId required');
+    }
+    return buildFileCreateSpecJson({
+        sourceKind: 'office_document',
+        sourceRef: { entity_id: namespaceId },
+        postCreate: { is_public: false },
+    });
+}

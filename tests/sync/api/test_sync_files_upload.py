@@ -1,36 +1,25 @@
-"""POST /frontend/api/v1/files/ — реальный S3 (MinIO), ASGI + worker не обязателен."""
+"""Chunked upload /frontend/api/v1/files/uploads — реальный S3 (MinIO)."""
 
 from __future__ import annotations
 
-import io
-import json
-
 import pytest
 
-
-def _platform_auxiliary_spec() -> str:
-    return json.dumps(
-        {
-            "source_kind": "platform_auxiliary",
-            "source_ref": {},
-            "retention": {"kind": "platform_default"},
-            "post_create": {"is_public": True},
-        }
-    )
+from tests.files.chunked_upload_helpers import chunked_upload_file, platform_auxiliary_upload_spec_json
 
 
 @pytest.mark.asyncio
-async def test_upload_file_multipart(
+async def test_upload_file_chunked(
     frontend_client,
     sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
-    files = {"file": ("hello.txt", io.BytesIO(b"hello world"), "text/plain")}
-    r = await frontend_client.post(
-        "/frontend/api/v1/files/",
-        headers=sync_auth_headers,
-        data={"spec": _platform_auxiliary_spec()},
-        files=files,
+    r = await chunked_upload_file(
+        frontend_client,
+        sync_auth_headers,
+        content=b"hello world",
+        original_name="hello.txt",
+        content_type="text/plain",
+        spec_json=platform_auxiliary_upload_spec_json(is_public=True),
     )
     assert r.status_code == 200, r.text
     data = r.json()

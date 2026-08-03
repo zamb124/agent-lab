@@ -17,6 +17,30 @@ from a2a.types import Message, Part, Role
 
 from apps.capability_gateway.services.context_service import CapabilityContextService
 from apps.capability_gateway.services.contracts import CapabilityGatewayContainerProtocol
+from apps.capability_gateway.services.crm_capabilities import (
+    CRM_CAPABILITY_SPECS,
+    crm_capability_definitions,
+    invoke_crm_client,
+)
+from apps.capability_gateway.services.documents_capabilities import (
+    DOCUMENTS_CAPABILITY_SPECS,
+    documents_capability_definitions,
+    invoke_documents_client,
+)
+from apps.capability_gateway.services.invoke_helpers import (
+    invoke_text_format_markdown,
+    invoke_text_summarize,
+)
+from apps.capability_gateway.services.sync_capabilities import (
+    SYNC_CAPABILITY_SPECS,
+    invoke_sync_client,
+    sync_capability_definitions,
+)
+from apps.capability_gateway.services.wiki_capabilities import (
+    WIKI_CAPABILITY_SPECS,
+    invoke_wiki_client,
+    wiki_capability_definitions,
+)
 from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
 from core.a2a import message_to_json_dict, struct_from_mapping
 from core.ai.runtime import synthesize_speech_audio, transcribe_audio_bytes
@@ -35,7 +59,9 @@ from core.capabilities import (
     JsonObject,
     JsonValue,
     verify_execution_context,
+    verify_execution_token,
 )
+from core.capabilities.tokens import assert_capability_allowed
 from core.clients.service_client import ServiceClientError
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
@@ -538,6 +564,14 @@ class CapabilityRegistry:
             self._handlers[f"http.{method.lower()}"] = self._make_http_method_handler(method)
         for level in LOG_LEVELS:
             self._handlers[f"log.{level}"] = self._make_log_handler(level)
+        for method, _title, _description, _args_model in WIKI_CAPABILITY_SPECS:
+            self._handlers[f"wiki.{method}"] = self._make_wiki_handler(method)
+        for method, _title, _description, _args_model in DOCUMENTS_CAPABILITY_SPECS:
+            self._handlers[f"documents.{method}"] = self._make_documents_handler(method)
+        for method, _title, _description, _args_model in CRM_CAPABILITY_SPECS:
+            self._handlers[f"crm.{method}"] = self._make_crm_handler(method)
+        for method, _title, _description, _args_model in SYNC_CAPABILITY_SPECS:
+            self._handlers[f"sync.{method}"] = self._make_sync_handler(method)
         definition_names = set(self._static_definitions)
         handler_names = set(self._handlers)
         if not definition_names.issubset(handler_names):
@@ -570,7 +604,8 @@ class CapabilityRegistry:
             f"Language: `{language_note}`",
             "",
             "User code calls platform SDK namespaces generated from the same manifest: "
-            + "`tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, `platform`, `channel`, `flow`.",
+            + "`tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, "
+            + "`platform`, `channel`, `flow`, `wiki`, `documents`, `crm`.",
             "The structured `capabilities` and `namespaces` fields in this response are the backend source for editor autocomplete.",
             "If `entrypoint` is omitted, the runner executes the first function declared in the source. "
             + "Node/tool configs may set any valid language function name via `entrypoint`.",
@@ -954,6 +989,8 @@ class CapabilityRegistry:
 
     async def call(self, request: CapabilityCallRequest) -> CapabilityCallResponse:
         verify_execution_context(request.context)
+        claims = verify_execution_token(request.context.execution_token)
+        assert_capability_allowed(claims, request.name)
         handler = self._handlers.get(request.name)
         if handler is None and request.name.startswith("tools."):
             handler = self._tool_capability_call
@@ -1361,6 +1398,10 @@ class CapabilityRegistry:
                 sdk_method=level,
             )
         definitions.update(self._state_definitions())
+        definitions.update(wiki_capability_definitions())
+        definitions.update(documents_capability_definitions())
+        definitions.update(crm_capability_definitions())
+        definitions.update(sync_capability_definitions())
         definitions.update(
             {
                 "channel.send": CapabilityDefinition(
@@ -1577,6 +1618,42 @@ class CapabilityRegistry:
             )
             for method, title, description, input_schema, output_schema in specs
         }
+
+    def _make_wiki_handler(self, method: str) -> CapabilityHandler:
+        async def _handler(request: CapabilityCallRequest) -> JsonValue:
+            self._reject_positional_args(request)
+            context = await self._context_service.build_context(request.context)
+            with self._context_service.activate(context):
+                return await invoke_wiki_client(method, request.kwargs)
+
+        return _handler
+
+    def _make_documents_handler(self, method: str) -> CapabilityHandler:
+        async def _handler(request: CapabilityCallRequest) -> JsonValue:
+            self._reject_positional_args(request)
+            context = await self._context_service.build_context(request.context)
+            with self._context_service.activate(context):
+                return await invoke_documents_client(method, request.kwargs)
+
+        return _handler
+
+    def _make_crm_handler(self, method: str) -> CapabilityHandler:
+        async def _handler(request: CapabilityCallRequest) -> JsonValue:
+            self._reject_positional_args(request)
+            context = await self._context_service.build_context(request.context)
+            with self._context_service.activate(context):
+                return await invoke_crm_client(method, request.kwargs)
+
+        return _handler
+
+    def _make_sync_handler(self, method: str) -> CapabilityHandler:
+        async def _handler(request: CapabilityCallRequest) -> JsonValue:
+            self._reject_positional_args(request)
+            context = await self._context_service.build_context(request.context)
+            with self._context_service.activate(context):
+                return await invoke_sync_client(method, request.kwargs)
+
+        return _handler
 
     async def _files_create(self, request: CapabilityCallRequest) -> JsonObject:
         self._reject_positional_args(request)
@@ -2010,22 +2087,24 @@ class CapabilityRegistry:
         )
         context = await self._context_service.build_context(request.context)
         with self._context_service.activate(context):
-            summary = await self._text_transform_service.summarize(
-                text,
+            return await invoke_text_summarize(
+                self._text_transform_service,
+                text=text,
                 instruction=instruction,
                 provider=provider,
                 model=model,
                 max_output_tokens=max_output_tokens,
             )
-        return {"summary": summary}
 
     async def _text_format_markdown(self, request: CapabilityCallRequest) -> JsonObject:
         self._reject_positional_args(request)
         text = _required_string(request.kwargs.get("text"), "text")
         context = await self._context_service.build_context(request.context)
         with self._context_service.activate(context):
-            markdown = await self._text_transform_service.format_markdown(text)
-        return {"markdown": markdown}
+            return await invoke_text_format_markdown(
+                self._text_transform_service,
+                text=text,
+            )
 
     async def _voice_transcribe_audio(self, request: CapabilityCallRequest) -> JsonObject:
         self._reject_positional_args(request)

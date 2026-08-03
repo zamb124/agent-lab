@@ -43,6 +43,7 @@ def wiki_container(setup_database_before_tests):
     _ = setup_database_before_tests
     reset_wiki_container()
     container = get_wiki_container()
+    container.bind_files_route_segment("wiki")
     yield container
     reset_wiki_container()
 

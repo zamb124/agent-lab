@@ -55,6 +55,7 @@ from core.events import store_registered_platform_events
 from core.events.publisher import close_publisher_client
 from core.files.api import build_files_router
 from core.files.processors import initialize_default_processors
+from core.files.urls import resolve_files_route_segment, set_files_route_segment
 from core.frontend.documentation_mount import mount_documentation_static
 from core.logging import (
     SystemLogScope,
@@ -183,9 +184,15 @@ def create_service_app(
     # Настройка логирования и публикация settings в глобальный синглтон
     setup_logging(service_name, settings.logging)
     set_settings(settings)
+    files_segment = resolve_files_route_segment(
+        service_name,
+        documentation_gateway_prefix=documentation_gateway_prefix,
+    )
+    set_files_route_segment(files_segment)
 
     # Получение контейнера
     container = get_container()
+    container.bind_files_route_segment(files_segment)
 
     # Lifespan: системный скоуп — нет request_id/user_id, но нужен canonical service.name
     @asynccontextmanager
@@ -423,13 +430,14 @@ def create_service_app(
     public_segment = url_route_segment
 
     if include_platform_routers:
-        if service_name == "frontend":
-            files_api_prefix = f"/{url_route_segment}/api/{api_version or 'v1'}/files"
-            _files_router = build_files_router(
-                get_files_service=lambda: container.files_service,
-            )
-            app.include_router(_files_router, prefix=files_api_prefix)
-            logger.info("service.router_attached", router="files", prefix=files_api_prefix)
+        files_api_prefix = f"/{url_route_segment}/api/{api_version or 'v1'}/files"
+        _files_router = build_files_router(
+            get_files_service=lambda: container.files_service,
+            get_chunked_upload_service=lambda: container.chunked_upload_service,
+            files_route_segment=url_route_segment,
+        )
+        app.include_router(_files_router, prefix=files_api_prefix)
+        logger.info("service.router_attached", router="files", prefix=files_api_prefix)
 
         auth_prefix = f"/{public_segment}/api/auth"
         logger.info("service.router_attached", router="core_auth", prefix=auth_prefix)

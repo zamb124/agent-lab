@@ -66,6 +66,30 @@ class S3ListObjectsV2Response(TypedDict, total=False):
     Contents: list[S3ListedObjectResponse]
 
 
+class S3CreateMultipartUploadRequest(TypedDict, total=False):
+    Bucket: Required[str]
+    Key: Required[str]
+    ContentType: str
+    Metadata: dict[str, str]
+
+
+class S3CreateMultipartUploadResponse(TypedDict):
+    UploadId: str
+
+
+class S3UploadPartResponse(TypedDict):
+    ETag: str
+
+
+class S3CompletedPart(TypedDict):
+    PartNumber: int
+    ETag: str
+
+
+class S3CompletedMultipartUpload(TypedDict):
+    Parts: list[S3CompletedPart]
+
+
 class S3ServiceClient:
     async def __aexit__(
         self,
@@ -88,6 +112,34 @@ class S3ServiceClient:
     async def get_object(self, **kwargs: Unpack[S3GetObjectRequest]) -> S3GetObjectResponse: ...
     async def delete_object(self, *, Bucket: str, Key: str) -> None: ...
     async def head_object(self, *, Bucket: str, Key: str) -> S3HeadObjectResponse: ...
+    async def create_multipart_upload(
+        self,
+        **kwargs: Unpack[S3CreateMultipartUploadRequest],
+    ) -> S3CreateMultipartUploadResponse: ...
+    async def upload_part(
+        self,
+        *,
+        Bucket: str,
+        Key: str,
+        UploadId: str,
+        PartNumber: int,
+        Body: bytes,
+    ) -> S3UploadPartResponse: ...
+    async def complete_multipart_upload(
+        self,
+        *,
+        Bucket: str,
+        Key: str,
+        UploadId: str,
+        MultipartUpload: S3CompletedMultipartUpload,
+    ) -> None: ...
+    async def abort_multipart_upload(
+        self,
+        *,
+        Bucket: str,
+        Key: str,
+        UploadId: str,
+    ) -> None: ...
     async def generate_presigned_url(
         self,
         ClientMethod: S3PresignedMethod,

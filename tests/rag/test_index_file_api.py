@@ -378,7 +378,6 @@ async def test_full_delete_document_removes_file_record_but_index_only_does_not(
     await _wait_rag_document_completed(rag_client, reindex.json()["document_id"], auth_headers_system)
 
     rag_owned = await upload_rag_document_bytes(
-        frontend_client,
         rag_client,
         auth_headers_system,
         namespace_id=namespace_id,

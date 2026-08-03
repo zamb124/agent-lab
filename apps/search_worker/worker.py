@@ -8,6 +8,7 @@
 from apps.search_worker.config import SearchWorkerSettings
 from core.config import set_settings
 from core.config.loader import load_merged_config
+from core.files.urls import resolve_files_route_segment, set_files_route_segment
 from core.tasks.logging_init import setup_worker_logging_early
 
 _settings = SearchWorkerSettings.model_validate(
@@ -15,6 +16,8 @@ _settings = SearchWorkerSettings.model_validate(
 )
 setup_worker_logging_early("search_worker", logging_config=_settings.logging)
 set_settings(_settings)
+_segment = resolve_files_route_segment("search_worker")
+set_files_route_segment(_segment)
 
 from taskiq import TaskiqState
 
@@ -32,6 +35,7 @@ broker = wire_worker("search")
 
 async def _startup(state: TaskiqState) -> None:
     container = get_search_container()
+    container.bind_files_route_segment(_segment)
     state.container = container
     set_billing_service(container.billing_service)
     init_worker_tracing("search_worker", container)

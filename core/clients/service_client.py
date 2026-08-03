@@ -168,7 +168,9 @@ class ServiceClient:
 
         # Не устанавливаем Content-Type: application/json, если передаются files
         # (httpx сам установит multipart/form-data)
-        include_content_type = "files" not in kwargs
+        include_content_type = (
+            "files" not in kwargs and "content" not in kwargs and "data" not in kwargs
+        )
         headers = self._build_headers(include_content_type=include_content_type)
         request_kwargs = dict(kwargs)
         extra_headers = request_kwargs.pop("headers", None)

@@ -71,6 +71,7 @@ os.environ["SERVER__CODE_RUNNER_NODE_SERVICE_URL"] = "http://localhost:9018"
 os.environ["SERVER__CODE_RUNNER_GO_SERVICE_URL"] = "http://localhost:9019"
 os.environ["SERVER__CODE_RUNNER_CSHARP_SERVICE_URL"] = "http://localhost:9020"
 os.environ["SERVER__WORKTRACKER_SERVICE_URL"] = "http://localhost:9021"
+os.environ["SERVER__WIKI_SERVICE_URL"] = "http://localhost:9023"
 os.environ.setdefault("VOICE__STT__PROVIDER", "mock")
 os.environ.setdefault("VOICE__STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция sync worker")
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
@@ -1247,7 +1248,7 @@ def inline_tools():
                 },
                 "required": ["question"],
             },
-            "code": 'async def execute(args: dict, state: dict = None):\n    from apps.flows.src.runtime.exceptions import FlowInterrupt\n    q = args.get("question")\n    if not q or not str(q).strip():\n        raise ValueError("ask_user: question обязателен")\n    raise FlowInterrupt(question=str(q).strip())\n',
+            "code": 'async def execute(args: dict, state: dict = None):\n    q = args.get("question")\n    if not q or not str(q).strip():\n        raise ValueError("ask_user: question обязателен")\n    raise FlowInterrupt(question=str(q).strip())\n',
         },
         "reason": {
             "tool_id": "reason",

@@ -34,58 +34,35 @@ export function a2aEndpointUrl(target) {
 }
 
 /**
- * A2A 1.0 file parts из host-файлов: либо `{ name, mimeType|type, data: base64 }`,
- * либо уже A2A `{ raw|url, filename, mediaType }`.
+ * A2A 1.0 file parts для platform UI: только `{ url, filename, mediaType }`
+ * после Files chunked upload. `raw` / `data` / `file.bytes` запрещены.
  */
 export function buildA2aFileParts(files) {
-    return (Array.isArray(files) ? files : []).map((f) => {
-        if (f && typeof f === 'object') {
-            if (typeof f.raw === 'string' && f.raw.length > 0) {
-                return {
-                    raw: f.raw,
-                    filename: f.filename != null ? String(f.filename) : 'file',
-                    mediaType:
-                        f.mediaType != null && String(f.mediaType) !== ''
-                            ? String(f.mediaType)
-                            : 'application/octet-stream',
-                };
-            }
-            if (typeof f.url === 'string' && f.url.length > 0) {
-                return {
-                    url: f.url,
-                    filename: f.filename != null ? String(f.filename) : 'file',
-                    mediaType:
-                        f.mediaType != null && String(f.mediaType) !== ''
-                            ? String(f.mediaType)
-                            : 'application/octet-stream',
-                };
-            }
-            if (f.file && typeof f.file === 'object' && f.file.bytes != null) {
-                const fw = f.file;
-                return {
-                    raw: String(fw.bytes),
-                    filename: fw.name != null ? String(fw.name) : 'file',
-                    mediaType:
-                        fw.mimeType != null && String(fw.mimeType) !== ''
-                            ? String(fw.mimeType)
-                            : fw.mime_type != null && String(fw.mime_type) !== ''
-                              ? String(fw.mime_type)
-                              : 'application/octet-stream',
-                };
-            }
+    return (Array.isArray(files) ? files : []).map((f, index) => {
+        if (f == null || typeof f !== 'object') {
+            throw new Error(`buildA2aFileParts: files[${index}] must be an object`);
         }
-        const bytes = f && f.data != null ? String(f.data) : '';
-        const name = f && f.name != null ? String(f.name) : 'file';
-        const mimeType =
-            f && f.mimeType != null && String(f.mimeType) !== ''
-                ? String(f.mimeType)
-                : f && f.type != null && String(f.type) !== ''
-                  ? String(f.type)
-                  : 'application/octet-stream';
+        if (Object.prototype.hasOwnProperty.call(f, 'raw')) {
+            throw new Error(`buildA2aFileParts: files[${index}].raw forbidden; use url after upload`);
+        }
+        if (Object.prototype.hasOwnProperty.call(f, 'data')) {
+            throw new Error(`buildA2aFileParts: files[${index}].data forbidden; use url after upload`);
+        }
+        if (f.file && typeof f.file === 'object' && Object.prototype.hasOwnProperty.call(f.file, 'bytes')) {
+            throw new Error(
+                `buildA2aFileParts: files[${index}].file.bytes forbidden; use url after upload`,
+            );
+        }
+        if (typeof f.url !== 'string' || f.url.length === 0) {
+            throw new Error(`buildA2aFileParts: files[${index}].url required`);
+        }
         return {
-            raw: bytes,
-            filename: name,
-            mediaType: mimeType,
+            url: f.url,
+            filename: f.filename != null ? String(f.filename) : 'file',
+            mediaType:
+                f.mediaType != null && String(f.mediaType) !== ''
+                    ? String(f.mediaType)
+                    : 'application/octet-stream',
         };
     });
 }

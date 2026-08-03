@@ -1,12 +1,13 @@
 /**
  * Documents — документы внутри RAG namespace.
  *
- * Upload: platform/file_create → POST /frontend/api/v1/files/, затем index-file.
+ * Upload: uploadPlatformFile (chunked) → index-file.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 import { buildRagDocumentFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
+import { uploadPlatformFile } from '@platform/lib/utils/platform-file-upload.js';
 import { documentStatusResource } from './document-status.resource.js';
 
 export const documentsResource = createAsyncOp({
@@ -124,14 +125,13 @@ export const documentUploadOp = createAsyncOp({
             namespaceId: payload.namespaceId,
             ragMetadata: metadata,
         });
-        const uploadForm = new FormData();
-        uploadForm.append('file', payload.file);
-        uploadForm.append('spec', spec);
-        const fileRecord = await httpRequest({
-            method: 'POST',
-            url: '/frontend/api/v1/files/',
-            body: uploadForm,
-        });
+        const file =
+            payload.file instanceof File
+                ? payload.file
+                : new File([payload.file], 'document.bin', {
+                    type: payload.file.type || 'application/octet-stream',
+                });
+        const fileRecord = await uploadPlatformFile({ file, spec });
         if (!fileRecord || typeof fileRecord.file_id !== 'string') {
             throw new Error('rag/document_upload: file create response.file_id required');
         }
@@ -140,7 +140,7 @@ export const documentUploadOp = createAsyncOp({
             url: `/rag/api/v1/namespaces/${encodeURIComponent(payload.namespaceId)}/documents/index-file`,
             body: {
                 file_id: fileRecord.file_id,
-                document_name: payload.file instanceof File ? payload.file.name : 'document',
+                document_name: file.name,
                 metadata,
             },
         });

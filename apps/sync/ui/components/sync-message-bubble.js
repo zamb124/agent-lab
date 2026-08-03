@@ -30,9 +30,9 @@ import { parseMentionsToSegments } from '../_helpers/sync-mention-text.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
+import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 
-const FILE_DOWNLOAD_BASE = '/frontend/api/v1/files/download';
 const LONG_PRESS_MS = 450;
 
 const EMOJI_QUICK = ['👍','👎','❤️', '😂', '🔥', '🎉', '👏'];
@@ -838,7 +838,7 @@ export class SyncMessageBubble extends PlatformElement {
         if (!data) return '';
         let url = '';
         if (typeof data.url === 'string' && data.url !== '') url = data.url;
-        else if (typeof data.file_id === 'string') url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(data.file_id)}`;
+        else if (typeof data.file_id === 'string') url = buildPlatformFileDownloadUrl(data.file_id);
         if (url === '') return '';
         const alt = (typeof data.alt_text === 'string' && data.alt_text !== '')
             ? data.alt_text
@@ -871,7 +871,10 @@ export class SyncMessageBubble extends PlatformElement {
         if (data && typeof data.original_name === 'string' && data.original_name !== '') name = data.original_name;
         else if (data && typeof data.name === 'string' && data.name !== '') name = data.name;
         else name = this.t('bubble.file_fallback');
-        const url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(fileId)}`;
+        const url =
+            (data && typeof data.url === 'string' && data.url !== '')
+                ? data.url
+                : buildPlatformFileDownloadUrl(fileId);
         const size = data && typeof data.file_size === 'number'
             ? formatFileSize(data.file_size)
             : '';
@@ -908,7 +911,10 @@ export class SyncMessageBubble extends PlatformElement {
         const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
         const fileId = data ? data.file_id : null;
         if (typeof fileId !== 'string') return '';
-        const url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(fileId)}`;
+        const url =
+            (data && typeof data.url === 'string' && data.url !== '')
+                ? data.url
+                : buildPlatformFileDownloadUrl(fileId);
         const status = data && typeof data.transcription_status === 'string' ? data.transcription_status : 'idle';
         const durationMs = data && typeof data.duration_ms === 'number' ? data.duration_ms : 0;
         const hasWaveform = data && Array.isArray(data.waveform);
@@ -934,7 +940,10 @@ export class SyncMessageBubble extends PlatformElement {
         const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
         const fileId = data ? data.file_id : null;
         if (typeof fileId !== 'string') return '';
-        const url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(fileId)}`;
+        const url =
+            (data && typeof data.url === 'string' && data.url !== '')
+                ? data.url
+                : buildPlatformFileDownloadUrl(fileId);
         const status = data ? data.transcription_status : null;
         let name = '';
         if (data && typeof data.original_name === 'string' && data.original_name !== '') {

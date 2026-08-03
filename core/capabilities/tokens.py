@@ -34,13 +34,26 @@ class CapabilityExecutionTokenClaims(BaseModel):
     durable_superstep_sequence: int | None = Field(default=None, ge=0)
     source_node_id: str | None = Field(default=None, min_length=1)
     source_tool_call_id: str | None = Field(default=None, min_length=1)
+    namespace: str | None = Field(default=None, min_length=1)
+    allowed_capabilities: list[str] = Field(default_factory=list)
+    max_calls: int = Field(default=0, ge=0)
+    approved_argument_hash: str | None = Field(default=None, min_length=1)
+    audience: str = Field(default="capability_gateway", min_length=1)
     exp: int = Field(..., gt=0)
 
 
 def issue_execution_token(
     claims: CapabilityExecutionTokenClaims,
 ) -> str:
-    payload = claims.model_dump(mode="json")
+    payload = claims.model_dump(mode="json", exclude_none=True)
+    # Default grant fields are omitted so older runners (without these claims)
+    # can still verify tokens until all processes reload core.capabilities.
+    if not payload.get("allowed_capabilities"):
+        payload.pop("allowed_capabilities", None)
+    if payload.get("max_calls", 0) == 0:
+        payload.pop("max_calls", None)
+    if payload.get("audience") == CAPABILITY_GATEWAY_TOKEN_AUDIENCE:
+        payload.pop("audience", None)
     payload_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     payload_part = _b64url_encode(payload_bytes)
     signature_part = _sign(payload_part)
@@ -62,8 +75,27 @@ def verify_execution_token(token: str) -> CapabilityExecutionTokenClaims:
     return claims
 
 
+CAPABILITY_GATEWAY_TOKEN_AUDIENCE = "capability_gateway"
+
+
+def assert_capability_allowed(
+    claims: CapabilityExecutionTokenClaims,
+    capability_name: str,
+) -> None:
+    if not claims.allowed_capabilities:
+        return
+    if capability_name not in claims.allowed_capabilities:
+        raise ValueError(
+            f"Capability not allowed by execution token: {capability_name}"
+        )
+
+
 def verify_execution_context(context: CapabilityExecutionContext) -> None:
     claims = verify_execution_token(context.execution_token)
+    if claims.audience != CAPABILITY_GATEWAY_TOKEN_AUDIENCE:
+        raise ValueError(
+            f"Invalid execution token audience: {claims.audience!r}"
+        )
     mismatches: list[str] = []
     if claims.company_id != context.company_id:
         mismatches.append("company_id")
@@ -93,6 +125,8 @@ def verify_execution_context(context: CapabilityExecutionContext) -> None:
         mismatches.append("source_node_id")
     if claims.source_tool_call_id != context.source_tool_call_id:
         mismatches.append("source_tool_call_id")
+    if claims.namespace is not None and claims.namespace != context.namespace:
+        mismatches.append("namespace")
     if mismatches:
         joined = ", ".join(mismatches)
         raise ValueError(f"Execution token context mismatch: {joined}")

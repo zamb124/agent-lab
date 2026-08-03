@@ -228,7 +228,9 @@ class TestSchedulingTools:
             },
             state,
         )
-        assert "Одноразовая задача создана" in result
+        assert isinstance(result, dict)
+        assert result["content"] == "Tool test reminder"
+        assert result["schedule_type"] == "one_time"
         assert len(state.scheduled_tasks) == 1
         assert state.scheduled_tasks[0]["content"] == "Tool test reminder"
 
@@ -246,8 +248,9 @@ class TestSchedulingTools:
             },
             state,
         )
-        assert "Периодическая задача создана" in result
-        assert "0 8 * * 1-5" in result
+        assert isinstance(result, dict)
+        assert result["schedule_type"] == "cron"
+        assert result["cron"] == "0 8 * * 1-5"
         assert len(state.scheduled_tasks) == 1
 
     @pytest.mark.asyncio
@@ -258,8 +261,9 @@ class TestSchedulingTools:
         result = await tool.run(
             {"interval_minutes": 60, "content_type": "message", "content": "Hourly check"}, state
         )
-        assert "Периодическая задача создана" in result
-        assert "60" in result
+        assert isinstance(result, dict)
+        assert result["schedule_type"] == "interval"
+        assert result["interval_minutes"] == 60
         assert len(state.scheduled_tasks) == 1
 
     @pytest.mark.asyncio
@@ -275,8 +279,12 @@ class TestSchedulingTools:
             {"run_at": run_at, "content_type": "message", "content": "List test task"}, state
         )
         result = await list_tool.run({}, state)
-        assert "Запланированные задачи" in result
-        assert "List test task" in result
+        assert isinstance(result, dict)
+        items = result["items"]
+        assert isinstance(items, list)
+        assert any(
+            isinstance(item, dict) and item.get("content") == "List test task" for item in items
+        )
 
     @pytest.mark.asyncio
     async def test_cancel_scheduled_task_tool(self, app, container, unique_id, make_state):
@@ -294,7 +302,9 @@ class TestSchedulingTools:
         )
         schedule_task_id = state.scheduled_tasks[0]["schedule_task_id"]
         result = await cancel_tool.run({"schedule_task_id": schedule_task_id}, state)
-        assert "отменена" in result
+        assert isinstance(result, dict)
+        assert result["cancelled"] is True
+        assert result["schedule_task_id"] == schedule_task_id
         assert len(state.scheduled_tasks) == 0
 
     @pytest.mark.asyncio
@@ -313,7 +323,9 @@ class TestSchedulingTools:
             },
             state,
         )
-        assert "Одноразовая задача создана" in result
+        assert isinstance(result, dict)
+        assert result["content_type"] == "tool_call"
+        assert result["content"] == "calculator"
         task_data = state.scheduled_tasks[0]
         assert task_data["content_type"] == "tool_call"
         assert task_data["content"] == "calculator"

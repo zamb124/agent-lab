@@ -15,6 +15,7 @@ from core.files.registry import default_docs_placement
 from core.files.retention import FileRetentionKind
 from core.files.retention_promote import promote_file_retention_record
 from core.files.storage import FileStorage, retention_fields_from_spec
+from core.files.urls import normalize_files_route_segment
 from core.logging import get_logger
 from core.types import JsonObject
 
@@ -34,12 +35,19 @@ class FilesService:
         self,
         file_repository: FileRepository,
         *,
+        files_route_segment: str,
         rag_index_hook: RagIndexHook | None = None,
         docs_bind_hook: DocsBindHook | None = None,
     ) -> None:
         self._storage: FileStorage = FileStorage(file_repository=file_repository)
+        self._files_route_segment: str = normalize_files_route_segment(files_route_segment)
         self._rag_index_hook: RagIndexHook | None = rag_index_hook
         self._docs_bind_hook: DocsBindHook | None = docs_bind_hook
+
+    def _resolve_route_segment(self, route_segment: str | None) -> str:
+        if route_segment is not None:
+            return normalize_files_route_segment(route_segment)
+        return self._files_route_segment
 
     async def create(
         self,
@@ -49,6 +57,7 @@ class FilesService:
         original_name: str,
         content_type: str,
         content_sha256_hex: str | None = None,
+        route_segment: str | None = None,
     ) -> FileRecord:
         settings = get_settings()
         if not settings.s3.enabled or not settings.s3.default_bucket:
@@ -79,6 +88,7 @@ class FilesService:
             metadata=metadata,
             tags=spec.tags,
             content_sha256_hex=content_sha256_hex,
+            route_segment=self._resolve_route_segment(route_segment),
         )
 
         await self._run_post_create(file_record, spec, post_create)
@@ -94,6 +104,9 @@ class FilesService:
         original_name: str,
         content_type: str,
         file_size: int,
+        existing_file_id: str | None = None,
+        content_sha256_hex: str | None = None,
+        route_segment: str | None = None,
     ) -> FileRecord:
         settings = get_settings()
         if not settings.s3.enabled:
@@ -123,6 +136,9 @@ class FilesService:
             ttl_seconds=ttl_seconds,
             metadata=metadata,
             tags=spec.tags,
+            existing_file_id=existing_file_id,
+            content_sha256_hex=content_sha256_hex,
+            route_segment=self._resolve_route_segment(route_segment),
         )
         await self._run_post_create(file_record, spec, post_create)
         await self._bind_after_create(file_record, spec, title=original_name)

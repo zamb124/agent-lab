@@ -97,7 +97,7 @@ class TestFlowWithSubagentInterrupt:
     @pytest.fixture
     def main_agent_config(self) -> JsonObject:
         """Конфиг главного flow с субагентом как inline tool."""
-        ask_user_code = '\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    question = args.get("question", "")\n    raise FlowInterrupt(question)\n'
+        ask_user_code = '\nasync def run(args, state):\n    question = args.get("question", "")\n    raise FlowInterrupt(question)\n'
         return {
             "flow_id": "main_flow",
             "name": "Main Agent",
@@ -212,7 +212,7 @@ class TestSubagentMessagesIntegrity:
     @pytest.fixture
     def main_flow_with_subagent(self) -> JsonObject:
         """Agent с субагентом - полностью inline."""
-        ask_user_code = '\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    question = args.get("question", "")\n    raise FlowInterrupt(question)\n'
+        ask_user_code = '\nasync def run(args, state):\n    question = args.get("question", "")\n    raise FlowInterrupt(question)\n'
         return {
             "flow_id": "test_flow",
             "name": "Test Agent",

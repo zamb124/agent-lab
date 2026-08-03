@@ -5,6 +5,8 @@ from __future__ import annotations
 import io
 
 import pytest
+
+from tests.files.chunked_upload_helpers import chunked_upload_file, platform_auxiliary_upload_spec_json
 from httpx import ASGITransport, AsyncClient
 
 from tests.sync.api._helpers import platform_auxiliary_file_spec_json
@@ -17,15 +19,15 @@ async def test_upload_empty_file_400(
     sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
-    files = {"file": ("empty.txt", io.BytesIO(b""), "text/plain")}
-    r = await frontend_client.post(
-        "/frontend/api/v1/files/",
-        headers=sync_auth_headers,
-        data={"spec": platform_auxiliary_file_spec_json()},
-        files=files,
-    )
-    assert r.status_code == 400, r.text
-    assert "Пустой" in r.json()["detail"]
+    with pytest.raises(ValueError, match="empty content"):
+        await chunked_upload_file(
+            frontend_client,
+            sync_auth_headers,
+            content=b"",
+            original_name="empty.txt",
+            content_type="text/plain",
+            spec_json=platform_auxiliary_file_spec_json(),
+        )
 
 
 @pytest.mark.asyncio
@@ -49,14 +51,22 @@ async def test_upload_returns_503_when_s3_disabled(
     from apps.frontend.main import app
 
     async with _temporary_settings({"s3.enabled": False}):
-        files = {"file": ("x.txt", io.BytesIO(b"data"), "text/plain")}
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as client:
             r = await client.post(
-                "/frontend/api/v1/files/",
-                headers=sync_auth_headers,
-                data={"spec": platform_auxiliary_file_spec_json()},
-                files=files,
+                "/frontend/api/v1/files/uploads",
+                headers={**sync_auth_headers, "Content-Type": "application/json"},
+                json={
+                    "spec": {
+                        "source_kind": "platform_auxiliary",
+                        "source_ref": {},
+                        "retention": {"kind": "platform_default"},
+                        "post_create": {"is_public": True},
+                    },
+                    "original_name": "x.txt",
+                    "content_type": "text/plain",
+                    "file_size": 4,
+                },
             )
     assert r.status_code == 503
     assert "S3" in r.json()["detail"]

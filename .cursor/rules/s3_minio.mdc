@@ -72,17 +72,20 @@ API **никогда** не возвращает клиенту прямой S3/
 
 ### Архитектура
 
-`core/files/api.py::build_files_router(get_files_service)`. Mount **только** на frontend: `/frontend/api/v1/files/*`. In-process — `container.files_service` (`FilesService` + `FileCreateSpec`). Cross-pod HTTP — `core/clients/files_client.py::FilesClient`.
+`core/files/api.py::build_files_router`. Mount на каждом сервисе с `include_platform_routers`: `/{service}/api/v1/files/*` (office → `/documents/api/v1/files/*`). Клиентский upload — **только** chunked `/uploads*`. In-process — `container.files_service` (`FilesService` + `FileCreateSpec`). Cross-pod HTTP — `core/clients/files_client.py::FilesClient` (segment целевого процесса, не frontend-канон). Download на любом mount — shared `FileRepository` + S3.
 
 | Метод | Путь | Описание |
 |---|---|---|
-| `POST` | `/frontend/api/v1/files/` | Multipart upload (`file` + form `spec`) |
-| `POST` | `/frontend/api/v1/files/register-s3` | Регистрация уже загруженного S3-объекта |
-| `POST` | `/frontend/api/v1/files/{file_id}/bind` | Docs bind (`DocsPlacement`) |
-| `GET` | `/frontend/api/v1/files/download/{file_id}` | Стриминг (с `Accept-Ranges: bytes`, `Content-Length`, `206 Partial Content` на `Range`) |
-| `GET` | `/frontend/api/v1/files/{file_id}` | Метаданные |
+| `POST` | `/{svc}/api/v1/files/uploads` | Init chunked session |
+| `PUT` | `/{svc}/api/v1/files/uploads/{upload_id}/parts/{n}` | Raw body одной части (≤ chunk_size) |
+| `POST` | `/{svc}/api/v1/files/uploads/{upload_id}/complete` | Complete → `FileResponse` |
+| `DELETE` | `/{svc}/api/v1/files/uploads/{upload_id}` | Abort |
+| `POST` | `/{svc}/api/v1/files/register-s3` | Регистрация уже загруженного S3-объекта |
+| `POST` | `/{svc}/api/v1/files/{file_id}/bind` | Docs bind (`DocsPlacement`) |
+| `GET` | `/{svc}/api/v1/files/download/{file_id}` | Стриминг (с `Accept-Ranges: bytes`, `Content-Length`, `206 Partial Content` на `Range`); `svc` = segment любого сервиса с mount |
+| `GET` | `/{svc}/api/v1/files/{file_id}` | Метаданные |
 
-Per-service `/{svc}/api/v1/files/*` **запрещены**. S3 выключен — `POST .../files/` возвращает `503`. Download публичных файлов — `auth_required=False` в `route_config.py`; приватные проверяет хендлер.
+FormData/`UploadFile` single-shot на Files API **запрещён**. S3 выключен — init upload возвращает `503`. Download публичных файлов — `auth_required=False` в `route_config.py`; приватные проверяет хендлер.
 
 ### Логика доступа
 
@@ -91,11 +94,11 @@ Per-service `/{svc}/api/v1/files/*` **запрещены**. S3 выключен 
 
 ### Поля `FileRecord`
 
-`FileRecord.download_url: str | None` — same-origin URL при загрузке. `FileRecord.url` — канонический `/frontend/api/v1/files/download/{file_id}`.
+`FileRecord.download_url: str | None` — same-origin URL при загрузке (`/{creating-service-segment}/api/v1/files/download/{file_id}`). `FileRecord.url` — тот же путь; другой сервис может скачать тот же `file_id` через свой `/{segment}/api/v1/files/download/{file_id}`.
 
 ### Запрещённые паттерны
 
-- `FileProcessor`, `build_file_api_router`, per-service file routers, `upload_namespace_document`.
+- `FileProcessor`, `build_file_api_router`, FormData single-shot upload, `upload_namespace_document`.
 - `file_record.direct_s3_url` — прямые S3 URL запрещены в ответах.
 - `s3_client.get_public_url()` в API-хендлерах (разрешён только в RAG internals).
 - Сервис-специфичные upload endpoints и factory `*/file_upload` — только `platform/file_create`.
