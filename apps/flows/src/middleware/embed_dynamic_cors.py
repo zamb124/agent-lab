@@ -14,10 +14,10 @@ from apps.flows.src.services.embed_target_resolver import resolve_embed_target
 
 
 class EmbedDynamicCorsMiddleware(BaseHTTPMiddleware):
-    """Обрабатывает CORS для /flows/api/v1/embed/{embed_id} и его chat-profile."""
+    """Обрабатывает CORS для embed A2A и его узкого interface-profile."""
 
     _EMBED_PREFIX: str = "/flows/api/v1/embed/"
-    _EMBED_SUBPATHS: frozenset[str] = frozenset({"chat-profile"})
+    _EMBED_SUBPATHS: frozenset[str] = frozenset({"interface-profile"})
 
     def __init__(self, app: ASGIApp, *, container: FlowContainer) -> None:
         super().__init__(app)
@@ -79,7 +79,8 @@ def _is_origin_allowed(origin: str, allowed_origins: list[str]) -> bool:
 
 
 _EMBED_CORS_ALLOW_HEADERS = (
-    "Accept, Authorization, Content-Type, A2A-Version, X-Platform-Namespace, X-Test-Scope"
+    "Accept, Authorization, Content-Type, A2A-Version, A2A-Extensions, "
+    "X-Platform-Namespace, X-Test-Scope"
 )
 
 

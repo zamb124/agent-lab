@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import Field, model_validator
 
 from core.models import StrictBaseModel
+from core.models.flow_interface import FlowInterfaceOverride
 from core.types import JsonObject, require_json_object
 
 from .enums import MergeMode
@@ -35,6 +36,13 @@ class BranchPayload(StrictBaseModel):
     resources: dict[str, ResourceReference] = Field(default_factory=dict)
     resources_mode: MergeMode = MergeMode.MERGE
     speech: FlowSpeechSettings | None = None
+    interface_override: FlowInterfaceOverride = Field(
+        default_factory=FlowInterfaceOverride,
+        description=(
+            "Полная replacement-семантика Flow UI для ветки; "
+            "inherit не создаёт частичный component merge"
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -80,6 +88,13 @@ class BranchDetailResponse(StrictBaseModel):
     resources: dict[str, ResourceReference] = Field(default_factory=dict)
     resources_mode: MergeMode = MergeMode.MERGE
     speech: FlowSpeechSettings | None = None
+    interface_override: FlowInterfaceOverride = Field(
+        default_factory=FlowInterfaceOverride,
+        description=(
+            "Полная replacement-семантика Flow UI для ветки; "
+            "inherit не создаёт частичный component merge"
+        ),
+    )
 
 
 class BranchMutationResponse(StrictBaseModel):
@@ -107,6 +122,7 @@ def branch_payload_to_config(payload: BranchPayload) -> BranchConfig:
         resources=payload.resources,
         resources_mode=payload.resources_mode,
         speech=payload.speech,
+        interface_override=payload.interface_override,
     )
 
 
@@ -138,6 +154,7 @@ def branch_detail_response(branch_id: str, branch_cfg: BranchConfig) -> BranchDe
         resources=branch_cfg.resources,
         resources_mode=branch_cfg.resources_mode,
         speech=branch_cfg.speech,
+        interface_override=branch_cfg.interface_override,
     )
 
 

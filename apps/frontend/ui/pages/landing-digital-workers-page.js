@@ -1,10 +1,10 @@
 /**
- * Публичный каталог демо-агентов: карточки + пробный чат через <platform-chat display="drawer">.
+ * Публичный каталог демо-агентов: карточки + пробный чат через <platform-flow-ui display="drawer">.
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
-import '@platform/lib/chat/platform-chat.js';
+import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -302,7 +302,7 @@ export class LandingDigitalWorkersPage extends PlatformPage {
                 </div>
                 <landing-footer></landing-footer>
             </div>
-            <platform-chat
+            <platform-flow-ui
                 display="drawer"
                 profile="embed_public"
                 flows-base-url=${this._flowsBaseUrl}
@@ -322,7 +322,7 @@ export class LandingDigitalWorkersPage extends PlatformPage {
                 .getAuthToken=${this._getDemoAuthHeaders}
                 @humanitec-embed-drawer-open-changed=${this._onDrawerOpenChanged}
                 @embed-toast=${this._onEmbedDrawerToast}
-            ></platform-chat>
+            ></platform-flow-ui>
         `;
     }
 }

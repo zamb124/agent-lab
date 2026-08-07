@@ -53,6 +53,10 @@ from core.types import JsonObject, JsonValue
 
 logger = get_logger(__name__)
 
+PLATFORM_DEFAULT_APEX = "linnex.io"
+"""Deployment default apex. Single source for identities that must stay stable
+across brands (A2UI catalog ID); host-aware code uses resolve_brand()."""
+
 
 class MergedJsonConfigSettingsSource(PydanticBaseSettingsSource):
     """Источник Pydantic Settings на основе объединённого JSON-конфига проекта."""
@@ -108,7 +112,7 @@ class BaseSettings(PydanticBaseSettings):
     legal: LegalConfig = Field(default_factory=LegalConfig)
     public_site: PublicSiteConfig = Field(default_factory=PublicSiteConfig)
     primary_platform_domain: str = Field(
-        default="linnex.io",
+        default=PLATFORM_DEFAULT_APEX,
         description="Deployment default apex when Host is unavailable (TURN, VAPID). Host-aware code uses resolve_brand().",
     )
     platform_brands: dict[str, PlatformBrandConfig] = Field(

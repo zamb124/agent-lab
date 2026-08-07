@@ -5,6 +5,11 @@ alwaysApply: false
 ---
 # Wiki — база знаний платформы
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 Сервис **wiki** (порт 8023, БД `platform_wiki`, префикс REST `/wiki/api/v1/`, SPA `/wiki`). Страницы живут внутри рабочего пространства компании и связаны в дерево.
 
 Каноническое имя сущности — **`WikiPage` / `wiki_page_id`**. `document_id` занят RAG, `file_id` — платформенным файлом; страница базы знаний ими не называется.

@@ -5,8 +5,13 @@ from datetime import datetime, timezone
 import pytest
 from httpx import AsyncClient
 
+from core.a2a import PLATFORM_UI_BOOTSTRAP_ACTION
 from core.models.identity_models import Company
 from core.utils.tokens import get_token_service
+from tests.flows._flow_ui_session import (
+    flow_ui_a2a_headers,
+    flow_ui_protojson_message,
+)
 
 
 async def _create_embed(frontend_client: AsyncClient, auth_headers: dict[str, str], flow_id: str) -> str:
@@ -280,8 +285,14 @@ async def test_embed_session_token_rejects_forbidden_method(
     rpc_body = {
         "jsonrpc": "2.0",
         "id": "test-forbidden-method",
-        "method": "GetTask",
-        "params": {"id": "t1"},
+        "method": "CreateTaskPushNotificationConfig",
+        "params": {
+            "taskId": "t1",
+            "pushNotificationConfig": {
+                "id": "cfg-1",
+                "url": "https://example.com/push",
+            },
+        },
     }
     deny_response = await flows_client.post(
         f"/flows/api/v1/embed/{embed_id}",
@@ -294,7 +305,165 @@ async def test_embed_session_token_rejects_forbidden_method(
     assert deny_response.status_code == 200
     deny_payload = deny_response.json()
     assert deny_payload["error"]["code"] == -32000
-    assert "supports only SendMessage, SendStreamingMessage and CancelTask" in deny_payload["error"]["message"]
+    assert "cannot access this A2A method" in deny_payload["error"]["message"]
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_embed_session_token_rejects_list_tasks_without_context_id(
+    flows_client: AsyncClient,
+    frontend_client: AsyncClient,
+    embed_test_auth,
+    unique_id,
+):
+    auth_headers, flow_id, _, _ = embed_test_auth
+    embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
+    token_response = await frontend_client.post(
+        f"/frontend/api/embed/configs/{embed_id}/session-token",
+        headers=auth_headers,
+        json={"origin": "https://larashved.ru", "expires_in_seconds": 300},
+    )
+    assert token_response.status_code == 200
+    embed_token = token_response.json()["token"]
+
+    deny_response = await flows_client.post(
+        f"/flows/api/v1/embed/{embed_id}",
+        headers={
+            "Authorization": f"Bearer {embed_token}",
+            "Origin": "https://larashved.ru",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": f"test-list-no-ctx-{unique_id}",
+            "method": "ListTasks",
+            "params": {"pageSize": 50, "includeArtifacts": True},
+        },
+    )
+    assert deny_response.status_code == 200
+    deny_payload = deny_response.json()
+    assert deny_payload["error"]["code"] == -32000
+    assert "ListTasks requires contextId" in deny_payload["error"]["message"]
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_embed_session_token_allows_list_tasks_with_context_id(
+    flows_client: AsyncClient,
+    frontend_client: AsyncClient,
+    embed_test_auth,
+    unique_id,
+):
+    auth_headers, flow_id, _, _ = embed_test_auth
+    embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
+    token_response = await frontend_client.post(
+        f"/frontend/api/embed/configs/{embed_id}/session-token",
+        headers=auth_headers,
+        json={"origin": "https://larashved.ru", "expires_in_seconds": 300},
+    )
+    assert token_response.status_code == 200
+    embed_token = token_response.json()["token"]
+    context_id = f"ctx-embed-list-{unique_id}"
+
+    list_response = await flows_client.post(
+        f"/flows/api/v1/embed/{embed_id}",
+        headers={
+            "Authorization": f"Bearer {embed_token}",
+            "Origin": "https://larashved.ru",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": f"test-list-ctx-{unique_id}",
+            "method": "ListTasks",
+            "params": {
+                "contextId": context_id,
+                "pageSize": 50,
+                "includeArtifacts": True,
+            },
+        },
+    )
+    assert list_response.status_code == 200
+    list_payload = list_response.json()
+    assert "error" not in list_payload, list_payload
+    result = list_payload["result"]
+    assert isinstance(result, dict)
+    tasks = result.get("tasks", [])
+    assert isinstance(tasks, list)
+    assert tasks == []
+    assert result.get("nextPageToken", "") == ""
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_embed_session_token_bootstrap_then_list_tasks_hydrate(
+    flows_client: AsyncClient,
+    frontend_client: AsyncClient,
+    embed_test_auth,
+    unique_id,
+):
+    """Flow UI bootstrap + hydrateContextTasks (ListTasks) must not hit method allowlist."""
+    auth_headers, flow_id, _, _ = embed_test_auth
+    embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
+    token_response = await frontend_client.post(
+        f"/frontend/api/embed/configs/{embed_id}/session-token",
+        headers=auth_headers,
+        json={"origin": "https://larashved.ru", "expires_in_seconds": 300},
+    )
+    assert token_response.status_code == 200
+    embed_token = token_response.json()["token"]
+    context_id = f"ctx-embed-bootstrap-{unique_id}"
+    embed_headers = flow_ui_a2a_headers(
+        {
+            "Authorization": f"Bearer {embed_token}",
+            "Origin": "https://larashved.ru",
+        }
+    )
+
+    bootstrap_response = await flows_client.post(
+        f"/flows/api/v1/embed/{embed_id}",
+        headers=embed_headers,
+        json={
+            "jsonrpc": "2.0",
+            "id": f"test-bootstrap-{unique_id}",
+            "method": "SendMessage",
+            "params": {
+                "message": flow_ui_protojson_message(
+                    action=PLATFORM_UI_BOOTSTRAP_ACTION,
+                    context_id=context_id,
+                    action_id=f"bootstrap-{unique_id}",
+                ),
+                "metadata": {"branch": "default"},
+            },
+        },
+        timeout=30.0,
+    )
+    assert bootstrap_response.status_code == 200
+    bootstrap_payload = bootstrap_response.json()
+    assert "error" not in bootstrap_payload, bootstrap_payload
+
+    list_response = await flows_client.post(
+        f"/flows/api/v1/embed/{embed_id}",
+        headers=embed_headers,
+        json={
+            "jsonrpc": "2.0",
+            "id": f"test-hydrate-{unique_id}",
+            "method": "ListTasks",
+            "params": {
+                "contextId": context_id,
+                "pageSize": 50,
+                "includeArtifacts": True,
+            },
+        },
+    )
+    assert list_response.status_code == 200
+    list_payload = list_response.json()
+    assert "error" not in list_payload, list_payload
+    result = list_payload["result"]
+    assert isinstance(result, dict)
+    tasks = result.get("tasks", [])
+    assert isinstance(tasks, list)
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 

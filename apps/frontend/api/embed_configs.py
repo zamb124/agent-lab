@@ -22,11 +22,13 @@ from core.models.embed_models import (
     DEFAULT_EMBED_INPUT_PLACEHOLDER,
     EmbedConfig,
     EmbedMapping,
+    EmbedPresentation,
     EmbedStatus,
+    resolve_embed_presentation,
 )
-from core.models.flow_chat_settings import (
-    EmbedChatPolicyOverride,
-    compact_embed_chat_policy_override,
+from core.models.flow_interface import (
+    EmbedInterfaceOverride,
+    compact_embed_interface_override,
 )
 from core.models.identity_models import Company, User
 from core.pagination import OffsetPage
@@ -68,7 +70,7 @@ def _build_embed_integration_snippets(
         "(как у window.location.origin на странице клиента).\n"
         "// Если список allowed_origins виджета не пустой, это значение должно быть в списке.\n"
         f"// allowed_origins виджета: {origins_js}\n"
-        "// Задайте browserOrigin, например из входящего HTTP-запроса к вашему POST /api/chat-token:\n"
+        "// Задайте browserOrigin, например из входящего HTTP-запроса к вашему POST /api/flow-ui-token:\n"
         "// const browserOrigin = req.headers.origin; // примерный Express\n"
         f"const response = await fetch({token_ep_js}, {{\n"
         "  method: 'POST',\n"
@@ -88,8 +90,8 @@ def _build_embed_integration_snippets(
 
     browser_to_host_backend_code = (
         "// Браузер вызывает только ваш backend, не платформу напрямую.\n"
-        "async function getChatToken() {\n"
-        "  const r = await fetch('/api/chat-token', {\n"
+        "async function getFlowUIToken() {\n"
+        "  const r = await fetch('/api/flow-ui-token', {\n"
         "    method: 'POST',\n"
         "    headers: { 'Content-Type': 'application/json' },\n"
         "    body: JSON.stringify({\n"
@@ -98,7 +100,7 @@ def _build_embed_integration_snippets(
         f"      expires_in_seconds: {ttl},\n"
         "    }),\n"
         "  });\n"
-        "  if (!r.ok) throw new Error('Cannot get chat token');\n"
+        "  if (!r.ok) throw new Error('Cannot get Flow UI token');\n"
         "  return await r.json();\n"
         "}\n"
     )
@@ -146,6 +148,10 @@ def _validate_voice_flags(*, voice_enabled: bool, voice_default_on: bool) -> Non
 
 
 def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
+    presentation = resolve_embed_presentation(
+        presentation=config.presentation,
+        position=config.position,
+    )
     return EmbedConfigResponse(
         embed_id=config.embed_id,
         name=config.name,
@@ -153,9 +159,10 @@ def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
         branch_id=config.branch_id,
         allowed_origins=config.allowed_origins,
         status=config.status,
+        presentation=presentation,
         theme=config.theme,
-        position=config.position,
-        show_launcher=config.show_launcher,
+        position=config.position if presentation == "drawer" else "bottom-right",
+        show_launcher=False if presentation == "page" else config.show_launcher,
         primary_color=config.primary_color,
         assistant_title=config.assistant_title,
         interface_locale=config.interface_locale,
@@ -167,7 +174,7 @@ def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
         guest_max_user_messages=config.guest_max_user_messages,
         voice_enabled=config.voice_enabled,
         voice_default_on=config.voice_default_on,
-        chat_override=compact_embed_chat_policy_override(config.chat_override),
+        interface_override=compact_embed_interface_override(config.interface_override),
         preview_share_link=config.preview_share_link,
         usage_count=config.usage_count,
         last_used_at=config.last_used_at,
@@ -182,8 +189,12 @@ class CreateEmbedConfigRequest(BaseModel):
     flow_id: str = Field(description="ID агента")
     branch_id: str = Field(default="default", description="Skill flow (LOCAL); для EXTERNAL не используется")
     allowed_origins: list[str] = Field(default_factory=list, description="Разрешенные домены")
+    presentation: EmbedPresentation = Field(
+        default="drawer",
+        description="drawer — FAB + панель; page — полноэкранный Flow UI",
+    )
     theme: str = Field(default="dark", description="Тема оформления")
-    position: str = Field(default="bottom-right", description="Позиция на странице")
+    position: str = Field(default="bottom-right", description="Позиция FAB (drawer)")
     show_launcher: bool = Field(default=True, description="Показывать встроенную кнопку запуска")
     primary_color: str = Field(default="#6366f1", description="Основной цвет")
     assistant_title: str | None = Field(default=None, description="Имя ассистента в шапке")
@@ -208,9 +219,12 @@ class CreateEmbedConfigRequest(BaseModel):
         default=False,
         description="Автоматически включать голосовой режим при открытии виджета",
     )
-    chat_override: EmbedChatPolicyOverride | None = Field(
+    interface_override: EmbedInterfaceOverride | None = Field(
         default=None,
-        description="Частичное переопределение FlowChatSettings для виджета; null — наследовать flow",
+        description=(
+            "Частичное переопределение policy/initial content Flow UI; "
+            "null — наследовать interface flow"
+        ),
     )
 
 class UpdateEmbedConfigRequest(BaseModel):
@@ -220,6 +234,7 @@ class UpdateEmbedConfigRequest(BaseModel):
     branch_id: str | None = None
     allowed_origins: list[str] | None = None
     status: EmbedStatus | None = None
+    presentation: EmbedPresentation | None = None
     theme: str | None = None
     position: str | None = None
     show_launcher: bool | None = None
@@ -234,7 +249,7 @@ class UpdateEmbedConfigRequest(BaseModel):
     guest_max_user_messages: int | None = None
     voice_enabled: bool | None = None
     voice_default_on: bool | None = None
-    chat_override: EmbedChatPolicyOverride | None = None
+    interface_override: EmbedInterfaceOverride | None = None
 
 class EmbedConfigResponse(BaseModel):
     """Ответ с конфигурацией виджета"""
@@ -244,6 +259,7 @@ class EmbedConfigResponse(BaseModel):
     branch_id: str
     allowed_origins: list[str]
     status: EmbedStatus
+    presentation: EmbedPresentation
     theme: str
     position: str
     show_launcher: bool
@@ -258,7 +274,7 @@ class EmbedConfigResponse(BaseModel):
     guest_max_user_messages: int | None
     voice_enabled: bool
     voice_default_on: bool
-    chat_override: EmbedChatPolicyOverride | None
+    interface_override: EmbedInterfaceOverride | None
     preview_share_link: bool
     usage_count: int
     last_used_at: datetime | None
@@ -272,6 +288,8 @@ class EmbedCodeResponse(BaseModel):
     html_code: str
     script_url: str
     embed_id: str
+    presentation: EmbedPresentation
+    page_url: str
     token_endpoint: str
     backend_proxy_code: str
     browser_to_host_backend_code: str
@@ -361,6 +379,18 @@ async def create_embed_config(
     )
 
     # Создаем конфигурацию
+    presentation = resolve_embed_presentation(
+        presentation=request_data.presentation,
+        position=request_data.position,
+    )
+    position = request_data.position
+    show_launcher = request_data.show_launcher
+    if presentation == "page":
+        position = "bottom-right"
+        show_launcher = False
+    elif position.strip().lower() not in ("bottom-right", "bottom-left"):
+        position = "bottom-right"
+
     config = EmbedConfig(
         embed_id=embed_id,
         name=request_data.name,
@@ -368,9 +398,10 @@ async def create_embed_config(
         branch_id=branch_id,
         allowed_origins=allowed_origins,
         status=EmbedStatus.ACTIVE,
+        presentation=presentation,
         theme=request_data.theme,
-        position=request_data.position,
-        show_launcher=request_data.show_launcher,
+        position=position,
+        show_launcher=show_launcher,
         primary_color=request_data.primary_color,
         assistant_title=request_data.assistant_title,
         interface_locale=interface_locale,
@@ -382,7 +413,9 @@ async def create_embed_config(
         guest_max_user_messages=request_data.guest_max_user_messages,
         voice_enabled=request_data.voice_enabled,
         voice_default_on=request_data.voice_default_on,
-        chat_override=compact_embed_chat_policy_override(request_data.chat_override),
+        interface_override=compact_embed_interface_override(
+            request_data.interface_override
+        ),
         preview_share_link=False,
         created_by=user.user_id,
     )
@@ -484,6 +517,10 @@ async def update_embed_config(
         if request_data.theme is None:
             raise HTTPException(status_code=400, detail="theme не может быть null")
         config.theme = request_data.theme
+    if "presentation" in fields:
+        if request_data.presentation is None:
+            raise HTTPException(status_code=400, detail="presentation не может быть null")
+        config.presentation = request_data.presentation
     if "position" in fields:
         if request_data.position is None:
             raise HTTPException(status_code=400, detail="position не может быть null")
@@ -492,6 +529,16 @@ async def update_embed_config(
         if request_data.show_launcher is None:
             raise HTTPException(status_code=400, detail="show_launcher не может быть null")
         config.show_launcher = request_data.show_launcher
+    effective_presentation = resolve_embed_presentation(
+        presentation=config.presentation,
+        position=config.position,
+    )
+    if effective_presentation == "page":
+        config.presentation = "page"
+        config.position = "bottom-right"
+        config.show_launcher = False
+    elif config.position.strip().lower() not in ("bottom-right", "bottom-left"):
+        config.position = "bottom-right"
     if "primary_color" in fields:
         if request_data.primary_color is None:
             raise HTTPException(status_code=400, detail="primary_color не может быть null")
@@ -534,8 +581,10 @@ async def update_embed_config(
         if request_data.voice_default_on is None:
             raise HTTPException(status_code=400, detail="voice_default_on не может быть null")
         config.voice_default_on = request_data.voice_default_on
-    if "chat_override" in fields:
-        config.chat_override = compact_embed_chat_policy_override(request_data.chat_override)
+    if "interface_override" in fields:
+        config.interface_override = compact_embed_interface_override(
+            request_data.interface_override
+        )
 
     _validate_landing_catalog_fields(
         landing_visible=config.landing_visible,
@@ -632,7 +681,10 @@ async def get_embed_code(
             raise ValueError(
                 f"get_embed_code: ожидалась схема http или https, получено {protocol!r}"
             )
-        script_url = f"{protocol}://{host_value}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
+        script_url = (
+            f"{protocol}://{host_value}/static/core/lib/embed-flow-ui/"
+            "flow-ui-embed-autoload.js"
+        )
         base_url = f"{protocol}://{host_value}"
 
     token_endpoint = f"{base_url}/frontend/api/embed/configs/{embed_id}/session-token"
@@ -646,21 +698,38 @@ async def get_embed_code(
     )
     assistant_title = config.assistant_title or config.name
     voice_default_active = config.voice_enabled and config.voice_default_on
+    presentation = resolve_embed_presentation(
+        presentation=config.presentation,
+        position=config.position,
+    )
+    position = (
+        "bottom-right"
+        if presentation == "page"
+        else (
+            config.position
+            if config.position.strip().lower() in ("bottom-right", "bottom-left")
+            else "bottom-right"
+        )
+    )
+    show_launcher = False if presentation == "page" else config.show_launcher
+    page_url = f"{base_url}/flow-embed-page?embed={config.embed_id}"
 
     open_tag_parts = [
         f'src="{html.escape(script_url, quote=True)}"',
         f'data-embed-id="{html.escape(config.embed_id, quote=True)}"',
         f'data-assistant-title="{html.escape(assistant_title, quote=True)}"',
+        f'data-presentation="{presentation}"',
+        f'data-position="{html.escape(position, quote=True)}"',
         f'data-theme="{html.escape(config.theme, quote=True)}"',
         f'data-locale="{html.escape(config.interface_locale, quote=True)}"',
-        ('data-show-launcher="true"' if config.show_launcher else 'data-show-launcher="false"'),
+        ('data-show-launcher="true"' if show_launcher else 'data-show-launcher="false"'),
         f'data-flows-base-url="{html.escape(f"{base_url}/flows", quote=True)}"',
         f'data-platform-ui-origin="{html.escape(base_url, quote=True)}"',
-        'data-chat-token-url="/api/chat-token"',
+        'data-token-url="/api/flow-ui-token"',
         f'data-token-expires-seconds="{ttl}"',
         'data-use-credentials="false"',
-        'data-event-namespace="assistant"',
-        'data-toggle-event-name="humanitec-embed-chat-toggle"',
+        'data-event-namespace="flow-ui"',
+        'data-toggle-event-name="linnex-flow-ui-toggle"',
         ('data-voice-enabled="true"' if config.voice_enabled else 'data-voice-enabled="false"'),
         ('data-voice-default-on="true"' if voice_default_active else 'data-voice-default-on="false"'),
         f'data-voice-base-url="{html.escape(f"{base_url}/voice", quote=True)}"',
@@ -673,6 +742,8 @@ async def get_embed_code(
         html_code=html_code,
         script_url=script_url,
         embed_id=embed_id,
+        presentation=presentation,
+        page_url=page_url,
         token_endpoint=token_endpoint,
         backend_proxy_code=backend_proxy_code,
         browser_to_host_backend_code=browser_to_host_backend_code,

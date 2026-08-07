@@ -1,8 +1,13 @@
 ---
-description: "Flows: архитектура сервиса, ноды, триггеры, ресурсы, чат A2A SSE"
+description: "Flows: архитектура сервиса, ноды, триггеры, ресурсы и единый Flow UI поверх A2A"
 alwaysApply: false
 ---
 # Flows — сервис
+
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 
 ## Принципы
 
@@ -10,29 +15,17 @@ alwaysApply: false
 2. **Stream-First** — все события через Redis Pub/Sub (см. `streaming.mdc`).
 3. **Zero-Guess** — нет fallback значений, ошибка = exception.
 
-## Чат: A2A SSE (платформенный инвариант)
+## Flow UI: A2A SSE (платформенный инвариант)
 
-Транспорт чата — JSON-RPC поверх Server-Sent Events. **Единственный** транспорт чата для всех клиентов (UI, CLI, SDK, embed).
+Каждый пользовательский интерфейс flow — `FlowUIDocument`; чат является редактируемым default template, а не отдельным runtime. Единственный транспорт для UI, CLI, SDK и embed — A2A 1.0 JSON-RPC/SSE. Полный канон → **`flow_ui.mdc`**.
 
 - Запрос: `POST /flows/api/v1/{flow_id}` body `{jsonrpc:"2.0", id, method:"SendStreamingMessage", params:{message, metadata?}}`, header `A2A-Version: 1.0`, `Accept: text/event-stream`. Источник — `_handle_streaming` в `apps/flows/src/api/a2a.py`. Канон wire → **`a2a.mdc`**.
 - Cancel: `POST /flows/api/v1/{flow_id}` body `{method:"CancelTask", params:{id: task_id}}`.
 - Ответ: `text/event-stream`, кадры `data: {jsonrpc, id, result: {statusUpdate|artifactUpdate|task|message}}\n\n`. Terminal/interrupted wire states: `TASK_STATE_COMPLETED` / `FAILED` / `CANCELED` / `REJECTED` / `INPUT_REQUIRED` / `AUTH_REQUIRED` (поля `final` нет).
 
-Клиент — единый `<platform-chat>` (`core/lib/chat`, → **`flows_chat.mdc`**): `ChatController` читает SSE-стрим через `consumeA2aStream` и маппит каждый A2A-фрейм в verb pure reducer'а `applyChatRuntimeEvent` (`chat-state.js`, `messagesByContextId[ctx]`):
+Клиент — единый `<platform-flow-ui>`. Один ingress reducer применяет snapshot/update через lossless Artifact accumulator и generic/A2UI Part projectors. SPA/editor/embed/Lara/landing/HITL не создают собственные reducers или transport. Ordinary `response`, `reasoning`, `operator_reply`, `operator_files`, tool/node/edge/file artifacts сохраняются и проецируются catalog adapters; неизвестные names отображаются generic projector'ом.
 
-| Verb reducer'а | Источник в A2A-стриме |
-|---|---|
-| `task_started` | первый `task` |
-| `content_chunk` | `artifactUpdate` text-part |
-| `reasoning_chunk` | `artifactUpdate` artifact `name='reasoning'` |
-| `operator_reply` | artifact `name='operator_reply'` |
-| `operator_files` | artifact `name='operator_files'` |
-| `tool_calls` | `Message.metadata.tool_calls` |
-| `tool_result` | `Message.metadata.tool_result` |
-| `breakpoint` | `statusUpdate` `TASK_STATE_INPUT_REQUIRED` + `metadata.breakpoint` |
-| `input_required` | `statusUpdate` `TASK_STATE_INPUT_REQUIRED` без breakpoint |
-| `completed` | `statusUpdate` `TASK_STATE_COMPLETED` или конец SSE |
-| `failed` | `statusUpdate` `TASK_STATE_FAILED` или ошибка стрима |
+До Submit значения синхронизируются командой `platform.ui.sync` через тот же A2A endpoint. `platform.ui.submit` атомарно подтверждает последнюю revision и создаёт новый Task в текущем `context_id`. Reload/reopen/share получают authoritative document/values через A2A bootstrap/GetTask до первого production render.
 
 ## HITL и задачи оператора
 
@@ -305,10 +298,19 @@ Runtime (`lab_service`): harness-owned structured call (`record_evaluation_judgm
 
 ## Гостевой preview embed (одноразовая ссылка)
 
+Это **flow invite**, не live session share: гость открывает **новую** сессию с flow/веткой. Шеринг уже существующего диалога — Share в Flow UI chrome (`FLOW_UI_SHARE`), канон → **`flow_ui.mdc`**.
+
+| | Flow invite (этот раздел) | Live session share |
+|---|---|---|
+| Scope | flow + branch, новый `context_id` | существующий `context_id` / document |
+| Token | `EMBED_SESSION` | `FLOW_UI_SHARE` |
+| Entry | preview-share modal, embed widgets, landing demos | Share в `<platform-flow-ui>` |
+
 - **Минт:** `POST /flows/api/v1/flows/{flow_id}/preview-share` body `{ "branch_id": "<ветка>", "guest_max_user_messages"?: <1..500> }` — права как у остальных операций с flow; создаётся ephemeral `EmbedConfig` с `preview_share_link=True`, опционально `guest_max_user_messages`, + mapping, `embed_session` JWT (24h), payload handoff в **Redis** (`core/identity/flow_preview_handoff.py`, ключ с префиксом, TTL как у JWT), короткая ссылка kind `flow_preview_embed` (`core/short_links/kinds.py`) с payload только `handoff_id` (без JWT в PostgreSQL). Ответ: `{ "share_url": "<platform_public>/l/{code}" }`.
 - **Редирект:** `GET /l/{code}` на **frontend** — для kind `flow_preview_embed` строка в `platform_short_links` удаляется атомарно (`delete_by_code_and_kind_returning`), при успехе **303** на относительный `/flow-preview?h=<handoff_id>`. Повторный `GET` того же code → **404**. `HEAD /l/{code}` для этого kind не сжигает строку (проверка существования/срока).
 - **Страница:** `GET /flow-preview?h=...` — первое успешное обращение забирает payload из Redis **GETDEL** (`consume_flow_preview_handoff`); HTML: **import map** для bare `lit`/`lit/*` на vendored `/static/core/assets/js/lit/` (как SPA через бандлер, здесь — без бандлера), затем `<script type="module" src="...humanitec-embed-autoload.js">` с `data-static-bearer`. Повтор того же `h` (в т.ч. F5) → **404** без пояснения причины на странице. `HEAD` — только проверка наличия ключа в Redis (без consume).
 - **Консоль embed:** `EmbedConfig` с `preview_share_link=True` не попадает в список виджетов (`apps/frontend/api/embed_configs.py`); прямой доступ по id для правки кода/сессии — **404**.
+- **A2A methods:** embed-session token разрешает тот же scoped набор, что Flow UI guest runtime (`SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `SubscribeToTask`, `CancelTask`); `ListTasks` требует `contextId`.
 
 ## Профиль речи flow (`FlowConfig.speech`)
 
@@ -330,10 +332,15 @@ Runtime (`lab_service`): harness-owned structured call (`record_evaluation_judgm
 
 Канон canvas inputs:
 
-- **Entry-нода** — реалистичные стартовые входы: `content`, `files` (только если есть в `sample_state`), `variables.{key}` из declared branch variables, пути из `triggers[*].output_mapping` enabled triggers (`triggers.{id}.context.*`, `triggers.{id}.payload`). Runtime/frozen поля (`breakpoint_*`, `node_history`, `task_id`, …) на canvas не показываются.
+- **Entry-нода** — реалистичные стартовые входы: `content`, `files` (только если есть в `sample_state`), `variables.{key}` из declared branch variables, `ui_values.{field}` из Flow UI submit contract (`build_flow_ui_submit_contract` / `iter_flow_ui_submit_contract_fields` по `interface.template.document`), пути из `triggers[*].output_mapping` enabled triggers (`triggers.{id}.context.*`, `triggers.{id}.payload`). Runtime/frozen поля (`breakpoint_*`, `node_history`, `task_id`, …) на canvas не показываются.
 - **Downstream** — только явный контракт ноды: `input_mapping` + `required_inputs` + `reads`; fallback dump всего `incoming_state` запрещён.
+- Chip `kind`: `content` | `files` | `variable` | `trigger` | `ui_value` — визуальный tint на Logic canvas; `ui_value` — отдельный info/cyan (`--info` / `--flows-dataflow-ui-value`), не тот же accent что у variables.
 
-`sample_state` для inspect санитизируется на backend: только `content`, `files`, top-level `variables.{declared_key}`; полный `previewExecutionState` остаётся в editor state для TestPanel.
+`sample_state` для inspect санитизируется на backend: только `content`, `files`, top-level `variables.{declared_key}`, `ui_values.{contract_field}`; полный `previewExecutionState` остаётся в editor state для TestPanel.
+
+Inspect request несёт `interface: FlowInterfaceConfig | None` (редактор — текущий resolved interface); без interface — нет `ui_values.*` chips (как раньше).
+
+`llm_node` prompt: `{ui_values.<field>}` читает `ExecutionState.ui_values` (тот же contract); dataflow считает root `ui_values` available при seed; UI chips «Доступно здесь» — `buildPromptVariableContext` source `ui_value`.
 
 ## Трейсы
 
@@ -405,12 +412,12 @@ Runtime (`lab_service`): harness-owned structured call (`record_evaluation_judgm
 
 **Library picker (`flows.tool_picker`)** — одна реализация `flows-library-picker-modal.js`. `useOp('flows/tools_all')`, REST `GET /flows/api/v1/tools/all` (`limit` ≤ 20; при открытии — первая страница, дальше infinite scroll; поиск — query `q` с debounce и сбросом offset). `pickMode: 'all' | 'flow_only' | 'mcp_only' | 'code_node'`. Body один: tag-groups (`buildToolTagGroups`) или MCP grouped layout; `onPick({kind:'tool'|'flow', tool_id, item})` / `onPickBatch`. В LLM-ноде «Из библиотеки» для `kind === 'flow'` в `cfg.tools` добавляется `{type:'flow', tool_id}`; для tool — `{tool_id}`. Canvas drop flow/MCP — `flow_only` / `mcp_only`. Code-нода «из шаблонов» — `pickMode: 'code_node'` + `onCommit({config, nodeName})` (каталог `flows/code_templates` + registry code tools в тех же tag-groups). Kind `flows.code_node_templates` — alias того же компонента (нормализует `pickMode` в `code_node`). MCP node editor смена tool — тот же `flows.tool_picker` `mcp_only`, не enum-поля.
 
-**Lara в редакторе flows:** `<flows-app>` монтирует `<platform-chat display="drawer" profile="spa">` с `flow-id="lara"` и фиксированной branch `flows`; глобальная кнопка Lara в `flows-editor-header.js` не переключается на специализации нод. AI для выбранной ноды открывается отдельной кнопкой в шапке `flows-floating-panel.js` и рендерит `flows-node-ai-helper.js` вместо property panel. `flows-node-ai-helper.js` не реализует собственный чат/transport: внутри тот же `<platform-chat display="panel" profile="spa">` (A2A/SSE, messages, input, action buttons).
+**Lara в редакторе flows:** `<flows-app>` монтирует `<platform-flow-ui surface="drawer">` для `flow-id="lara"` и фиксированной branch `flows`; глобальная кнопка Lara в `flows-editor-header.js` не переключается на специализации нод. AI выбранной ноды использует тот же universal renderer с panel render context и специализированным interface template/variables; собственного чата/transport нет.
 
 Node AI / Flows Lara standing context строится в `apps/flows/ui/_helpers/lara-node-helper.js`: в `metadata.variables` только IDs и скаляры — `flow_id`, `target_branch_id`, `api_branch_id`, `assistant_branch_id`, `node_id`, `node_type`, `branch_node_count`, `branch_edge_count`, `editor_dirty`, `screen`, `selection_source`, `lara_request_kind`. Полные `*_payload_json` / `lara_ui_context_json` / inline code docs **не** передаются. Тела нод Lara читает tools: `flows_get_node`, `flows_list_nodes`, лёгкий `flows_read_context` (summary + `nodes_index`). Tools смотрят сохранённый flow; при `editor_dirty=true` skill просит сохранить. Для каждого типа ноды — отдельная branch Lara: `code_helper`, `llm_node_helper`, `flow_node_helper`, `remote_flow_node_helper`, `external_api_node_helper`, `mcp_node_helper`, `channel_node_helper`, `hitl_node_helper`, `reflection_node_helper`, `resource_node_helper`; неизвестный тип → `node_helper`. Патчи — `flows_patch_node` confirm-first (`mode=propose` → `mode=apply`).
 
 **HITL-нода (редактор):** `flows-hitl-node-editor.js` редактирует ключи `NodeConfig`: `work_queue_slug` (slug WorkQueue), `handoff_mode` (`single_reply`/`takeover`), `handoff_task_title`, `handoff_user_message`. Канон подстановки **только** `@state:path` / `@var:name` (как у обычных полей и `platform-variable-input`), не `{brace}`. Заголовок — `<platform-variable-input>` (CM at-ref: highlight/hover/autocomplete); сообщение — `<platform-markdown-editor enable-variables variable-syntax="at-ref">` (тот же `createVariableExtensions` стек). Оба получают `.previewValues`/`.variables` + `.variableCatalog` + `.statePreview` + `.statePaths`. Дроп с палитры — `getBlankHitlNodeConfig()` (`flows-hitl-defaults.js`): пример с `@state:content`. Runtime: `MappingResolver.resolve_interpolated_string` (тот же хелпер, что HTTP headers/URL; JSON body — отдельный `resolve_json_template_*` с typed whole-ref). Выбор очереди — `<platform-searchable-combobox>` по фабрике `flows/work_queues` (REST `GET/POST /flows/api/v1/work-queues` → `WorkItemService`). Create на лету — пункт в dropdown (`createLabel` / `createQueryLabel` → событие `create`); typed slug создаётся сразу, пустой query открывает форму name+slug. Создатель становится owner. `slug` очереди = `assignee_queue` в `hitl_operator_task` и `work_queue_slug` в `hitl_node`. Динамическая очередь — `input_mapping.assignee_queue`. Участники очереди и канбан — в сервисе worktracker.
 
-**Reflection-нода (редактор + канва):** `flows-reflection-node-editor.js` редактирует inline `critic_policy` (`core.reflection.CriticPolicy`) + `llm` (без tools/fallback). UI: intro, пресеты (`final_answer` / `transaction` / `quality` из `flows-reflection-defaults.js`), секция **Exits** (`exits[]`: `exit_id`/`label`/`when`), human labels для `gate`/`target`/`severity`, severity toggles, criteria как карточки. `policy_id` — ярлык для логов/`state.validation.policy_id`, не каталог. `gate` — семантическая метка; алгоритм блока один (`evaluate_reflection_gate`: decision ≠ approved | confidence < min | issue.severity ∈ block_on_severities), затем **first-match** `select_reflection_exit` → `state.validation.exit_id`. `when.kind`: `approved_true`/`approved_false`/`decision_eq`/`blocked_reason_prefix`/`always` (always только последним). На канве у `type=reflection` **N out-портов** из `critic_policy.exits` (`Edge.from_port` = `exit_id`); drag создаёт condition `validation.exit_id == <exit_id>`. `FlowValidator`: каждый declared exit покрыт ребром (error `reflection_exits_incomplete`); unknown `from_port` — error. Dataflow: target (`response`/`result`/`validation`/`state_path`) должен быть `guaranteed` во `incoming_state` иначе `reflection_target_unavailable`. После gate — `push_ui_event` `platform.reflection_resolved` → chip резолюции в `<platform-chat>` (`show_reflection`). Runtime ветвит только по `condition`.
+**Reflection-нода (редактор + канва):** `flows-reflection-node-editor.js` редактирует inline `critic_policy` (`core.reflection.CriticPolicy`) + `llm` (без tools/fallback). UI: intro, пресеты (`final_answer` / `transaction` / `quality` из `flows-reflection-defaults.js`), секция **Exits** (`exits[]`: `exit_id`/`label`/`when`), human labels для `gate`/`target`/`severity`, severity toggles, criteria как карточки. `policy_id` — ярлык для логов/`state.validation.policy_id`, не каталог. `gate` — семантическая метка; алгоритм блока один (`evaluate_reflection_gate`: decision ≠ approved | confidence < min | issue.severity ∈ block_on_severities), затем **first-match** `select_reflection_exit` → `state.validation.exit_id`. `when.kind`: `approved_true`/`approved_false`/`decision_eq`/`blocked_reason_prefix`/`always` (always только последним). На канве у `type=reflection` **N out-портов** из `critic_policy.exits` (`Edge.from_port` = `exit_id`); drag создаёт condition `validation.exit_id == <exit_id>`. `FlowValidator`: каждый declared exit покрыт ребром (error `reflection_exits_incomplete`); unknown `from_port` — error. Dataflow: target (`response`/`result`/`validation`/`state_path`) должен быть `guaranteed` во `incoming_state` иначе `reflection_target_unavailable`. После gate typed `ReflectionResolved` effect/Artifact проецируется trusted catalog component или generic data card; runtime ветвит только по `condition`.
 
 **i18n:** namespace `flows`, `static i18nNamespace = 'flows'` или `defaultI18nNamespace='flows'` в `<flows-app>`. Бандл — `core/i18n/translations/{ru,en}/flows.json`. Снимающие правила см. `frontend.mdc`. Сообщения `console.*` и технические комментарии в коде — на английском (без i18n).

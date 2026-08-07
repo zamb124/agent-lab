@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from a2a.types import Message, Part
 
 from core.a2a import get_part_raw, get_part_url, part_has_raw, part_has_url
-from core.files.file_ref import FileRef
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -86,25 +85,3 @@ def extract_incoming_a2a_files(message: Message) -> list[IncomingA2aFile]:
             raise ValueError(f"Part без raw/url: {part.WhichOneof('content')!r}")
 
     return result
-
-
-def format_a2a_files_content(files_data: list[FileRef]) -> str:
-    """
-    Добавляет в текст сообщения блоки [FILE]...[/FILE] по записям для state.files.
-
-    Ожидаются canonical keys original_name, url, content_type.
-    """
-    if not files_data:
-        return ""
-
-    parts: list[str] = []
-    for file_ref in files_data:
-        parts.append(
-            "\n[FILE]\n"
-            + f"original_name: {file_ref.original_name}\n"
-            + f"url: {file_ref.url}\n"
-            + f"content_type: {file_ref.content_type}\n"
-            + "[/FILE]"
-        )
-
-    return "".join(parts)

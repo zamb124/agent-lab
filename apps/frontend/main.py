@@ -9,6 +9,7 @@ from urllib.parse import quote, urlparse
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import (
     FileResponse,
+    HTMLResponse,
     JSONResponse,
     PlainTextResponse,
     RedirectResponse,
@@ -48,6 +49,7 @@ from apps.frontend.api.platform_pronunciation_rules import (
 )
 from apps.frontend.api.platform_tracing import router as platform_tracing_router
 from apps.frontend.api.public_docs_assistant import router as public_docs_assistant_router
+from apps.frontend.api.public_embed_page import router as public_embed_page_router
 from apps.frontend.api.public_landing_agents import router as public_landing_agents_router
 from apps.frontend.api.public_search import router as public_search_router
 from apps.frontend.api.public_site import router as public_site_router
@@ -65,9 +67,13 @@ from apps.frontend.config import (
 from apps.frontend.container import FrontendContainer, get_frontend_container
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.services.docs_assistant_bootstrap import schedule_docs_assistant_bootstrap
+from apps.frontend.services.flow_embed_page_html import build_flow_embed_page_html
 from apps.frontend.services.flow_preview_guest_html import (
     build_flow_preview_guest_html,
     build_flow_preview_unavailable_html,
+)
+from apps.frontend.services.flow_ui_shared_session_html import (
+    build_flow_ui_shared_session_html,
 )
 from core.ai.runtime import invalidate_voice_platform_pronunciation_cache
 from core.app.factory import create_service_app
@@ -351,6 +357,7 @@ app = create_service_app(
         platform_pronunciation_rules_router,
         voice_providers_catalog_router,
         embed_configs_router,
+        public_embed_page_router,
         public_landing_agents_router,
         public_docs_assistant_router,
         public_search_router,
@@ -426,6 +433,26 @@ for route in list(app.routes):
 async def health(container: ContainerDep):
     _ = container
     return build_health_payload(get_frontend_settings())
+
+
+@app.api_route("/flow-session-share", methods=["GET", "HEAD"])
+async def flow_ui_shared_session_page(request: Request, grant: str = "") -> Response:
+    grant_id = grant.strip()
+    if not grant_id:
+        raise HTTPException(status_code=404, detail="Share grant is required")
+    if request.method.upper() == "HEAD":
+        return Response(status_code=200, content=b"")
+    return HTMLResponse(build_flow_ui_shared_session_html(grant_id=grant_id))
+
+
+@app.api_route("/flow-embed-page", methods=["GET", "HEAD"])
+async def flow_embed_page_host(request: Request, embed: str = "") -> Response:
+    embed_id = embed.strip()
+    if not embed_id:
+        raise HTTPException(status_code=404, detail="embed is required")
+    if request.method.upper() == "HEAD":
+        return Response(status_code=200, content=b"")
+    return HTMLResponse(build_flow_embed_page_html(embed_id=embed_id))
 
 @app.api_route("/l/{code}", methods=["GET", "HEAD"])
 async def resolve_short_link(request: Request, container: ContainerDep, code: str):
@@ -518,7 +545,9 @@ async def flow_preview_guest_page(request: Request, container: ContainerDep, h: 
     platform_ui_origin = page_origin
     # Только same-origin `/static/core/...`: страница на нашем домене; CDN-скрипт может быть иной сборки
     # и ломать нативный ESM (bare `@platform/*` без import map).
-    script_url = f"{page_origin}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
+    script_url = (
+        f"{page_origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js"
+    )
 
     html_out = build_flow_preview_guest_html(
         script_url=script_url,

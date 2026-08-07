@@ -6,9 +6,8 @@ const ROOT = process.cwd();
 
 const ENTRYPOINT_FILES = [
     'core/frontend/static/lib/platform-element/index.js',
-    'core/frontend/static/lib/chat/chat-message.js',
-    'core/frontend/static/lib/chat/chat-files-panel.js',
-    'core/frontend/static/lib/chat/blocks/flows-chat-ui-file-card.js',
+
+
     'apps/sync/ui/components/sync-message-bubble.js',
     'apps/crm/ui/components/entity-card.js',
     'apps/crm/ui/components/note-card-view.js',
@@ -18,10 +17,9 @@ const ENTRYPOINT_FILES = [
 ];
 
 const FILE_ICON_SURFACE_FILES = [
-    'core/frontend/static/lib/chat/chat-message.js',
-    'core/frontend/static/lib/chat/chat-files-panel.js',
-    'core/frontend/static/lib/chat/chat-input.js',
-    'core/frontend/static/lib/chat/blocks/flows-chat-ui-file-card.js',
+
+
+
     'apps/sync/ui/components/sync-message-bubble.js',
     'apps/crm/ui/components/entity-card.js',
     'apps/crm/ui/components/note-card-view.js',

@@ -1,5 +1,7 @@
 """Google Sheets tools: OAuth interrupt when credentials are missing."""
 
+import uuid
+
 import pytest
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt
@@ -16,11 +18,12 @@ from core.state.interrupt import InterruptKind, OAuthInterrupt
 
 
 def _make_state() -> ExecutionState:
+    uid = uuid.uuid4().hex[:12]
     return ExecutionState(
-        task_id="test-task",
-        context_id="test-context",
+        task_id=f"test-task-{uid}",
+        context_id=f"test-context-{uid}",
         user_id="test-user",
-        session_id="test-sheets:test-context",
+        session_id=f"test-sheets:test-context-{uid}",
     )
 
 

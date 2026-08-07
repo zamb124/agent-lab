@@ -4,6 +4,11 @@ alwaysApply: false
 ---
 # Flows — краткий справочник
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 ## Durable execution invariant
 
 Flows исполняются как durable workflow runtime: `workflow_events` — источник истины, `ExecutionState` — projection, Redis — cache. Любая новая логика resume/retry/time-travel/fork строится через `durable_execution.mdc` и append-only ledger.

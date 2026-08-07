@@ -77,7 +77,6 @@ from apps.flows.src.state.cancellation import (
 )
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import BaseEmitter, Emitter
-from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from apps.flows.src.tools.base import BaseTool, OpenAIToolSchema, ToolArguments, sanitize_tool_name
 from apps.flows.src.variables import VariableResolver
 from core.a2a import (
@@ -591,7 +590,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         context_id = state.context_id
 
         if emitter is None:
-            emitter = Emitter(self.container.redis_client, state)
+            emitter = await Emitter.create_ensured(self.container, state)
 
         raw_user_content = input_data.get("content", "")
         if not isinstance(raw_user_content, str):
@@ -1138,8 +1137,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     )
                                 )
                                 await emitter.emit_tool_result(exit_tool_name, final_response, exit_call_id)
-                                await self._emit_pending_ui_events(emitter, state)
-
                                 state.response = final_response
                                 InterruptManager.clear_interrupt_path(state)
                                 await self._checkpoint_state(state)
@@ -1198,8 +1195,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     await emitter.emit_tool_result(
                                         tool_name, tr["content"], tool_call_id
                                     )
-                                    await self._emit_pending_ui_events(emitter, state)
-
                                 pending_reasoning = state.pending_reasoning
                                 if pending_reasoning:
                                     await emitter.emit_reasoning(
@@ -1207,7 +1202,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     )
                                     state.pending_reasoning = None
 
-                                await self._emit_pending_ui_events(emitter, state)
                                 await self._checkpoint_state(state)
 
                                 if state.terminal_task_state == "handback":
@@ -1939,12 +1933,18 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         variables: JsonObject = {
             **flow_variables,
             **(self.node_config.local_variables if self.node_config else {}),
+            "ui_values": dict(state.ui_values),
         }
 
         if self.llm_node:
             prompt_template, variables = await self.llm_node.before_prompt_render(
                 prompt_template, state, variables
             )
+            # Flow UI submit fields: always expose for {ui_values.field} (after hook).
+            variables = {
+                **variables,
+                "ui_values": dict(state.ui_values),
+            }
 
         resolved_vars = require_json_object(
             VariableResolver.resolve_all(local_vars=variables),
@@ -2008,10 +2008,3 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         for tool in self.tools:
             schema.append(tool.to_openai_schema())
         return schema
-
-    async def _emit_pending_ui_events(
-        self,
-        emitter: BaseEmitter,
-        state: ExecutionState,
-    ) -> None:
-        await emit_pending_ui_events(emitter=emitter, state=state)

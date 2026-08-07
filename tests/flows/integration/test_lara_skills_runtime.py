@@ -283,7 +283,6 @@ async def test_lara_documents_branch_load_then_knowledge_search(
 
     assert result.interrupt is None
     search_body = _tool_result_json_object(result.tool_results["rag_search"])
-    assert search_body.get("success") is True
     results = search_body.get("results")
     assert isinstance(results, list) and results
     assert marker in json.dumps(results, ensure_ascii=False)

@@ -2,7 +2,7 @@
  * platform-notification-manager — колокольчик, счётчик, панель уведомлений.
  */
 
-import { fixture, html, expect, elementUpdated } from '../helpers/render.js';
+import { fixture, html, expect, elementUpdated, aTimeout } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { getPlatformBus } from '@platform/lib/events/index.js';
 import '@platform/lib/components/platform-notification-manager.js';
@@ -116,6 +116,8 @@ describe('platform-notification-manager', () => {
         const el = await mountManager();
         bellOf(el).click();
         await elementUpdated(el);
+        // Outside-dismiss вешается после rAF и игнорирует жест открытия (~320ms).
+        await aTimeout(400);
 
         document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
         await elementUpdated(el);

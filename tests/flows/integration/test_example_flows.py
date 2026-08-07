@@ -15,6 +15,9 @@ from a2a.types import Message
 from apps.flows.src.models.flow_config import SimpleEdgeCondition
 
 
+from core.a2a import mapping_from_struct
+
+
 def msg_role(msg) -> str:
     """Извлекает role из A2A Message или dict."""
     if isinstance(msg, dict):
@@ -27,8 +30,9 @@ def msg_role(msg) -> str:
             return "user"
         return role_str
 
-    metadata = msg.metadata if hasattr(msg, "metadata") else None
-    if metadata and metadata.get("tool_call_id"):
+    metadata_raw = msg.metadata if hasattr(msg, "metadata") else None
+    metadata = mapping_from_struct(metadata_raw) if metadata_raw is not None else {}
+    if metadata.get("tool_call_id"):
         return "tool"
     role_str = msg.role.value if hasattr(msg.role, "value") else str(msg.role)
     if role_str == "ROLE_USER":

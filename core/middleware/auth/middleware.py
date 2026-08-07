@@ -266,11 +266,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if rule.auth_required and not token_data:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
+        if (
+            token_data is not None
+            and token_data.token_type == TokenType.FLOW_UI_SHARE
+            and not self._flow_ui_share_path_allowed(request, token_data)
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Flow UI share token is scoped to one A2A session",
+            )
+
         user = await self._get_user(container, token_data) if token_data else None
 
         token_type = token_data.token_type if token_data else None
-        is_embed_session = token_type == TokenType.EMBED_SESSION
-        if rule.auth_required and not user and not is_embed_session:
+        is_scoped_runtime = token_type in {
+            TokenType.EMBED_SESSION,
+            TokenType.FLOW_UI_SHARE,
+        }
+        if rule.auth_required and not user and not is_scoped_runtime:
             raise HTTPException(status_code=401, detail="User not found")
 
         company = await company_resolver.resolve(request, token_data, rule.context_type)
@@ -518,13 +531,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
 
         token_from_authorization = False
-        if not token:
-            auth_header = request.headers.get("authorization", "")
-            if auth_header.startswith("Bearer "):
-                token = auth_header[7:]
-                token_from_authorization = True
-                if not is_public_path:
-                    logger.debug("auth.bearer_token_used", path=path)
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            # Explicit Authorization wins over session cookie so scoped tokens
+            # (embed / Flow UI share) are not shadowed by an ambient login.
+            token = auth_header[7:]
+            token_from_authorization = True
+            if not is_public_path:
+                logger.debug("auth.bearer_token_used", path=path)
 
         if not token:
             return None, None
@@ -562,6 +576,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if path.startswith("/frontend/api/embed/configs/") and path.endswith("/session-token"):
             return EMBED_SESSION_TOKEN_REQUIRED_SCOPES
         return set()
+
+    @staticmethod
+    def _flow_ui_share_path_allowed(request: Request, token_data: TokenData) -> bool:
+        flow_id = token_data.metadata.get("flow_ui_share_flow_id")
+        if not isinstance(flow_id, str) or not flow_id:
+            return False
+        path = request.url.path.rstrip("/")
+        roots = {
+            f"/api/v1/{flow_id}",
+            f"/flows/api/v1/{flow_id}",
+        }
+        if request.method.upper() == "POST" and path in roots:
+            return True
+        if request.method.upper() in {"GET", "HEAD"} and any(
+            path == f"{root}/interface-profile" for root in roots
+        ):
+            return True
+        return False
 
     async def _build_api_key_token_data(
         self,
@@ -603,20 +635,27 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def _get_user(self, container: BaseContainer, token_data: TokenData) -> User | None:
         """Получает пользователя по данным токена"""
         user = await container.user_repository.get(token_data.user_id)
-        if user is None and token_data.token_type == TokenType.EMBED_SESSION:
+        if user is None and token_data.token_type in {
+            TokenType.EMBED_SESSION,
+            TokenType.FLOW_UI_SHARE,
+        }:
+            is_share = token_data.token_type == TokenType.FLOW_UI_SHARE
             user = await ensure_persisted_runtime_user(
                 container,
                 user_id=token_data.user_id,
                 company_id=token_data.company_id,
-                name="Embed Guest",
+                name="Shared Flow UI Viewer" if is_share else "Embed Guest",
                 roles=["guest"],
                 attributes={
-                    "kind": "embed_session_guest",
+                    "kind": "flow_ui_share_viewer" if is_share else "embed_session_guest",
                     "token_expires_at": token_data.exp.isoformat(),
                     "embed_id": token_data.metadata.get("embed_id"),
                     "embed_flow_id": token_data.metadata.get("embed_flow_id"),
                     "embed_branch_id": token_data.metadata.get("embed_branch_id"),
                     "issued_by": token_data.metadata.get("issued_by"),
+                    "flow_ui_share_grant_id": token_data.metadata.get(
+                        "flow_ui_share_grant_id"
+                    ),
                 },
             )
         if user:

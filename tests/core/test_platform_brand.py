@@ -70,7 +70,7 @@ def test_resolve_infrastructure_service_url_onlyoffice_linnex() -> None:
 
 def test_resolve_embed_origins_linnex() -> None:
     script_url, api_base = resolve_embed_origins("linnex.io")
-    assert script_url == "https://cdn.linnex.io/lib/embed-chat/humanitec-embed-autoload.js"
+    assert script_url == "https://cdn.linnex.io/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     assert api_base == "https://api.linnex.io"
 
 

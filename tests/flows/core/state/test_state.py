@@ -50,7 +50,7 @@ def workflow_runtime(app: object) -> DurableWorkflowRuntime:
 
 
 class TestDurableWorkflowProjection:
-    def test_execution_state_rejects_forbidden_terminal_field_names(self):
+    def test_execution_state_rejects_forbidden_terminal_field_names(self, unique_id):
         with pytest.raises(ValueError, match="system field names"):
             _ = ExecutionState.model_validate(
                 {
@@ -63,8 +63,8 @@ class TestDurableWorkflowProjection:
             )
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
             session_id="test-flow:test-context",
         )

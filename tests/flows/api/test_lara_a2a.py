@@ -169,6 +169,6 @@ async def test_lara_a2a_stream_loads_skill_and_runs_crm_tool(
     events = _parse_sse(response.text)
     events_text = _events_text(events)
     assert any(_event_state(event) == "TASK_STATE_COMPLETED" for event in events), events_text
-    assert "platform.skill_loaded" in events_text
+    assert "SkillActivity" in events_text or "skill_activity" in events_text, events_text
     assert "crm_search_entities" in events_text
     assert marker in events_text

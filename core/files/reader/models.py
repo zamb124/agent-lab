@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import ClassVar
+from typing import ClassVar, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from core.files.file_ref import FileRef, file_id_from_download_url
+from core.types import JsonArray, parse_json_value, require_json_array
 
 # ---------------------------------------------------------------------------
 # Константы
@@ -131,8 +132,43 @@ class ReadFileArgs(BaseModel):
     compression: CompressionMode = CompressionMode.NEVER
     transcription_company_id: str | None = None
     forced_lane: ReadLane | None = None
-    names: list[str] = Field(default_factory=list)
+    names: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Список original_name из state.files. "
+            "Передавай JSON-массив строк, например [\"report.pdf\"], не строку с JSON внутри."
+        ),
+    )
     budget: int = Field(default=MAX_READ_BUDGET, ge=0)
+
+    @field_validator("names", mode="before")
+    @classmethod
+    def coerce_names_from_llm_wire(cls, value: object) -> list[str]:
+        """LLM tool wire: names иногда приходит строкой '["a.jpg"]' вместо массива."""
+        if value is None:
+            return []
+        items: JsonArray
+        if isinstance(value, list):
+            items = require_json_array(cast(object, value), "ReadFileArgs.names")
+        elif isinstance(value, str):
+            text = value.strip()
+            if text == "":
+                return []
+            if text.startswith("["):
+                items = require_json_array(
+                    parse_json_value(text, "ReadFileArgs.names"),
+                    "ReadFileArgs.names",
+                )
+            else:
+                return [text]
+        else:
+            raise ValueError("names must be a list of strings")
+        names: list[str] = []
+        for item in items:
+            if not isinstance(item, str) or item.strip() == "":
+                raise ValueError("names array items must be non-empty strings")
+            names.append(item.strip())
+        return names
 
 
 # ---------------------------------------------------------------------------

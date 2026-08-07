@@ -112,6 +112,10 @@ test-crawl-strict-e2e:
 
 check-ui-canon:
 	@./scripts/check_ui_canon.sh
+	@uv run python scripts/check_flow_ui_hard_cut.py
+
+check-flow-ui-hard-cut:
+	@uv run python scripts/check_flow_ui_hard_cut.py
 
 # Field canon: запрет сырых <input>/<textarea>/<select> в apps/<svc>/ui/{pages,modals,components}/**
 # кроме whitelist type= и data-canon (см. scripts/check_field_canon.sh). Не входит в check-events-canon.

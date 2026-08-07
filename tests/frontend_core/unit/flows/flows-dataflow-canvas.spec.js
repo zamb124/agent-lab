@@ -10,9 +10,12 @@ import {
     countNodeDataflowProblems,
     aggregateDataflowIssues,
     dataWireKey,
+    dataWireChipKind,
     dataflowChipAnchor,
     dataflowChipCenterY,
+    dataflowChipKind,
     dataflowNodeChipLayout,
+    dataflowPathChipKind,
     resolveChipStatePaths,
     resolveDataWireEndpoints,
     dataWirePathFor,
@@ -409,5 +412,15 @@ describe('flows-dataflow-canvas helpers', () => {
             new Set([chipRefKey(refs[0]), chipRefKey(refs[1])]),
         );
         expect(buildLineageSetFromWireKeys(new Set([dataWireKey(wire)]), [wire])?.has('llm_1')).toBe(true);
+    });
+
+    it('dataflowChipKind prefers explicit kind and falls back to path prefix', () => {
+        expect(dataflowChipKind({ label: 'ui_values.email', kind: 'ui_value' })).toBe('ui_value');
+        expect(dataflowChipKind({ label: 'ui_values.email' })).toBe('ui_value');
+        expect(dataflowChipKind({ label: 'variables.x' })).toBe('variable');
+        expect(dataflowChipKind({ label: 'triggers.tg.payload' })).toBe('trigger');
+        expect(dataflowChipKind({ label: 'content' })).toBe('content');
+        expect(dataWireChipKind({ sourceLabel: 'ui_values.email', label: 'email' })).toBe('ui_value');
+        expect(dataflowPathChipKind('files')).toBe('files');
     });
 });

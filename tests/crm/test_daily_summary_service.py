@@ -9,11 +9,31 @@ import pytest
 
 import apps.crm.services.entity_service as entity_service_module
 from apps.crm.services.entity_service import EntityService
-from core.clients.a2a_client import A2ATaskResponse
+from core.clients.a2a_client import A2ATaskResult
 from core.context import Context, set_context
 from core.models.identity_models import Company, User
 
 pytestmark = pytest.mark.no_crm_http
+
+
+def _a2a_response(*, response: str, raw: dict) -> A2ATaskResult:
+    result_raw = raw.get("result")
+    if isinstance(result_raw, dict):
+        result = result_raw
+    else:
+        result = {
+            "status": {"state": "TASK_STATE_COMPLETED"},
+            "artifacts": [{"artifactId": "a1", "parts": [{"text": response}]}],
+        }
+    artifacts_raw = result.get("artifacts")
+    artifacts: list[object] = list(artifacts_raw) if isinstance(artifacts_raw, list) else []
+    return A2ATaskResult(
+        task=result,
+        artifacts=artifacts,
+        response=response,
+        status="completed",
+        raw=raw,
+    )
 
 
 def _set_test_context() -> None:
@@ -36,10 +56,6 @@ def _analyzed_note() -> SimpleNamespace:
         tags=[],
         attributes={"ai_analysis_applied_at": "2026-01-01T00:00:00+00:00"},
     )
-
-
-def _a2a_response(*, response: str, raw: dict) -> A2ATaskResponse:
-    return A2ATaskResponse(response=response, status="completed", raw=raw)
 
 
 def _build_service() -> EntityService:

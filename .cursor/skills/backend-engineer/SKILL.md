@@ -11,6 +11,16 @@ description: Backend инженер Платформы. Использовать
 
 Канон: **строгая типизация, top-level imports, DI через контейнер, один доменный контракт, реальные тесты**.
 
+## Zero Translation / Deep Contract Refactoring
+
+Канон — **`main.mdc`** (запреты 11–14) и **`architecture.mdc`**.
+
+- Не создавай промежуточные mappers/adapters/`convert_*`/`*_to_*`/`*_from_*`, чтобы «не трогать» callers.
+- Несовпали типы или поля — меняй контракты upstream и downstream по всей цепочке (API, service, repository, events, UI, tests).
+- Минимизация blast radius заплатами и glue вокруг устаревшего интерфейса **запрещена**.
+- Одна бизнес-сущность — одна модель. Twin `*DTO`/`*Internal`/`*Response` с теми же полями — дефект.
+- Конвертация только на внешней границе (wire/SDK/сырой JSON→typed / ORM→domain в repository).
+
 ## Правила кода
 
 - HTTP-слой тонкий: Pydantic payload → `container.<service>` → response. Контейнер в route только как `container: ContainerDep`.

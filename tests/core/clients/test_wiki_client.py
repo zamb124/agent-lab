@@ -13,7 +13,6 @@ from core.context.job_context import build_job_context
 from core.models.identity_models import Company, User
 from tests.sync.api._helpers import seed_namespace_via_repo
 
-pytest_plugins = ["tests.wiki.conftest"]
 pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("wiki_app")]
 
 

@@ -188,6 +188,8 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         _verifyHintText: { state: true },
         _mappingTestResultText: { state: true },
         _catalogItems: { state: true },
+        _catalogLoadError: { state: true },
+        _catalogEnumConfig: { state: true },
     };
 
     static styles = [
@@ -461,6 +463,8 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this._verifyHintText = '';
         this._mappingTestResultText = '';
         this._catalogItems = [];
+        this._catalogLoadError = '';
+        this._catalogEnumConfig = Object.freeze({ values: Object.freeze([]) });
         this._catalogLoadStarted = false;
         this._catalogOp = this.useOp('flows/platform_events_catalog');
         this._createOp = this.useOp('flows/trigger_create');
@@ -492,6 +496,9 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         super.updated?.(changed);
         if (changed.has('flowId') && this.flowId) {
             this._ensureFlowForBranches();
+        }
+        if (changed.has('_type') && this._type === 'platform_event') {
+            this._ensurePlatformEventsCatalogLoaded();
         }
         if (this._type === 'email') {
             this._maybeAutofillMailboxBinding();
@@ -1404,11 +1411,46 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     _ensurePlatformEventsCatalogLoaded() {
         if (this._catalogLoadStarted) return;
         this._catalogLoadStarted = true;
+        this._catalogLoadError = '';
         void this._catalogOp.run({}).then((r) => {
-            if (r && Array.isArray(r.items)) {
-                this._catalogItems = r.items.map((raw) => this._normalizeCatalogItem(raw));
+            if (r === null) {
+                this._catalogLoadStarted = false;
+                const err = this._catalogOp.error;
+                this._catalogLoadError = typeof err === 'string' && err.length > 0
+                    ? err
+                    : this.t('trigger_editor_modal.error_event_catalog_load');
+                this._catalogItems = [];
+                this._rebuildCatalogEnumConfig('');
+                return;
             }
+            if (!Array.isArray(r.items)) {
+                this._catalogLoadStarted = false;
+                throw new TypeError('flows-trigger-editor-modal: catalog response.items must be an array');
+            }
+            this._catalogItems = r.items.map((raw) => this._normalizeCatalogItem(raw));
+            this._catalogLoadError = '';
+            const selectedType = asString(this._config.event_type);
+            this._rebuildCatalogEnumConfig(selectedType);
         });
+    }
+
+    /**
+     * Стабильный `.config` для platform-field-enum: новый object только при
+     * реальной смене набора event_type (не на каждый render модалки).
+     * @param {string} selectedType
+     */
+    _rebuildCatalogEnumConfig(selectedType) {
+        const items = Array.isArray(this._catalogItems) ? this._catalogItems : [];
+        const values = items.map((item) => ({
+            value: item.event_type,
+            label: item.description
+                ? `${item.event_type} — ${item.description}`
+                : item.event_type,
+        }));
+        if (selectedType.length > 0 && !values.some((v) => v.value === selectedType)) {
+            values.unshift({ value: selectedType, label: selectedType });
+        }
+        this._catalogEnumConfig = Object.freeze({ values: Object.freeze(values) });
     }
 
     /**
@@ -1533,16 +1575,6 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this._ensurePlatformEventsCatalogLoaded();
         const c = this._config;
         const selectedType = asString(c.event_type);
-        const items = Array.isArray(this._catalogItems) ? this._catalogItems : [];
-        const eventEnumValues = items.map((item) => ({
-            value: item.event_type,
-            label: item.description
-                ? `${item.event_type} — ${item.description}`
-                : item.event_type,
-        }));
-        if (selectedType.length > 0 && !eventEnumValues.some((v) => v.value === selectedType)) {
-            eventEnumValues.unshift({ value: selectedType, label: selectedType });
-        }
         const selectedEntry = this._selectedCatalogEntry();
         const filterFields = selectedEntry !== null ? selectedEntry.filter_fields : [];
         const filters = this._platformEventFilters();
@@ -1551,6 +1583,11 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             value: field.path,
             label: `${field.path} — ${field.label}`,
         }));
+        const catalogBusy = this._catalogOp.busy;
+        const catalogEmpty = !catalogBusy
+            && this._catalogLoadError.length === 0
+            && this._catalogItems.length === 0
+            && this._catalogLoadStarted;
 
         return html`
             <div class="config-section">
@@ -1561,8 +1598,12 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                         type="enum"
                         mode="edit"
                         .value=${selectedType}
-                        .config=${{ values: eventEnumValues }}
+                        .config=${this._catalogEnumConfig}
+                        .placeholder=${catalogBusy
+                            ? this.t('trigger_editor_modal.event_catalog_loading')
+                            : ''}
                         .hint=${this.t('trigger_editor_modal.hint_event_type')}
+                        ?disabled=${catalogBusy}
                         @change=${(e) => {
                             const v = e.detail.value;
                             if (typeof v !== 'string') {
@@ -1573,8 +1614,14 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                                 event_type: v,
                                 filters: [],
                             };
+                            this._rebuildCatalogEnumConfig(v);
                         }}
                     ></platform-field>
+                    ${this._catalogLoadError.length > 0
+                        ? html`<span class="hint" style="color: var(--error);">${this._catalogLoadError}</span>`
+                        : catalogEmpty
+                            ? html`<span class="hint">${this.t('trigger_editor_modal.error_event_catalog_empty')}</span>`
+                            : nothing}
                 </div>
                 <div class="mapping-add-row">
                     <span style="font-weight: var(--font-medium); color: var(--text-secondary);">

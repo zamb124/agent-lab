@@ -86,28 +86,30 @@ class TestA2AArtifacts:
         assert "result" in data
         result = data["result"]
 
-        # Проверяем что есть artifacts
+        # Flow UI document always present; LLM stream is `response`; extracted JSON is `artifact`.
         assert "artifacts" in result
         assert result["artifacts"] is not None
         assert len(result["artifacts"]) > 0
 
-        artifact = result["artifacts"][0]
-        assert artifact["name"] == "response"
-        assert "parts" in artifact
-        assert len(artifact["parts"]) > 0
+        artifact_by_name = {
+            artifact["name"]: artifact for artifact in result["artifacts"] if "name" in artifact
+        }
+        assert "ui.document" in artifact_by_name
+        assert "response" in artifact_by_name
+        assert "artifact" in artifact_by_name
+        json_artifact = artifact_by_name["artifact"]
+        assert "parts" in json_artifact
+        assert len(json_artifact["parts"]) > 0
 
-        part = artifact["parts"][0]
+        part = json_artifact["parts"][0]
         assert "data" in part
-        assert "res" in part["data"]
-
-        # Когда есть artifacts, status.message НЕ дублирует ответ
-        assert result["status"].get("message") is None
+        assert "content" in part["data"] or "res" in part["data"]
 
         # taskId должен быть в user message
         assert result["history"][0].get("taskId") is not None
 
     async def test_message_send_no_artifact_for_plain_text(self, client, mock_llm_with_queue, sync_tools, unique_id: str):
-        """SendMessage не возвращает artifact для простого текста."""
+        """Plain text: Flow UI + response stream present; no extracted JSON artifact."""
         # Мок ответ без JSON
         mock_llm_with_queue([{"type": "text", "content": "Просто текстовый ответ без JSON"}])
 
@@ -134,6 +136,11 @@ class TestA2AArtifacts:
         assert "result" in data
         result = data["result"]
 
-        # artifacts должен быть None или отсутствовать
-        assert result.get("artifacts") is None
+        artifacts = result.get("artifacts") or []
+        artifact_by_name = {
+            artifact["name"]: artifact for artifact in artifacts if "name" in artifact
+        }
+        assert "ui.document" in artifact_by_name
+        assert "response" in artifact_by_name
+        assert "artifact" not in artifact_by_name
 

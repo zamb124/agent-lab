@@ -11,6 +11,7 @@ from a2a.types import (
     Artifact,
     Message,
     Part,
+    Task,
     TaskArtifactUpdateEvent,
     TaskState,
     TaskStatus,
@@ -19,8 +20,8 @@ from a2a.types import (
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER, TASK_STATE_FAILED, Role
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.channels.a2a import _build_task_from_events
 from core.a2a import get_part_text, make_task_status, part_has_text
+from core.a2a.task_projection import build_task_projection
 from core.clients.llm import MockLLM, setup_mock_responses
 
 
@@ -41,22 +42,38 @@ def _completed_status(task_id: str, context_id: str) -> TaskStatusUpdateEvent:
     )
 
 
-class TestReasoningArtifactsInBuildTask:
-    """Тесты reasoning артефактов в _build_task_from_events."""
+def _build_task_from_events(
+    events: list[TaskArtifactUpdateEvent | TaskStatusUpdateEvent],
+    task_id: str,
+    context_id: str,
+    input_message: Message,
+) -> Task:
+    """Lossless Task materialization — same reducer as GetTask / blocking SendMessage."""
+    return build_task_projection(
+        events=events,
+        task_id=task_id,
+        context_id=context_id,
+        history=[input_message],
+    )
 
-    @pytest.mark.asyncio
-    async def test_build_task_separates_reasoning_and_response(self, app):
-        """_build_task_from_events разделяет reasoning и response артефакты."""
+
+class TestReasoningArtifactsInBuildTask:
+    """Тесты reasoning артефактов в TaskProjectionAccumulator."""
+
+    def test_build_task_separates_reasoning_and_response(self):
+        """build_task_projection разделяет reasoning и response артефакты."""
         task_id = str(uuid.uuid4())
         context_id = str(uuid.uuid4())
         input_message = _msg("Test question")
+        reasoning_artifact_id = str(uuid.uuid4())
+        response_artifact_id = str(uuid.uuid4())
 
         events = [
             TaskArtifactUpdateEvent(
                 context_id=context_id,
                 task_id=task_id,
                 artifact=Artifact(
-                    artifact_id=str(uuid.uuid4()),
+                    artifact_id=reasoning_artifact_id,
                     name="reasoning",
                     parts=[Part(text="Step 1: ")]
                 ),
@@ -67,7 +84,7 @@ class TestReasoningArtifactsInBuildTask:
                 context_id=context_id,
                 task_id=task_id,
                 artifact=Artifact(
-                    artifact_id=str(uuid.uuid4()),
+                    artifact_id=reasoning_artifact_id,
                     name="reasoning",
                     parts=[Part(text="analyzing...")]
                 ),
@@ -78,7 +95,8 @@ class TestReasoningArtifactsInBuildTask:
                 context_id=context_id,
                 task_id=task_id,
                 artifact=Artifact(
-                    artifact_id=str(uuid.uuid4()),
+                    artifact_id=response_artifact_id,
+                    name="response",
                     parts=[Part(text="Response text")]
                 ),
                 append=True,
@@ -87,7 +105,7 @@ class TestReasoningArtifactsInBuildTask:
             _completed_status(task_id, context_id),
         ]
 
-        task = await _build_task_from_events(events, task_id, context_id, input_message, flow_id="test_flow")
+        task = _build_task_from_events(events, task_id, context_id, input_message)
 
         assert task.artifacts is not None
         assert len(task.artifacts) == 2
@@ -104,9 +122,8 @@ class TestReasoningArtifactsInBuildTask:
         response_text = "".join(get_part_text(p) for p in response_artifact.parts if part_has_text(p))
         assert response_text == "Response text"
 
-    @pytest.mark.asyncio
-    async def test_build_task_with_reasoning_only(self, app):
-        """_build_task_from_events обрабатывает только reasoning артефакты."""
+    def test_build_task_with_reasoning_only(self):
+        """build_task_projection обрабатывает только reasoning артефакты."""
         task_id = str(uuid.uuid4())
         context_id = str(uuid.uuid4())
         input_message = _msg("Test question")
@@ -126,7 +143,7 @@ class TestReasoningArtifactsInBuildTask:
             _completed_status(task_id, context_id),
         ]
 
-        task = await _build_task_from_events(events, task_id, context_id, input_message, flow_id="test_flow")
+        task = _build_task_from_events(events, task_id, context_id, input_message)
 
         assert task.artifacts is not None
         assert len(task.artifacts) == 1
@@ -137,8 +154,7 @@ class TestReasoningArtifactsInBuildTask:
         reasoning_text = "".join(get_part_text(p) for p in reasoning_artifact.parts if part_has_text(p))
         assert reasoning_text == "Thinking..."
 
-    @pytest.mark.asyncio
-    async def test_failed_status_preserves_error_message_with_reasoning_artifact(self, app):
+    def test_failed_status_preserves_error_message_with_reasoning_artifact(self):
         """При failed и артефакте reasoning текст ошибки остаётся в status.message (для A2A-клиента)."""
         task_id = str(uuid.uuid4())
         context_id = str(uuid.uuid4())
@@ -166,7 +182,7 @@ class TestReasoningArtifactsInBuildTask:
             ),
         ]
 
-        task = await _build_task_from_events(events, task_id, context_id, input_message, flow_id="test_flow")
+        task = _build_task_from_events(events, task_id, context_id, input_message)
 
         assert task.status.state == TASK_STATE_FAILED
         assert task.status.message is not None

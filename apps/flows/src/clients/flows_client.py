@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from apps.flows.src.container_state import require_current_container
 from apps.flows.src.models.flow_config import FlowConfig
-from apps.flows.src.runtime_helpers.state_utils import push_ui_event
+from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
 from apps.flows.src.services.lara_facade import flow_config_from_flow_api_response
 from core.clients.service_client import ServiceClient
 from core.context import get_context
@@ -260,12 +260,12 @@ class FlowsClient:
             "flows.node.preview.blocks",
         )
         preview_payload["blocks"] = preview_blocks
-        _ = push_ui_event(
+        _ = present_flow_ui_artifact(
             state,
-            event_type="action_previewed",
-            payload=preview_payload,
-            event_id=f"flows-node-preview-{action.pending_action_id}",
-            version="1.0.0",
+            kind="action_preview",
+            data=preview_payload,
+            artifact_id=f"flows-node-preview-{action.pending_action_id}",
+            source="flows_editor",
         )
         ctx = get_context()
         if ctx is None:
@@ -344,12 +344,12 @@ class FlowsClient:
             "changes": patch_restored,
             "open_editor": True,
         }
-        _ = push_ui_event(
+        _ = present_flow_ui_artifact(
             state,
-            event_type="action_applied",
-            payload=event_payload,
-            event_id=f"flows-node-apply-{pending_action_id}",
-            version="1.0.0",
+            kind="action_result",
+            data=event_payload,
+            artifact_id=f"flows-node-apply-{pending_action_id}",
+            source="flows_editor",
         )
         return {
             "success": True,
@@ -428,12 +428,12 @@ class FlowsClient:
             "flows.flow.preview.blocks",
         )
         preview_payload["blocks"] = preview_blocks
-        _ = push_ui_event(
+        _ = present_flow_ui_artifact(
             state,
-            event_type="action_previewed",
-            payload=preview_payload,
-            event_id=f"flows-flow-preview-{action.pending_action_id}",
-            version="1.0.0",
+            kind="action_preview",
+            data=preview_payload,
+            artifact_id=f"flows-flow-preview-{action.pending_action_id}",
+            source="flows_editor",
         )
         return {
             "success": True,
@@ -484,12 +484,12 @@ class FlowsClient:
             "flow_changes": patch_restored,
             "open_editor": True,
         }
-        _ = push_ui_event(
+        _ = present_flow_ui_artifact(
             state,
-            event_type="action_applied",
-            payload=apply_payload,
-            event_id=f"flows-flow-apply-{pending_action_id}",
-            version="1.0.0",
+            kind="action_result",
+            data=apply_payload,
+            artifact_id=f"flows-flow-apply-{pending_action_id}",
+            source="flows_editor",
         )
         return {
             "success": True,

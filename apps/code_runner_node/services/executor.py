@@ -603,6 +603,7 @@ class NodeSandboxExecutor:
 
             async function executeOne(request) {{
               const logs = [];
+              const platformEffects = [];
               let stage = 'bootstrap';
               try {{
                 if (!Object.hasOwn(request, 'args') && !Object.hasOwn(request, 'state')) {{
@@ -645,6 +646,12 @@ class NodeSandboxExecutor:
                     throw new Error(`Capability ${{name}} failed: ${{response.status}} ${{await response.text()}}`);
                   }}
                   const payload = await response.json();
+                  if (payload.platform_effects !== undefined) {{
+                    if (!Array.isArray(payload.platform_effects)) {{
+                      throw new Error(`Capability ${{name}} returned invalid platform_effects`);
+                    }}
+                    platformEffects.push(...payload.platform_effects);
+                  }}
                   if (payload.state && typeof payload.state === 'object' && !Array.isArray(payload.state)) {{
                     for (const key of Object.keys(request.state ?? {{}})) delete request.state[key];
                     Object.assign(request.state, payload.state);
@@ -679,6 +686,7 @@ class NodeSandboxExecutor:
                   state,
                   state_returned: stateReturned,
                   logs,
+                  platform_effects: platformEffects,
                 }};
               }} catch (error) {{
                 if (error instanceof CapabilityInterrupt) {{
@@ -688,6 +696,7 @@ class NodeSandboxExecutor:
                     state: request.state ?? {{}},
                     interrupt: error.payload?.interrupt,
                     logs,
+                    platform_effects: platformEffects,
                   }};
                 }}
                 return {{
@@ -705,6 +714,7 @@ class NodeSandboxExecutor:
                     trace_id: request.context?.trace_id ?? null,
                   }},
                   logs,
+                  platform_effects: platformEffects,
                 }};
               }}
             }}
@@ -730,6 +740,7 @@ class NodeSandboxExecutor:
                     traceback: error?.stack ?? String(error),
                   }},
                   logs: [],
+                  platform_effects: [],
                 }};
               }}
               process.stdout.write(JSON.stringify(payload) + '\\n');

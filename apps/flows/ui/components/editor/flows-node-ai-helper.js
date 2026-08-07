@@ -1,11 +1,10 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/chat/platform-chat.js';
+import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import {
     buildLaraFlowsContext,
     flattenLaraFlowsContext,
     laraNodeHelperBranchId,
-    laraNodeHelperConversationKey,
 } from '../../_helpers/lara-node-helper.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
@@ -22,27 +21,34 @@ export class FlowsNodeAiHelper extends PlatformElement {
             :host {
                 display: flex;
                 flex-direction: column;
+                flex: 1 1 0;
                 height: 100%;
                 min-height: 0;
+                overflow: hidden;
                 background: color-mix(in oklab, var(--bg-secondary) 72%, transparent);
             }
 
             .chat-shell {
-                flex: 1;
+                flex: 1 1 0;
                 min-height: 0;
                 padding: var(--space-2);
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
+                overflow: hidden;
             }
 
-            platform-chat {
-                flex: 1;
+            platform-flow-ui {
+                flex: 1 1 0;
                 min-height: 0;
-                --platform-chat-radius: var(--radius-lg);
-                --platform-chat-accent: var(--accent);
-                --platform-chat-accent-muted: var(--accent-subtle);
-                --platform-chat-on-accent: var(--text-inverse);
+                height: 100%;
+                --flow-ui-radius: var(--radius-lg);
+                --flow-ui-accent: var(--accent);
+                --flow-ui-accent-muted: var(--accent-subtle);
+                --flow-ui-on-accent: var(--text-inverse);
+                /* spa profile clears page fill; keep an opaque surface in the assistant column */
+                --flow-ui-page-background: color-mix(in oklab, var(--bg-secondary) 88%, transparent);
+                --flow-ui-background: var(--flow-ui-page-background);
             }
         `,
     ];
@@ -53,6 +59,7 @@ export class FlowsNodeAiHelper extends PlatformElement {
         this.branchId = 'base';
         this.nodeId = '';
         this._editor = this.useOp('flows/editor');
+        this._getExtraMetadataVariables = async () => flattenLaraFlowsContext(this._nodeContext());
     }
 
     _nodeContext() {
@@ -77,36 +84,20 @@ export class FlowsNodeAiHelper extends PlatformElement {
         );
     }
 
-    _chatVariables = async () => flattenLaraFlowsContext(this._nodeContext());
-
-    _labels() {
-        return {
-            greeting: '',
-            placeholder: this.t('node_ai_helper.placeholder'),
-        };
-    }
-
     render() {
         const context = this._nodeContext();
         return html`
             <div class="chat-shell">
-                <platform-chat
+                <platform-flow-ui
                     display="panel"
                     profile="spa"
-                    hide-header
-                    theme="light"
-                    interface-locale="auto"
-                    .flowsBaseUrl=${'/flows'}
+                    theme="auto"
+                    locale="auto"
+                    base-url="/flows"
                     flow-id="lara"
                     branch-id=${context.assistant_branch_id}
-                    conversation-key=${laraNodeHelperConversationKey(context)}
-                    assistant-title="Lara"
-                    .labels=${this._labels()}
-                    ?use-credentials=${true}
-                    .enableVoice=${false}
-                    .getExtraMetadataVariables=${this._chatVariables}
-                    event-namespace="assistant"
-                ></platform-chat>
+                    .getExtraMetadataVariables=${this._getExtraMetadataVariables}
+                ></platform-flow-ui>
             </div>
         `;
     }

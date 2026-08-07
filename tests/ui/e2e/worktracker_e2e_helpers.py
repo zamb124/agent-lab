@@ -352,13 +352,13 @@ async def worktracker_click_nav(page: Page, *labels: str) -> None:
 
 
 # --------------------------------------------------------------------------------------
-# Встроенный HITL-чат (platform-chat operator_handoff в карточке задачи)
+# Встроенный HITL-чат (platform-flow-ui operator_handoff в карточке задачи)
 # --------------------------------------------------------------------------------------
 
 
 async def worktracker_hitl_embedded_chat(editor: Locator) -> Locator:
-    """`<platform-chat profile=operator_handoff>` внутри карточки operator_handoff."""
-    chat = editor.locator("section.wt-hitl platform-chat").first
+    """`<platform-flow-ui profile=operator_handoff>` внутри карточки operator_handoff."""
+    chat = editor.locator("section.wt-hitl platform-flow-ui").first
     await expect(chat).to_be_visible(timeout=60_000)
     return chat
 
@@ -375,63 +375,28 @@ async def worktracker_hitl_chat_wait_text(
         if isinstance(text_pattern, re.Pattern)
         else re.compile(re.escape(text_pattern), re.I)
     )
-    source = pattern.pattern
-    deadline = time.monotonic() + timeout_s
-    last_bubble_count = 0
-    last_bubble_texts: list[str] = []
-    while time.monotonic() < deadline:
-        stats = await chat.evaluate(
-            """
-            (el, reSource) => {
-                const re = new RegExp(reSource, 'i');
-                const root = el.renderRoot;
-                if (!root) {
-                    return { bubbleCount: 0, matched: false, texts: [] };
-                }
-                const bubbles = root.querySelectorAll('flows-chat-message');
-                const texts = [];
-                let matched = false;
-                for (const bubble of bubbles) {
-                    const bubbleRoot = bubble.renderRoot || bubble.shadowRoot;
-                    const text = (bubbleRoot ? bubbleRoot.textContent : bubble.textContent) || '';
-                    texts.push(text);
-                    if (re.test(text)) {
-                        matched = true;
-                    }
-                }
-                return { bubbleCount: bubbles.length, matched, texts };
-            }
-            """,
-            source,
-        )
-        if isinstance(stats, dict):
-            last_bubble_count = int(stats.get("bubbleCount") or 0)
-            raw_texts = stats.get("texts")
-            if isinstance(raw_texts, list):
-                last_bubble_texts = [str(t) for t in raw_texts]
-            if stats.get("matched") is True:
-                return
-        await asyncio.sleep(0.5)
-    raise AssertionError(
-        f"embedded HITL chat did not show text matching {source!r} within {timeout_s}s "
-        f"(last bubble count={last_bubble_count}, texts={last_bubble_texts!r})"
+    await expect(chat.get_by_text(pattern).first).to_be_visible(
+        timeout=int(timeout_s * 1000)
     )
 
 
 async def worktracker_hitl_chat_send(editor: Locator, text: str) -> None:
     chat = await worktracker_hitl_embedded_chat(editor)
-    textarea = chat.locator("flows-chat-input textarea")
+    textarea = chat.locator(
+        '[data-flow-ui-component="message-input"] textarea, textarea'
+    ).first
     await expect(textarea).to_be_visible(timeout=30_000)
     await textarea.fill(text)
-    send_btn = chat.locator("flows-chat-input button.send-btn:not(.muted)").first
+    send_btn = chat.locator("button").filter(
+        has_text=re.compile(r"^\s*(Submit|Отправить|Send)\s*$")
+    ).first
     await expect(send_btn).to_be_enabled(timeout=10_000)
     await send_btn.click()
-    # Текст в shadow DOM flows-chat-message — не get_by_text по light DOM.
     await worktracker_hitl_chat_wait_text(editor, text.strip(), timeout_s=60.0)
 
 
 async def worktracker_hitl_single_reply_complete(editor: Locator, text: str) -> None:
-    """single_reply: Send в platform-chat = complete + closing reply."""
+    """single_reply: Send в platform-flow-ui = complete + closing reply."""
     await worktracker_hitl_chat_send(editor, text)
 
 async def flows_user_chat_wait_text(page: Page, text_pattern: re.Pattern[str] | str) -> None:

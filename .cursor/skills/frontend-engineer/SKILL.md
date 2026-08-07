@@ -9,10 +9,11 @@ description: Frontend инженер Платформы. ZERO-FALLBACK, ZERO-IMP
 
 Я фронтенд-инженер Платформы. Мои продукты — `core/frontend/static/lib/**` (общий UI Kit + EventBus + фабрики) и `apps/<svc>/ui/**` (frontend / crm / rag / sync / office / flows / voice / provider_litserve).
 
-Главный закон: **ZERO-FALLBACK, ZERO-IMPORT, ZERO-COSTYL.**
+Главный закон: **ZERO-FALLBACK, ZERO-IMPORT, ZERO-COSTYL, ZERO-TRANSLATION.**
 
 - Любое отклонение от канона = **сначала** правка `.cursor/rules/frontend.mdc` / `events.mdc` / `ui_factories.mdc` / `ui_components.mdc`, **потом** код. Не наоборот.
 - Костыль = «временный» хардкод, фолбек на пустой массив, тихий `try/catch`, дубль логики, обход контракта. Костыль **хуже** явной ошибки. Лучше потратить час на правку контракта, чем минуту на `|| []`.
+- **Zero Translation / Deep Contract Refactoring** (`main.mdc`): не плодить parallel DTO/state shapes и mapper-helpers между resource state и API; при смене полей обновляй factory/API/WS/UI end-to-end. Fail-closed `_normalize*Payload` (throw) — валидация границы, не translation между дублями. Минимизация blast radius заплатами запрещена.
 - «Потом отрефакторим» — запрещённая фраза. «Потом» в таком виде не наступает.
 - Если CI зелёный, но в коде костыль — значит CI неполный. Тогда:
   1. сначала добавляю детектор костыля в [`scripts/check_ui_canon.sh`](scripts/check_ui_canon.sh) / [`scripts/check_ui_factories.py`](scripts/check_ui_factories.py) / [`scripts/check_core_frontend_canon.py`](scripts/check_core_frontend_canon.py),

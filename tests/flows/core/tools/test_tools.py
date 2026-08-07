@@ -16,7 +16,7 @@ class TestBaseTool:
     """Тесты BaseTool."""
 
     @pytest.mark.asyncio
-    async def test_run_calls_run_impl(self):
+    async def test_run_calls_run_impl(self, unique_id):
         """BaseTool.run вызывает каноническую реализацию _run_impl."""
 
         class ToolWithoutMock(BaseTool):
@@ -27,10 +27,10 @@ class TestBaseTool:
                 return "real_called"
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
 
         tool_without_mock = ToolWithoutMock()
@@ -42,25 +42,25 @@ class TestCalculatorTool:
     """Тесты calculator tool (FunctionTool)."""
 
     @pytest.mark.asyncio
-    async def test_calculator_works(self):
+    async def test_calculator_works(self, unique_id):
         """Калькулятор вычисляет выражения."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
         result = await calculator.run({"expression": "2 + 2"}, state)
         assert "4" in result
 
     @pytest.mark.asyncio
-    async def test_calculator_complex_expression(self):
+    async def test_calculator_complex_expression(self, unique_id):
         """Сложные выражения."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
         result = await calculator.run({"expression": "sqrt(144) + pow(2, 3)"}, state)
         # sqrt(144) = 12, pow(2,3) = 8, total = 20
@@ -71,13 +71,13 @@ class TestAskUserTool:
     """Тесты ask_user tool."""
 
     @pytest.mark.asyncio
-    async def test_ask_user_raises_interrupt(self):
+    async def test_ask_user_raises_interrupt(self, unique_id):
         """ask_user всегда кидает FlowInterrupt."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
         with pytest.raises(FlowInterrupt) as exc_info:
             await ask_user.run({"question": "Как вас зовут?"}, state)
@@ -150,13 +150,13 @@ class TestFinishTool:
     """Тесты finish tool."""
 
     @pytest.mark.asyncio
-    async def test_finish_returns_answer(self):
+    async def test_finish_returns_answer(self, unique_id):
         """finish возвращает answer."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
         result = await finish.run({"answer": "Готово!"}, state)
         assert result == "Готово!"

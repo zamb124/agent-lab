@@ -100,6 +100,7 @@ class TestParallelNodeExecution:
             user_id="test-user",
             content="Start parallel test",
             context_data=mock_context.model_dump(),
+            background_kind="background",
         )
         result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         overall_end = time.time()
@@ -141,6 +142,7 @@ class TestParallelNodeExecution:
             user_id="test-user",
             content="Start timestamp test",
             context_data=mock_context.model_dump(),
+            background_kind="background",
         )
         result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result.is_err, f"Task failed: {result.error}"
@@ -227,6 +229,7 @@ class TestParallelNodesMerge:
             user_id="test-user",
             content="Test merge",
             context_data=mock_context.model_dump(),
+            background_kind="background",
         )
         result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result.is_err, f"Task failed: {result.error}"

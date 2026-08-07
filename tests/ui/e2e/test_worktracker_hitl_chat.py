@@ -1,4 +1,4 @@
-"""UI E2E: встроенный `<platform-chat>` в карточке WorkItem(operator_handoff).
+"""UI E2E: встроенный `<platform-flow-ui>` в карточке WorkItem(operator_handoff).
 
 Оператор видит тот же диалог сессии, что и покупатель, отвечает тем же композером,
 что в Flows/Embed; покупатель получает ответ в своём чате в реальном времени.
@@ -113,7 +113,9 @@ async def test_worktracker_hitl_embedded_operator_chat(
 
         await worktracker_claim_task(wt_page, editor)
         chat = await worktracker_hitl_embedded_chat(editor)
-        await expect(chat.locator("flows-chat-input textarea")).to_be_visible(timeout=30_000)
+        await expect(
+            chat.locator('[data-flow-ui-component="message-input"] textarea, textarea').first
+        ).to_be_visible(timeout=30_000)
         await scenario.step(
             "Возьмите задачу и проверьте композер",
             wt_page,

@@ -4,6 +4,11 @@ alwaysApply: false
 ---
 # ExecutionState
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 `ExecutionState` — нативный Pydantic-объект **везде** в runtime, но не источник истины хранения. Источник истины выполнения flows — durable event ledger (`durable_execution.mdc`). `ExecutionState` является projection, восстановленной через deterministic reducer из snapshots + events.
 
 Сериализация (`model_dump`/`model_validate`) — только на границах: snapshots/events, TaskIQ, API, tracing.
@@ -96,10 +101,19 @@ def execute(args, state):
 - Управление графом: `current_nodes`, `join_arrived_preds`.
 - HITL: `interrupt`, `interrupt_path`, `hitl_handoff_correlation_id`.
 - Аудит/отладка: `node_history`, `execution_exceptions`, `prompt_history`, `reasoning_history`, `pending_reasoning`, `breakpoints`, `breakpoint_hit`, `breakpoint_state`, `triggers`, `scheduled_tasks`, `nested_states`, `user_groups`.
+- Flow UI: `ui_document`, `ui_document_revision`, `ui_interaction`, `ui_negotiation`, `ui_effect_dedup` и task/artifact projection cursors.
 
 Каноничный список — `core/state/mutation_policy.py::FROZEN_STATE_FIELDS`. Исключение — `FrozenStateFieldError` (`core.errors`).
 
 HITL для пользователя — через `ask_user` / `InterruptManager`, не прямой записью в `interrupt`.
+
+`ui_events_pending`/`PendingUIEvent` отсутствуют. CodeNode/inline tools не получают mutable `ui_document`; UI изменяется только typed `PlatformEffect` через capability boundary или validated `FlowInteraction` на A2A command boundary.
+
+## Flow UI document
+
+`ExecutionState.ui_document` содержит полный materialized `FlowUIDocument`: pages/components/layout/values/active page/revision. Это authoritative server-owned projection, которая сохраняется в durable ledger/snapshots и возвращается при reopen/share. `ui_interaction` — typed snapshot принятого Submit, включающий `interaction_id`, component/action identity и acknowledged revision; original A2A Message сохраняется отдельно.
+
+Semantic UI delta применяется только к exact `base_revision`, увеличивает revision один раз и входит в state hash/replay. Default template используется только при создании нового context и никогда не заменяет уже существующий document при hydration.
 
 ## Merge при параллельном выполнении
 
@@ -123,4 +137,5 @@ new_state.current_nodes = []
 - `core/state/mutation_policy.py` — `FROZEN_STATE_FIELDS`.
 - `core/state/interrupt.py` — `InterruptData`, `InterruptSystemContext`.
 - `apps/flows/src/durable_execution/**` — canonical durable history, reducer, snapshots и projection cache.
+- `core/state/flow_ui.py`, `flow_ui_delta.py` — Flow UI domain/revision/delta.
 - `apps/flows/src/durable_execution/**` — ledger/reducer/snapshots/rehydration для canonical execution history.

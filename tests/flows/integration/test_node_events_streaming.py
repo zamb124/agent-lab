@@ -13,6 +13,7 @@ from a2a.types import TaskArtifactUpdateEvent
 
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.streaming import EventSubscriber
+from core.a2a import get_part_data
 from core.errors import CodeExecutionRuntimeError
 from core.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow
@@ -76,11 +77,11 @@ class TestNodeEventsStreaming:
             complete_event = collected_events[1]
             assert isinstance(complete_event, TaskArtifactUpdateEvent)
             assert complete_event.artifact.name == "node_complete_process"
-            complete_data = complete_event.artifact.parts[0].root.data
+            complete_data = get_part_data(complete_event.artifact.parts[0])
             assert complete_data["event"] == "node_complete"
             assert complete_data["node_id"] == "process"
             assert complete_data["node_type"] == "code"
-            assert isinstance(complete_data["duration_ms"], int)
+            assert isinstance(complete_data["duration_ms"], (int, float))
             assert complete_data["run_index"] == 0
             assert isinstance(complete_data["result_preview"], str)
             assert isinstance(complete_data["diff"], list)

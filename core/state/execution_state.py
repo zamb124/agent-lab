@@ -7,7 +7,8 @@ Zero-Guess: все системные поля явно типизированы
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from datetime import datetime
 from typing import ClassVar, Literal, TypedDict, TypeVar, Unpack, cast, get_args, overload, override
 
 from a2a.types import Message
@@ -21,11 +22,18 @@ from pydantic import (
 )
 
 from core.a2a.codec import messages_from_json_list, messages_to_json_list
+from core.a2a.representation import A2ARepresentationSnapshot
 from core.agent_plan.models import AgentPlan
 from core.clients.llm.messages import LLMToolCall
 from core.files.file_ref import FileRef
 from core.models import FlexibleBaseModel, StrictBaseModel
 from core.reflection import ReflectionRecord
+from core.state.flow_ui import (
+    FlowUIConflict,
+    FlowUIDocument,
+    FlowUIInteraction,
+    FlowUITransition,
+)
 from core.state.interrupt import InterruptData
 from core.state.mutation_policy import guard_setattr_if_user_code
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
@@ -43,7 +51,7 @@ ExecutionTaskState = Literal[
 ]
 TERMINAL_TASK_STATES: frozenset[str] = frozenset(get_args(ExecutionTaskState))
 FORBIDDEN_EXECUTION_STATE_FIELD_NAMES: frozenset[str] = frozenset(
-    {"terminal_status", "terminal_error", "mock"}
+    {"terminal_status", "terminal_error", "mock", "ui_events_pending"}
 )
 ChildWorkflowStatus = Literal["running", "suspended", "completed", "failed"]
 _GetDefault = TypeVar("_GetDefault")
@@ -91,7 +99,17 @@ class ExecutionStateCreateKwargs(TypedDict, total=False):
     flow_deadline_monotonic: float | None
     flow_timeout_effective_seconds: int | None
     prompt_history: list[PromptHistoryItem]
-    ui_events_pending: list[PendingUIEvent]
+    a2a_representation: A2ARepresentationSnapshot
+    ui_document: FlowUIDocument
+    ui_interaction: FlowUIInteraction | None
+    ui_effect_cursor: int
+    ui_applied_effect_ids: list[str]
+    ui_template_version: str
+    ui_last_synced_at: datetime | None
+    ui_last_accepted_client_mutation_id: str | None
+    ui_last_accepted_client_mutation_hash: str | None
+    ui_conflict: FlowUIConflict | None
+    ui_values: JsonObject
     llm_context_memory_cursor: dict[str, int]
 
 
@@ -133,21 +151,6 @@ class ExecutionExceptionRecord(FlexibleBaseModel):
     message: str = Field(..., description="Текст исключения")
     tool_name: str | None = Field(default=None, description="Имя tool при source=tool")
     tool_call_id: str | None = Field(default=None, description="ID tool_call при source=tool")
-
-
-class PendingUIEvent(StrictBaseModel):
-    """Pending client frame в ExecutionState до A2A stream.
-
-    Не путать с ``PlatformEvent`` шины ``platform:events``.
-    """
-
-    event_id: str = Field(..., description="ID события")
-    event_type: str = Field(..., description="Тип события")
-    payload: JsonObject = Field(..., description="Payload события")
-    version: str = Field(..., description="Версия события")
-    timestamp: str = Field(..., description="Время создания ISO")
-    source: str = Field(..., description="Источник события")
-    correlation_id: str | None = Field(default=None, description="Correlation id")
 
 
 class ChildWorkflowLink(StrictBaseModel):
@@ -310,6 +313,7 @@ class ExecutionState(FlexibleBaseModel):
     _durable_edge_execution_branch_id: str | None = PrivateAttr(default=None)
     _durable_edge_evaluation_sequence: int | None = PrivateAttr(default=None)
     _structured_output_result: JsonValue = PrivateAttr(default=None)
+    _pending_ui_transitions: list[FlowUITransition] = PrivateAttr(default_factory=list)
 
     @property
     def durable_execution_branch_id(self) -> str | None:
@@ -353,7 +357,21 @@ class ExecutionState(FlexibleBaseModel):
             edge_evaluation_sequence=self.durable_edge_evaluation_sequence,
         )
         copied.set_structured_output_result(self.structured_output_result)
+        copied.queue_ui_transitions(self._pending_ui_transitions)
         return copied
+
+    def queue_ui_transition(self, transition: FlowUITransition) -> None:
+        self._pending_ui_transitions.append(transition.model_copy(deep=True))
+
+    def queue_ui_transitions(self, transitions: Sequence[FlowUITransition]) -> None:
+        self._pending_ui_transitions.extend(
+            transition.model_copy(deep=True) for transition in transitions
+        )
+
+    def drain_ui_transitions(self) -> list[FlowUITransition]:
+        transitions = self._pending_ui_transitions
+        self._pending_ui_transitions = []
+        return transitions
 
     def attach_durable_node_context(
         self,
@@ -395,7 +413,59 @@ class ExecutionState(FlexibleBaseModel):
                 f"ExecutionState system field names are forbidden: {names}. "
                 + "Use terminal_task_state and terminal_task_error."
             )
-        return dict(raw)
+        normalized = dict(raw)
+        context_id = normalized.get("context_id")
+        if "ui_document" not in normalized or normalized.get("ui_document") is None:
+            if not isinstance(context_id, str) or not context_id:
+                raise ValueError("context_id is required to materialize the Flow UI document")
+            from core.models.flow_interface import default_flow_interface_config
+
+            config = default_flow_interface_config()
+            document = config.template.materialize(document_id=f"flow-ui:{context_id}")
+            normalized["ui_document"] = document.model_dump(mode="python")
+            if "ui_template_version" not in normalized:
+                normalized["ui_template_version"] = document.template_version
+        ui_document = normalized.get("ui_document")
+        document_mapping: Mapping[str, object] | None = None
+        if isinstance(ui_document, FlowUIDocument):
+            document_mapping = {
+                "template_version": ui_document.template_version,
+                "last_accepted_client_mutation_id": (
+                    ui_document.last_accepted_client_mutation_id
+                ),
+            }
+        elif isinstance(ui_document, dict):
+            document_mapping = cast(Mapping[str, object], ui_document)
+        if "ui_template_version" not in normalized and document_mapping is not None:
+            template_version = document_mapping.get("template_version")
+            if isinstance(template_version, str):
+                normalized["ui_template_version"] = template_version
+        if (
+            "ui_last_accepted_client_mutation_id" not in normalized
+            and document_mapping is not None
+        ):
+            mutation_id = document_mapping.get("last_accepted_client_mutation_id")
+            if mutation_id is None or isinstance(mutation_id, str):
+                normalized["ui_last_accepted_client_mutation_id"] = mutation_id
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_flow_ui_projection(self) -> ExecutionState:
+        if self.ui_template_version != self.ui_document.template_version:
+            raise ValueError("ui_template_version must match ui_document.template_version")
+        if (
+            self.ui_last_accepted_client_mutation_id
+            != self.ui_document.last_accepted_client_mutation_id
+        ):
+            raise ValueError(
+                "ui_last_accepted_client_mutation_id must match the materialized document"
+            )
+        if self.ui_interaction is not None:
+            if self.ui_interaction.context_id != self.context_id:
+                raise ValueError("ui_interaction context does not match ExecutionState")
+            if self.ui_interaction.document_id != self.ui_document.document_id:
+                raise ValueError("ui_interaction document does not match ExecutionState")
+        return self
 
     @field_validator("session_id")
     @classmethod
@@ -759,9 +829,31 @@ class ExecutionState(FlexibleBaseModel):
         default_factory=list,
         description="История изменений системного промпта"
     )
-    ui_events_pending: list[PendingUIEvent] = Field(
+    a2a_representation: A2ARepresentationSnapshot = Field(
+        default_factory=A2ARepresentationSnapshot,
+        description="Immutable representation negotiation snapshot for the current A2A Task",
+    )
+    ui_document: FlowUIDocument
+    ui_interaction: FlowUIInteraction | None = None
+    ui_effect_cursor: int = Field(default=0, ge=0)
+    ui_applied_effect_ids: list[str] = Field(
         default_factory=list,
-        description="UI events, ожидающие публикации в A2A stream",
+        description="Ordered idempotency keys of accepted capability UI effects",
+    )
+    ui_template_version: str = Field(default="1.0.0", min_length=1)
+    ui_last_synced_at: datetime | None = None
+    ui_last_accepted_client_mutation_id: str | None = None
+    ui_last_accepted_client_mutation_hash: str | None = Field(
+        default=None,
+        pattern=r"^sha256:[0-9a-f]{64}$",
+    )
+    ui_conflict: FlowUIConflict | None = None
+    ui_values: JsonObject = Field(
+        default_factory=dict,
+        description=(
+            "Flat values of the last accepted submit, addressed by the flow as "
+            "@state:ui_values.<field>. Projected by core.state.flow_ui_contract."
+        ),
     )
     llm_context_memory_cursor: dict[str, int] = Field(
         default_factory=dict,

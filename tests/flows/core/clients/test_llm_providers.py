@@ -73,11 +73,11 @@ class TestResolveVar:
         result = _resolve_var("sk-test-key-123", None)
         assert result == "sk-test-key-123"
 
-    def test_resolve_var_from_state_variables(self):
+    def test_resolve_var_from_state_variables(self, unique_id):
         """@var:key резолвится из state.variables."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
             session_id="test:session",
             variables={"my_api_key": "sk-resolved-key"},
@@ -85,11 +85,11 @@ class TestResolveVar:
         result = _resolve_var("@var:my_api_key", state)
         assert result == "sk-resolved-key"
 
-    def test_resolve_var_missing_key_raises_error(self):
+    def test_resolve_var_missing_key_raises_error(self, unique_id):
         """Отсутствующий ключ вызывает VariableResolutionError."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
             session_id="test:session",
             variables={"other_key": "value"},
@@ -102,11 +102,11 @@ class TestResolveVar:
         with pytest.raises(VariableResolutionError):
             _resolve_var("@var:my_key", None)
 
-    def test_resolve_var_empty_variables_raises_error(self):
+    def test_resolve_var_empty_variables_raises_error(self, unique_id):
         """@var: с пустыми variables вызывает VariableResolutionError."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
             session_id="test:session",
             variables={},
@@ -199,11 +199,11 @@ class TestLLMTransportWithCustomCredentials:
                 assert client.base_url == "https://api.openai.com/v1"
                 assert client.model == "gpt-4"
 
-    def test_llm_transport_with_var_resolved_from_state(self):
+    def test_llm_transport_with_var_resolved_from_state(self, unique_id):
         """create_transport_llm_client с @var: резолвит из state."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
             session_id="test:session",
             variables={
@@ -301,6 +301,7 @@ class TestLlmNodeLLMConfig:
     async def test_llm_node_passes_llm_config_to_factory(
         self,
         container: FlowRuntimeContainer,
+        unique_id,
     ):
         """LlmNode передает typed llm config в canonical AI runtime."""
         from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig, NodeType
@@ -328,8 +329,8 @@ class TestLlmNodeLLMConfig:
         node._node_config = node_config
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
             session_id="test:session",
         )
@@ -368,6 +369,7 @@ class TestLlmNodeLLMConfig:
     async def test_llm_node_passes_llm_config_dict(
         self,
         container: FlowRuntimeContainer,
+        unique_id,
     ):
         """LlmNode передает llm_config_dict в canonical AI runtime."""
         from apps.flows.src.runtime.nodes import LlmNode
@@ -391,8 +393,8 @@ class TestLlmNodeLLMConfig:
         )
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
             session_id="test:session",
             variables={"my_key": "sk-variable-key", "my_url": "https://openrouter.ai/api/v1"},

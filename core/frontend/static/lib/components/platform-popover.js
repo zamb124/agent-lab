@@ -71,6 +71,13 @@ export class PlatformPopover extends PlatformElement {
                 will-change: transform;
             }
 
+            /* Явный display при открытии: иначе после снятия display:none
+               custom element остаётся inline и в top layer легко получить
+               нулевой box до первого reposition. */
+            :host(:popover-open) {
+                display: block;
+            }
+
             :host(:not(:popover-open)) {
                 display: none;
             }
@@ -137,6 +144,10 @@ export class PlatformPopover extends PlatformElement {
 
         this._resizeObserver = null;
         this._hoverTimer = null;
+        /** @type {number | null} */
+        this._outsideListenFrame = null;
+        /** Игнорировать outside-dismiss до этого timestamp (жест открытия). */
+        this._ignoreOutsideUntil = 0;
 
         this._onReposition = this._onReposition.bind(this);
         this._onDocumentPointerDown = this._onDocumentPointerDown.bind(this);
@@ -281,10 +292,23 @@ export class PlatformPopover extends PlatformElement {
         window.addEventListener('resize', this._onReposition);
         window.visualViewport?.addEventListener('resize', this._onReposition);
         window.visualViewport?.addEventListener('scroll', this._onReposition);
-        if (this.dismissOnOutside) {
-            document.addEventListener('pointerdown', this._onDocumentPointerDown, true);
-        }
         document.addEventListener('keydown', this._onDocumentKeyDown, true);
+
+        // Outside-dismiss после жеста открытия: иначе pointerdown/focus→open
+        // в том же turn (или с null-anchor) сразу гасит слой.
+        this._ignoreOutsideUntil = performance.now() + 320;
+        if (this.dismissOnOutside) {
+            if (this._outsideListenFrame !== null) {
+                cancelAnimationFrame(this._outsideListenFrame);
+            }
+            this._outsideListenFrame = requestAnimationFrame(() => {
+                this._outsideListenFrame = null;
+                if (!this.open || !this.dismissOnOutside) {
+                    return;
+                }
+                document.addEventListener('pointerdown', this._onDocumentPointerDown, true);
+            });
+        }
 
         if (typeof ResizeObserver !== 'undefined') {
             this._resizeObserver = new ResizeObserver(() => this.reposition());
@@ -305,6 +329,10 @@ export class PlatformPopover extends PlatformElement {
         window.visualViewport?.removeEventListener('scroll', this._onReposition);
         document.removeEventListener('pointerdown', this._onDocumentPointerDown, true);
         document.removeEventListener('keydown', this._onDocumentKeyDown, true);
+        if (this._outsideListenFrame !== null) {
+            cancelAnimationFrame(this._outsideListenFrame);
+            this._outsideListenFrame = null;
+        }
         this._resizeObserver?.disconnect();
         this._resizeObserver = null;
     }
@@ -318,6 +346,9 @@ export class PlatformPopover extends PlatformElement {
     }
 
     _onDocumentPointerDown(event) {
+        if (performance.now() < this._ignoreOutsideUntil) {
+            return;
+        }
         const path = event.composedPath();
         if (path.includes(this)) {
             return;

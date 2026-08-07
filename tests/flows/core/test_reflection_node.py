@@ -71,13 +71,20 @@ async def test_reflection_blocks_and_records_typed_result(
     assert out.reflection_history[0].result.approved is False
     assert out.reflection_history[0].node_id == "critic"
     assert "issue:critical:safety" in out.validation["blocked_reasons"]
-    assert len(out.ui_events_pending) == 1
-    ui_event = out.ui_events_pending[0]
-    assert ui_event.event_type == "platform.reflection_resolved"
-    assert ui_event.payload["exit_id"] == "blocked"
-    assert ui_event.payload["approved"] is False
-    assert ui_event.payload["decision"] == "blocked"
-    assert ui_event.payload["exit_label"] == "Blocked"
+    artifact = out.ui_document.surfaces["main"].data_model.content["artifacts"][
+        "critic:blocked"
+    ]
+    assert artifact["exit_id"] == "blocked"
+    assert artifact["approved"] is False
+    assert artifact["decision"] == "blocked"
+    assert artifact["exit_label"] == "Blocked"
+    component = out.ui_document.surfaces["main"].components[
+        "artifact-critic-blocked"
+    ]
+    assert component.type == "ReflectionResult"
+    transitions = out.drain_ui_transitions()
+    assert len(transitions) == 1
+    assert transitions[0].after.revision == out.ui_document.revision
 
 
 @pytest.mark.asyncio

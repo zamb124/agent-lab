@@ -4,6 +4,11 @@ alwaysApply: false
 ---
 # Durable Execution Ledger
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 Flows исполняются как durable workflow runtime. Источник истины — append-only event history, а не mutable `ExecutionState`.
 
 ## Канон
@@ -341,6 +346,14 @@ key -> {session_id, execution_branch_id, head_sequence, head_state_hash, state_j
 
 Если Redis отсутствует или hash/sequence не совпадают с `workflow_instances`, state rehydrate'ится из snapshots + events.
 
+## A2A Task/Artifact и Flow UI projections
+
+Ledger также является источником истины для A2A query projection и UI revisions. `a2a_task_projections`, `a2a_task_messages`, `a2a_artifact_projections`, event dedup и `flow_ui_share_grants` — materialized query state, который полностью rebuildable из ledger/authoritative config.
+
+Commit/publication order один: validate → append event → update execution/task/artifact/UI projection + outbox atomically → commit → publish Redis/SSE → acknowledge. `GetTask`/`ListTasks`/`SubscribeToTask` читают projection; запрещено восстанавливать Task только из последнего `state.response`.
+
+Flow UI events содержат semantic delta, `mutation_id`, `base_revision`, accepted revision, causation и deterministic hash. Autosync, forced flush перед Submit/share и Submit+sync являются durable commands с OCC/idempotency. Rebuild обязан давать тот же document/artifact order/hash. Share grant фиксирует существующий context/document, но не копирует snapshot и не создаёт workflow branch.
+
 ## Запреты
 
 - Запрещено считать legacy mutable DB rows или Redis canonical storage выполнения.
@@ -350,3 +363,4 @@ key -> {session_id, execution_branch_id, head_sequence, head_state_hash, state_j
 - Запрещено повторять non-idempotent activity при replay без journal/idempotency/approve policy.
 - Запрещено делать branch/fork/rewind через копирование полной истории events. Новая branch создаёт anchor snapshot и дальше живёт собственным append-only log.
 - Запрещено исполнять activity, если в journal уже есть completed result для того же deterministic activity key/input hash.
+- Запрещено publish A2A update до durable projection commit или хранить единственную копию Artifact/UI revision только в Redis/DOM.

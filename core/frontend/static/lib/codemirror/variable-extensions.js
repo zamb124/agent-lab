@@ -123,6 +123,7 @@ function _createHighlighter(cm, ctx) {
         required: cm.Decoration.mark({ class: 'cm-variable-required' }),
         optional: cm.Decoration.mark({ class: 'cm-variable-optional' }),
         default: cm.Decoration.mark({ class: 'cm-variable-default' }),
+        uiValue: cm.Decoration.mark({ class: 'cm-variable-ui-value' }),
         undefined: cm.Decoration.mark({ class: 'cm-variable-undefined' }),
         forKeyword: cm.Decoration.mark({ class: 'cm-for-keyword' }),
         loopVar: cm.Decoration.mark({ class: 'cm-loop-var' }),
@@ -188,7 +189,9 @@ function _createHighlighter(cm, ctx) {
 
                 const refStateRegex = /@state:([\w.]+)/g;
                 while ((match = refStateRegex.exec(doc)) !== null) {
-                    builder.push(decoClasses.refState.range(match.index, match.index + match[0].length));
+                    const statePath = match[1];
+                    const mark = _isUiValuePath(statePath) ? decoClasses.uiValue : decoClasses.refState;
+                    builder.push(mark.range(match.index, match.index + match[0].length));
                 }
             }
 
@@ -196,18 +199,23 @@ function _createHighlighter(cm, ctx) {
                 const optionalWithDefaultRegex = /\{\?([\w.]+)\|([^}]+)\}/g;
                 let match;
                 while ((match = optionalWithDefaultRegex.exec(doc)) !== null) {
-                    builder.push(decoClasses.optional.range(match.index, match.index + match[0].length));
+                    const varName = match[1];
+                    const mark = _isUiValuePath(varName) ? decoClasses.uiValue : decoClasses.optional;
+                    builder.push(mark.range(match.index, match.index + match[0].length));
                 }
 
                 const optionalRegex = /\{\?([\w.]+)\}/g;
                 while ((match = optionalRegex.exec(doc)) !== null) {
-                    builder.push(decoClasses.optional.range(match.index, match.index + match[0].length));
+                    const varName = match[1];
+                    const mark = _isUiValuePath(varName) ? decoClasses.uiValue : decoClasses.optional;
+                    builder.push(mark.range(match.index, match.index + match[0].length));
                 }
 
                 const defaultRegex = /\{([\w.]+)\|([^}]+)\}/g;
                 while ((match = defaultRegex.exec(doc)) !== null) {
                     const varName = match[1];
-                    builder.push(decoClasses.default.range(match.index, match.index + match[0].length));
+                    const mark = _isUiValuePath(varName) ? decoClasses.uiValue : decoClasses.default;
+                    builder.push(mark.range(match.index, match.index + match[0].length));
                     if (
                         !_variableKnown(varName, values, catalog)
                         && !loopVars.has(varName)
@@ -225,6 +233,11 @@ function _createHighlighter(cm, ctx) {
                     const isLoopVar = loopVars.has(varName) || _isLoopProperty(varName, loopVars);
                     if (isLoopVar) {
                         builder.push(decoClasses.loopVar.range(match.index, match.index + match[0].length));
+                    } else if (_isUiValuePath(varName)) {
+                        builder.push(decoClasses.uiValue.range(match.index, match.index + match[0].length));
+                        if (!_variableKnown(varName, values, catalog)) {
+                            builder.push(decoClasses.undefined.range(match.index, match.index + match[0].length));
+                        }
                     } else if (_variableKnown(varName, values, catalog)) {
                         builder.push(decoClasses.required.range(match.index, match.index + match[0].length));
                     } else {
@@ -514,6 +527,15 @@ function unwrapForNesting(value) {
         return /** @type {Record<string, unknown>} */ (value).value;
     }
     return value;
+}
+
+/**
+ * @param {string} path
+ * @returns {boolean}
+ */
+function _isUiValuePath(path) {
+    return typeof path === 'string'
+        && (path === 'ui_values' || path.startsWith('ui_values.'));
 }
 
 /**

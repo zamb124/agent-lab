@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from apps.flows.src.container_state import require_current_container
-from apps.flows.src.runtime_helpers.state_utils import push_ui_event
+from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
 from core.context import resolve_namespace_or_raise
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
@@ -48,17 +48,17 @@ class LaraClient:
             {"type": "text", "text": "Черновик создания заметки готов. Подтвердите применение."},
             {"type": "actions", "buttons": [action_button]},
         ]
-        _ = push_ui_event(
+        _ = present_flow_ui_artifact(
             state,
-            event_type="action_previewed",
-            payload={
+            kind="action_preview",
+            data={
                 "action": action_payload,
                 "capability": "crm.note",
                 "operation": "create",
                 "blocks": preview_blocks,
             },
-            event_id=f"crm-note-preview-{action.pending_action_id}",
-            version="1.0.0",
+            artifact_id=f"crm-note-preview-{action.pending_action_id}",
+            source="lara",
         )
         return {
             "mode": "propose",
@@ -115,17 +115,17 @@ class LaraClient:
                 {"type": "actions", "buttons": [open_entity_button]},
             ],
         }
-        _ = push_ui_event(
+        _ = present_flow_ui_artifact(
             state,
-            event_type="action_applied",
-            payload={
+            kind="action_result",
+            data={
                 "action": action_payload,
                 "capability": "crm.note",
                 "operation": "create",
                 "entity_id": eid,
                 "blocks": [{"type": "actions", "buttons": [open_entity_button]}],
             },
-            event_id=f"crm-note-apply-{pending_action_id}",
-            version="1.0.0",
+            artifact_id=f"crm-note-apply-{pending_action_id}",
+            source="lara",
         )
         return result

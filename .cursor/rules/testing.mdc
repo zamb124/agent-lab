@@ -4,6 +4,11 @@ alwaysApply: false
 ---
 # Тестирование
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 **Зона:** фикстуры/клиенты, команды запуска, timeout/cleanup, Sync/UI/E2E-инфра, MockLLM, структура `tests/`.
 
 **Не дублируется здесь** (один источник — `testing_invariants.mdc`): инварианты контрактов, уровень теста «от потребителя», стиль ассертов, контракт vs реализация, DI/`patch`, проверка записи в БД и согласованность с ответом API, изоляция по `company_id`/`namespace_id`, чтение состояния через ORM/репозитории вместо сырого SQL, чеклист стиля.
@@ -342,6 +347,21 @@ make test-frontend-core-unit  # включает *.fuzz.spec.js
 - [ ] Нет моков внутренних компонентов (кроме MockLLM)
 - [ ] Интеграция с worker — `@pytest.mark.real_taskiq` + `mock_llm_redis` + уникальный `test_scope`
 - [ ] Перед pytest: `make test-up` (стек готов)
+
+## Flow UI / A2A compatibility matrix
+
+Обязательные suites проверяют consumer-visible parity, а не private reducer names:
+
+- all `text|raw|url|data`, mixed Parts, arbitrary Artifact names/metadata/extensions для blocking stream/Get/List/Subscribe/restart/outbound remote client;
+- append/replace/lastChunk/order/idempotency/stable artifact IDs;
+- A2UI v0.9.1 official fixtures, extension/catalog negotiation и non-A2UI generic fallback без dual emit;
+- durable UI delta/replay/OCC/autosync/forced flush/reopen/new device/same-context share;
+- forged returned-state/effect/catalog/action/URL/ownership attacks;
+- identical golden `PlatformEffect` ordering для Python/Node/Go/C# runners;
+- universal renderer на SPA/editor/embed/landing/Lara/HITL и safe unknown Artifact projector;
+- 4/8/12/nested grid, keyboard/a11y, RU/EN, theme/brand profiles.
+
+Editor/runtime WYSIWYG suite запускает один production bundle в deterministic Chromium: сравнивает render-context fingerprints, semantic placements, DOM/a11y tree, geometry с zero-pixel tolerance и screenshot fixtures для canonical matrix page/panel/drawer/embed × desktop/tablet/mobile × light/dark × RU/EN × brands. Editor overlays не входят в production screenshot/DOM.
 
 ## Agent handoff (flows)
 

@@ -1,5 +1,7 @@
 """Интеграционные тесты ноды type=resource (pass-through)."""
 
+import uuid
+
 import pytest
 
 from apps.flows.src.models.enums import NodeType
@@ -8,11 +10,12 @@ from core.state import ExecutionState
 
 
 def _minimal_state() -> ExecutionState:
+    uid = uuid.uuid4().hex[:12]
     return ExecutionState(
-        task_id="test-task",
-        context_id="test-context",
+        task_id=f"test-task-{uid}",
+        context_id=f"test-context-{uid}",
         user_id="test-user",
-        session_id="test-flow:test-context",
+        session_id=f"test-flow:test-context-{uid}",
         messages=[],
     )
 

@@ -164,7 +164,7 @@ class TestMCPSyncAPI:
         assert "input_schema" not in tools[0]
         tool_names = [t["name"] for t in tools]
         print(f"Synced {len(tools)} tools: {tool_names}")
-        tools_resp = await client.get("/flows/api/v1/tools/all")
+        tools_resp = await client.get("/flows/api/v1/tools/all?picker_category=mcp")
         assert tools_resp.status_code == 200
         all_tools = tools_resp.json()["items"]
         mcp_tools = [t for t in all_tools if t.get("mcp_server_id") == server_id]
@@ -361,8 +361,10 @@ class TestMCPNodeInGraph:
         data = exec_resp.json()
         task = data.get("result", {})
         status = task.get("status", {}).get("state")
-        assert status in ["completed", "failed"], f"Unexpected status: {status}"
-        if status == "failed":
+        assert status in ["TASK_STATE_COMPLETED", "TASK_STATE_FAILED"], (
+            f"Unexpected status: {status}"
+        )
+        if status == "TASK_STATE_FAILED":
             artifacts = task.get("artifacts", [])
             error_artifacts = [a for a in artifacts if "error" in a.get("name", "")]
             if error_artifacts:
@@ -451,7 +453,9 @@ class TestMCPToolInLlmNode:
         print(f"Full response: {data}")
         task = data.get("result", {})
         status = task.get("status", {}).get("state")
-        assert status in ["completed", "failed"], f"Unexpected status: {status}, full: {data}"
+        assert status in ["TASK_STATE_COMPLETED", "TASK_STATE_FAILED"], (
+            f"Unexpected status: {status}, full: {data}"
+        )
         artifacts = task.get("artifacts", [])
         artifact_names = [a.get("name", "") for a in artifacts]
         print(f"Artifacts ({len(artifacts)}): {artifact_names}")

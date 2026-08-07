@@ -54,6 +54,41 @@ export function dataflowChipLabel(chip) {
 }
 
 /**
+ * @param {string | null | undefined} path
+ * @returns {'content' | 'files' | 'variable' | 'trigger' | 'ui_value'}
+ */
+export function dataflowPathChipKind(path) {
+    if (typeof path !== 'string' || path.length === 0) return 'content';
+    if (path === 'files') return 'files';
+    if (path.startsWith('variables.')) return 'variable';
+    if (path.startsWith('triggers.')) return 'trigger';
+    if (path.startsWith('ui_values.')) return 'ui_value';
+    return 'content';
+}
+
+/**
+ * @param {unknown} chip
+ * @returns {'content' | 'files' | 'variable' | 'trigger' | 'ui_value'}
+ */
+export function dataflowChipKind(chip) {
+    if (chip && typeof chip.kind === 'string' && chip.kind.length > 0) {
+        return /** @type {'content' | 'files' | 'variable' | 'trigger' | 'ui_value'} */ (chip.kind);
+    }
+    return dataflowPathChipKind(dataflowChipLabel(chip));
+}
+
+/**
+ * @param {{ label?: string, sourceLabel?: string }} wire
+ * @returns {'content' | 'files' | 'variable' | 'trigger' | 'ui_value'}
+ */
+export function dataWireChipKind(wire) {
+    const sourceLabel = typeof wire?.sourceLabel === 'string' && wire.sourceLabel.length > 0
+        ? wire.sourceLabel
+        : (typeof wire?.label === 'string' ? wire.label : '');
+    return dataflowPathChipKind(sourceLabel);
+}
+
+/**
  * @param {unknown} chip
  * @param {'in' | 'out'} side
  * @returns {number}

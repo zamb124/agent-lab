@@ -18,6 +18,7 @@ from uuid import UUID
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
+    AgentExtension,
     AgentInterface,
     AgentSkill,
     CancelTaskRequest,
@@ -44,6 +45,8 @@ from google.protobuf.json_format import MessageToDict
 
 from apps.agent.device_binding import bind_user_device_variables
 from apps.flows.config import get_settings
+from apps.flows.src.a2a.ensure_submitted_task import ensure_submitted_a2a_task
+from apps.flows.src.a2a.interaction_parser import FlowUIInboundCommand, FlowUIIngressKind
 from apps.flows.src.channels.request_context_variables import (
     flow_employee_variables_from_user,
     flow_user_identity_overrides,
@@ -60,6 +63,7 @@ from apps.flows.src.durable_execution import (
     create_initial_state,
 )
 from apps.flows.src.durable_execution.repository import WorkflowConcurrencyError
+from apps.flows.src.files.state_file_refs import upsert_state_file
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models.branch_contracts import (
     BranchCreateRequest,
@@ -78,6 +82,7 @@ from apps.flows.src.observability.flow_timing import (
     record_flow_task_enqueued,
 )
 from apps.flows.src.observability.handoff_timing import record_handoff_initiated
+from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
 from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.services.flow_speech_resolve import attach_flow_speech_layers_to_context
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
@@ -90,6 +95,7 @@ from apps.flows.src.state.cancellation import (
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
+from apps.flows.src.streaming.flow_ui import emit_flow_ui_transitions
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows.src.tracing.handoff_tracing import (
     HANDOFF_OP_INITIATED,
@@ -104,11 +110,16 @@ from apps.flows.src.triggers.trigger_type_contract import effective_output_actio
 from apps.flows.src.utils import extract_json_from_response
 from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.a2a import (
+    A2UI_EXTENSION_URI,
+    A2UI_MIME_TYPE,
+    A2UI_PLATFORM_CATALOG_ID,
     A2AApplicationError,
     A2AErrorCode,
-    platform_task_state_to_a2a,
+    message_to_json_dict,
     set_task_status_state,
+    struct_from_mapping,
 )
+from core.a2a.representation import A2ARepresentationSnapshot
 from core.auth import permission_checker
 from core.auth.errors import PermissionDeniedA2AError
 from core.billing.exceptions import BillingBalanceBlockedError
@@ -120,7 +131,18 @@ from core.context import Context, clear_context, get_context, set_context
 from core.files.file_ref import FileRef
 from core.logging import bind_log_context, get_logger
 from core.logging.attributes import LOG_SESSION_AGENT
+from core.models.flow_interface import (
+    EmbedInterfaceOverride,
+    apply_embed_interface_override,
+    resolve_flow_interface_config,
+)
 from core.state import ChildWorkflowLink, ExecutionState, ExecutionTaskState
+from core.state.flow_ui import FlowUIDocument
+from core.state.flow_ui_contract import (
+    FlowUISubmitContract,
+    build_flow_ui_submit_contract,
+    flow_ui_submit_file_refs,
+)
 from core.state.interrupt import HandoffInterrupt, HandoffMode, OperatorTaskInterrupt
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
 from core.tasks import enqueue
@@ -128,7 +150,7 @@ from core.tracing import get_tracer
 from core.tracing.context import TraceContext
 from core.tracing.operation_span import traced_operation
 from core.tracing.provider import is_tracing_enabled
-from core.types import JsonObject, JsonValue, require_json_array, require_json_object
+from core.types import JsonArray, JsonObject, JsonValue, require_json_array, require_json_object
 from core.utils.background import run_with_log_context
 from core.worktracker.models import TERMINAL_WORK_ITEM_STATES
 
@@ -156,13 +178,43 @@ def effective_stream_task_id_for_session(
     return ""
 
 
-def _agent_text_message(text: str) -> Message:
-    """A2A 1.0 ROLE_AGENT text message."""
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.ROLE_AGENT,
-        parts=[Part(text=text)],
-    )
+
+def _requested_branch_id(metadata: JsonObject | None) -> str | None:
+    """Graph branch the caller asked for, or None when it did not name one."""
+    if not metadata:
+        return None
+    raw = metadata.get("branch")
+    if raw is None:
+        return None
+    branch_id = str(raw).strip()
+    return branch_id or None
+
+
+def _user_turn_text(contract: FlowUISubmitContract) -> str:
+    """Bubble text for one submit: free-text fields only (files are chips)."""
+    text_fields = [
+        field
+        for field in contract.fields
+        if field.included_in_content and field.component_type != "FileUpload"
+    ]
+    if not text_fields:
+        return ""
+    single = None
+    if len(text_fields) == 1 and text_fields[0].component_type in {"TextArea", "TextField"}:
+        value = text_fields[0].value
+        if isinstance(value, str):
+            single = value.strip()
+    if single is not None:
+        return single
+    # Multi-field / non-chat: strip [FILE] appendix from contract content.
+    content = contract.content
+    marker = "\n[FILE]\n"
+    cut = content.find(marker)
+    if cut >= 0:
+        return content[:cut].strip()
+    if content.startswith("[FILE]\n"):
+        return ""
+    return content.strip()
 
 
 class PermissionDenied(Exception):
@@ -196,11 +248,13 @@ class BaseChannel(ABC):
         flow_config: FlowConfig | None = None,
         *,
         container: FlowRuntimeContainer,
+        interface_override: EmbedInterfaceOverride | None = None,
     ) -> None:
         self.flow_id: str = flow_id
         self.context: Context | None = context or get_context()
         self._flow_config: FlowConfig | None = flow_config
         self.container: FlowRuntimeContainer = container
+        self._interface_override: EmbedInterfaceOverride | None = interface_override
 
     # === Универсальный метод отправки сообщения ===
 
@@ -226,6 +280,38 @@ class BaseChannel(ABC):
     def _generate_session_id(self, context_id: str) -> str:
         """Генерирует session_id из flow_id и context_id."""
         return f"{self.flow_id}:{context_id}"
+
+    def _materialize_flow_ui_document(
+        self,
+        flow_config: FlowConfig,
+        *,
+        branch_id: str,
+        context_id: str,
+    ) -> FlowUIDocument:
+        branch = flow_config.branches.get(branch_id)
+        interface = resolve_flow_interface_config(
+            flow_config.interface,
+            branch_override=(None if branch is None else branch.interface_override),
+        )
+        interface = apply_embed_interface_override(interface, self._interface_override)
+        return interface.template.materialize(document_id=f"flow-ui:{context_id}")
+
+    async def _initial_flow_ui_document(
+        self,
+        *,
+        flow_id: str,
+        branch_id: str,
+        context_id: str,
+        flow_config: FlowConfig | None = None,
+    ) -> FlowUIDocument:
+        config = flow_config or await self.container.flow_repository.get(flow_id)
+        if config is None:
+            raise ValueError(f"Flow не найден: {flow_id}")
+        return self._materialize_flow_ui_document(
+            config,
+            branch_id=branch_id,
+            context_id=context_id,
+        )
 
     def _generate_ids(self, message: Message | None = None) -> tuple[str, str]:
         """
@@ -435,6 +521,8 @@ class BaseChannel(ABC):
         metadata: JsonObject | None = None,
         files_data: list[FileRef] | None = None,
         user_id: str | None = None,
+        a2a_representation: A2ARepresentationSnapshot | None = None,
+        flow_ui_command: FlowUIInboundCommand | None = None,
     ) -> PreparedTaskParams:
         """
         Подготовка общих параметров для process_task.
@@ -464,18 +552,33 @@ class BaseChannel(ABC):
         handoff_child_flow_id: str | None = None
         handoff_child_branch_id: str | None = None
 
+        requested_branch_id = _requested_branch_id(metadata)
         if state is None:
-            branch_id = "default"
-            if metadata:
-                b = metadata.get("branch")
-                if b is not None and str(b).strip():
-                    branch_id = str(b).strip()
+            branch_id = requested_branch_id or "default"
             is_resume = False
         else:
+            # A session owns the branch it was created with: the branch selects the
+            # graph and the interface, so it cannot change under a live context.
+            # `default` is what a caller sends when it has no branch information
+            # (session deep links), and it must not override the session.
             branch_id = state.branch_id
+            if (
+                requested_branch_id is not None
+                and requested_branch_id != "default"
+                and requested_branch_id != branch_id
+            ):
+                branch_conflict = (
+                    f"Session {session_id} runs branch {branch_id!r}."
+                    f" Branch {requested_branch_id!r} requires a new context."
+                )
+                raise ValueError(branch_conflict)
             # Resume, если есть interrupt ИЛИ breakpoint_hit
             is_resume = bool(state.interrupt) or bool(state.breakpoint_hit)
-            task_id = effective_stream_task_id_for_session(task_id, state)
+            if (
+                flow_ui_command is None
+                or flow_ui_command.kind == FlowUIIngressKind.SUBMIT
+            ):
+                task_id = effective_stream_task_id_for_session(task_id, state)
 
             # A2A input-required, продолжение диалога: при активном operator takeover
             # реплика пользователя маршрутизируется в dialog_log,
@@ -502,6 +605,10 @@ class BaseChannel(ABC):
                         handoff_child_flow_id = routing.child_flow_id
                         handoff_child_branch_id = routing.child_branch_id
                         is_resume = False
+                        # Parent interrupt.system.task_id / client taskId keep the
+                        # parent stream open, but A2A projection is scoped to the
+                        # child session — each handoff Submit needs a new task_id.
+                        task_id = str(uuid.uuid4())
 
         # Объединяем metadata из Context канала с переданным metadata
         final_metadata: JsonObject = metadata or {}
@@ -519,6 +626,8 @@ class BaseChannel(ABC):
             message=message,
             metadata=final_metadata,
             user_id=user_id or context_id,
+            a2a_representation=a2a_representation,
+            flow_ui_command=flow_ui_command,
             is_takeover_user_reply=is_takeover_user_reply,
             takeover_work_item_id=takeover_work_item_id,
             is_handoff_user_reply=is_handoff_user_reply,
@@ -555,6 +664,41 @@ class BaseChannel(ABC):
         context_data = execution_identity.context.to_dict()
         effective_user_id = execution_identity.context.user.user_id
         initiator_user_id = execution_identity.initiator_user_id
+
+        active_company = execution_identity.context.active_company
+        if active_company is None:
+            raise ValueError("create_task requires active_company for durable A2A projection")
+        target_state = await self.container.workflow_runtime.get_state(target.session_id)
+        if target_state is None:
+            initial_ui_document = await self._initial_flow_ui_document(
+                flow_id=target.flow_id,
+                branch_id=target.branch_id,
+                context_id=target.context_id,
+                flow_config=target_flow_config,
+            )
+            projection_state = create_initial_state(
+                task_id=params.task_id,
+                context_id=target.context_id,
+                user_id=effective_user_id,
+                session_id=target.session_id,
+                content=params.content,
+                branch_id=target.branch_id,
+                initiator_user_id=initiator_user_id,
+                ui_document=initial_ui_document,
+            )
+        else:
+            projection_state = target_state.runtime_copy()
+            projection_state.task_id = params.task_id
+            projection_state.context_id = target.context_id
+            projection_state.session_id = target.session_id
+            projection_state.user_id = effective_user_id
+            projection_state.initiator_user_id = initiator_user_id
+        projection_state.a2a_representation = params.a2a_representation
+        await self._ensure_a2a_task_projection(
+            params=params,
+            state=projection_state,
+            company_id=active_company.company_id,
+        )
 
         # Создаем trace context для propagation в worker
         trace_context_data: JsonObject | None = None
@@ -626,10 +770,16 @@ class BaseChannel(ABC):
                 task_id=params.task_id,
                 context_id=target.context_id,
                 metadata=params.metadata or {},
+                message=(
+                    message_to_json_dict(params.message)
+                    if params.message is not None
+                    else None
+                ),
                 is_resume=target.is_resume,
                 files=[file_ref.to_json_object() for file_ref in params.files_data],
                 context_data=context_data,
                 trace_context=trace_context_data,
+                a2a_representation=params.a2a_representation.model_dump(mode="json"),
                 background_kind="flow_task",
             )
 
@@ -650,6 +800,21 @@ class BaseChannel(ABC):
         logger.debug(f"[create_task] Task kicked to TaskIQ: task_id={params.task_id}")
 
     # === Основной метод выполнения задачи ===
+
+    async def _ensure_a2a_task_projection(
+        self,
+        *,
+        params: PreparedTaskParams,
+        state: ExecutionState,
+        company_id: str,
+    ) -> None:
+        await ensure_submitted_a2a_task(
+            repository=self.container.a2a_task_repository,
+            company_id=company_id,
+            state=state,
+            input_message=params.message,
+            content=params.content,
+        )
 
     async def _run_trigger_output_actions_if_applicable(
         self,
@@ -762,24 +927,6 @@ class BaseChannel(ABC):
                 user_groups=self._get_user_groups_from_context(self.context),
             )
 
-        exec_state = ExecutionState(
-            task_id=effective_task_id,
-            context_id=params.context_id,
-            user_id=params.user_id,
-            user_groups=self._get_user_groups_from_context(self.context),
-            session_id=params.session_id,
-            branch_id=params.branch_id,
-            breakpoints=breakpoints,
-        )
-        emitter = Emitter(container.redis_client, exec_state)
-
-        logger.debug(f"[process_task] Emitter created for stream:{effective_task_id}")
-        heartbeat_task = run_with_log_context(
-            self._run_stream_heartbeat(emitter),
-            name=f"flows.stream_heartbeat.{effective_task_id}",
-            background_kind="flow_stream",
-        )
-
         user_id = ctx.user.user_id
         user_groups = self._get_user_groups_from_context(ctx)
         initiator_user_id = params.initiator_user_id or user_id
@@ -787,6 +934,14 @@ class BaseChannel(ABC):
         state_is_new = state is None
 
         if state_is_new:
+            flow_config = await self.container.flow_repository.get(self.flow_id)
+            if flow_config is None:
+                raise ValueError(f"Flow не найден: {self.flow_id}")
+            initial_ui_document = self._materialize_flow_ui_document(
+                flow_config,
+                branch_id=params.branch_id,
+                context_id=params.context_id,
+            )
             state = create_initial_state(
                 task_id=effective_task_id,
                 context_id=params.context_id,
@@ -795,6 +950,7 @@ class BaseChannel(ABC):
                 content=params.content,
                 branch_id=params.branch_id,
                 initiator_user_id=initiator_user_id,
+                ui_document=initial_ui_document,
             )
             logger.info(f"[state] Created workflow projection for session {params.session_id}")
         else:
@@ -820,6 +976,29 @@ class BaseChannel(ABC):
         state.user_id = user_id
         state.initiator_user_id = initiator_user_id
         state.user_groups = user_groups
+        state.a2a_representation = params.a2a_representation
+
+        active_company = ctx.active_company
+        if active_company is None:
+            raise ValueError("Flow execution requires active_company for durable A2A projection")
+        company_id = active_company.company_id
+        await self._ensure_a2a_task_projection(
+            params=params,
+            state=state,
+            company_id=company_id,
+        )
+        emitter = Emitter(
+            container.a2a_task_projection_service,
+            state,
+            company_id=company_id,
+        )
+
+        logger.debug(f"[process_task] Emitter created for stream:{effective_task_id}")
+        heartbeat_task = run_with_log_context(
+            self._run_stream_heartbeat(emitter),
+            name=f"flows.stream_heartbeat.{effective_task_id}",
+            background_kind="flow_stream",
+        )
 
         try:
             await self._save_state(
@@ -833,6 +1012,64 @@ class BaseChannel(ABC):
                 ),
                 snapshot=state_is_new,
             )
+            # The snapshot is exposed only after the authoritative session
+            # projection has crossed its durable commit boundary.
+            await emitter.emit_flow_ui_snapshot()
+
+            submit_file_refs: list[FileRef] = []
+            emit_user_turn = False
+            user_turn_mutation_id = ""
+            contract: FlowUISubmitContract | None = None
+            if state.ui_interaction is not None and (
+                (
+                    params.flow_ui_command is not None
+                    and params.flow_ui_command.kind == FlowUIIngressKind.SUBMIT
+                )
+                or not params.is_resume
+            ):
+                interaction = state.ui_interaction
+                snapshot = interaction.validated_values_snapshot
+                surface_values: JsonObject = (
+                    require_json_object(
+                        snapshot[interaction.surface_id],
+                        "ui_interaction.validated_values_snapshot surface",
+                    )
+                    if interaction.surface_id in snapshot
+                    else {}
+                )
+                contract = build_flow_ui_submit_contract(
+                    state.ui_document,
+                    surface_id=interaction.surface_id,
+                    values=surface_values,
+                )
+                submit_file_refs = flow_ui_submit_file_refs(contract)
+                # Bubble emission once per turn kick (not on interrupt resume).
+                emit_user_turn = not params.is_resume
+                if (
+                    params.flow_ui_command is not None
+                    and params.flow_ui_command.kind == FlowUIIngressKind.SUBMIT
+                ):
+                    user_turn_mutation_id = params.flow_ui_command.client_mutation_id
+                else:
+                    user_turn_mutation_id = interaction.interaction_id
+
+            if emit_user_turn:
+                if contract is None:
+                    raise ValueError("Flow UI user turn requires submit contract")
+                user_files: JsonArray = [
+                    require_json_object(
+                        file_ref.model_dump(mode="json"),
+                        "flow_ui_submit_file_ref",
+                    )
+                    for file_ref in submit_file_refs
+                ]
+                user_turn = _user_turn_text(contract)
+                if user_turn != "" or user_files:
+                    await emitter.emit_user_message(
+                        user_turn,
+                        mutation_id=user_turn_mutation_id,
+                        files=user_files,
+                    )
 
             pinned_version = saved_state.flow_config_version if saved_state else None
             try:
@@ -886,7 +1123,14 @@ class BaseChannel(ABC):
                 state.files = collect_flow_node_files(cfg_nodes)
 
             if params.files_data:
-                state.files = list(state.files) + params.files_data
+                for file_ref in params.files_data:
+                    upsert_state_file(state, file_ref)
+
+            # Flow UI FileUpload lives in a2uiClientDataModel.values, not A2A Part.url.
+            # Tools (read_file) read ExecutionState.files — project submit attachments here
+            # after node-pinned files so a new session does not wipe the turn's uploads.
+            for file_ref in submit_file_refs:
+                upsert_state_file(state, file_ref)
 
             # Детерминизм: переменные компании/flow материализуются один раз на старте.
             # На resume/replay значения берутся из durable ledger (persisted state.variables),
@@ -903,13 +1147,12 @@ class BaseChannel(ABC):
                 if request_scoped_variables:
                     state.variables = {**state.variables, **request_scoped_variables}
 
-            if ctx.active_company is not None:
-                await bind_user_device_variables(
-                    state.variables,
-                    container.shared_storage,
-                    company_id=ctx.active_company.company_id,
-                    user_id=user_id,
-                )
+            await bind_user_device_variables(
+                state.variables,
+                container.shared_storage,
+                company_id=company_id,
+                user_id=user_id,
+            )
 
             if state_is_new:
                 company_secret_keys = await container.variables_service.secret_variable_keys()
@@ -1226,13 +1469,22 @@ class BaseChannel(ABC):
             operation_category="handoff",
             extra_attributes=span_attrs,
         ):
-            await emitter.emit_handoff_initiated(
-                target_flow_id=validated_body.target_flow_id,
-                target_flow_name=validated_body.target_name,
-                handoff_reason=validated_body.reason,
-                depth=child_depth,
-                child_session_id=child_session_id,
-                trace_id=parent_state.handoff_trace_id,
+            handoff_payload: JsonObject = {
+                "activity": "handoff_initiated",
+                "target_flow_id": validated_body.target_flow_id,
+                "target_flow_name": validated_body.target_name,
+                "handoff_reason": validated_body.reason or "",
+                "depth": child_depth,
+                "child_session_id": child_session_id,
+            }
+            if parent_state.handoff_trace_id is not None:
+                handoff_payload["trace_id"] = parent_state.handoff_trace_id
+            _ = present_flow_ui_artifact(
+                parent_state,
+                kind="activity",
+                data=handoff_payload,
+                source="handoff",
+                artifact_id=f"handoff:{child_session_id}",
             )
 
             await orchestrator.record_handoff_initiated(
@@ -1244,6 +1496,9 @@ class BaseChannel(ABC):
                 trace_id=parent_state.handoff_trace_id,
                 span_id=initiated_span_id,
             )
+            # The materialized document is durable now; only then expose its
+            # accepted transition through the negotiated A2A representation.
+            await emit_flow_ui_transitions(emitter=emitter, state=parent_state)
             await record_handoff_initiated(
                 self.container.redis_client,
                 child_session_id=child_session_id,
@@ -1291,58 +1546,14 @@ class BaseChannel(ABC):
                 await self._save_terminal_state(child_session_id, child_state, "canceled")
             state.child_workflows[key] = link.model_copy(update={"status": "failed"})
 
-    # === Общая реализация on_get_task ===
-
-    async def _get_task_from_state(self, lookup_id: str) -> Task | None:
-        """
-        Получает Task из state.
-
-        Общая логика для всех каналов.
-        ``lookup_id`` — ``task_id`` или ``context_id`` из A2A.
-        """
-        session_id = await self._resolve_session_id_for_a2a_lookup(lookup_id)
-
-        if session_id is None:
-            return None
-
-        state = await self._get_state(session_id)
-
-        if state is None:
-            return None
-
-        if state.terminal_task_state:
-            task_state = platform_task_state_to_a2a(state.terminal_task_state)
-            if task_state == TaskState.TASK_STATE_INPUT_REQUIRED and state.interrupt:
-                response = state.interrupt.question
-            elif task_state == TaskState.TASK_STATE_CANCELED:
-                response = "Task cancelled"
-            elif task_state == TaskState.TASK_STATE_FAILED:
-                response = state.terminal_task_error or "Task failed"
-            else:
-                response = state.response or state.terminal_task_error or ""
-        elif state.interrupt:
-            task_state = TaskState.TASK_STATE_INPUT_REQUIRED
-            response = state.interrupt.question
-        elif state.response:
-            task_state = TaskState.TASK_STATE_COMPLETED
-            response = state.response
-        else:
-            task_state = TaskState.TASK_STATE_WORKING
-            response = ""
-
-        task_status = TaskStatus(message=_agent_text_message(response))
-        set_task_status_state(task_status, task_state)
-        task = Task(
-            id=state.task_id,
-            context_id=state.context_id,
-            status=task_status,
-        )
-        if state.messages:
-            task.history.extend(state.messages)
-        return task
-
     def _canceled_task_from_state(self, state: ExecutionState) -> Task:
-        canceled_status = TaskStatus(message=_agent_text_message("Task cancelled"))
+        canceled_status = TaskStatus(
+            message=Message(
+                message_id=f"status:{state.task_id}:canceled",
+                role=Role.ROLE_AGENT,
+                parts=[Part(text="Task cancelled")],
+            )
+        )
         set_task_status_state(canceled_status, TaskState.TASK_STATE_CANCELED)
         return Task(
             id=state.task_id,
@@ -1443,7 +1654,11 @@ class BaseChannel(ABC):
 
     @abstractmethod
     def on_subscribe_to_task(
-        self, params: SubscribeToTaskRequest, context: ChannelRequestContext = None
+        self,
+        params: SubscribeToTaskRequest,
+        context: ChannelRequestContext = None,
+        *,
+        after_sequence: int = 0,
     ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """Подписка на события задачи (SubscribeToTask)."""
         raise NotImplementedError
@@ -1915,8 +2130,8 @@ class BaseChannel(ABC):
                     name=branch_cfg.name,
                     description=branch_cfg.description,
                     tags=branch_cfg.tags or [],
-                    input_modes=["text/plain"],
-                    output_modes=["text/plain"],
+                    input_modes=["text/plain", "application/json", A2UI_MIME_TYPE],
+                    output_modes=["text/plain", "application/json", A2UI_MIME_TYPE],
                 )
             )
 
@@ -1927,8 +2142,8 @@ class BaseChannel(ABC):
                     name=config.name,
                     description=config.description,
                     tags=config.tags or [],
-                    input_modes=["text/plain"],
-                    output_modes=["text/plain"],
+                    input_modes=["text/plain", "application/json", A2UI_MIME_TYPE],
+                    output_modes=["text/plain", "application/json", A2UI_MIME_TYPE],
                 )
             )
 
@@ -1949,10 +2164,23 @@ class BaseChannel(ABC):
                 streaming=True,
                 push_notifications=True,
                 extended_agent_card=False,
+                extensions=[
+                    AgentExtension(
+                        uri=A2UI_EXTENSION_URI,
+                        required=False,
+                        description="Declarative Flow UI over standard A2A data parts",
+                        params=struct_from_mapping(
+                            {
+                                "supportedCatalogIds": [A2UI_PLATFORM_CATALOG_ID],
+                                "acceptsInlineCatalogs": False,
+                            }
+                        ),
+                    )
+                ],
             ),
             skills=card_branch_entries,
-            default_input_modes=["text/plain"],
-            default_output_modes=["text/plain"],
+            default_input_modes=["text/plain", "application/json", A2UI_MIME_TYPE],
+            default_output_modes=["text/plain", "application/json", A2UI_MIME_TYPE],
         )
 
         card_dict = require_json_object(MessageToDict(card), "agent.card")

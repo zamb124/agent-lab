@@ -109,5 +109,5 @@ async def test_flows_edge_condition_and_run_mode_smoke(
         to_node="returns_path",
     )
     await flows_switch_editor_mode(page, "run")
-    await expect(page.locator("flows-execution-panel platform-chat")).to_be_visible(timeout=5_000)
+    await expect(page.locator("flows-execution-panel platform-flow-ui")).to_be_visible(timeout=5_000)
 

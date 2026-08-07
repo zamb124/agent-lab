@@ -143,12 +143,26 @@ export class FrontendEmbedCodeModal extends PlatformModal {
         }
         const entry = this._entry();
         const html_code = entry.html_code;
+        const page_url = entry.page_url || '';
+        const presentation = entry.presentation === 'page' ? 'page' : 'drawer';
         const token_endpoint = entry.token_endpoint;
         const backendExample = entry.backend_proxy_code || '';
         const clientExample = entry.browser_to_host_backend_code || '';
         const origins = Array.isArray(entry.allowed_origins) ? entry.allowed_origins : [];
         return html`
+            ${presentation === 'page' && page_url ? html`
             <div class="section">
+                <div class="section-title">${this.t('embed_code_modal.page_url_title')}</div>
+                <div class="section-desc">${this.t('embed_code_modal.page_url_description')}</div>
+                <div class="endpoint">${page_url}</div>
+                <button class="btn btn-primary copy-btn"
+                    @click=${() => this._copy(page_url, 'embed_code_modal.toast_copied')}
+                >${this.t('embed_code_modal.copy_page_url')}</button>
+            </div>
+            ` : ''}
+
+            <div class="section">
+                <div class="section-title">${this.t('embed_code_modal.snippet_title')}</div>
                 <div class="section-desc">${this.t('embed_code_modal.description')}</div>
                 <pre>${html_code}</pre>
                 <button class="btn btn-primary copy-btn"

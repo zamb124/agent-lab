@@ -11,7 +11,7 @@ from apps.flows.src.runtime.agent_skill_runtime import (
     AgentSkillRuntimeHost,
     require_agent_skill_runtime_host,
 )
-from apps.flows.src.runtime_helpers.state_utils import push_ui_event
+from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.files_client import FilesClient
@@ -121,14 +121,14 @@ async def load_agent_skill(agent_skill_id: str, *, state: "ExecutionState") -> J
         "references": [_file_ref_brief(ref) for ref in skill.references],
         "assets": [_file_ref_brief(ref) for ref in skill.assets],
     }
-    _push_skill_loaded_ui_event(state, result)
+    _present_skill_activity(state, result)
     return result
 
 
-def _push_skill_loaded_ui_event(state: "ExecutionState", load_payload: JsonObject) -> None:
+def _present_skill_activity(state: "ExecutionState", load_payload: JsonObject) -> None:
     skill_id = load_payload.get("agent_skill_id")
     if not isinstance(skill_id, str) or not skill_id.strip():
-        raise ValueError("skill_loaded ui_event requires agent_skill_id")
+        raise ValueError("skill activity requires agent_skill_id")
     name_raw = load_payload.get("name")
     name = name_raw if isinstance(name_raw, str) and name_raw.strip() else skill_id
     depth_raw = load_payload.get("depth")
@@ -137,17 +137,17 @@ def _push_skill_loaded_ui_event(state: "ExecutionState", load_payload: JsonObjec
     tools_unlocked: list[str] = []
     if isinstance(tools_raw, list):
         tools_unlocked = [str(item) for item in tools_raw if isinstance(item, str)]
-    _ = push_ui_event(
+    _ = present_flow_ui_artifact(
         state,
-        event_type="platform.skill_loaded",
-        payload={
+        kind="skill_activity",
+        data={
             "agent_skill_id": skill_id,
             "name": name,
             "depth": depth,
             "tools_unlocked": tools_unlocked,
         },
         source="agent_skills",
-        correlation_id=skill_id,
+        artifact_id=skill_id,
     )
 
 

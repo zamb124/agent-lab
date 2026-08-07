@@ -28,7 +28,7 @@ import './worktracker-activity-thread.js';
 import './worktracker-detail-inspector.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/chat/platform-chat.js';
+import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '@platform/lib/components/glass-spinner.js';
 
 export class WorkItemDetailEditor extends PlatformElement {
@@ -146,7 +146,7 @@ export class WorkItemDetailEditor extends PlatformElement {
                 border-radius: var(--radius-lg);
                 overflow: hidden;
             }
-            .wt-hitl-chat platform-chat {
+            .wt-hitl-chat platform-flow-ui {
                 flex: 1 1 auto;
                 min-width: 0;
             }
@@ -715,15 +715,13 @@ export class WorkItemDetailEditor extends PlatformElement {
                     ? html`<p class="wt-hitl-hint">${this.t('hitl_chat.hint_need_queue_access')}</p>`
                     : nothing}
                 <div class="wt-hitl-chat">
-                    <platform-chat
+                    <platform-flow-ui
                         profile="operator_handoff"
                         display="page"
-                        ?hide-header=${true}
                         work-item-id=${this.workItemId}
+                        base-url="/flows"
                         .interactionPolicy=${policy}
-                        .flowsBaseUrl=${'/flows'}
-                        ?use-credentials=${true}
-                    ></platform-chat>
+                    ></platform-flow-ui>
                 </div>
                 ${isTakeover && canComplete && item && !TERMINAL_STATES.has(item.state)
                     ? html`

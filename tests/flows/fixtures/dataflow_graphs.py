@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from pydantic import TypeAdapter
 
 from apps.flows.src.models import Edge, FlowVariableConfig, GraphNodeConfig, TriggerConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.services.flow_dataflow_inspector import inspect_flow_dataflow
+from core.models.flow_interface import FlowInterfaceConfig
+from core.types import JsonObject
 
 _GRAPH_NODES_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(dict[str, GraphNodeConfig])
 
@@ -73,6 +75,7 @@ def inspect(
     triggers_payload: dict[str, object] | None = None,
     sample_state: dict[str, object] | None = None,
     observed_runs: dict[str, object] | None = None,
+    interface: FlowInterfaceConfig | None = None,
 ):
     return inspect_flow_dataflow(
         flow_id=flow_id,
@@ -80,10 +83,11 @@ def inspect(
         entry=entry,
         variables=variables(variables_payload or {}),
         triggers=triggers(triggers_payload or {}),
-        sample_state=sample_state,
-        observed_runs=observed_runs or {},
+        sample_state=cast(JsonObject | None, sample_state),
+        observed_runs=cast(JsonObject, observed_runs or {}),
         nodes=nodes(nodes_payload or {"n1": {"type": "llm_node", "prompt": "hi"}}),
         edges=edges(edges_payload or []),
+        interface=interface,
     )
 
 

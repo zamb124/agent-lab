@@ -435,13 +435,13 @@ class TestToolsAPI:
 
     @pytest.mark.asyncio
     async def test_list_all_tools_includes_builtin_registry_tools(self, client, app):
-        """Общий picker должен видеть platform tools из ToolRegistry."""
+        """Code picker должен видеть platform tools из ToolRegistry."""
         ids: set[str] = set()
         offset = 0
         page_limit = 20
         while True:
             response = await client.get(
-                f"/flows/api/v1/tools/all?limit={page_limit}&offset={offset}"
+                f"/flows/api/v1/tools/all?picker_category=code&limit={page_limit}&offset={offset}"
             )
             assert response.status_code == 200
             page = response.json()

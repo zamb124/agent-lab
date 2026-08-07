@@ -4,6 +4,12 @@ alwaysApply: false
 ---
 # Frontend — общий канон
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+Не плодить parallel DTO/state shapes рядом с каноническим resource/API контрактом. Fail-closed `_normalize*Payload` в factories — валидация границы (throw), не translation между дублями моделей.
+
 Весь UI — на событиях через единый `EventBus`. Доменное состояние — в фабриках (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`/`createSlice`). Pages, modals и components получают доступ к фабрикам **только** через helpers базы по строковому имени. Никаких сервисов, store, features, Zustand, BaseStore, ad-hoc HTTP-клиентов и фолбеков.
 
 **ZERO-IMPORT**, **ZERO-FALLBACK**, **ZERO-GUESS** — отклонений нет.
@@ -360,22 +366,21 @@ await publish_event_to_user(user_id=..., type="crm/note/updated", payload={"note
 
 WS-эффект форвардит фрейм, фронт диспатчит как обычное событие. Компонент: `this.useEvent('crm/note/updated', handler)`.
 
-### Lara — pending apply из чата
+### Flow UI host actions
 
-- `<platform-chat>`: клик по кнопке блока `embed-ui-actions` эмитирует `assistant:action_invoked` для хоста.
-- Если задан `actionHandlers['assistant:action_invoked']` — только он (нет дефолтного apply через LLM).
-- Иначе при `action_kind === 'apply'` выполняется `POST {flowsBaseUrl}/api/v1/lara/pending-actions/apply` с `{ pending_action_id, context_id }`; `context_id` — текущий контекст `ChatController`. Требуется непустой `flowsBaseUrl`.
-- При `action_kind === 'open_entity'` и наличии на шине зарегистрированных маршрутов `entity` / `note` (как в CRM) выполняется `ROUTER_NAVIGATE_REQUESTED` с `params.itemId = arguments.entity_id` и `routeKey` из `context.entity_type` (`note`|`meeting`|`call` → `note`, иначе `entity`). Иначе — сообщение в чат о невозможности открыть карточку.
-- При непустом `company-id` на том же узле добавляются исходящие заголовки к flows (`A2A`, apply, integrations/credentials, voice-session query): см. `_outboundFlowsRequestHeaders()` — **`X-Platform-Namespace`** из `getActivePlatformNamespaceName(companyId)` (тот же выбор, что сайдбар CRM), чтобы тулы Lara и HTTP-apply попадали в активный namespace.
-- Поток блоков действий превью продолжает идти через UI-event `action_previewed` (`_mergeBlocksFromUiEvents`), не через сырой `tool_result.actions`.
+- `<platform-flow-ui>` рендерит только catalog-declared actions. `platform.ui.submit` идёт через A2A; local navigation/focus/suggestion не запускают flow.
+- Trusted host action (`lara.pending_action.apply`, `platform.entity.open` и т. п.) имеет typed catalog contract и проходит allowlist `FlowUIRenderContext.capabilities`; произвольное event name из Artifact не исполняется.
+- Apps регистрируют host handlers через documented component property/context. Handler вызывает фабрику/`navigate`/base helper, не `fetch` и не raw CoreEvents dispatch в page/component.
+- При непустом `company-id` universal transport добавляет `X-Platform-Namespace` из `getActivePlatformNamespaceName(companyId)` ко всем flows-запросам.
+- Preview/applied results приходят ordinary Artifact либо negotiated A2UI representation, не special `ui_event` branch.
 
 ### Lara в PlatformApp
 
-- Каждый authenticated сервисный SPA задаёт `static platformAssistant = { serviceId, branchId, showLauncher, launcherPosition? }`. `launcherPosition`: `'bottom-right'` (дефолт) | `'bottom-left'` (Sync: FAB не перекрывает composer Send). `PlatformApp.render()` монтирует ровно один `<platform-chat display="drawer" profile="spa" flow-id="lara">` и прокидывает `data-embed-position`.
+- Каждый authenticated сервисный SPA задаёт `static platformAssistant = { serviceId, branchId, showLauncher, launcherPosition? }`. `launcherPosition`: `'bottom-right'` (дефолт) | `'bottom-left'` (Sync: FAB не перекрывает composer Submit). `PlatformApp.render()` монтирует ровно один `<platform-flow-ui surface="drawer" flow-id="lara">` с production drawer render context.
 - Branch задаёт только фокус точки входа; полный Agent Skill catalog одинаков во всех сервисах. Service context передаётся через `getPlatformAssistantContextVariables(routeKey, params)` как компактные canonical IDs без секретов и полных коллекций. Flows editor — только IDs (`flow_id`/`node_id`/…); тела graph Lara достаёт tools (`flows_get_node` / `flows_list_nodes`), не standing `*_payload_json`.
 - Открытие из UI — только `openPlatformLaraAssistant()`; единое событие `platform-lara-open`. Сервисные toggle event names запрещены.
 - Круглый launcher использует знак Linnex, двигается pointer/touch и сохраняет позицию отдельно для service branch. Открытая drawer-панель сохраняет собственный desktop drag.
-- Public/guest routes скрывают global Lara через `shouldRenderPlatformAssistant(routeKey, params)`. Docs guest assistant и embed agents остаются отдельными параметризациями того же `<platform-chat>`.
+- Public/guest routes скрывают global Lara через `shouldRenderPlatformAssistant(routeKey, params)`. Docs guest assistant и embed flows остаются отдельными render contexts того же `<platform-flow-ui>`.
 
 ## Marketing / product pages (часть core Design System)
 
@@ -390,7 +395,13 @@ WS-эффект форвардит фрейм, фронт диспатчит к�
 
 ## Публичный каталог лендинга (BFF frontend)
 
-Анонимные HTTP-эндпоинты `GET /frontend/api/public/landing-agents` и `POST /frontend/api/public/landing-agents/session` (`apps/frontend/api/public_landing_agents.py`). В выдачу — только виджеты компании **`system`** с `landing_visible` и непустым `landing_card_image_url`. UI: маршрут `digital-workers` (`/demo/digital-workers`), страница `apps/frontend/ui/pages/landing-digital-workers-page.js`, фабрики `frontend/landing_agents_load` и `frontend/landing_demo_session` в `landing-demo.resource.js`; пробный чат через `<platform-chat display="drawer" profile="embed_public">` + гостевой JWT из POST session. Лимит сообщений гостя — `EmbedConfig.guest_max_user_messages` (применяется в flows для A2A `SendMessage`/`SendStreamingMessage` при непустом `contextId`).
+Анонимные HTTP-эндпоинты `GET /frontend/api/public/landing-agents` и `POST /frontend/api/public/landing-agents/session` (`apps/frontend/api/public_landing_agents.py`). В выдачу — только виджеты компании **`system`** с `landing_visible` и непустым `landing_card_image_url`. UI: маршрут `digital-workers` (`/demo/digital-workers`), страница `apps/frontend/ui/pages/landing-digital-workers-page.js`, фабрики `frontend/landing_agents_load` и `frontend/landing_demo_session` в `landing-demo.resource.js`; demo монтирует `<platform-flow-ui surface="drawer">` с embed-safe guest render context и JWT из POST session. Лимит Submit-turns гостя — `EmbedConfig.guest_max_user_messages` (A2A `SendMessage`/`SendStreamingMessage` при непустом `contextId`).
+
+## Universal Flow UI
+
+`<platform-flow-ui>` (`core/frontend/static/lib/flow-ui/`) — единственный A2A interface runtime. Один protocol accumulator, reducer/store, catalog registry, layout resolver и production frame обслуживают page/panel/drawer/embed/shared/editor. Host не интерпретирует A2A frames и не реализует grid CSS.
+
+Editor canvas монтирует тот же production bundle в isolated frame. Palette/layers/inspector/rulers/guides/selection/resize находятся снаружи read-only inspection boundary. `Exact` разрешён только при полном `FlowUIRenderContext` fingerprint match; обязательна zero-pixel geometry parity matrix. Полный канон → **`flow_ui.mdc`**.
 
 ## Тесты
 

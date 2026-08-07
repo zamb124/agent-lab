@@ -79,6 +79,8 @@ alwaysApply: true
 
 - **Новое = правка рулов.** Новый паттерн/сервис/конвенция — сразу `.cursor/rules/`. Без обновления — не считается завершённым. Один источник правды.
 - **Ноль костылей.** *Чиним систему — не обходим её.* Костыль (обходной путь, спецфлаг, дублирование, маскировка дыры) запрещён под предлогом «быстрее сейчас» / «потом отрефакторим».
+- **Zero Translation Layers & End-to-End Type Safety.** Данные текут сквозь систему на строгих нативных доменных типах без промежуточных mappers, translators, adapters и лишней (de)сериализации. Одна концептуальная сущность — одна shared-модель (Single Source of Truth), а не набор почти одинаковых DTO с перекладыванием полей.
+- **Deep Contract Refactoring.** При смене логики или рефакторинге **обязательно** меняй upstream/downstream контракты (сигнатуры, input/output атрибуты, интерфейсы, Pydantic/TypedDict модели, API/WS payload). Минимизация blast radius **не оправдание**: glue, wrappers и localized patches вокруг устаревших интерфейсов запрещены — breaking changes протягивай по call stack до конца.
 - **Zero-Guess.** *Better to crash than to guess.* Нет значения — `raise`. Не подставлять, не угадывать. Дефолты — только в Pydantic-моделях. Инфраструктура (БД/Redis) недоступна — сервис падает. Сбои на старте — фатальные.
 - **CleanFirst.** Мёртвый код удаляется немедленно. Не делать «на будущее». Минимум обёрток/альясов.
 - **Стиль документации (`as is`).** Комментарии, cursor rules, docstrings, `description` схем, подписи UI — только как устроено сейчас. История — в коммитах/PR/CHANGELOG, не inline. Поведение изменилось — переписать целиком, не дописывать «обновлено…».
@@ -102,18 +104,34 @@ alwaysApply: true
 8. **Никаких голых и широких типов.** Публичные API аннотируются конкретными доменными типами. `Any`, `object`, голые `dict`/`list`, `dict[str, Any]`, `list[Any]`, `Callable[..., Any]` запрещены в платформенном коде. Доменные модели — Pydantic/`TypedDict` по смыслу, не сырые словари.
 9. **Никакого дублирования функционала.** Перед реализацией — проверь что нет уже похожего. Дубль запрещён.
 10. **Isolated code execution.** Пользовательский code_node / inline tool / code-condition исполняется только через `RemoteCodeRunner` → `code-runner-*`. Доступ к платформе — только через `capability-gateway`; in-process `eval`/`exec`/`PythonNamespaceBuilder` запрещены. Детали → **`eval.mdc`**.
+11. **No translation / mapping / adapter layers (Zero Translation Layers).** Запрещены промежуточные helpers вида `*_to_*`, `*_from_*`, `convert_*`, `map_*`, `adapt_*`, `normalize_*`, `to_dict`/`from_dict`, которые только перекладывают поля между почти одинаковыми моделями или чинят type mismatch. Не мост между типами — общий нативный тип.
+12. **No glue / compatibility wrappers (Deep Contract Refactoring).** Запрещены wrapper-функции, shim, «временный» compat-слой, localized patch «чтобы не трогать callers». Устаревший контракт удаляй и обновляй consumers; не оборачивай его.
+13. **Eradicate Model Duplication.** Одна бизнес-сущность — одна каноническая модель. `Foo` / `FooDTO` / `FooInternal` / `FooData` / `FooResponse` с ~теми же атрибутами запрещены. Отдельные Input/Internal/Output модели — только если форма **реально** другая (не 90%+ одних и тех же полей).
+14. **Propagate breaking changes end-to-end.** При рефакторинге обязан пройти call stack, API/WS/UI/tests и обновить контракты. Нельзя оставить старые входящие/исходящие атрибуты и добавить слой преобразования вокруг них.
+
+### Zero Translation — единственное разрешённое исключение
+
+Конвертация допустима **только** на реальной внешней границе и только когда форма действительно чужая; место конвертации = владелец контракта:
+
+- wire внешней спеки (A2A ProtoJSON, OpenAI-compatible messages, LiveKit, Telegram payload и т.п.);
+- вход внешнего SDK / сырой HTTP/JSON → typed boundary;
+- ORM row → domain model **внутри repository**, если ORM не является доменной моделью.
+
+Запрещена «внутренняя» конвертация между слоями платформы (`service` ↔ `api` ↔ `ui` ↔ `events`) ради сохранения устаревших имён или дублей моделей.
+
+**Не путать** с fail-closed boundary-валидацией UI factories (`_normalize*Payload`, которые `throw` при битом payload) — это проверка границы транспорта, не translation layer между дублями моделей.
 
 ## Типизация и import-gate
 
 - `basedpyright core apps` должен иметь `errorCount == 0`, а затронутый код — `0` новых warning. Новые `reportAny`/`reportUnknown*`/`reportMissingParameterType` не принимаются как «потом».
-- `Any`, `object`, `Unknown`, голые коллекции и широкие callable-типы не являются решением. Если они появляются — сначала найти источник потери типа: БД, HTTP, SDK, JSON parser, контейнер, registry, event bus, runtime state. Лечить нужно источник и протянуть строгий контракт по всей цепочке.
+- `Any`, `object`, `Unknown`, голые коллекции и широкие callable-типы не являются решением. Если они появляются — сначала найти источник потери типа: БД, HTTP, SDK, JSON parser, контейнер, registry, event bus, runtime state. Лечить нужно источник и протянуть строгий контракт по всей цепочке (**Deep Contract Refactoring**, не local patch / `cast` / mapper).
 - Публичные функции, методы сервисов, репозитории, API payload/response, factories, контейнеры, registries, event handlers и runtime-узлы — с явными доменными типами. Тип не должен теряться между слоями.
 - Граница внешнего мира всегда заканчивается typed boundary: Pydantic-модель, `dataclass`, `TypedDict`, `Protocol` или платформенный JSON-тип. Нельзя возвращать из boundary `Any`/`object` и «дотипизировать потом» в бизнес-логике.
 - Платформенные JSON-типы живут только в `core.types`: `JsonValue`, `JsonObject`, `JsonArray`, `JsonScalar`, `require_json_*`. Новый код импортирует их из `core.types`; `core.capabilities.JsonObject/JsonValue` — только compatibility re-export для существующего capability API.
 - `JsonObject`/`JsonValue` — только для действительно произвольного JSON. Если известны поля, смысл или инварианты — нужна существующая доменная Pydantic-модель/`TypedDict`; если её нет, создать одну каноническую модель на уровне владельца данных и переиспользовать её.
 - `dict[str, JsonValue]` не заменяет модель там, где есть бизнес-сущность. `dict[str, JsonValue]` допустим для словаря однотипных JSON-значений без фиксированных ключей; `JsonObject` — для JSON object без известной схемы; Pydantic-модель — для известной схемы.
-- Одна доменная сущность — одна каноническая модель. Перед созданием модели обязательно проверить `core/`, `apps/*/models/`, API schemas и tests на существующий контракт. Дубли вида `UserResponse`/`UserData`/`UserModel`, если это одна бизнес-сущность, запрещены; слой-специфичные request/patch/response модели допускаются только когда форма реально другая.
-- Запрещены helper-«нормализаторы», conversion-функции и adapter-слои, которые существуют только чтобы замолчать типизацию. Конвертация допустима только на реальной внешней границе или при смене доменной формы; место конвертации должно совпадать с владельцем контракта.
+- Одна доменная сущность — одна каноническая модель (**Eradicate Model Duplication**). Перед созданием модели обязательно проверить `core/`, `apps/*/models/`, API schemas и tests на существующий контракт. Дубли вида `UserResponse`/`UserData`/`UserModel`, если это одна бизнес-сущность, запрещены; слой-специфичные request/patch/response модели допускаются только когда форма реально другая.
+- **Zero Translation Layers:** запрещены helper-«нормализаторы», conversion-функции и adapter-слои, которые существуют только чтобы замолчать типизацию или сохранить устаревший контракт. Не совпали типы/поля — меняй контракты upstream и downstream, не пиши glue. Конвертация — только по исключению выше (внешняя граница / реально другая форма у владельца контракта).
 - Проверка локальных импортов: `make lint` (python-часть — `analyze_imports.py`). Ожидание для `core/` + `apps/`: `Total local imports: 0`.
 
 ## Глобальный naming contract
@@ -167,7 +185,9 @@ alwaysApply: true
 | API key | `key_id`, `ApiKeyRecord` | `key_hash`, `key_prefix`, `scopes`, `created_by`; не `id`. |
 | Schedule | `schedule_task_id`, `schedule_id`, `PlatformScheduledTask` | `schedule_task_id` — запись платформенного scheduler/API/TaskIQ kwargs/state, `schedule_id` — id RedisScheduleSource; `taskiq_task_id` — id сообщения TaskIQ. Запрещены `id`, `task_id`, `scheduler_task_id`, `scheduled_task_id` для schedule-записи. |
 | Platform event | `PlatformEvent` (`event_id`, `type`, `payload`, `meta`, `delivery?`) | Envelope шины `platform:events` / WS frame. Не `UIEvent`. |
-| Client pending frames (flows/A2A) | `ui_events_pending`, `PendingUIEvent` | Pending client frames в `ExecutionState`; **≠** шина `platform:events`. |
+| Flow UI document | `FlowUIDocument`, `FlowUIComponent`, `FlowInteraction` | Материализованный интерфейс и values в durable `ExecutionState`; чат — default template. Канон → **`flow_ui.mdc`**. |
+| Flow UI mutation | `mutation_id`, `base_revision`, `revision` | Semantic A2A autosync/submit с OCC; не DOM patch и не `ui_event`. |
+| A2A Artifact projection | `artifact_id`, `ArtifactAccumulator` | Lossless materialization ordinary/A2UI Artifacts; `artifact_id` сохраняет имя внешней A2A-спеки на wire boundary. |
 | WorkItem (ядро задач) | `work_item_id`, `WorkItem` | `kind`, `state`, `board_id`, `board_column_id`, `assignment`, `created_by`, `blocking`, `hooks` (`assigned`/`comment`/`completed`), `resolution`, `links`, `variables: VariableMap`, `attachments: list[FileRef]`; не `task_id`, не `operator_task_id`. Детали → **`worktracker.mdc`**. |
 | Work queue | `work_queue_id`, `WorkQueue`, `work_queue_slug` | `WorkQueueMember(work_queue_id, user_id, role)`; полная замена `OperatorQueues`; не `queue_id`. |
 | Board / column | `board_id`, `Board`, `board_column_id`, `BoardColumn` | `label`, `state`, `position`; единая доска для людей/операторов/CRM. |
@@ -368,6 +388,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | Сессии | `session.mdc` |
 | Инвайты | `invites.mdc` |
 | Flows: сервис, ноды, триггеры, ресурсы | `flows.mdc` |
+| Flow UI: единый A2A-интерфейс, document/layout/editor/runtime/share | `flow_ui.mdc` |
 | Flow как сотрудник (identity, inbox, Sync, WorkItem) | `flow_employee.mdc` |
 | Runtime flows: ноды, tools, branches, FlowInterrupt | `flows_logic.mdc` |
 | Agent handoff / handback между flows | `handoff.mdc` |

@@ -25,6 +25,7 @@ from core.files.create_spec import FileCreateSpec
 from core.files.file_ref import FileRef
 from core.models.identity_models import Company, User
 from core.state import ExecutionState
+from tests.flows._flow_ui import flow_ui_artifacts
 from tests.flows.agent_skills_harness import company_scope
 
 
@@ -282,23 +283,23 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
         )
         assert len(host.pending_tool_refs) == 1
         assert host.pending_tool_refs[0].tool_id == "calculator"
-        assert len(state.ui_events_pending) == 1
-        skill_event = state.ui_events_pending[0]
-        assert skill_event.event_type == "platform.skill_loaded"
-        assert skill_event.payload["agent_skill_id"] == root_id
-        assert skill_event.payload["name"] == root_id
-        assert skill_event.payload["tools_unlocked"] == ["calculator"]
+        loaded = flow_ui_artifacts(state, kind="skill_activity")
+        assert len(loaded) == 1
+        assert loaded[0].component_type == "SkillActivity"
+        assert loaded[0].data["agent_skill_id"] == root_id
+        assert loaded[0].data["name"] == root_id
+        assert loaded[0].data["tools_unlocked"] == ["calculator"]
 
         with agent_skill_runtime_host_scope(host):
             dep_result = await load_agent_skill.run({"agent_skill_id": dep_id}, state)
         assert dep_result["depth"] == 1
-        assert len(state.ui_events_pending) == 2
-        assert state.ui_events_pending[1].payload["agent_skill_id"] == dep_id
+        loaded = flow_ui_artifacts(state, kind="skill_activity")
+        assert [view.data["agent_skill_id"] for view in loaded] == [root_id, dep_id]
 
         with agent_skill_runtime_host_scope(host):
             reload = await load_agent_skill.run({"agent_skill_id": root_id}, state)
         assert reload["already_loaded"] is True
-        assert len(state.ui_events_pending) == 2
+        assert len(flow_ui_artifacts(state, kind="skill_activity")) == 2
 
         foreign_id = f"skill-foreign-{unique_id}"
         await container.agent_skill_service.create(

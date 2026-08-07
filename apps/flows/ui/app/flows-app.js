@@ -2,8 +2,8 @@
  * FlowsApp — корневой Lit-компонент сервиса flows.
  *
  * Все доменные операции описаны фабриками в `apps/flows/ui/events/resources/*`.
- * Чат целиком живёт в едином компоненте `<platform-chat>` (core/lib/chat):
- * состояние, SSE A2A и voice — внутри компонента, не в фабриках. Задачи
+ * Runtime UI — единый `<platform-flow-ui>` (core/lib/flow-ui): document/tasks/
+ * artifacts, A2A SSE и voice внутри компонента, не в фабриках. Задачи
  * (включая HITL) ведутся в сервисе worktracker, а не во flows UI.
  *
  * Маршруты заданы декларативно через `createRouterEffect` (см. SYNC_ROUTES
@@ -16,7 +16,8 @@ import { createRouterEffect } from '@platform/lib/events/effects/router.effect.j
 
 import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp,
          flowStoreBundlesOp, flowValidateOp, branchCreateOp, branchUpdateOp,
-         branchRemoveOp, flowVoiceSessionQueryOp, flowPreviewShareOp } from '../events/resources/flows.resource.js';
+         branchRemoveOp, flowVoiceSessionQueryOp, flowPreviewShareOp,
+         flowInterfaceContractPreviewOp } from '../events/resources/flows.resource.js';
 import { flowsVoiceCatalogLoadOp } from '../events/resources/voice-catalog.resource.js';
 import { toolsResource, toolsAllOp } from '../events/resources/tools.resource.js';
 import { toolTagGroupsOp } from '../events/resources/tool-tag-groups.resource.js';
@@ -83,10 +84,16 @@ import {
     googleWorkspaceCompanyDeleteOp,
 } from '../events/resources/integrations.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
+import {
+    flowsCatalogsOp,
+    flowsDocumentsOp,
+    flowsDocumentsSearchOp,
+} from '../events/resources/documents-browse.resource.js';
 import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import { apiConsoleRunOp } from '../events/resources/api-console.resource.js';
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
+import { interfaceEditorSlice } from '../events/resources/interface-editor.resource.js';
 import {
     evaluationUiSlice,
     evaluationEvaluatorCatalogOp,
@@ -142,8 +149,13 @@ const FLOWS_ROUTES = [
     { key: 'platform_services',    path: 'services', parent: 'list',      titleKey: 'routes.platform_services' },
     { key: 'agent_skills',         path: 'skills', parent: 'list',        titleKey: 'routes.agent_skills' },
     { key: 'flow_chat',            path: ':flowId',                       parent: 'list', titleKey: 'routes.flow_chat' },
-    { key: 'flow_chat_branch',     path: ':flowId/branch/:branchId',      parent: 'flow_chat', titleKey: 'routes.flow_chat_branch' },
-    { key: 'flow_chat_session',    path: ':flowId/session/:sessionId',    parent: 'flow_chat', titleKey: 'routes.flow_chat_session' },
+    // Chat branch/session parent is list (not flow_chat): crumbs are Overview / <flow> [/ <branch>],
+    // not Overview / Flow / Flow. Entity names come from chat-page current-label + trail.
+    { key: 'flow_chat_branch',     path: ':flowId/branch/:branchId',      parent: 'list', titleKey: 'routes.flow_chat_branch' },
+    { key: 'flow_chat_session',    path: ':flowId/session/:sessionId',    parent: 'list', titleKey: 'routes.flow_chat_session' },
+    // A session belongs to the branch it was created with, so the branch stays in the
+    // URL: reload and "New screen" must not fall back to the base flow.
+    { key: 'flow_chat_branch_session', path: ':flowId/branch/:branchId/session/:sessionId', parent: 'list', titleKey: 'routes.flow_chat_branch_session' },
     { key: 'flow_editor',          path: ':flowId/editor',                parent: 'flow_chat', titleKey: 'routes.flow_editor' },
     { key: 'flow_editor_branch',   path: ':flowId/editor/:branchId',      parent: 'flow_editor', titleKey: 'routes.flow_editor_branch' },
     { key: 'flow_evaluation',      path: ':flowId/evaluation',            parent: 'flow_chat', titleKey: 'routes.flow_evaluation' },
@@ -164,6 +176,7 @@ const FLOWS_BOTTOM_NAV_HIDE_ON_ROUTES = [
     'flow_chat',
     'flow_chat_branch',
     'flow_chat_session',
+    'flow_chat_branch_session',
     'flow_editor',
     'flow_editor_branch',
     'flow_evaluation',
@@ -193,6 +206,7 @@ export class FlowsApp extends PlatformApp {
         flowsVoiceCatalogLoadOp,
         flowVoiceSessionQueryOp,
         flowPreviewShareOp,
+        flowInterfaceContractPreviewOp,
         toolsResource,
         toolsAllOp,
         toolTagGroupsOp,
@@ -276,12 +290,16 @@ export class FlowsApp extends PlatformApp {
         googleWorkspaceCompanyPutOp,
         googleWorkspaceCompanyDeleteOp,
         platformFileCreateOp,
+        flowsCatalogsOp,
+        flowsDocumentsOp,
+        flowsDocumentsSearchOp,
         platformVoiceDictationOp,
         apiConsoleRunOp,
         editorResource,
         editorBulkDeleteOp,
         stickyNoteUpsertOp,
         executionUiSlice,
+        interfaceEditorSlice,
         evaluationUiSlice,
         evaluationEvaluatorCatalogOp,
         evaluationSuitesListOp,
@@ -470,11 +488,12 @@ export class FlowsApp extends PlatformApp {
             case 'flow_chat':
             case 'flow_chat_branch':
             case 'flow_chat_session':
+            case 'flow_chat_branch_session':
                 return html`
                     ${this._flowsDesktopSidebarColumn()}
                     <div class="main">
                         <platform-island
-                            padding=${this._flowsMobile ? 'none' : 'md'}
+                            padding="none"
                             ?safe-bottom=${this._flowsMobile}
                             ?content-no-scroll=${true}
                         >

@@ -82,7 +82,9 @@ function sampleFromDescriptor(descriptor) {
 
 /**
  * Builds the exact prompt namespace for one LLM node.
- * Precedence mirrors runtime: system < flow/state variables < input_mapping < node locals.
+ * Precedence mirrors runtime: system < flow/state variables < ui_values < input_mapping < node locals.
+ * Flow UI fields appear as nested `values.ui_values` and catalog names `ui_values.<field>`
+ * (inserts `{ui_values.field}` — same path as ExecutionState / Logic chips).
  */
 export function buildPromptVariableContext({
     flowVariables = {},
@@ -99,6 +101,15 @@ export function buildPromptVariableContext({
         entries.set(name, { name, source, type: typeOf(value, type), availability, hasValue });
         if (hasValue) values[name] = value;
         else delete values[name];
+    };
+
+    const putUiValue = (field, { value, hasValue = true, source, type = 'any', availability = 'guaranteed' }) => {
+        if (typeof field !== 'string' || field.length === 0 || field.includes('.')) return;
+        const name = `ui_values.${field}`;
+        entries.set(name, { name, source, type: typeOf(value, type), availability, hasValue });
+        if (!isObject(values.ui_values)) values.ui_values = {};
+        if (hasValue) values.ui_values[field] = value;
+        else delete values.ui_values[field];
     };
 
     const previewTimezone = isObject(previewExecutionState?.store)
@@ -128,22 +139,48 @@ export function buildPromptVariableContext({
         ? dataflowNode.incoming_state
         : [];
     for (const descriptor of incoming) {
-        if (!isObject(descriptor) || typeof descriptor.path !== 'string' || !descriptor.path.startsWith('variables.')) continue;
-        const name = descriptor.path.slice('variables.'.length);
-        if (!name || name.includes('.')) continue;
-        const sample = sampleFromDescriptor(descriptor);
-        put(name, {
-            value: sample.value,
-            hasValue: sample.hasValue,
-            source: 'upstream',
-            type: typeof descriptor.type === 'string' ? descriptor.type : 'any',
-            availability: descriptor.availability || 'guaranteed',
-        });
+        if (!isObject(descriptor) || typeof descriptor.path !== 'string') continue;
+        if (descriptor.path.startsWith('variables.')) {
+            const name = descriptor.path.slice('variables.'.length);
+            if (!name || name.includes('.')) continue;
+            const sample = sampleFromDescriptor(descriptor);
+            put(name, {
+                value: sample.value,
+                hasValue: sample.hasValue,
+                source: 'upstream',
+                type: typeof descriptor.type === 'string' ? descriptor.type : 'any',
+                availability: descriptor.availability || 'guaranteed',
+            });
+            continue;
+        }
+        if (descriptor.path.startsWith('ui_values.')) {
+            const field = descriptor.path.slice('ui_values.'.length);
+            if (!field || field.includes('.')) continue;
+            const sample = sampleFromDescriptor(descriptor);
+            putUiValue(field, {
+                value: sample.value,
+                hasValue: sample.hasValue,
+                source: 'ui_value',
+                type: typeof descriptor.type === 'string' ? descriptor.type : 'any',
+                availability: descriptor.availability || 'guaranteed',
+            });
+        }
     }
 
     if (isObject(previewExecutionState) && isObject(previewExecutionState.variables)) {
         for (const [name, value] of Object.entries(previewExecutionState.variables)) {
             put(name, { value: unwrapFlowVariable(value), source: 'preview', type: typeOf(value), availability: 'observed' });
+        }
+    }
+
+    if (isObject(previewExecutionState) && isObject(previewExecutionState.ui_values)) {
+        for (const [field, value] of Object.entries(previewExecutionState.ui_values)) {
+            putUiValue(field, {
+                value: unwrapFlowVariable(value),
+                source: 'ui_value',
+                type: typeOf(value),
+                availability: 'observed',
+            });
         }
     }
 
@@ -171,7 +208,15 @@ export function buildPromptVariableContext({
     return {
         values,
         catalog: [...entries.values()].sort((a, b) => {
-            const sourceOrder = { local: 0, input: 1, upstream: 2, preview: 2, flow: 3, system: 4 };
+            const sourceOrder = {
+                local: 0,
+                input: 1,
+                ui_value: 2,
+                upstream: 2,
+                preview: 2,
+                flow: 3,
+                system: 4,
+            };
             return (sourceOrder[a.source] ?? 9) - (sourceOrder[b.source] ?? 9) || a.name.localeCompare(b.name);
         }),
     };

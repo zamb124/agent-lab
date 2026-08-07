@@ -108,13 +108,13 @@ class TestBeforePromptRenderHook:
     """Тесты хука before_prompt_render."""
 
     @pytest.mark.asyncio
-    async def test_before_prompt_render_modifies_template(self, runner_with_hooks):
+    async def test_before_prompt_render_modifies_template(self, runner_with_hooks, unique_id):
         """Проверяет, что before_prompt_render может изменить шаблон."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"test_var": "test_value"}
         )
 
@@ -124,13 +124,13 @@ class TestBeforePromptRenderHook:
         assert "custom_value" in rendered
 
     @pytest.mark.asyncio
-    async def test_before_prompt_render_modifies_variables(self, runner_with_hooks):
+    async def test_before_prompt_render_modifies_variables(self, runner_with_hooks, unique_id):
         """Проверяет, что before_prompt_render может изменить переменные."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"test_var": "test_value"}
         )
 
@@ -142,13 +142,13 @@ class TestBeforePromptRenderHook:
         assert "custom_value" in rendered
 
     @pytest.mark.asyncio
-    async def test_before_prompt_render_with_state(self, runner_with_hooks):
+    async def test_before_prompt_render_with_state(self, runner_with_hooks, unique_id):
         """Проверяет, что before_prompt_render получает state."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"test_var": "test_value"},
             user_role="admin",
             context="support"
@@ -164,13 +164,13 @@ class TestAfterPromptRenderHook:
     """Тесты хука after_prompt_render."""
 
     @pytest.mark.asyncio
-    async def test_after_prompt_render_modifies_prompt(self, runner_with_hooks):
+    async def test_after_prompt_render_modifies_prompt(self, runner_with_hooks, unique_id):
         """Проверяет, что after_prompt_render может изменить финальный промпт."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"test_var": "test_value"}
         )
 
@@ -179,13 +179,13 @@ class TestAfterPromptRenderHook:
         assert "Финальная заметка: промпт обработан хуком." in rendered
 
     @pytest.mark.asyncio
-    async def test_after_prompt_render_receives_state(self, runner_with_hooks):
+    async def test_after_prompt_render_receives_state(self, runner_with_hooks, unique_id):
         """Проверяет, что after_prompt_render получает state."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"test_var": "test_value"},
             additional_context="Дополнительная информация"
         )
@@ -200,13 +200,13 @@ class TestHooksWithoutAgent:
     """Тесты работы без хуков (агент не переопределяет методы)."""
 
     @pytest.mark.asyncio
-    async def test_agent_without_hooks_works_normally(self, runner_without_hooks):
+    async def test_agent_without_hooks_works_normally(self, runner_without_hooks, unique_id):
         """Проверяет, что агент без хуков работает нормально."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"test_var": "test_value"}
         )
 
@@ -219,14 +219,14 @@ class TestHooksWithoutAgent:
         assert "Дополнительная инструкция" not in rendered
 
     @pytest.mark.asyncio
-    async def test_default_hooks_return_unchanged(self, runner_without_hooks):
+    async def test_default_hooks_return_unchanged(self, runner_without_hooks, unique_id):
         """Проверяет, что дефолтные хуки возвращают значения без изменений."""
         variables = {"test_var": "test_value"}
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
 
         agent = runner_without_hooks.llm_node
@@ -247,13 +247,13 @@ class TestHooksIntegration:
     """Интеграционные тесты хуков."""
 
     @pytest.mark.asyncio
-    async def test_both_hooks_work_together(self, runner_with_hooks):
+    async def test_both_hooks_work_together(self, runner_with_hooks, unique_id):
         """Проверяет, что оба хука работают вместе."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"test_var": "test_value"}
         )
 
@@ -269,13 +269,13 @@ class TestHooksIntegration:
         assert "test_value" in rendered
 
     @pytest.mark.asyncio
-    async def test_hooks_with_system_variables(self, runner_with_hooks):
+    async def test_hooks_with_system_variables(self, runner_with_hooks, unique_id):
         """Проверяет, что хуки работают с системными переменными."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
 
         rendered = await runner_with_hooks._render_prompt(state)

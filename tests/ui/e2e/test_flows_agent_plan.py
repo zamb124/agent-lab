@@ -181,7 +181,7 @@ async def test_flows_agent_plan_via_skill(
 
     await flows_publish_editor(page)
     await flows_open_chat_page(page, flows_ui, flow_id)
-    chat = page.locator("chat-page platform-chat").first
+    chat = page.locator("chat-page platform-flow-ui").first
     await expect(chat).to_be_visible(timeout=30_000)
     await scenario.step(
         "Опубликуйте агента и откройте чат",
@@ -344,7 +344,7 @@ async def test_flows_agent_plan_via_tools(
 
     await flows_publish_editor(page)
     await flows_open_chat_page(page, flows_ui, flow_id)
-    chat = page.locator("chat-page platform-chat").first
+    chat = page.locator("chat-page platform-flow-ui").first
     await expect(chat).to_be_visible(timeout=30_000)
     await scenario.step(
         "Опубликуйте агента и откройте чат",

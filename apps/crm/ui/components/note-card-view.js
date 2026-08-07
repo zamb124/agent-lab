@@ -48,7 +48,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-markdown-editor.js';
-import { flowsChatMarkdownToHtml } from '@platform/lib/chat/markdown.js';
+import { flowsChatMarkdownToHtml } from '@platform/lib/flow-ui/utils/markdown.js';
 import './entity-hover-preview.js';
 import './crm-related-neighbor-rows.js';
 import './crm-mini-graph.js';

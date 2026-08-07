@@ -392,7 +392,7 @@ class TestIncomingA2aFilesUnit:
 
     def test_format_a2a_files_content(self):
         """Форматирование записей state.files в текст для агента."""
-        from apps.flows.src.files.handler import format_a2a_files_content
+        from core.files.file_ref import format_a2a_files_content
 
         files_data = [
             FileRef(

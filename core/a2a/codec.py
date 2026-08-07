@@ -6,11 +6,22 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import cast
 
-from a2a.types import Message, Part
+from a2a.types import (
+    Artifact,
+    Message,
+    Part,
+    StreamResponse,
+    Task,
+    TaskArtifactUpdateEvent,
+    TaskStatus,
+    TaskStatusUpdateEvent,
+)
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 from google.protobuf.struct_pb2 import Struct, Value
 
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
+
+_STREAM_RESPONSE_WIRE_KEYS = ("task", "message", "statusUpdate", "artifactUpdate")
 
 _PART_CONTENT_ONEOF = "content"
 
@@ -34,7 +45,8 @@ _ROLE_ALIASES: dict[str, str] = {
 
 def message_to_json_dict(message: Message) -> JsonObject:
     """Сериализует protobuf `Message` в ProtoJSON dict (camelCase)."""
-    return require_json_object(MessageToDict(message), "Message")
+    raw = require_json_object(MessageToDict(message), "Message")
+    return require_json_object(_restore_json_integers(raw), "Message")
 
 
 def _normalize_part_json(part: JsonObject) -> JsonObject:
@@ -97,6 +109,136 @@ def message_from_json_dict(payload: Mapping[str, JsonValue]) -> Message:
     return message
 
 
+def normalize_artifact_json_for_proto(payload: Mapping[str, JsonValue]) -> JsonObject:
+    """Normalize an Artifact payload while retaining every standard field."""
+    normalized: JsonObject = {}
+    for key, value in payload.items():
+        if value is None:
+            continue
+        if key == "parts":
+            if not isinstance(value, list):
+                raise ValueError("Artifact.parts must be a list")
+            parts: list[JsonValue] = []
+            for index, entry in enumerate(value):
+                if not isinstance(entry, dict):
+                    raise ValueError(f"Artifact.parts[{index}] must be an object")
+                parts.append(
+                    _normalize_part_json(
+                        require_json_object(entry, f"Artifact.parts[{index}]")
+                    )
+                )
+            normalized[key] = parts
+            continue
+        normalized[key] = value
+    return normalized
+
+
+def artifact_to_json_dict(artifact: Artifact) -> JsonObject:
+    return require_json_object(MessageToDict(artifact), "Artifact")
+
+
+def artifact_from_json_dict(payload: Mapping[str, JsonValue]) -> Artifact:
+    artifact = Artifact()
+    _ = ParseDict(normalize_artifact_json_for_proto(payload), artifact)
+    return artifact
+
+
+def task_status_to_json_dict(status: TaskStatus) -> JsonObject:
+    return require_json_object(MessageToDict(status), "TaskStatus")
+
+
+def task_status_from_json_dict(payload: Mapping[str, JsonValue]) -> TaskStatus:
+    normalized: JsonObject = dict(payload)
+    message_value = normalized.get("message")
+    if isinstance(message_value, dict):
+        normalized["message"] = normalize_message_json_for_proto(
+            require_json_object(message_value, "TaskStatus.message")
+        )
+    status = TaskStatus()
+    _ = ParseDict(normalized, status)
+    return status
+
+
+def task_to_json_dict(task: Task) -> JsonObject:
+    return require_json_object(MessageToDict(task), "Task")
+
+
+def task_from_json_dict(payload: Mapping[str, JsonValue]) -> Task:
+    normalized: JsonObject = dict(payload)
+    status_value = normalized.get("status")
+    if isinstance(status_value, dict):
+        normalized["status"] = task_status_to_json_dict(
+            task_status_from_json_dict(
+                require_json_object(status_value, "Task.status")
+            )
+        )
+    artifacts_value = normalized.get("artifacts")
+    if isinstance(artifacts_value, list):
+        normalized_artifacts: list[JsonValue] = []
+        for index, artifact_value in enumerate(artifacts_value):
+            if not isinstance(artifact_value, dict):
+                raise ValueError(f"Task.artifacts[{index}] must be an object")
+            normalized_artifacts.append(
+                normalize_artifact_json_for_proto(
+                    require_json_object(artifact_value, f"Task.artifacts[{index}]")
+                )
+            )
+        normalized["artifacts"] = normalized_artifacts
+    history_value = normalized.get("history")
+    if isinstance(history_value, list):
+        normalized_history: list[JsonValue] = []
+        for index, message_value in enumerate(history_value):
+            if not isinstance(message_value, dict):
+                raise ValueError(f"Task.history[{index}] must be an object")
+            normalized_history.append(
+                normalize_message_json_for_proto(
+                    require_json_object(message_value, f"Task.history[{index}]")
+                )
+            )
+        normalized["history"] = normalized_history
+    task = Task()
+    _ = ParseDict(normalized, task)
+    return task
+
+
+def artifact_update_to_json_dict(event: TaskArtifactUpdateEvent) -> JsonObject:
+    return require_json_object(MessageToDict(event), "TaskArtifactUpdateEvent")
+
+
+def artifact_update_from_json_dict(
+    payload: Mapping[str, JsonValue],
+) -> TaskArtifactUpdateEvent:
+    normalized: JsonObject = dict(payload)
+    artifact_value = normalized.get("artifact")
+    if isinstance(artifact_value, dict):
+        normalized["artifact"] = normalize_artifact_json_for_proto(
+            require_json_object(artifact_value, "TaskArtifactUpdateEvent.artifact")
+        )
+    event = TaskArtifactUpdateEvent()
+    _ = ParseDict(normalized, event)
+    return event
+
+
+def status_update_to_json_dict(event: TaskStatusUpdateEvent) -> JsonObject:
+    return require_json_object(MessageToDict(event), "TaskStatusUpdateEvent")
+
+
+def status_update_from_json_dict(
+    payload: Mapping[str, JsonValue],
+) -> TaskStatusUpdateEvent:
+    normalized: JsonObject = dict(payload)
+    status_value = normalized.get("status")
+    if isinstance(status_value, dict):
+        normalized["status"] = task_status_to_json_dict(
+            task_status_from_json_dict(
+                require_json_object(status_value, "TaskStatusUpdateEvent.status")
+            )
+        )
+    event = TaskStatusUpdateEvent()
+    _ = ParseDict(normalized, event)
+    return event
+
+
 def struct_from_mapping(mapping: Mapping[str, JsonValue]) -> Struct:
     """Собирает `google.protobuf.Struct` из JSON object."""
     struct = Struct()
@@ -104,9 +246,30 @@ def struct_from_mapping(mapping: Mapping[str, JsonValue]) -> Struct:
     return struct
 
 
+def _restore_json_integers(value: JsonValue) -> JsonValue:
+    """protobuf Struct/Value хранит числа как double; MessageToDict отдаёт float.
+
+    JSON integer (и tool args с schema integer) после round-trip должны снова
+    быть int, иначе sandbox/f-string получают 30.0 вместо 30. Safe в пределах
+    IEEE-754 exact integer range (±2^53).
+    """
+    if isinstance(value, float) and value.is_integer() and abs(value) <= 2**53:
+        return int(value)
+    if isinstance(value, list):
+        return [_restore_json_integers(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _restore_json_integers(item)
+            for key, item in value.items()
+        }
+    return value
+
+
 def mapping_from_struct(struct: Struct) -> JsonObject:
     """Разворачивает `Struct` в JSON object."""
-    return require_json_object(MessageToDict(struct), "Struct")
+    raw = require_json_object(MessageToDict(struct), "Struct")
+    restored = _restore_json_integers(raw)
+    return require_json_object(restored, "Struct")
 
 
 def value_from_json(value: JsonValue) -> Value:
@@ -118,8 +281,8 @@ def value_from_json(value: JsonValue) -> Value:
 
 def json_from_value(value: Value) -> JsonValue:
     """Разворачивает `google.protobuf.Value` в JSON value."""
-    return require_json_value(MessageToDict(value), "Value")
-
+    raw = require_json_value(MessageToDict(value), "Value")
+    return _restore_json_integers(raw)
 
 def _part_content_kind(part: Part) -> str | None:
     kind = cast(str | None, part.WhichOneof(_PART_CONTENT_ONEOF))
@@ -184,10 +347,59 @@ def messages_to_json_list(messages: Sequence[Message]) -> list[JsonObject]:
     return [message_to_json_dict(message) for message in messages]
 
 
+def stream_response_from_event(
+    event: Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent,
+) -> StreamResponse:
+    """Wrap one A2A stream payload into the standard StreamResponse oneof."""
+    if isinstance(event, TaskStatusUpdateEvent):
+        return StreamResponse(status_update=event)
+    if isinstance(event, TaskArtifactUpdateEvent):
+        return StreamResponse(artifact_update=event)
+    if isinstance(event, Task):
+        return StreamResponse(task=event)
+    return StreamResponse(message=event)
+
+
+def stream_response_to_json_dict(stream: StreamResponse) -> JsonObject:
+    """Serialize StreamResponse to ProtoJSON; payload oneof is required."""
+    if not (
+        stream.HasField("task")
+        or stream.HasField("message")
+        or stream.HasField("status_update")
+        or stream.HasField("artifact_update")
+    ):
+        raise ValueError("StreamResponse payload oneof is required")
+    return require_json_object(MessageToDict(stream), "StreamResponse")
+
+
+def stream_response_from_json_dict(payload: Mapping[str, JsonValue]) -> StreamResponse:
+    """Parse ProtoJSON StreamResponse; exactly one payload field must be present."""
+    present = [key for key in _STREAM_RESPONSE_WIRE_KEYS if key in payload]
+    if len(present) != 1:
+        raise ValueError(
+            f"StreamResponse requires exactly one of {_STREAM_RESPONSE_WIRE_KEYS}, got {present!r}"
+        )
+    stream = StreamResponse()
+    _ = ParseDict(dict(payload), stream)
+    if not (
+        stream.HasField("task")
+        or stream.HasField("message")
+        or stream.HasField("status_update")
+        or stream.HasField("artifact_update")
+    ):
+        raise ValueError("StreamResponse payload oneof is required after parse")
+    return stream
+
+
 __all__ = [
+    "artifact_from_json_dict",
+    "artifact_to_json_dict",
+    "artifact_update_from_json_dict",
+    "artifact_update_to_json_dict",
     "message_to_json_dict",
     "message_from_json_dict",
     "normalize_message_json_for_proto",
+    "normalize_artifact_json_for_proto",
     "struct_from_mapping",
     "mapping_from_struct",
     "value_from_json",
@@ -202,4 +414,13 @@ __all__ = [
     "get_part_data",
     "messages_from_json_list",
     "messages_to_json_list",
+    "status_update_from_json_dict",
+    "status_update_to_json_dict",
+    "stream_response_from_event",
+    "stream_response_from_json_dict",
+    "stream_response_to_json_dict",
+    "task_from_json_dict",
+    "task_status_from_json_dict",
+    "task_status_to_json_dict",
+    "task_to_json_dict",
 ]

@@ -254,9 +254,9 @@ class TestProcessAgentTask:
             )
 
         set_context(mock_context)
+        # Flow отсутствует — durable session не создаётся до materialize UI / run.
         persisted = await container.workflow_runtime.get_state(session_id)
-        assert persisted is not None
-        assert persisted.terminal_task_state == "failed"
+        assert persisted is None
 
     @pytest.mark.asyncio
     async def test_process_flow_task_persists_failed_terminal_state(
@@ -342,8 +342,8 @@ class TestProcessAgentTaskResume:
                 "interrupt": InterruptData(
                     body=UserMessageInterrupt(question="What is your name?"),
                     system=InterruptSystemContext(
-                        task_id="test-task",
-                        context_id="test-context",
+                        task_id=f"test-task-{unique_id}",
+                        context_id=f"test-context-{unique_id}",
                     ),
                 ).model_dump(mode="json"),
                 "branch_id": "default",

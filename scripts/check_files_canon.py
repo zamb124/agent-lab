@@ -117,22 +117,31 @@ def _check_docs_placement_coverage() -> list[str]:
     return errors
 
 
-def _check_chat_no_base64_upload() -> list[str]:
-    """platform-chat must not encode files as base64 for A2A."""
+def _check_flow_ui_no_base64_upload() -> list[str]:
+    """platform-flow-ui must upload files via resolvePlatformFileRefs, not base64."""
     errors: list[str] = []
-    chat_path = REPO_ROOT / "core" / "frontend" / "static" / "lib" / "chat" / "platform-chat.js"
-    text = chat_path.read_text(encoding="utf-8")
+    controller = (
+        REPO_ROOT
+        / "core"
+        / "frontend"
+        / "static"
+        / "lib"
+        / "flow-ui"
+        / "runtime"
+        / "flow-ui-controller.js"
+    )
+    text = controller.read_text(encoding="utf-8")
     if "_fileToBase64Part" in text:
-        errors.append("platform-chat.js: _fileToBase64Part must be removed")
+        errors.append("flow-ui-controller.js: _fileToBase64Part must be removed")
     if "readAsDataURL" in text:
-        errors.append("platform-chat.js: readAsDataURL file upload path forbidden")
+        errors.append("flow-ui-controller.js: readAsDataURL file upload path forbidden")
     if "resolvePlatformFileRefs" not in text:
-        errors.append("platform-chat.js: must use resolvePlatformFileRefs for outbound files")
+        errors.append("flow-ui-controller.js: must use resolvePlatformFileRefs for outbound files")
     return errors
 
 
 def _check_a2a_stream_url_only() -> list[str]:
-    """Platform A2A builder accepts only url file parts."""
+    """Platform A2A builder accepts only url/file_id file parts."""
     errors: list[str] = []
     path = (
         REPO_ROOT
@@ -140,34 +149,32 @@ def _check_a2a_stream_url_only() -> list[str]:
         / "frontend"
         / "static"
         / "lib"
-        / "chat"
-        / "runtime"
-        / "a2a-stream.js"
+        / "flow-ui"
+        / "protocol"
+        / "a2a-codec.js"
     )
     text = path.read_text(encoding="utf-8")
     if "typeof f.raw === 'string'" in text:
-        errors.append("a2a-stream.js: buildA2aFileParts must not accept f.raw")
+        errors.append("a2a-codec.js: buildA2aFileParts must not accept f.raw")
     if "fw.bytes" in text:
-        errors.append("a2a-stream.js: buildA2aFileParts must not accept file.bytes")
+        errors.append("a2a-codec.js: buildA2aFileParts must not accept file.bytes")
     if "f.data != null" in text or "f && f.data" in text:
-        errors.append("a2a-stream.js: buildA2aFileParts must not accept f.data fallback")
-    if "raw forbidden" not in text:
-        errors.append("a2a-stream.js: must fail-closed on raw file parts")
-    if "url required" not in text:
-        errors.append("a2a-stream.js: must require url for file parts")
+        errors.append("a2a-codec.js: buildA2aFileParts must not accept f.data fallback")
+    if "file_id or url" not in text:
+        errors.append("a2a-codec.js: must require file_id or url for file parts")
     controller = (
         REPO_ROOT
         / "core"
         / "frontend"
         / "static"
         / "lib"
-        / "chat"
+        / "flow-ui"
         / "runtime"
-        / "chat-controller.js"
+        / "flow-ui-controller.js"
     )
     controller_text = controller.read_text(encoding="utf-8")
-    if "raw forbidden" not in controller_text:
-        errors.append("chat-controller.js: must reject files[].raw before send")
+    if "resolvePlatformFileRefs" not in controller_text:
+        errors.append("flow-ui-controller.js: must resolve platform file refs before send")
     return errors
 
 
@@ -415,7 +422,7 @@ def main() -> int:
     errors = _scan_for_legacy()
     errors.extend(_check_files_router_mount())
     errors.extend(_check_docs_placement_coverage())
-    errors.extend(_check_chat_no_base64_upload())
+    errors.extend(_check_flow_ui_no_base64_upload())
     errors.extend(_check_a2a_stream_url_only())
     errors.extend(_check_mail_no_content_base64())
     errors.extend(_check_public_search_no_base64_upload())

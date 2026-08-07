@@ -2,27 +2,32 @@
 Emitter - публикация A2A событий в Redis Pub/Sub.
 """
 
-import json
-from datetime import datetime, timezone
-from typing import override
+from typing import Protocol, Self, override
 
-from a2a.types import StreamResponse, TaskStatusUpdateEvent
+from a2a.types import Message
 from google.protobuf.json_format import MessageToDict
 
+from apps.flows.src.a2a.ensure_submitted_task import ensure_submitted_a2a_task
+from apps.flows.src.a2a.task_projection_service import A2ATaskProjectionService
+from apps.flows.src.db.a2a_task_repository import A2ATaskRepository
 from apps.flows.src.observability.flow_timing import maybe_record_flow_first_content_chunk
 from core.a2a import struct_from_mapping
-from core.clients.redis_client import RedisClient
+from core.context import require_context
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 from .base import BaseEmitter, StreamEvent
 
+
+class A2AEmitterContainer(Protocol):
+    @property
+    def a2a_task_projection_service(self) -> A2ATaskProjectionService: ...
+
+    @property
+    def a2a_task_repository(self) -> A2ATaskRepository: ...
+
 logger = get_logger(__name__)
-
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 class Emitter(BaseEmitter):
@@ -35,24 +40,74 @@ class Emitter(BaseEmitter):
     - trace_id (из OpenTelemetry контекста)
     - span_id (из OpenTelemetry контекста)
 
+    Durable append требует Task projection: для новых путей используй
+    ``create_ensured``. ``from_container`` — только когда Task уже ensured.
+
     Примеры:
-        >>> emitter = Emitter(redis, state)
+        >>> emitter = await Emitter.create_ensured(container, state)
         >>> await emitter.emit_text("Привет")
         >>> await emitter.emit_complete("Готово")
     """
 
-    redis: RedisClient
+    projection_service: A2ATaskProjectionService
+    company_id: str
     _first_content_chunk_recorded: bool
 
-    def __init__(self, redis_client: RedisClient, state: ExecutionState):
+    def __init__(
+        self,
+        projection_service: A2ATaskProjectionService,
+        state: ExecutionState,
+        *,
+        company_id: str,
+    ) -> None:
         """
         Аргументы:
-            redis_client: Redis клиент для pub/sub
+            projection_service: durable projection and Redis publication service
             state: ExecutionState с task_id, context_id
         """
+        if company_id.strip() == "":
+            raise ValueError("Emitter company_id is required")
         super().__init__(state)
-        self.redis = redis_client
+        self.projection_service = projection_service
+        self.company_id = company_id
         self._first_content_chunk_recorded = False
+
+    @classmethod
+    def from_container(
+        cls,
+        container: A2AEmitterContainer,
+        state: ExecutionState,
+    ) -> Self:
+        context = require_context()
+        if context.active_company is None:
+            raise ValueError("Durable A2A emitter requires active_company")
+        return cls(
+            container.a2a_task_projection_service,
+            state,
+            company_id=context.active_company.company_id,
+        )
+
+    @classmethod
+    async def create_ensured(
+        cls,
+        container: A2AEmitterContainer,
+        state: ExecutionState,
+        *,
+        input_message: Message | None = None,
+        content: str | None = None,
+    ) -> Self:
+        """Ensure SUBMITTED Task projection, then build a durable Emitter."""
+        context = require_context()
+        if context.active_company is None:
+            raise ValueError("Durable A2A emitter requires active_company")
+        await ensure_submitted_a2a_task(
+            repository=container.a2a_task_repository,
+            company_id=context.active_company.company_id,
+            state=state,
+            input_message=input_message,
+            content=content,
+        )
+        return cls.from_container(container, state)
 
     @override
     async def emit_text(
@@ -71,7 +126,7 @@ class Emitter(BaseEmitter):
             self._first_content_chunk_recorded = True
             flow_id = self.state.session_flow_id
             await maybe_record_flow_first_content_chunk(
-                self.redis,
+                self.projection_service.redis_client,
                 task_id=self.state.task_id,
                 flow_id=flow_id,
                 text=text,
@@ -104,93 +159,9 @@ class Emitter(BaseEmitter):
                 meta = {**existing, **meta}
             event.metadata.CopyFrom(struct_from_mapping(meta))
 
-        if isinstance(event, TaskStatusUpdateEvent):
-            stream = StreamResponse(status_update=event)
-            event_kind = "statusUpdate"
-        else:
-            stream = StreamResponse(artifact_update=event)
-            event_kind = "artifactUpdate"
-
-        event_dict = MessageToDict(stream)
-        channel = f"stream:{self.state.task_id}"
-        logger.debug(f"[Emitter] Publishing {event_kind} to {channel}")
-        _ = await self.redis.publish(
-            channel,
-            json.dumps(event_dict, ensure_ascii=False),
+        _ = await self.projection_service.publish(
+            company_id=self.company_id,
+            event=event,
         )
-        logger.debug(f"[Emitter] Published {event_kind} to {channel}")
-
-    async def emit_handoff_initiated(
-        self,
-        target_flow_id: str,
-        target_flow_name: str,
-        handoff_reason: str | None,
-        depth: int,
-        child_session_id: str,
-        trace_id: str | None = None,
-    ) -> None:
-        """Публикует ui_event platform.handoff_initiated для UI."""
-        payload: JsonObject = {
-            "target_flow_id": target_flow_id,
-            "target_flow_name": target_flow_name,
-            "handoff_reason": handoff_reason or "",
-            "depth": depth,
-            "child_session_id": child_session_id,
-        }
-        if trace_id is not None:
-            payload["trace_id"] = trace_id
-        await self.emit_ui_event(
-            event_type="platform.handoff_initiated",
-            payload=payload,
-            timestamp=_utc_now_iso(),
-        )
-
-    async def emit_handback_completed(
-        self,
-        response: str,
-        handoff_depth: int,
-        child_flow_id: str,
-        child_flow_name: str,
-        parent_flow_name: str,
-        trace_id: str | None = None,
-    ) -> None:
-        """Публикует ui_event platform.handback_completed для UI."""
-        payload: JsonObject = {
-            "response": response,
-            "handoff_depth": handoff_depth,
-            "child_flow_id": child_flow_id,
-            "child_flow_name": child_flow_name,
-            "parent_flow_name": parent_flow_name,
-        }
-        if trace_id is not None:
-            payload["trace_id"] = trace_id
-        await self.emit_ui_event(
-            event_type="platform.handback_completed",
-            payload=payload,
-            timestamp=_utc_now_iso(),
-        )
-
-    @override
-    async def emit_ui_event(
-        self,
-        event_type: str,
-        payload: JsonObject,
-        *,
-        event_id: str | None = None,
-        version: str = "1.0.0",
-        timestamp: str,
-        source: str = "assistant",
-        correlation_id: str | None = None,
-    ) -> None:
-        await super().emit_ui_event(
-            event_type=event_type,
-            payload=payload,
-            event_id=event_id,
-            version=version,
-            timestamp=timestamp,
-            source=source,
-            correlation_id=correlation_id,
-        )
-
 
 __all__ = ["Emitter"]

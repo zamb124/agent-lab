@@ -460,7 +460,8 @@ class TestReminderWithToolNames:
 
     @pytest.mark.asyncio
     async def test_reminder_uses_exit_tool_name(
-        self, explicit_strict_config, mock_llm_with_queue
+        self, explicit_strict_config, mock_llm_with_queue,
+        unique_id,
     ):
         """Reminder содержит имя exit tool."""
         runner = _llm_runner(
@@ -476,10 +477,10 @@ class TestReminderWithToolNames:
         ])
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             messages=[]
         )
         await _run_reminder_agent(runner, state)
@@ -504,7 +505,8 @@ class TestReminderWithToolNames:
 
     @pytest.mark.asyncio
     async def test_reminder_includes_reason_tool_when_present(
-        self, explicit_strict_config, mock_llm_with_queue
+        self, explicit_strict_config, mock_llm_with_queue,
+        unique_id,
     ):
         """Reminder включает имя reason tool если он есть."""
         runner = _llm_runner(
@@ -520,10 +522,10 @@ class TestReminderWithToolNames:
         ])
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             messages=[]
         )
         await _run_reminder_agent(runner, state)
@@ -542,7 +544,8 @@ class TestReminderWithToolNames:
 
     @pytest.mark.asyncio
     async def test_reminder_uses_custom_exit_tool_name(
-        self, mock_llm_with_queue
+        self, mock_llm_with_queue,
+        unique_id,
     ):
         """Reminder использует кастомное имя exit tool."""
         custom_exit = CustomExitTool()
@@ -572,10 +575,10 @@ class TestReminderWithToolNames:
         ])
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             messages=[]
         )
         await _run_reminder_agent(runner, state)
@@ -594,7 +597,8 @@ class TestReminderWithToolNames:
 
     @pytest.mark.asyncio
     async def test_reminder_uses_custom_reason_tool_name(
-        self, mock_llm_with_queue
+        self, mock_llm_with_queue,
+        unique_id,
     ):
         """Reminder использует кастомное имя reason tool."""
         custom_reason = CustomReasonTool()
@@ -624,10 +628,10 @@ class TestReminderWithToolNames:
         ])
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             messages=[]
         )
         await _run_reminder_agent(runner, state)

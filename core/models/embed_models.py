@@ -1,14 +1,16 @@
-"""
-Модели для системы встраиваемых виджетов чата.
-"""
+"""Models for universal embedded Flow UI surfaces."""
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import ClassVar
+from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
-from core.models.flow_chat_settings import EmbedChatPolicyOverride
+from core.models.flow_interface import (
+    EmbedInterfaceOverride,
+    compact_embed_interface_override,
+)
+from core.types import JsonObject, require_json_object
 
 
 class EmbedStatus(str, Enum):
@@ -17,7 +19,22 @@ class EmbedStatus(str, Enum):
     DISABLED = "disabled"
 
 
+EmbedPresentation = Literal["drawer", "page"]
+
 DEFAULT_EMBED_INPUT_PLACEHOLDER = "Введите сообщение..."
+
+
+def resolve_embed_presentation(
+    *,
+    presentation: EmbedPresentation,
+    position: str,
+) -> EmbedPresentation:
+    """Effective host mount mode; position=fullscreen resolves to page."""
+    if presentation == "page":
+        return "page"
+    if position.strip().lower() == "fullscreen":
+        return "page"
+    return "drawer"
 
 
 class EmbedConfig(BaseModel):
@@ -63,6 +80,11 @@ class EmbedConfig(BaseModel):
     )
 
     # Настройки внешнего вида
+    presentation: EmbedPresentation = Field(
+        default="drawer",
+        title="Режим поверхности",
+        description="drawer — FAB + панель; page — полноэкранный Flow UI document",
+    )
     theme: str = Field(
         default="dark",
         title="Тема",
@@ -71,7 +93,7 @@ class EmbedConfig(BaseModel):
     position: str = Field(
         default="bottom-right",
         title="Позиция",
-        description="Позиция на странице (bottom-right, bottom-left)",
+        description="Позиция FAB на странице (bottom-right, bottom-left); для presentation=page игнорируется",
     )
     show_launcher: bool = Field(
         default=True,
@@ -101,7 +123,7 @@ class EmbedConfig(BaseModel):
     branding: bool = Field(
         default=True,
         title="Брендинг",
-        description="Показывать брендинг Humanitec",
+        description="Показывать брендинг Linnex",
     )
     landing_visible: bool = Field(
         default=False,
@@ -147,26 +169,29 @@ class EmbedConfig(BaseModel):
         title="Служебный виджет для одноразовой гостевой ссылки из редактора flow",
         description="Не показывается в списке embed configs консоли; создаётся только через preview-share API.",
     )
-    chat_override: EmbedChatPolicyOverride | None = Field(
+    interface_override: EmbedInterfaceOverride | None = Field(
         default=None,
-        title="Переопределение поведения чата",
+        title="Переопределение Flow UI для embed",
         description=(
-            "Частичный override FlowChatSettings для этого виджета; "
-            "None — полное наследование настроек flow"
+            "Частичный policy/initial-content override; component tree "
+            "наследуется от FlowConfig.interface"
         ),
     )
 
-    @field_serializer("chat_override")
-    def _serialize_chat_override(
+    @field_serializer("interface_override")
+    def _serialize_interface_override(
         self,
-        value: EmbedChatPolicyOverride | None,
-    ) -> dict[str, bool | str | list[str] | None] | None:
-        if value is None:
-            return None
-        payload = value.model_dump(exclude_unset=True)
-        if not payload:
-            return None
-        return payload
+        value: EmbedInterfaceOverride | None,
+    ) -> JsonObject | None:
+        compact = compact_embed_interface_override(value)
+        return (
+            None
+            if compact is None
+            else require_json_object(
+                compact.model_dump(mode="json", exclude_unset=True),
+                "EmbedInterfaceOverride",
+            )
+        )
 
     # Статистика
     usage_count: int = Field(
@@ -201,14 +226,22 @@ class EmbedConfig(BaseModel):
         json_schema_extra={"readonly": True},
     )
 
+    @model_validator(mode="after")
+    def _fullscreen_position_to_page(self) -> "EmbedConfig":
+        if self.presentation == "drawer" and self.position.strip().lower() == "fullscreen":
+            self.presentation = "page"
+            self.position = "bottom-right"
+        return self
 
-class EmbedChatLook(BaseModel):
+
+class EmbedInterfaceLook(BaseModel):
     """
-    Look&feel-проекция EmbedConfig для доставки в chat-profile.
+    Look&feel проекция EmbedConfig для interface-profile.
 
-    Только внешний вид виджета; политика поведения чата живёт в FlowConfig.chat.
+    Только host look; документ и values через profile не доставляются.
     """
 
+    presentation: EmbedPresentation
     theme: str
     position: str
     primary_color: str
@@ -221,15 +254,25 @@ class EmbedChatLook(BaseModel):
     voice_default_on: bool
 
     @classmethod
-    def from_embed_config(cls, config: EmbedConfig) -> "EmbedChatLook":
-        return cls(
-            theme=config.theme,
+    def from_embed_config(cls, config: EmbedConfig) -> "EmbedInterfaceLook":
+        presentation = resolve_embed_presentation(
+            presentation=config.presentation,
             position=config.position,
+        )
+        position = config.position
+        if presentation == "page":
+            position = "bottom-right"
+        elif position.strip().lower() not in ("bottom-right", "bottom-left"):
+            position = "bottom-right"
+        return cls(
+            presentation=presentation,
+            theme=config.theme,
+            position=position,
             primary_color=config.primary_color,
             assistant_title=config.assistant_title,
             placeholder=config.placeholder,
             interface_locale=config.interface_locale,
-            show_launcher=config.show_launcher,
+            show_launcher=False if presentation == "page" else config.show_launcher,
             branding=config.branding,
             voice_enabled=config.voice_enabled,
             voice_default_on=config.voice_default_on,
@@ -258,4 +301,3 @@ class EmbedMapping(BaseModel):
         description="ID компании, которой принадлежит виджет",
         json_schema_extra={"readonly": True},
     )
-

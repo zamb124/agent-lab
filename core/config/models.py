@@ -2304,7 +2304,7 @@ class PlatformBrandConfig(BaseModel):
     public_site: PublicSiteConfig = Field(default_factory=PublicSiteConfig)
     embed_api_subdomain: str = "api"
     embed_cdn_subdomain: str = "cdn"
-    embed_script_path: str = "/lib/embed-chat/humanitec-embed-autoload.js"
+    embed_script_path: str = "/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     auth_apple_client_id: str | None = None
     vapid_email: str | None = None
 

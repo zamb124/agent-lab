@@ -15,6 +15,7 @@ from typing import Literal, cast
 from apps.flows.src.models import (
     DataflowAvailability,
     DataflowCanvasChip,
+    DataflowCanvasChipKind,
     DataflowCanvasOutputChip,
     DataflowCanvasSummary,
     DataflowConfidence,
@@ -36,6 +37,11 @@ from apps.flows.src.models import (
     TriggerConfig,
 )
 from core.code_contract import CodeContract, scan_code_contract
+from core.models.flow_interface import FlowInterfaceConfig
+from core.state.flow_ui_contract import (
+    FlowUIContractField,
+    iter_flow_ui_submit_contract_fields,
+)
 from core.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.types import JsonObject, JsonValue, require_json_object
 from core.variables import scan_prompt_template
@@ -46,6 +52,7 @@ SYSTEM_STATE_FIELDS: dict[str, str] = {
     "result": "any",
     "validation": "object|null",
     "variables": "object",
+    "ui_values": "object",
     "triggers": "object",
     "files": "array",
     "messages": "array",
@@ -75,6 +82,7 @@ def inspect_flow_dataflow(
     sample_state: JsonObject | None = None,
     observed_runs: JsonObject | None = None,
     triggers: Mapping[str, TriggerConfig] | None = None,
+    interface: FlowInterfaceConfig | None = None,
 ) -> DataflowInspectResult:
     node_payloads: dict[str, JsonObject] = {
         node_id: require_json_object(
@@ -92,8 +100,13 @@ def inspect_flow_dataflow(
 
     normalized_variables = variables or {}
     normalized_triggers = triggers or {}
-    sanitized_sample = _sanitize_sample_state_for_inspect(sample_state, normalized_variables)
-    seed = _initial_state_map(normalized_variables, sanitized_sample)
+    ui_contract_fields = _ui_contract_fields(interface)
+    sanitized_sample = _sanitize_sample_state_for_inspect(
+        sample_state,
+        normalized_variables,
+        ui_contract_fields,
+    )
+    seed = _initial_state_map(normalized_variables, sanitized_sample, ui_contract_fields)
     incoming_by_node = _incoming_edges(edge_list)
     outgoing_by_node = _outgoing_edges(edge_list)
     reachable = _reachable_nodes(normalized_entry, outgoing_by_node)
@@ -152,6 +165,7 @@ def inspect_flow_dataflow(
             seed=in_states.get(node_id, seed),
             variables=normalized_variables,
             triggers=normalized_triggers,
+            ui_contract_fields=ui_contract_fields,
         )
 
     return DataflowInspectResult(
@@ -209,6 +223,7 @@ def _reachable_nodes(entry: str | None, outgoing_by_node: dict[str, list[Edge]])
 def _initial_state_map(
     variables: Mapping[str, FlowVariableConfig],
     sample_state: JsonObject,
+    ui_contract_fields: tuple[FlowUIContractField, ...] = (),
 ) -> dict[str, DataflowStateDescriptor]:
     out: dict[str, DataflowStateDescriptor] = {}
     for path, type_name in SYSTEM_STATE_FIELDS.items():
@@ -221,7 +236,10 @@ def _initial_state_map(
             protected=path in FROZEN_STATE_FIELDS,
         )
     out.update(_variable_state_map(variables))
-    for path, value in _flatten_sample_state_paths(sample_state, variables).items():
+    out.update(_ui_values_state_map(ui_contract_fields))
+    for path, value in _flatten_sample_state_paths(
+        sample_state, variables, ui_contract_fields
+    ).items():
         existing = out.get(path)
         desc = _descriptor(
             path,
@@ -243,6 +261,7 @@ def _is_system_descriptor(desc: DataflowStateDescriptor) -> bool:
 def _sanitize_sample_state_for_inspect(
     sample_state: JsonObject | None,
     variables: Mapping[str, FlowVariableConfig],
+    ui_contract_fields: tuple[FlowUIContractField, ...] = (),
 ) -> JsonObject:
     if not sample_state:
         return {}
@@ -260,15 +279,29 @@ def _sanitize_sample_state_for_inspect(
                 trimmed_variables[key] = variables_obj[key]
         if trimmed_variables:
             out["variables"] = trimmed_variables
+    raw_ui_values = sample_state.get("ui_values")
+    if isinstance(raw_ui_values, dict):
+        ui_values_obj = require_json_object(raw_ui_values, "sample_state.ui_values")
+        known_fields = {field.field for field in ui_contract_fields}
+        trimmed_ui_values: JsonObject = {}
+        for key in known_fields:
+            if key in ui_values_obj:
+                trimmed_ui_values[key] = ui_values_obj[key]
+        if trimmed_ui_values:
+            out["ui_values"] = trimmed_ui_values
     return out
 
 
 def _flatten_sample_state_paths(
     sample_state: JsonObject,
     variables: Mapping[str, FlowVariableConfig],
+    ui_contract_fields: tuple[FlowUIContractField, ...] = (),
 ) -> dict[str, JsonValue]:
-    sanitized = _sanitize_sample_state_for_inspect(sample_state, variables)
+    sanitized = _sanitize_sample_state_for_inspect(
+        sample_state, variables, ui_contract_fields
+    )
     out: dict[str, JsonValue] = {}
+    known_ui_fields = {field.field for field in ui_contract_fields}
     for top_key, value in sanitized.items():
         if top_key in CANVAS_START_TOP_LEVEL_FIELDS:
             out[top_key] = value
@@ -278,13 +311,32 @@ def _flatten_sample_state_paths(
             for var_key in variables:
                 if var_key in variables_obj:
                     out[f"variables.{var_key}"] = variables_obj[var_key]
+            continue
+        if top_key == "ui_values" and isinstance(value, dict):
+            ui_values_obj = require_json_object(value, "ui_values")
+            for field_key in known_ui_fields:
+                if field_key in ui_values_obj:
+                    out[f"ui_values.{field_key}"] = ui_values_obj[field_key]
     return out
+
+
+def _chip_kind_for_path(path: str) -> DataflowCanvasChipKind:
+    if path == "files":
+        return "files"
+    if path.startswith("variables."):
+        return "variable"
+    if path.startswith("triggers."):
+        return "trigger"
+    if path.startswith("ui_values."):
+        return "ui_value"
+    return "content"
 
 
 def _build_entry_canvas_inputs(
     seed: dict[str, DataflowStateDescriptor],
     variables: Mapping[str, FlowVariableConfig],
     triggers: Mapping[str, TriggerConfig],
+    ui_contract_fields: tuple[FlowUIContractField, ...] = (),
 ) -> list[DataflowCanvasChip]:
     chips: list[DataflowCanvasChip] = []
     seen_labels: set[str] = set()
@@ -306,6 +358,7 @@ def _build_entry_canvas_inputs(
                 status="ok",
                 type=descriptor.type if descriptor else type_name,
                 required=required,
+                kind=_chip_kind_for_path(label),
             )
         )
 
@@ -323,6 +376,13 @@ def _build_entry_canvas_inputs(
         descriptor = seed.get(path)
         add_chip(path, type_name=descriptor.type if descriptor else "any")
 
+    for field in sorted(ui_contract_fields, key=lambda item: item.field):
+        if not field.field:
+            continue
+        path = f"ui_values.{field.field}"
+        descriptor = seed.get(path)
+        add_chip(path, type_name=descriptor.type if descriptor else _type_of_value(field.value))
+
     for trigger_id, trigger in sorted(triggers.items()):
         if not trigger.enabled:
             continue
@@ -338,6 +398,33 @@ def _build_entry_canvas_inputs(
         add_chip(f"triggers.{trigger_id}.payload", type_name="object")
 
     return chips
+
+
+def _ui_contract_fields(
+    interface: FlowInterfaceConfig | None,
+) -> tuple[FlowUIContractField, ...]:
+    if interface is None:
+        return ()
+    return iter_flow_ui_submit_contract_fields(interface.template.document)
+
+
+def _ui_values_state_map(
+    ui_contract_fields: tuple[FlowUIContractField, ...],
+) -> dict[str, DataflowStateDescriptor]:
+    out: dict[str, DataflowStateDescriptor] = {}
+    for field in ui_contract_fields:
+        if not field.field:
+            continue
+        path = f"ui_values.{field.field}"
+        out[path] = _descriptor(
+            path,
+            type_name=_type_of_value(field.value),
+            source="flow_ui_contract",
+            availability="guaranteed",
+            confidence="runtime_contract",
+            sample_value=_sample_value(field.value),
+        )
+    return out
 
 
 def _variable_state_map(
@@ -550,8 +637,14 @@ def _input_satisfied_by_state(
 def _prompt_variable_available(
     name: str, incoming: dict[str, DataflowStateDescriptor]
 ) -> bool:
-    """Prompt placeholders read state.variables, not arbitrary top-level state."""
-    return f"variables.{name}" in incoming
+    """Prompt placeholders: state.variables.* and Flow UI ui_values.*."""
+    if f"variables.{name}" in incoming:
+        return True
+    if name == "ui_values":
+        if "ui_values" in incoming:
+            return True
+        return any(path.startswith("ui_values.") for path in incoming)
+    return False
 
 
 def _derive_required_inputs(
@@ -1429,6 +1522,7 @@ def _canvas_summary(
     seed: dict[str, DataflowStateDescriptor],
     variables: Mapping[str, FlowVariableConfig],
     triggers: Mapping[str, TriggerConfig],
+    ui_contract_fields: tuple[FlowUIContractField, ...] = (),
 ) -> DataflowCanvasSummary:
     required_by_target = {req.name: req for req in info.required_inputs}
     mapped_targets = {row.target for row in info.input_mapping if row.target}
@@ -1453,6 +1547,7 @@ def _canvas_summary(
                 type=row.type,
                 required=req is not None,
                 producer_node=row.producers[0] if row.producers else None,
+                kind=_chip_kind_for_path(str(label)),
             )
         )
     for req in info.required_inputs:
@@ -1465,6 +1560,7 @@ def _canvas_summary(
                 status="ok" if req.satisfied else "missing",
                 type=req.type,
                 required=True,
+                kind=_chip_kind_for_path(req.name),
             )
         )
     for read in info.reads:
@@ -1483,10 +1579,13 @@ def _canvas_summary(
                 status=read.status,
                 type=read.type,
                 producer_node=producer_node,
+                kind=_chip_kind_for_path(str(label)),
             )
         )
     if is_entry:
-        for chip in _build_entry_canvas_inputs(seed, variables, triggers):
+        for chip in _build_entry_canvas_inputs(
+            seed, variables, triggers, ui_contract_fields
+        ):
             add_chip(chip)
     outputs: list[DataflowCanvasOutputChip] = [
         DataflowCanvasOutputChip(label=desc.path, type=desc.type) for desc in info.writes

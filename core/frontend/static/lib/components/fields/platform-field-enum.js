@@ -145,14 +145,14 @@ export class PlatformFieldEnum extends PlatformElement {
         this._anchor = null;
     }
 
+    firstUpdated(changed) {
+        super.firstUpdated?.(changed);
+        this._ensureAnchor();
+    }
+
     updated(changed) {
         super.updated?.(changed);
-        if (this._anchor === null) {
-            const wrap = this.renderRoot?.querySelector?.('.field-pill-enum-wrap');
-            if (wrap instanceof HTMLElement) {
-                this._anchor = wrap;
-            }
-        }
+        this._ensureAnchor();
         if (this._listOpen && !this.disabled) {
             // Список меняет высоту при фильтрации, поэтому попап пересчитывается
             // после каждого обновления содержимого.
@@ -165,9 +165,31 @@ export class PlatformFieldEnum extends PlatformElement {
         if (this.mode !== 'edit') {
             return;
         }
+        // Пока список открыт — не затирать поисковый ввод при смене reference
+        // `.config` у родителя (новый object на каждый render).
+        if (this._listOpen) {
+            return;
+        }
         if (changed.has('value') || changed.has('config')) {
             this._filterQuery = this._displayTextSyncedToValue();
         }
+    }
+
+    /**
+     * Якорь нужен до showPopover: иначе слой открывается без позиции
+     * (static top-left) и outside-dismiss с null-anchor гасит его жестом открытия.
+     * @returns {HTMLElement | null}
+     */
+    _ensureAnchor() {
+        if (this._anchor instanceof HTMLElement) {
+            return this._anchor;
+        }
+        const wrap = this.renderRoot?.querySelector?.('.field-pill-enum-wrap');
+        if (wrap instanceof HTMLElement) {
+            this._anchor = wrap;
+            return wrap;
+        }
+        return null;
     }
 
     get _enumOptions() {
@@ -295,6 +317,7 @@ export class PlatformFieldEnum extends PlatformElement {
 
     _openList() {
         if (this.disabled) return;
+        this._ensureAnchor();
         this._listOpen = true;
         this._deferOptionFilter = true;
     }

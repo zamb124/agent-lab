@@ -366,7 +366,7 @@ async def test_flows_reflection_result_in_chat(
     await flows_close_floating_panel(page)
     await flows_open_editor(page, flows_ui, flow_id)
     await flows_switch_editor_mode(page, "run")
-    run_chat = page.locator("flows-execution-panel platform-chat").first
+    run_chat = page.locator("flows-execution-panel platform-flow-ui").first
     await expect(run_chat).to_be_visible(timeout=15_000)
     await scenario.step(
         "Откройте тестовый чат в режиме Запуск",

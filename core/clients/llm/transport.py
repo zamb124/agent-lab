@@ -200,6 +200,8 @@ async def stream_once(
 
     full_content = ""
     full_reasoning = ""
+    content_artifact_id = str(uuid.uuid4())
+    reasoning_artifact_id = str(uuid.uuid4())
     tool_calls_buffer: dict[int, dict[str, str]] = {}
     usage_data: JsonObject = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     stream_start_time = time.monotonic()
@@ -388,7 +390,8 @@ async def stream_once(
                                         context_id=context_id,
                                         task_id=task_id,
                                         artifact=Artifact(
-                                            artifact_id=str(uuid.uuid4()),
+                                            artifact_id=content_artifact_id,
+                                            name="response",
                                             parts=[Part(text=message_content)],
                                         ),
                                         append=True,
@@ -412,7 +415,8 @@ async def stream_once(
                                     context_id=context_id,
                                     task_id=task_id,
                                     artifact=Artifact(
-                                        artifact_id=str(uuid.uuid4()),
+                                        artifact_id=content_artifact_id,
+                                        name="response",
                                         parts=[Part(text=text)],
                                     ),
                                     append=True,
@@ -446,7 +450,7 @@ async def stream_once(
                                     context_id=context_id,
                                     task_id=task_id,
                                     artifact=Artifact(
-                                        artifact_id=str(uuid.uuid4()),
+                                        artifact_id=reasoning_artifact_id,
                                         name="reasoning",
                                         parts=[Part(text=reasoning_text)],
                                     ),

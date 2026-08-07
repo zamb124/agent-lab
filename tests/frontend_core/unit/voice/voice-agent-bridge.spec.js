@@ -3,7 +3,7 @@
  *
  * Проверяется:
  *  - на финальный `transcript{final:true}` от VoiceMediaSession bridge
- *    отправляет `SendStreamingMessage` в A2A через consumeA2aStream (chat/runtime/a2a-stream.js);
+ *    отправляет `SendStreamingMessage` в A2A через consumeA2AStream (flow-ui/protocol/a2a-stream.js);
  *  - speakable `TaskArtifactUpdateEvent` → `feedStreamTtsFromA2aResult` + registry → `mediaSession.speak`;
  *  - финальный `statusUpdate`: текст в `status.message` при `TASK_STATE_INPUT_REQUIRED` / `metadata.platform_interrupt`
  *    → `speak` (interrupt ask_user и т.п.), затем `endUtterance`; иначе только `endUtterance`;
@@ -15,11 +15,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const streamMock = vi.fn();
 
-vi.mock('@platform/lib/chat/runtime/a2a-stream.js', async (importOriginal) => {
+vi.mock('@platform/lib/flow-ui/protocol/a2a-stream.js', async (importOriginal) => {
     const actual = await importOriginal();
     return {
         ...actual,
-        consumeA2aStream: (options, onFrame) => streamMock(options, onFrame),
+        consumeA2AStream: (options, onFrame) => streamMock(options, onFrame),
     };
 });
 
@@ -129,7 +129,7 @@ describe('VoiceAgentBridge: userStopActiveTurn', () => {
 });
 
 describe('VoiceAgentBridge: voice → flows', () => {
-    it('на transcript{final:true} вызывает consumeA2aStream с текстом', async () => {
+    it('на transcript{final:true} вызывает consumeA2AStream с текстом', async () => {
         streamMock.mockResolvedValue(undefined);
         const media = new FakeMediaSession();
         const bridge = new VoiceAgentBridge({

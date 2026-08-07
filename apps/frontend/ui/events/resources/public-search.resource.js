@@ -11,9 +11,9 @@ import { httpRequest, HttpError } from '@platform/lib/events/http.js';
 import {
     a2aEndpointUrl,
     buildA2aSendStreamingMessageBody,
-    consumeA2aStream,
-} from '@platform/lib/chat/runtime/a2a-stream.js';
-import { mapA2aResultToChatRuntimeEvents } from '@platform/lib/chat/a2a-chat-runtime.js';
+} from '@platform/lib/flow-ui/protocol/a2a-codec.js';
+import { consumeA2AStream as consumeA2aStream } from '@platform/lib/flow-ui/protocol/a2a-stream.js';
+import { mapA2aResultToChatRuntimeEvents } from '@platform/lib/flow-ui/protocol/a2a-result-helpers.js';
 import {
     takePendingPublicSearchRunFiles,
     uploadPublicSearchFilesForA2a,

@@ -137,10 +137,10 @@ describe('PlatformApp: render', () => {
         await elementUpdated(el);
         expect(el.shadowRoot.querySelector('.route-content')).to.exist;
         expect(el.shadowRoot.querySelector('platform-modal-stack')).to.exist;
-        const lara = el.shadowRoot.querySelector('platform-chat[flow-id="lara"]');
+        const lara = el.shadowRoot.querySelector('flow-ui-drawer');
         expect(lara).to.exist;
-        expect(lara.branchId).to.equal('console');
-        expect(lara.companyId).to.equal('c1');
+        expect(lara.config.branchId).to.equal('console');
+        expect(lara.config.companyId).to.equal('c1');
     });
 
     it('не монтирует Lara на маршруте, исключённом route policy', async () => {
@@ -165,7 +165,7 @@ describe('PlatformApp: render', () => {
         });
         await elementUpdated(el);
         expect(el.shadowRoot.querySelector('.public-route')).to.exist;
-        expect(el.shadowRoot.querySelector('platform-chat[flow-id="lara"]')).to.equal(null);
+        expect(el.shadowRoot.querySelector('flow-ui-drawer')).to.equal(null);
     });
 
     it('service apps hide Lara on public guest routes', () => {
@@ -204,11 +204,11 @@ for (const entry of PLATFORM_ASSISTANT_BRANCH_MATRIX) {
                 user: { user_id: 'u1', name: 'A', company_id: 'c1' },
             });
             await elementUpdated(el);
-            const lara = el.shadowRoot.querySelector('platform-chat[flow-id="lara"]');
+            const lara = el.shadowRoot.querySelector('flow-ui-drawer');
             expect(lara).to.exist;
-            expect(lara.branchId).to.equal(entry.branchId);
-            expect(lara.launcherStorageScope).to.equal(entry.serviceId);
-            expect(lara.showLauncher).to.equal(true);
+            expect(lara.config.branchId).to.equal(entry.branchId);
+            expect(lara.config.serviceId).to.equal(entry.serviceId);
+            expect(lara.config.showLauncher).to.equal(true);
         });
     });
 }

@@ -217,6 +217,7 @@ export class FlowsFloatingPanel extends PlatformElement {
                 z-index: 1;
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) 0;
+                grid-template-rows: minmax(0, 1fr);
                 transition: grid-template-columns var(--duration-slower) var(--easing-smooth);
             }
 
@@ -259,9 +260,10 @@ export class FlowsFloatingPanel extends PlatformElement {
             }
 
             .panel-assistant ::slotted(*) {
-                flex: 1;
+                flex: 1 1 0;
                 min-height: 0;
                 height: 100%;
+                overflow: hidden;
             }
 
             .assistant-resize-handle {

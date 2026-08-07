@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     buildExecutionStatePreview,
     collectStatePathsFromDataflow,
+    findCatalogEntry,
     lookupPreviewValue,
     scanAtRefs,
     scanBraceRefs,
@@ -92,5 +93,18 @@ describe('variable-refs helpers', () => {
         expect(paths).toContain('response');
         expect(paths).toContain('variables.topic');
         expect(paths).toContain('context.foo');
+    });
+
+    it('findCatalogEntry matches ui_values leaf and root family', () => {
+        const catalog = [
+            { name: 'company_name', source: 'system' },
+            { name: 'ui_values.email', source: 'ui_value' },
+            { name: 'ui_values.phone', source: 'ui_value' },
+        ];
+        expect(findCatalogEntry('ui_values.email', catalog)?.name).toBe('ui_values.email');
+        expect(findCatalogEntry('ui_values', catalog)?.name).toMatch(/^ui_values\./);
+        expect(findCatalogEntry('ui_values.phone', catalog)?.name).toBe('ui_values.phone');
+        expect(findCatalogEntry('ui_values.missing', catalog)).toBeNull();
+        expect(findCatalogEntry('company_name', catalog)?.name).toBe('company_name');
     });
 });

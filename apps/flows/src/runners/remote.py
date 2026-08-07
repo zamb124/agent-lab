@@ -38,6 +38,7 @@ from core.context import get_context
 from core.errors import CodeExecutionRuntimeError, FrozenStateFieldError
 from core.logging import get_log_context, get_logger
 from core.state import ExecutionState, parse_interrupt_body_from_external_dict
+from core.state.flow_ui_effects import apply_capability_platform_effects
 from core.state.mutation_policy import (
     USER_RETURN_FORBIDDEN_FROZEN_FIELDS,
     should_skip_field_on_user_returned_state_copy,
@@ -278,6 +279,12 @@ class RemoteCodeRunner(BaseCodeRunner):
         if response.status == "failed":
             self._raise_execution_failed(response)
         self._apply_returned_state(state, response, frozen_snapshot)
+        _ = apply_capability_platform_effects(
+            state,
+            response.platform_effects,
+            context=context,
+            manifest=manifest,
+        )
         if response.status == "interrupted":
             self._raise_interrupted(response)
         return response

@@ -4,7 +4,7 @@
  * Поддержка темной и светлой темы
  */
 
-@import url('../../lib/chat/chat-tokens.css');
+@import url('../../lib/flow-ui/shell/tokens.css');
 @import url('../fonts/platform-fonts.css');
 
 :root {

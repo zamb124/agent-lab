@@ -22,6 +22,7 @@ from typing import TypedDict, cast
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
+from apps.flows.src.a2a.ensure_submitted_task import ensure_submitted_a2a_task
 from apps.flows.src.api.v1.flows import inline_tools_list
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.container_contracts import as_flow_runtime_container
@@ -1238,7 +1239,6 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
             "breakpoints": {},
             "scheduled_tasks": [],
             "prompt_history": [],
-            "ui_events_pending": [],
             "llm_context_memory_cursor": {},
             "agent_plan": None,
             "content": None,
@@ -1254,6 +1254,16 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
         }
         for key, value in state_defaults.items():
             _ = input_state_normalized.setdefault(key, value)
+
+        # Materialize Flow UI / system defaults so compute_state_diff compares
+        # the same shape ExecutionState.model_validate produces inside _execute_node.
+        input_state_normalized = require_json_object(
+            ExecutionState.model_validate(input_state_normalized).model_dump(
+                mode="json",
+                exclude_none=False,
+            ),
+            "execute.state",
+        )
 
         resolved_flow_id = flow_id
         raw_branch_id = input_state_normalized.get("branch_id")
@@ -1499,6 +1509,14 @@ async def _execute_node(
         execution_branch_id=scheduled_event.execution_branch_id or base_event.execution_branch_id,
         node_schedule_sequence=scheduled_event.sequence,
         superstep_sequence=superstep_event.sequence,
+    )
+    context = get_context()
+    if context is None or context.active_company is None:
+        raise ValueError("Node execute requires active_company for durable A2A projection")
+    await ensure_submitted_a2a_task(
+        repository=container.a2a_task_repository,
+        company_id=context.active_company.company_id,
+        state=state,
     )
     result_state = await node.run(state)
     _ = await runtime.record_state_event(

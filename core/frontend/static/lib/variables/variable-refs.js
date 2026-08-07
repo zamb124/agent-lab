@@ -121,12 +121,30 @@ export function findCatalogEntry(path, catalog) {
         return null;
     }
     const root = path.split('.', 1)[0];
+    /** @type {VariableCatalogEntry | null} */
+    let rootMatch = null;
+    /** @type {VariableCatalogEntry | null} */
+    let childOfRootMatch = null;
     for (const entry of catalog) {
         if (!entry || typeof entry !== 'object') continue;
         const name = /** @type {Record<string, unknown>} */ (entry).name;
-        if (typeof name === 'string' && name === root) {
+        if (typeof name !== 'string' || name.length === 0) continue;
+        if (name === path) {
             return /** @type {VariableCatalogEntry} */ (entry);
         }
+        if (name === root) {
+            rootMatch = /** @type {VariableCatalogEntry} */ (entry);
+            continue;
+        }
+        if (path === root && name.startsWith(`${root}.`)) {
+            childOfRootMatch = /** @type {VariableCatalogEntry} */ (entry);
+        }
+    }
+    if (rootMatch) {
+        return rootMatch;
+    }
+    if (path === root) {
+        return childOfRootMatch;
     }
     return null;
 }

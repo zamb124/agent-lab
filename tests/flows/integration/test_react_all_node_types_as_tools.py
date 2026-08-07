@@ -18,6 +18,7 @@ from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
+from core.a2a import mapping_from_struct
 from core.reflection import CriticCriterion, CriticPolicy, ReflectionTarget
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
@@ -849,11 +850,13 @@ class TestParallelToolExecution:
         assert "slow_tool" in result.tool_results, "slow_tool в tool_results"
         assert "fast_tool" in result.tool_results, "fast_tool в tool_results"
         assert "medium_tool" in result.tool_results, "medium_tool в tool_results"
-        tool_result_messages = [
-            m
-            for m in result.messages
-            if hasattr(m, "metadata") and m.metadata and m.metadata.get("tool_call_id")
-        ]
+        tool_result_messages = []
+        for message in result.messages:
+            if not hasattr(message, "metadata") or not message.HasField("metadata"):
+                continue
+            metadata = mapping_from_struct(message.metadata)
+            if metadata.get("tool_call_id"):
+                tool_result_messages.append(message)
         assert len(tool_result_messages) >= 3, (
             f"Должно быть минимум 3 tool_result messages, got {len(tool_result_messages)}"
         )

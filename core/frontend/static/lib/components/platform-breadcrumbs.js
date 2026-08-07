@@ -23,7 +23,8 @@ import '@platform/lib/components/platform-icon.js';
  * текущей подписью, каждая крошка ведёт на свой узел.
  *
  * Клик по неактивной крошке диспатчит `ROUTER_NAVIGATE_REQUESTED` с params
- * текущего маршрута, если совпадает routeKey, иначе с `{}`.
+ * текущего маршрута, пересечёнными с path-параметрами целевого route
+ * (`:flowId` и т.п. сохраняются при подъёме к родителю).
  */
 export class PlatformBreadcrumbs extends PlatformElement {
     static properties = {
@@ -168,6 +169,31 @@ export class PlatformBreadcrumbs extends PlatformElement {
         return this.t(`routes.${route.key}`);
     }
 
+    _paramsForRoute(route, activeRouteKey, currentParams) {
+        if (!route || typeof route.key !== 'string') {
+            throw new Error('platform-breadcrumbs: route required');
+        }
+        const params = currentParams && typeof currentParams === 'object' ? currentParams : {};
+        if (route.key === activeRouteKey) {
+            return params;
+        }
+        if (typeof route.path !== 'string') {
+            return {};
+        }
+        const tokens = route.path.match(/:([a-zA-Z_][a-zA-Z0-9_]*)/g);
+        if (!tokens) {
+            return {};
+        }
+        const inherited = {};
+        for (const token of tokens) {
+            const name = token.slice(1);
+            if (typeof params[name] === 'string' && params[name].length > 0) {
+                inherited[name] = params[name];
+            }
+        }
+        return inherited;
+    }
+
     _onClick(routeKey, params) {
         this.dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, {
             routeKey,
@@ -189,7 +215,7 @@ export class PlatformBreadcrumbs extends PlatformElement {
         const routeSegments = chain.map((route) => ({
             label: this._resolveLabel(route),
             routeKey: route.key,
-            params: route.key === router.routeKey ? router.params : {},
+            params: this._paramsForRoute(route, router.routeKey, router.params),
         }));
         const segments = trimmedCurrent.length > 0
             // Подпись текущей страницы занимает место последнего маршрута,

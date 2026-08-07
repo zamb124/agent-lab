@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://a2ui.org/specification/v0_9/client_capabilities.json",
+  "title": "A2UI Client Capabilities Schema",
+  "type": "object",
+  "properties": {
+    "v0.9": {"$ref": "#/$defs/versionCapabilities"},
+    "v0.9.1": {"$ref": "#/$defs/versionCapabilities"}
+  },
+  "oneOf": [
+    {"required": ["v0.9"]},
+    {"required": ["v0.9.1"]}
+  ],
+  "$defs": {
+    "versionCapabilities": {
+      "type": "object",
+      "properties": {
+        "supportedCatalogIds": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "inlineCatalogs": {
+          "type": "array",
+          "items": {"type": "object"}
+        }
+      },
+      "required": ["supportedCatalogIds"],
+      "additionalProperties": false
+    }
+  }
+}

@@ -19,6 +19,7 @@ from apps.flows.tools.crm_tools import (
 )
 from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_object
+from tests.flows._flow_ui import flow_ui_artifacts
 
 pytestmark = [
     pytest.mark.timeout(120, func_only=True),
@@ -82,9 +83,10 @@ async def test_crm_create_note_tool_returns_blocks_for_chat(
         state,
     )
     proposed = _as_object(propose_raw)
-    pending_events = state.ui_events_pending
-    assert pending_events[-1].event_type == "action_previewed"
-    preview_buttons = pending_events[-1].payload["blocks"][1]["buttons"]
+    preview = flow_ui_artifacts(state)[-1]
+    assert preview.kind == "action_preview"
+    assert preview.component_type == "ActionPreview"
+    preview_buttons = preview.data["blocks"][1]["buttons"]
     assert preview_buttons[0]["action_kind"] == "apply"
     assert preview_buttons[0]["action_id"] == "crm.note.create.apply"
     raw = await crm_create_note._run_impl(

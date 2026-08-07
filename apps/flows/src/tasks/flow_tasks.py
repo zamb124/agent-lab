@@ -3,6 +3,8 @@
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
+from core.a2a import message_from_json_dict
+from core.a2a.representation import A2ARepresentationSnapshot
 from core.context import Context, set_context
 from core.files.file_ref import FileRef
 from core.logging import get_logger
@@ -24,11 +26,13 @@ async def process_flow_task(
     task_id: str | None = None,
     context_id: str | None = None,
     metadata: JsonObject | None = None,
+    message: JsonObject | None = None,
     is_resume: bool = False,
     files: list[JsonObject] | None = None,
     context_data: JsonObject | None = None,
     trace_context: JsonObject | None = None,
     initiator_user_id: str | None = None,
+    a2a_representation: JsonObject | None = None,
 ) -> JsonObject:
     """
     Обрабатывает запрос через агента.
@@ -74,10 +78,15 @@ async def process_flow_task(
         branch_id=branch_id,
         is_resume=is_resume,
         files_data=file_refs,
-        message=None,
+        message=message_from_json_dict(message) if message is not None else None,
         metadata=metadata,
         user_id=user_id,
         initiator_user_id=initiator_user_id,
+        a2a_representation=(
+            A2ARepresentationSnapshot.model_validate(a2a_representation)
+            if a2a_representation is not None
+            else None
+        ),
     )
 
     result = await channel_instance.process_task(params)

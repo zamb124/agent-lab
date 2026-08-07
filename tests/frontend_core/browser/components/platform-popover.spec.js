@@ -5,7 +5,7 @@
  * контракт, на который эти компоненты будут опираться.
  */
 
-import { fixture, html, expect, oneEvent, elementUpdated } from '../helpers/render.js';
+import { fixture, html, expect, oneEvent, elementUpdated, aTimeout } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-popover.js';
 
@@ -123,6 +123,8 @@ describe('platform-popover', () => {
         const { popover } = await mountPopover();
         popover.open = true;
         await elementUpdated(popover);
+        // Outside-dismiss вешается после rAF и игнорирует жест открытия (~320ms).
+        await aTimeout(400);
 
         const dismissed = oneEvent(popover, 'popover-dismiss');
         document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
@@ -130,6 +132,19 @@ describe('platform-popover', () => {
 
         expect(event.detail.reason).to.equal('outside');
         expect(popover.open).to.be.false;
+    });
+
+    it('pointerdown сразу после open не гасит слой (жест открытия)', async () => {
+        const { popover } = await mountPopover();
+        popover.open = true;
+        await elementUpdated(popover);
+
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
+        await elementUpdated(popover);
+        await aTimeout(50);
+
+        expect(popover.open).to.be.true;
+        expect(popover.matches(':popover-open')).to.be.true;
     });
 
     it('клик внутри слоя не закрывает его', async () => {

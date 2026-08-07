@@ -10,7 +10,9 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import select, update
 
+from apps.flows.src.a2a.task_projection_service import A2ATaskProjectionService
 from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.db.a2a_task_repository import A2ATaskRepository
 from apps.flows.src.db.models import ActivityAttempts, utc_now
 from apps.flows.src.durable_execution import (
     ActivityLifecyclePayload,
@@ -63,6 +65,21 @@ class DurableStack:
 class DurableFlowHarness:
     workflow_runtime: DurableWorkflowRuntime
     redis_client: RedisClient
+    a2a_task_repository: A2ATaskRepository
+    a2a_task_projection_service: A2ATaskProjectionService
+
+
+def _flow_harness(*, durable_stack: DurableStack) -> DurableFlowHarness:
+    a2a_task_repository = A2ATaskRepository(storage=durable_stack.storage)
+    return DurableFlowHarness(
+        workflow_runtime=durable_stack.runtime,
+        redis_client=durable_stack.redis_client,
+        a2a_task_repository=a2a_task_repository,
+        a2a_task_projection_service=A2ATaskProjectionService(
+            repository=a2a_task_repository,
+            redis_client=durable_stack.redis_client,
+        ),
+    )
 
 
 class _StateWriteNode(BaseNode):
@@ -194,10 +211,16 @@ class DurableCodeConditionHarness:
         workflow_runtime: DurableWorkflowRuntime,
         redis_client: RedisClient,
         code_runner: _FalseCodeConditionRunner,
+        a2a_task_repository: A2ATaskRepository,
+        a2a_task_projection_service: A2ATaskProjectionService,
     ) -> None:
         self.workflow_runtime: DurableWorkflowRuntime = workflow_runtime
         self.redis_client: RedisClient = redis_client
         self._code_runner: _FalseCodeConditionRunner = code_runner
+        self.a2a_task_repository: A2ATaskRepository = a2a_task_repository
+        self.a2a_task_projection_service: A2ATaskProjectionService = (
+            a2a_task_projection_service
+        )
 
     def get_code_runner(self, language: str) -> _FalseCodeConditionRunner:
         _ = language
@@ -230,6 +253,8 @@ class DurableChildWorkflowHarness:
     workflow_runtime: DurableWorkflowRuntime
     redis_client: RedisClient
     flow_factory: DurableChildFlowFactory
+    a2a_task_repository: A2ATaskRepository
+    a2a_task_projection_service: A2ATaskProjectionService
 
 
 @pytest_asyncio.fixture
@@ -254,6 +279,23 @@ async def durable_stack(setup_database_before_tests: object) -> AsyncIterator[Du
     finally:
         await redis_client.close()
 
+
+def _child_workflow_harness(
+    *,
+    durable_stack: DurableStack,
+    factory: DurableChildFlowFactory,
+) -> DurableChildWorkflowHarness:
+    a2a_task_repository = A2ATaskRepository(storage=durable_stack.storage)
+    return DurableChildWorkflowHarness(
+        workflow_runtime=durable_stack.runtime,
+        redis_client=durable_stack.redis_client,
+        flow_factory=factory,
+        a2a_task_repository=a2a_task_repository,
+        a2a_task_projection_service=A2ATaskProjectionService(
+            repository=a2a_task_repository,
+            redis_client=durable_stack.redis_client,
+        ),
+    )
 
 def _session_id(flow_id: str) -> str:
     return f"{flow_id}:{uuid.uuid4().hex}"
@@ -530,12 +572,7 @@ async def test_parallel_superstep_retry_preserves_successful_pending_writes(
         payload=RunStartedPayload(),
         snapshot=True,
     )
-    container = _runtime_container(
-        DurableFlowHarness(
-            workflow_runtime=runtime,
-            redis_client=durable_stack.redis_client,
-        ),
-    )
+    container = _runtime_container(_flow_harness(durable_stack=durable_stack))
     flow = Flow(
         flow_id=flow_id,
         name="parallel retry",
@@ -607,12 +644,7 @@ async def test_node_activity_id_uses_durable_schedule_sequence_for_loop_visits(
         payload=RunStartedPayload(),
         snapshot=True,
     )
-    container = _runtime_container(
-        DurableFlowHarness(
-            workflow_runtime=runtime,
-            redis_client=durable_stack.redis_client,
-        ),
-    )
+    container = _runtime_container(_flow_harness(durable_stack=durable_stack))
     loop_node = _DurableCountingActivityNode("loop", {"type": "function"}, container=container)
     done_node = _StateWriteNode("done", {"type": "function"}, container=container)
     flow = Flow(
@@ -694,12 +726,7 @@ async def test_durable_activity_requires_attached_node_branch_context(
     node = _DurableCountingActivityNode(
         "unscoped",
         {"type": "function"},
-        container=_runtime_container(
-            DurableFlowHarness(
-                workflow_runtime=runtime,
-                redis_client=durable_stack.redis_client,
-            ),
-        ),
+        container=_runtime_container(_flow_harness(durable_stack=durable_stack)),
     )
 
     with pytest.raises(RuntimeError, match="requires execution_branch_id"):
@@ -767,11 +794,17 @@ async def test_code_edge_condition_replays_from_activity_journal_for_same_edge_s
         snapshot=True,
     )
     runner = _FalseCodeConditionRunner()
+    a2a_task_repository = A2ATaskRepository(storage=durable_stack.storage)
     container = _runtime_container(
         DurableCodeConditionHarness(
             workflow_runtime=runtime,
             redis_client=durable_stack.redis_client,
             code_runner=runner,
+            a2a_task_repository=a2a_task_repository,
+            a2a_task_projection_service=A2ATaskProjectionService(
+                repository=a2a_task_repository,
+                redis_client=durable_stack.redis_client,
+            ),
         ),
     )
     flow = Flow(
@@ -1367,11 +1400,7 @@ async def test_flow_node_records_child_workflow_as_separate_durable_history(
     session_id = _session_id(parent_flow_id)
     factory = DurableChildFlowFactory()
     container = _runtime_container(
-        DurableChildWorkflowHarness(
-            workflow_runtime=runtime,
-            redis_client=durable_stack.redis_client,
-            flow_factory=factory,
-        )
+        _child_workflow_harness(durable_stack=durable_stack, factory=factory)
     )
     child_flow = Flow(
         flow_id=child_flow_id,
@@ -1479,11 +1508,7 @@ async def test_flow_node_replay_reuses_completed_child_workflow_history(
     session_id = _session_id(parent_flow_id)
     factory = DurableChildFlowFactory()
     container = _runtime_container(
-        DurableChildWorkflowHarness(
-            workflow_runtime=runtime,
-            redis_client=durable_stack.redis_client,
-            flow_factory=factory,
-        )
+        _child_workflow_harness(durable_stack=durable_stack, factory=factory)
     )
     child_calls: list[str] = []
     child_flow = Flow(
@@ -1600,11 +1625,7 @@ async def test_flow_node_resume_uses_same_child_workflow_session_after_interrupt
     session_id = _session_id(parent_flow_id)
     factory = DurableChildFlowFactory()
     container = _runtime_container(
-        DurableChildWorkflowHarness(
-            workflow_runtime=runtime,
-            redis_client=durable_stack.redis_client,
-            flow_factory=factory,
-        )
+        _child_workflow_harness(durable_stack=durable_stack, factory=factory)
     )
     child_flow = Flow(
         flow_id=child_flow_id,

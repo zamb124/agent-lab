@@ -16,7 +16,7 @@ import './platform-markdown-editor.js';
 import './platform-mail-calendar-rail.js';
 import './platform-palette-color-picker.js';
 import { sanitizeMarkdownEditorHtml } from './platform-markdown-editor.js';
-import { flowsChatMarkdownToHtml } from '../chat/markdown.js';
+import { flowsChatMarkdownToHtml } from '../flow-ui/utils/markdown.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { platformConfirm } from './platform-confirm-modal.js';
 import { MAIL_EVENTS } from '../events/reducers/mail.js';

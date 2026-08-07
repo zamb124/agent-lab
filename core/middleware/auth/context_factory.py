@@ -102,9 +102,22 @@ class ContextFactory:
         metadata["grps"] = permission_groups
 
         if token_data is not None:
+            metadata["token_type"] = token_data.token_type.value
             impersonated_by = token_data.metadata.get("impersonated_by")
             if isinstance(impersonated_by, str) and impersonated_by:
                 metadata["impersonated_by"] = impersonated_by
+            for key in (
+                "flow_ui_share_grant_id",
+                "flow_ui_share_permission",
+                "flow_ui_share_flow_id",
+                "flow_ui_share_branch_id",
+                "flow_ui_share_context_id",
+                "flow_ui_share_document_id",
+                "flow_ui_share_origin",
+            ):
+                value = token_data.metadata.get(key)
+                if isinstance(value, str) and value:
+                    metadata[key] = value
 
         active_namespace = await self._resolve_active_namespace(
             request,

@@ -13,11 +13,11 @@ const EMBED_ID = 'embed_modal_test';
 
 const CODE_ENTRY = {
     embed_id: EMBED_ID,
-    html_code: '<script type="module" src="https://cdn.humanitec.ru/lib/embed-chat/humanitec-embed-autoload.js"></script>',
-    script_url: 'https://cdn.humanitec.ru/lib/embed-chat/humanitec-embed-autoload.js',
+    html_code: '<script type="module" src="https://cdn.humanitec.ru/lib/embed-flow-ui/flow-ui-embed-autoload.js"></script>',
+    script_url: 'https://cdn.humanitec.ru/lib/embed-flow-ui/flow-ui-embed-autoload.js',
     token_endpoint: 'https://api.humanitec.ru/frontend/api/embed/configs/embed_modal_test/session-token',
     backend_proxy_code: 'async def issue_embed_session_token(...):',
-    browser_to_host_backend_code: "await fetch('/api/chat-token', { method: 'POST' })",
+    browser_to_host_backend_code: "await fetch('/api/flow-ui-token', { method: 'POST' })",
     allowed_origins: ['https://customer.example'],
 };
 
@@ -50,7 +50,7 @@ describe('frontend-embed-code-modal', () => {
         expect(sections.length).to.equal(5);
 
         const htmlPre = sections[0].querySelector('pre');
-        expect(htmlPre.textContent).to.include('humanitec-embed-autoload.js');
+        expect(htmlPre.textContent).to.include('flow-ui-embed-autoload.js');
 
         expect(sections[1].textContent).to.include('/session-token');
         expect(sections[1].querySelectorAll('li').length).to.equal(3);
@@ -62,8 +62,8 @@ describe('frontend-embed-code-modal', () => {
         const clientSection = sections[4];
         const clientDesc = clientSection.querySelector('.section-desc');
         expect(clientDesc).to.not.equal(null);
-        expect(clientDesc.textContent).to.match(/data-chat-token-url|client_backend_example_description/);
-        expect(clientSection.querySelector('pre').textContent).to.include("/api/chat-token");
+        expect(clientDesc.textContent).to.match(/data-token-url|client_backend_example_description/);
+        expect(clientSection.querySelector('pre').textContent).to.include("/api/flow-ui-token");
 
         expect(root.querySelectorAll('.copy-btn').length).to.be.at.least(4);
     });

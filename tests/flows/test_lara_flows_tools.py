@@ -13,6 +13,7 @@ from apps.flows.tools.flows_editor_tools import (
     flows_read_context,
 )
 from core.state import ExecutionState
+from tests.flows._flow_ui import flow_ui_artifact, flow_ui_artifacts
 
 pytestmark = [pytest.mark.timeout(90, func_only=True)]
 
@@ -177,10 +178,11 @@ async def test_flows_patch_node_confirm_first_apply_persists_flow(
     proposed = json.loads(propose_raw)
     pending_action_id = proposed["pending_action_id"]
     assert proposed["success"] is True
-    pending_events = state.ui_events_pending
-    assert pending_events[0].event_type == "action_previewed"
-    assert pending_events[0].payload["changes"]["prompt"] == new_prompt
-    preview_buttons = pending_events[0].payload["blocks"][1]["buttons"]
+    preview = flow_ui_artifact(state, f"flows-node-preview-{pending_action_id}")
+    assert preview.kind == "action_preview"
+    assert preview.component_type == "ActionPreview"
+    assert preview.data["changes"]["prompt"] == new_prompt
+    preview_buttons = preview.data["blocks"][1]["buttons"]
     assert preview_buttons[0]["action_kind"] == "apply"
     assert preview_buttons[0]["action_id"] == "flows.node.patch.apply"
     apply_raw = await flows_patch_node._run_impl(
@@ -189,9 +191,10 @@ async def test_flows_patch_node_confirm_first_apply_persists_flow(
     data = json.loads(apply_raw)
     assert data["success"] is True
     assert data["node_after"]["prompt"] == new_prompt
-    pending_events = state.ui_events_pending
-    assert pending_events[-1].event_type == "action_applied"
-    assert pending_events[-1].payload["changes"]["prompt"] == new_prompt
+    applied = flow_ui_artifacts(state)[-1]
+    assert applied.kind == "action_result"
+    assert applied.component_type == "ActionResult"
+    assert applied.data["changes"]["prompt"] == new_prompt
     flow_resp = await flows_client.get(
         f"/flows/api/v1/flows/{flow_id}", headers=auth_headers_system
     )
@@ -219,10 +222,10 @@ async def test_flows_patch_flow_propose_does_not_persist(
     assert data["success"] is True
     assert data["flow_after"]["name"] == proposed_name
     assert isinstance(data.get("pending_action_id"), str) and data["pending_action_id"]
-    pending_events = state.ui_events_pending
-    assert pending_events[0].event_type == "action_previewed"
-    assert pending_events[0].payload["flow_changes"]["name"] == proposed_name
-    preview_buttons = pending_events[0].payload["blocks"][1]["buttons"]
+    preview = flow_ui_artifact(state, f"flows-flow-preview-{data['pending_action_id']}")
+    assert preview.kind == "action_preview"
+    assert preview.data["flow_changes"]["name"] == proposed_name
+    preview_buttons = preview.data["blocks"][1]["buttons"]
     assert preview_buttons[0]["action_kind"] == "apply"
     assert preview_buttons[0]["action_id"] == "flows.flow.patch.apply"
     flow_resp = await flows_client.get(

@@ -1,4 +1,4 @@
-"""Браузерный E2E: страница «внешнего сайта» + humanitec-embed-autoload.js при реальных HTTP-сервисах.
+"""Браузерный E2E: страница «внешнего сайта» + flow-ui-embed-autoload.js при реальных HTTP-сервисах.
 
 Поднимает flows (9001) и frontend (9004) через фикстуры session-серверов pytest
 (``tests/fixtures/services.py``). Тело теста — бюджет 15 с (см. ``tests/ui/e2e/conftest.py``);
@@ -83,7 +83,7 @@ def _make_embed_host_handler(state: _EmbedHostState) -> type[BaseHTTPRequestHand
 
         def do_POST(self) -> None:
             raw = self.path.split("?", 1)[0].rstrip("/") or ""
-            if raw != "/api/chat-token":
+            if raw != "/api/flow-ui-token":
                 self.send_error(404)
                 return
             length_hdr = self.headers.get("Content-Length")
@@ -168,11 +168,11 @@ def _build_embed_page_html(
         f'  data-show-launcher="{launcher_attr}"\n'
         f'  data-flows-base-url="{html_stdlib.escape(flows_base, quote=True)}"\n'
         f'  data-platform-ui-origin="{html_stdlib.escape(frontend_origin, quote=True)}"\n'
-        '  data-chat-token-url="/api/chat-token"\n'
+        '  data-token-url="/api/flow-ui-token"\n'
         '  data-token-expires-seconds="300"\n'
         '  data-use-credentials="false"\n'
-        '  data-event-namespace="assistant"\n'
-        '  data-toggle-event-name="humanitec-embed-chat-toggle"\n'
+        '  data-event-namespace="flow-ui"\n'
+        '  data-toggle-event-name="linnex-flow-ui-toggle"\n'
         '  data-voice-enabled="false"\n'
         '  data-voice-default-on="false"\n'
         f'  data-voice-base-url="{html_stdlib.escape(f"{frontend_origin}/voice", quote=True)}"\n'
@@ -257,13 +257,13 @@ async def _attach_embed_page_diagnostics(page: Page) -> tuple[list[str], list[st
         errors.append(f"console.{msg.type}: {text}")
 
     def _record_embed_request(req) -> None:
-        if "/api/v1/embed/" in req.url or req.url.endswith("/api/chat-token"):
+        if "/api/v1/embed/" in req.url or req.url.endswith("/api/flow-ui-token"):
             network_events.append(f"request {req.method} {req.url}")
 
     def _record_embed_response(resp) -> None:
         if resp.status == 404 and not _is_benign_embed_host_404(resp.url):
             errors.append(f"http.404: {resp.url}")
-        if "/api/v1/embed/" in resp.url or resp.url.endswith("/api/chat-token"):
+        if "/api/v1/embed/" in resp.url or resp.url.endswith("/api/flow-ui-token"):
             network_events.append(f"response {resp.status} {resp.url}")
 
     await page.add_init_script(
@@ -307,11 +307,15 @@ async def _wait_humanitec_embed(page: Page, errors: list[str], network_events: l
 
 
 async def _send_embed_message(page: Page, user_line: str, network_events: list[str], errors: list[str]) -> None:
-    root = page.locator("platform-chat")
-    textarea = root.locator("flows-chat-input textarea")
+    root = page.locator("flow-ui-drawer platform-flow-ui, platform-flow-ui").first
+    textarea = root.locator(
+        '[data-flow-ui-component="message-input"] textarea, textarea'
+    ).first
     await expect(textarea).to_be_visible(timeout=5_000)
     await textarea.fill(user_line)
-    send_btn = root.locator("flows-chat-input button.send-btn:not(.muted)").first
+    send_btn = root.locator("button").filter(
+        has_text=re.compile(r"^\s*(Submit|Отправить|Send)\s*$")
+    ).first
     await expect(send_btn).to_be_enabled(timeout=5_000)
     await send_btn.click()
     try:
@@ -344,7 +348,7 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
 
     frontend_origin = _frontend_api_origin(frontend_ui).rstrip("/")
     flows_public_base = _flows_api_origin(flows_ui).rstrip("/")
-    script_src = f"{frontend_origin}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
+    script_src = f"{frontend_origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     flows_base = f"{flows_public_base}/flows"
 
     embed_id: str | None = None
@@ -383,8 +387,8 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
         with _external_embed_origin(html_page_utf8=page_html, token_payload=token_payload_for_host) as host_origin:
             await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
             await _wait_humanitec_embed(page, errors, network_events)
-            await expect(page.locator("platform-chat")).to_be_attached(timeout=5_000)
-            fab = page.locator("platform-chat").locator("button.fab").first
+            await expect(page.locator("flow-ui-drawer, platform-flow-ui")).to_be_attached(timeout=5_000)
+            fab = page.locator("flow-ui-drawer, platform-flow-ui").locator("button.launcher, button.fab").first
             await expect(fab).to_be_visible(timeout=5_000)
             await fab.click()
             await _send_embed_message(page, user_line, network_events, errors)
@@ -436,7 +440,7 @@ async def test_flows_embed_agent_on_site(
 
     frontend_origin = _frontend_api_origin(frontend_ui).rstrip("/")
     flows_public_base = _flows_api_origin(flows_ui).rstrip("/")
-    script_src = f"{frontend_origin}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
+    script_src = f"{frontend_origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     flows_base = f"{flows_public_base}/flows"
 
     embed_id: str | None = None
@@ -508,8 +512,8 @@ async def test_flows_embed_agent_on_site(
         ) as host_origin:
             await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
             await _wait_humanitec_embed(page, errors, network_events)
-            await expect(page.locator("platform-chat")).to_be_attached(timeout=5_000)
-            fab = page.locator("platform-chat").locator("button.fab").first
+            await expect(page.locator("flow-ui-drawer, platform-flow-ui")).to_be_attached(timeout=5_000)
+            fab = page.locator("flow-ui-drawer, platform-flow-ui").locator("button.launcher, button.fab").first
             await expect(fab).to_be_visible(timeout=5_000)
             await scenario.step(
                 "Откройте виджет чата на сайте",
@@ -530,7 +534,7 @@ async def test_flows_embed_agent_on_site(
             await _send_embed_message(page, user_line, network_events, errors)
             if errors:
                 pytest.fail("embed браузер: ошибки страницы/консоли:\n" + "\n".join(errors))
-            reply = page.locator("platform-chat").get_by_text(
+            reply = page.locator("flow-ui-drawer, platform-flow-ui").get_by_text(
                 re.compile(rf"embed-ok:{re.escape(user_line)}", re.I)
             ).first
             await expect(reply).to_be_visible(timeout=8_000)
@@ -577,7 +581,7 @@ async def test_embed_autoload_toggle_opens_chat_without_launcher(
 
     frontend_origin = _frontend_api_origin(frontend_ui).rstrip("/")
     flows_public_base = _flows_api_origin(flows_ui).rstrip("/")
-    script_src = f"{frontend_origin}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
+    script_src = f"{frontend_origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     flows_base = f"{flows_public_base}/flows"
 
     embed_id: str | None = None
@@ -616,7 +620,7 @@ async def test_embed_autoload_toggle_opens_chat_without_launcher(
         with _external_embed_origin(html_page_utf8=page_html, token_payload=token_payload_for_host) as host_origin:
             await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
             await _wait_humanitec_embed(page, errors, network_events)
-            fab = page.locator("platform-chat").locator("button.fab")
+            fab = page.locator("flow-ui-drawer, platform-flow-ui").locator("button.launcher, button.fab")
             await expect(fab).to_have_count(0, timeout=5_000)
             await page.evaluate(
                 """() => {
@@ -651,7 +655,7 @@ async def test_embed_autoload_host_proxy_mints_session_token_s2s(
 
     frontend_origin = _frontend_api_origin(frontend_ui).rstrip("/")
     flows_public_base = _flows_api_origin(flows_ui).rstrip("/")
-    script_src = f"{frontend_origin}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
+    script_src = f"{frontend_origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     flows_base = f"{flows_public_base}/flows"
 
     embed_id = await _create_embed_config(
@@ -684,12 +688,12 @@ async def test_embed_autoload_host_proxy_mints_session_token_s2s(
         ) as host_origin:
             await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
             await _wait_humanitec_embed(page, errors, network_events)
-            fab = page.locator("platform-chat").locator("button.fab").first
+            fab = page.locator("flow-ui-drawer, platform-flow-ui").locator("button.launcher, button.fab").first
             await expect(fab).to_be_visible(timeout=5_000)
             await fab.click()
             await _send_embed_message(page, user_line, network_events, errors)
-            chat_token_requests = [line for line in network_events if "/api/chat-token" in line]
-            assert chat_token_requests, "autoload должен запросить /api/chat-token у mock host"
+            token_requests = [line for line in network_events if "/api/flow-ui-token" in line]
+            assert token_requests, "autoload должен запросить /api/flow-ui-token у mock host"
             if errors:
                 pytest.fail("embed proxy S2S: ошибки страницы/консоли:\n" + "\n".join(errors))
     finally:

@@ -134,7 +134,7 @@ class TestReasonToolExecution:
         )
 
     @pytest.mark.asyncio
-    async def test_reasoning_saved_to_history(self, runner, mock_llm_with_queue):
+    async def test_reasoning_saved_to_history(self, runner, mock_llm_with_queue, unique_id):
         """Reasoning сохраняется в state.reasoning_history."""
         mock_llm_with_queue([
             {
@@ -156,10 +156,10 @@ class TestReasonToolExecution:
         ])
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             messages=[]
         )
         input_data = {"content": "Сколько будет 2+2?"}
@@ -201,7 +201,7 @@ class TestAgentWithoutReasonWorks:
         )
 
     @pytest.mark.asyncio
-    async def test_normal_agent_works(self, runner, mock_llm_with_queue):
+    async def test_normal_agent_works(self, runner, mock_llm_with_queue, unique_id):
         """Агент без reason tool работает нормально."""
         mock_llm_with_queue([
             {
@@ -213,10 +213,10 @@ class TestAgentWithoutReasonWorks:
         ])
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             messages=[]
         )
         input_data = {"content": "Сколько 5+5?"}

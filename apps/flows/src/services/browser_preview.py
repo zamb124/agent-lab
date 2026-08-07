@@ -6,7 +6,6 @@ import base64
 import hashlib
 import hmac
 import time
-from datetime import datetime, timezone
 from urllib.parse import quote, urlencode
 
 from pydantic import Field
@@ -14,6 +13,7 @@ from pydantic import Field
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
 from apps.flows.src.models.mcp import MCPCallResult, MCPServerConfig
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
+from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.models.base import StrictBaseModel
@@ -83,10 +83,6 @@ class BrowserPreviewActiveSessionResponse(StrictBaseModel):
     viewer_url: str | None = None
     screenshot_url: str | None = None
     status_url: str | None = None
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _b64url_encode(raw: bytes) -> str:
@@ -193,18 +189,6 @@ def _session_id_from(tool_name: str, args: JsonObject, result: MCPCallResult | N
     return str(sid).strip() if isinstance(sid, str) else ""
 
 
-def _event_type_for_phase(tool_name: str, phase: str) -> str:
-    if phase == "started":
-        return f"{BROWSER_PREVIEW_EVENT_PREFIX}tool_started"
-    if phase == "failed":
-        return f"{BROWSER_PREVIEW_EVENT_PREFIX}tool_failed"
-    if tool_name == "browser_create_session":
-        return f"{BROWSER_PREVIEW_EVENT_PREFIX}session_started"
-    if tool_name == "browser_close_session":
-        return f"{BROWSER_PREVIEW_EVENT_PREFIX}session_closed"
-    return f"{BROWSER_PREVIEW_EVENT_PREFIX}step_finished"
-
-
 def _safe_args_preview(args: JsonObject) -> JsonObject:
     allowed = {
         "session_id",
@@ -264,7 +248,6 @@ async def _emit_browser_preview_mcp_event(
     if ctx is None or ctx.emitter is None:
         return
 
-    event_type = _event_type_for_phase(tool_name, phase)
     state = ctx.state
     task_id = state.task_id
     context_id = state.context_id
@@ -296,13 +279,12 @@ async def _emit_browser_preview_mcp_event(
     if error:
         payload["error"] = error
 
-    await ctx.emitter.emit_ui_event(
-        event_type=event_type,
-        payload=payload,
-        version="1.0.0",
-        timestamp=_now_iso(),
+    _ = present_flow_ui_artifact(
+        state,
+        kind="browser_preview",
+        data=payload,
         source="browser",
-        correlation_id=ctx.tool_call_id,
+        artifact_id=f"browser:{ctx.tool_call_id}",
     )
 
     # Viewer следит за задачей, а не за одной сессией: поддерживаем в Redis

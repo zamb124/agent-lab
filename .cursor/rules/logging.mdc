@@ -4,6 +4,11 @@ alwaysApply: false
 ---
 # Логирование
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 Все процессы (HTTP, TaskIQ, scheduler, фоновые задачи, WebSocket) пишут в **stdout** через единый `structlog`-pipeline поверх stdlib `logging`. Один контракт записи, один способ получения логгера, один способ привязки контекста. Никаких файловых хендлеров, `print(...)`, эмодзи в сообщениях, голых `try/except` ради «лишь бы залогировать».
 
 См. также: `tracing.mdc` (`trace_id`/`span_id`), `architecture.mdc` (REST-зеркало), `taskiq.mdc`.

@@ -123,10 +123,34 @@
         "type": "object",
         "title": "CalendarAttendee"
       },
+      "CalendarAutolinkStatus": {
+        "type": "string",
+        "enum": [
+          "linked",
+          "unsupported",
+          "needs_oauth",
+          "needs_password",
+          "failed",
+          "disabled"
+        ],
+        "title": "CalendarAutolinkStatus",
+        "description": "Итог авто-подъёма календаря для почтового ящика. Хранится на MailboxBinding,\nвозвращается календарём в CalendarAutolinkOutcome."
+      },
       "CalendarConnectIntegrationRequest": {
         "properties": {
           "provider": {
             "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
           },
           "username": {
             "anyOf": [
@@ -532,6 +556,17 @@
           "provider": {
             "$ref": "#/components/schemas/CalendarProvider"
           },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
+          },
           "settings": {
             "$ref": "#/components/schemas/CalendarIntegrationSettings"
           },
@@ -685,8 +720,9 @@
       },
       "CalendarSyncRequest": {
         "properties": {
-          "provider": {
-            "$ref": "#/components/schemas/CalendarProvider"
+          "integration_id": {
+            "type": "string",
+            "title": "Integration Id"
           },
           "start_at": {
             "type": "string",
@@ -701,7 +737,7 @@
         },
         "type": "object",
         "required": [
-          "provider",
+          "integration_id",
           "start_at",
           "end_at"
         ],
@@ -868,6 +904,101 @@
           "end_at"
         ],
         "title": "CalendarUpsertRequest"
+      },
+      "ChunkedUploadInitRequest": {
+        "properties": {
+          "spec": {
+            "$ref": "#/components/schemas/FileCreateSpec"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "File Size"
+          },
+          "content_sha256_hex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Sha256 Hex"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "spec",
+          "original_name",
+          "content_type",
+          "file_size"
+        ],
+        "title": "ChunkedUploadInitRequest"
+      },
+      "ChunkedUploadInitResult": {
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "title": "Upload Id"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "chunk_size_bytes": {
+            "type": "integer",
+            "title": "Chunk Size Bytes"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "upload_id",
+          "file_id",
+          "chunk_size_bytes",
+          "file_size"
+        ],
+        "title": "ChunkedUploadInitResult"
+      },
+      "ChunkedUploadPartRecord": {
+        "properties": {
+          "part_number": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Part Number"
+          },
+          "etag": {
+            "type": "string",
+            "title": "Etag"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "part_number",
+          "etag",
+          "size"
+        ],
+        "title": "ChunkedUploadPartRecord"
       },
       "CompanyMailConnectionPublic": {
         "properties": {
@@ -1129,6 +1260,360 @@
         ],
         "title": "DemoLoginRequest"
       },
+      "DocsPlacement": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "path_segments": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path Segments"
+          },
+          "anchor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocsPlacementAnchor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retention": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileRetentionSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "namespace",
+          "file_id"
+        ],
+        "title": "DocsPlacement"
+      },
+      "DocsPlacementAnchor": {
+        "properties": {
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "crm_entity",
+              "crm_knowledge_import",
+              "flow_session",
+              "flow_asset",
+              "work_item",
+              "work_item_comment",
+              "work_item_resolution",
+              "sync_message",
+              "sync_channel_message",
+              "sync_call_recording",
+              "sync_speech_segment",
+              "sync_channel_asset",
+              "calendar_event",
+              "browser_artifact",
+              "browser_session",
+              "rag_document",
+              "rag_namespace",
+              "mail_message",
+              "wiki_page",
+              "office_manual",
+              "manual"
+            ],
+            "title": "Source Kind"
+          },
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
+          },
+          "entity_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Title"
+          },
+          "import_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Id"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "flow_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Slug"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "work_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Item Id"
+          },
+          "work_queue_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Queue Id"
+          },
+          "board_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Board Id"
+          },
+          "comment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment Id"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "recording_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "browser_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Browser Session Id"
+          },
+          "namespace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace Id"
+          },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
+          },
+          "mail_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Uid"
+          },
+          "mailbox_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Email"
+          },
+          "mail_subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Subject"
+          },
+          "wiki_page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wiki Page Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_kind"
+        ],
+        "title": "DocsPlacementAnchor"
+      },
       "DocumentProcessingStatus": {
         "properties": {
           "document_id": {
@@ -1309,6 +1794,579 @@
           "statuses"
         ],
         "title": "DocumentStatusesBatchResponse"
+      },
+      "FileCreateSpec": {
+        "properties": {
+          "source_kind": {
+            "$ref": "#/components/schemas/FileSourceKind"
+          },
+          "source_ref": {
+            "$ref": "#/components/schemas/FileSourceRef"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/FileRetentionSpec"
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocsPlacement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "post_create": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FilePostCreate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_kind",
+          "source_ref",
+          "retention"
+        ],
+        "title": "FileCreateSpec"
+      },
+      "FilePostCreate": {
+        "properties": {
+          "rag_index_namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rag Index Namespace"
+          },
+          "rag_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rag Metadata"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FilePostCreate"
+      },
+      "FileReadPreviewResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Извлечённый текст (может быть усечён для UI)"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "Усечён ли текст по лимиту превью"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count",
+            "description": "Число страниц после чтения",
+            "default": 0
+          },
+          "detected_kind": {
+            "type": "string",
+            "title": "Detected Kind",
+            "description": "Тип файла по FileReader"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type",
+            "description": "Content-Type после распознавания"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Предупреждения парсера"
+          },
+          "preview_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Note",
+            "description": "Пояснение для пользователя (например для изображений)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "truncated",
+          "detected_kind"
+        ],
+        "title": "FileReadPreviewResponse",
+        "description": "Текстовое превью содержимого файла (извлечение без vision для изображений)."
+      },
+      "FileResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "original_name",
+          "content_type",
+          "file_size",
+          "url",
+          "is_public",
+          "created_at"
+        ],
+        "title": "FileResponse",
+        "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
+      },
+      "FileRetentionKind": {
+        "type": "string",
+        "enum": [
+          "permanent",
+          "flow_session",
+          "flow_asset",
+          "crm_entity",
+          "crm_knowledge_import",
+          "work_item",
+          "sync_message_attachment",
+          "sync_channel_asset",
+          "sync_call_recording",
+          "sync_speech_segment",
+          "calendar_event_attachment",
+          "mail_attachment",
+          "browser_artifact",
+          "generated_ephemeral",
+          "rag_document",
+          "office_document",
+          "wiki_page",
+          "platform_default"
+        ],
+        "title": "FileRetentionKind"
+      },
+      "FileRetentionSpec": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/FileRetentionKind"
+          },
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "FileRetentionSpec"
+      },
+      "FileSourceKind": {
+        "type": "string",
+        "enum": [
+          "crm_entity",
+          "flow_session",
+          "flow_asset",
+          "work_item",
+          "sync_message",
+          "sync_call_recording",
+          "sync_speech_segment",
+          "sync_channel_asset",
+          "browser_artifact",
+          "rag_document",
+          "office_document",
+          "calendar_event",
+          "mail_message",
+          "wiki_page",
+          "platform_auxiliary",
+          "generated_ephemeral"
+        ],
+        "title": "FileSourceKind"
+      },
+      "FileSourceRef": {
+        "properties": {
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
+          },
+          "entity_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Title"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "flow_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Slug"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "work_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Item Id"
+          },
+          "work_queue_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Queue Id"
+          },
+          "board_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Board Id"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "recording_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Id"
+          },
+          "namespace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
+          },
+          "mail_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Uid"
+          },
+          "mailbox_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Email"
+          },
+          "mail_subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Subject"
+          },
+          "browser_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Browser Session Id"
+          },
+          "import_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Id"
+          },
+          "wiki_page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wiki Page Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FileSourceRef"
+      },
+      "FilesUploadConfigResponse": {
+        "properties": {
+          "max_upload_bytes": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Upload Bytes"
+          },
+          "chunk_size_bytes": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Chunk Size Bytes"
+          },
+          "upload_session_ttl_seconds": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Upload Session Ttl Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "max_upload_bytes",
+          "chunk_size_bytes",
+          "upload_session_ttl_seconds"
+        ],
+        "title": "FilesUploadConfigResponse"
       },
       "GlobalSearchResponse": {
         "properties": {
@@ -2003,6 +3061,17 @@
               }
             ],
             "title": "Parse Error"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
           }
         },
         "additionalProperties": false,
@@ -2012,7 +3081,7 @@
           "content_type"
         ],
         "title": "MailAttachment",
-        "description": "Вложение письма (MIME part). content может быть пустым при list/ошибке разбора."
+        "description": "Вложение письма (MIME part). content может быть пустым при list/ошибке разбора.\n\nOutbound MailSendPayload: только ``file_id`` (байты уже в Files через chunked upload).\nInbound MIME / SMTP после resolve: ``content`` in-process."
       },
       "MailAttachmentPublic": {
         "properties": {
@@ -3624,6 +4693,20 @@
             "type": "string",
             "title": "Calendar Color"
           },
+          "calendar_autolink_status": {
+            "$ref": "#/components/schemas/CalendarAutolinkStatus"
+          },
+          "calendar_autolink_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Autolink Detail"
+          },
           "has_password": {
             "type": "boolean",
             "title": "Has Password"
@@ -3707,6 +4790,7 @@
           "sync_enabled",
           "is_default",
           "calendar_color",
+          "calendar_autolink_status",
           "has_password",
           "created_at",
           "updated_at"
@@ -5017,6 +6101,44 @@
         ],
         "title": "RAGSearchResult",
         "description": "Универсальная модель результата поиска"
+      },
+      "RegisterS3Request": {
+        "properties": {
+          "spec": {
+            "$ref": "#/components/schemas/FileCreateSpec"
+          },
+          "s3_key": {
+            "type": "string",
+            "title": "S3 Key"
+          },
+          "s3_bucket": {
+            "type": "string",
+            "title": "S3 Bucket"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "spec",
+          "s3_key",
+          "s3_bucket",
+          "original_name",
+          "content_type",
+          "file_size"
+        ],
+        "title": "RegisterS3Request"
       },
       "SearchChannelsDefaults": {
         "properties": {

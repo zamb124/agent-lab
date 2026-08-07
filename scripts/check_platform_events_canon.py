@@ -534,11 +534,16 @@ def _check_naming_and_docs(errors: list[str]) -> None:
                 window = text[max(0, m.start() - 40) : m.end() + 40]
                 if "Не `UIEvent`" in window or "не `UIEvent`" in window:
                     continue
+                if "Запрещены `UIEvent`" in window or "запрещены `UIEvent`" in window.lower():
+                    continue
                 if "PendingUIEvent" in window:
                     continue
                 if "PlatformEvent" in window:
                     continue
                 if "UIEventTarget" in window:
+                    continue
+                # Glossary ban column: `| Use X | UIEvent, ... |`
+                if "|" in window and ("chat event" in window or "chat event" in text[m.start() : m.end() + 80]):
                     continue
                 errors.append(f"{rel}: UIEvent used as platform envelope near {window!r}")
                 break

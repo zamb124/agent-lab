@@ -231,7 +231,7 @@ async def _execute_message_task(
                     title="Задача выполнена",
                     message=preview,
                     service="flows",
-                    action_url=f"/chat/{flow_id}?session={session_id}",
+                    action_url=f"/flows/{flow_id}/session/{session_id}",
                     data={
                         "flow_id": flow_id,
                         "session_id": session_id,

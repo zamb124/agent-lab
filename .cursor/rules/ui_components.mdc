@@ -4,6 +4,11 @@ alwaysApply: false
 ---
 # UI Components — core UI Kit
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 Все компоненты UI Kit живут в `core/frontend/static/lib/components/**` и наследуют `PlatformElement`. Это **единственная зона**, где допустимы прямые `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)` и `new CustomEvent(...)` для slot-композиции — здесь эти helpers и реализуются.
 
 См. также: `frontend.mdc` (запреты в apps), `ui_factories.mdc` (контракт фабрик и событий).
@@ -351,6 +356,8 @@ i18n namespace: `platform` (`work_item_badge.*`, `work_item_preview.*`, `work_it
 - `<platform-breadcrumbs>` читает срез `state.router` (`routes`, `routeKey`, `params`); маршруты приходят из `ROUTER_ROUTES_REGISTERED`, текущий — из `ROUTER_ROUTE_CHANGED`. `window.__PLATFORM_ROUTER__` запрещён.
 - Подпись крошки — `routes.<routeKey>` (или `route.titleKey`), динамический хвост — `current-label`.
 - Вложенность **внутри одного маршрута** (дерево страниц wiki, папки) маршрутами не выражается — для неё prop `.trail`: массив `{ label, routeKey, params }`, который встаёт между цепочкой маршрутов и текущей подписью. Каждый элемент валидируется (`label`, `routeKey`, `params` обязательны, иначе `throw`); без `trail` поведение прежнее.
+- Клик по родителю наследует path-params текущего маршрута, которые есть у целевого path (`:flowId` и т.п.); пустой `{}` только если пересечения нет.
+- Запрещён prop `.items` / локальная сборка крошек мимо router+current-label+trail.
 - Клик по крошке = `dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, { routeKey, params })` (в core; в apps — `this.navigate(routeKey, params)`).
 - `CustomEvent('navigate', ...)` запрещён.
 
@@ -369,7 +376,13 @@ i18n namespace: `platform` (`work_item_badge.*`, `work_item_preview.*`, `work_it
 - `new CustomEvent('navigate', ...)` для роутинга.
 - `this.calendarApi`, `this.companies`, `this.team` и подобные геттеры в `core/frontend/static/lib/**` — только `dispatch(<SLICE_EVENTS>)` + `select`.
 
-Исключение — `core/frontend/static/lib/chat/**` (`<platform-chat>`): единый чат-компонент работает и standalone (embed на внешних сайтах) со своим host-интерфейсом через свойства/события, без platform bus.
+Исключение — `core/frontend/static/lib/flow-ui/**` (`<platform-flow-ui>`): universal renderer работает и standalone на внешнем embed-host через строгий host API, но использует тот же A2A accumulator/reducer/catalog/layout/production frame, что SPA/editor. Отдельный chat runtime/store/transport запрещён.
+
+### Flow UI catalog и layout primitives
+
+Trusted catalog components принадлежат core UI Kit и следуют UIKDS: `platform-flow-ui`, production frame, Page/Section/Grid/Stack/Flex и reusable content/input/data components имеют manifest, RU/EN docs, contract и Playwright scenario. Catalog ID — `https://linnex.io/a2ui/catalog/platform/v1`.
+
+Grid — semantic 4/8/12 responsive layout из `FlowUIDocument`; компонент не угадывает placement из DOM. Editor overlays/rulers/guides не являются catalog components и не входят в production DOM. Runtime/editor вызывают один layout resolver и используют platform spacing/typography/color tokens. Канон → **`flow_ui.mdc`**.
 
 ## Платформенные просмотрщики (`trace-viewer`, `log-viewer`)
 

@@ -3,7 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/chat/platform-chat.js';
+import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -334,7 +334,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
                       `
                     : ''}
             </div>
-            <platform-chat
+            <platform-flow-ui
                 display="drawer"
                 profile="embed_public"
                 flows-base-url=${this._flowsBaseUrl}
@@ -354,7 +354,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 .getAuthToken=${this._getDemoAuthHeaders}
                 @humanitec-embed-drawer-open-changed=${this._onDrawerOpenChanged}
                 @embed-toast=${this._onEmbedDrawerToast}
-            ></platform-chat>
+            ></platform-flow-ui>
         `;
     }
 }

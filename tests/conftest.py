@@ -36,6 +36,7 @@ pytest_plugins = [
     "tests.fixtures.embed_e2e",
     "tests.fixtures.flows_chat_e2e",
     "tests.fixtures.google_api_emulator.handle",
+    "tests.fixtures.wiki",
     "tests.agent.fixtures.local_releases",
     "tests.agent.fixtures.e2e",
     "tests.profiling.plugin",

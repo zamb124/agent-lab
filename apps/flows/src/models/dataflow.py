@@ -74,6 +74,15 @@ class DataflowConfigRead(StrictBaseModel):
     type: str
 
 
+DataflowCanvasChipKind: TypeAlias = Literal[
+    "content",
+    "files",
+    "variable",
+    "trigger",
+    "ui_value",
+]
+
+
 class DataflowCanvasChip(StrictBaseModel):
     label: str
     target: str | None = None
@@ -81,6 +90,7 @@ class DataflowCanvasChip(StrictBaseModel):
     type: str | None = None
     required: bool = False
     producer_node: str | None = None
+    kind: DataflowCanvasChipKind = "content"
 
 
 class DataflowCanvasOutputChip(StrictBaseModel):
@@ -133,6 +143,7 @@ class DataflowInspectResult(StrictBaseModel):
 __all__ = [
     "DataflowAvailability",
     "DataflowCanvasChip",
+    "DataflowCanvasChipKind",
     "DataflowCanvasOutputChip",
     "DataflowCanvasSummary",
     "DataflowConfidence",

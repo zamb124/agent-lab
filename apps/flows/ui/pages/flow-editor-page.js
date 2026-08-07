@@ -53,6 +53,8 @@ import {
     writeEditorLayoutPreference,
 } from '../_helpers/flow-editor-layout.js';
 import '../components/editor/flows-agent-focus-studio.js';
+import '../components/interface-editor/flows-interface-editor.js';
+import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 
@@ -155,6 +157,9 @@ export class FlowEditorPage extends PlatformPage {
                 position: relative;
                 z-index: 91;
             }
+            .interface-host, .run-host { flex: 1; min-width: 0; min-height: 0; }
+            .run-host { padding: var(--space-4); }
+            .run-host platform-flow-ui { height: 100%; border: 1px solid var(--border-subtle); border-radius: 22px; overflow: hidden; }
         `,
     ];
 
@@ -247,6 +252,7 @@ export class FlowEditorPage extends PlatformPage {
         const apiBranch = (typeof this.branchId !== 'string' || this.branchId.length === 0 || this.branchId === 'base')
             ? 'default'
             : this.branchId;
+        const interfaceConfig = this._resolvedInterfaceConfig(state);
         return {
             flow_id: this.flowId || state.flowId || null,
             branch_id: apiBranch,
@@ -255,6 +261,7 @@ export class FlowEditorPage extends PlatformPage {
             edges: Array.isArray(branchData.edges) ? branchData.edges : [],
             variables: isPlainObject(branchData.variables) ? branchData.variables : {},
             triggers: isPlainObject(state.flowConfig?.triggers) ? state.flowConfig.triggers : {},
+            interface: isPlainObject(interfaceConfig) ? interfaceConfig : null,
             sample_state: isPlainObject(state.previewExecutionState) ? state.previewExecutionState : null,
             observed_runs: isPlainObject(state.dataflowObservations) ? state.dataflowObservations : {},
         };
@@ -397,22 +404,20 @@ export class FlowEditorPage extends PlatformPage {
                 >
                     ${isActive
                         ? html`
-                            <div slot="editor">
-                                <flows-property-panel
-                                    .flowId=${this.flowId}
-                                    .branchId=${this.branchId}
-                                    .nodeId=${nodeId}
-                                ></flows-property-panel>
-                            </div>
+                            <flows-property-panel
+                                slot="editor"
+                                .flowId=${this.flowId}
+                                .branchId=${this.branchId}
+                                .nodeId=${nodeId}
+                            ></flows-property-panel>
                             ${nodeAiOpen
                                 ? html`
-                                    <div slot="assistant">
-                                        <flows-node-ai-helper
-                                            .flowId=${this.flowId}
-                                            .branchId=${this.branchId}
-                                            .nodeId=${nodeId}
-                                        ></flows-node-ai-helper>
-                                    </div>
+                                    <flows-node-ai-helper
+                                        slot="assistant"
+                                        .flowId=${this.flowId}
+                                        .branchId=${this.branchId}
+                                        .nodeId=${nodeId}
+                                    ></flows-node-ai-helper>
                                 `
                                 : nothing}
                         `
@@ -514,26 +519,74 @@ export class FlowEditorPage extends PlatformPage {
         `;
     }
 
-    render() {
-        this._scheduleDataflowRefresh(asObject(this._editor.state));
-        const dismissSafe = this._flowSettingsOpen ? 'flow-settings-dismiss-safe' : '';
+    _resolvedInterfaceConfig(state) {
+        const flow = isPlainObject(state.flowConfig) ? state.flowConfig : null;
+        if (!flow || !isPlainObject(flow.interface)) return null;
+        if (!this.branchId || this.branchId === 'base') return flow.interface;
+        const branch = isPlainObject(flow.branches?.[this.branchId]) ? flow.branches[this.branchId] : null;
+        const override = branch?.interface_override;
+        return override?.mode === 'replace' && isPlainObject(override.replacement)
+            ? override.replacement
+            : flow.interface;
+    }
+
+    _onInterfaceChange(event) {
+        const config = event.detail?.config;
         const state = asObject(this._editor.state);
+        if (!isPlainObject(config)) {
+            throw new Error('flow-editor-page: interface-change config must be a plain object');
+        }
+        if (!isPlainObject(state.flowConfig)) {
+            throw new Error('flow-editor-page: interface-change requires loaded flowConfig');
+        }
+        if (!this.branchId || this.branchId === 'base') {
+            this._editor.patchFlowConfig({ patch: { interface: config } });
+            this._scheduleDataflowRefresh(asObject(this._editor.state));
+            return;
+        }
+        const branches = isPlainObject(state.flowConfig.branches) ? state.flowConfig.branches : {};
+        const branch = isPlainObject(branches[this.branchId]) ? branches[this.branchId] : { name: this.branchId };
+        this._editor.patchFlowConfig({
+            patch: {
+                branches: {
+                    ...branches,
+                    [this.branchId]: {
+                        ...branch,
+                        interface_override: { mode: 'replace', replacement: config },
+                    },
+                },
+            },
+        });
+        this._scheduleDataflowRefresh(asObject(this._editor.state));
+    }
+
+    _renderWorkspaceShell(state) {
+        const workspace = state.workspace;
+        if (workspace !== 'logic' && workspace !== 'interface' && workspace !== 'run') {
+            throw new Error(`flow-editor-page: unsupported workspace ${String(workspace)}`);
+        }
+        if (workspace === 'interface') {
+            return html`
+                    <div class="interface-host"><flows-interface-editor
+                        .interfaceConfig=${this._resolvedInterfaceConfig(state)}
+                        .flowId=${this.flowId}
+                        .branchId=${this.branchId === 'base' ? 'default' : this.branchId}
+                        @interface-change=${this._onInterfaceChange}
+                    ></flows-interface-editor></div>
+                `;
+        }
+        if (workspace === 'run') {
+            return html`
+                    <div class="run-host"><platform-flow-ui
+                        flow-id=${this.flowId}
+                        branch-id=${this.branchId === 'base' ? 'default' : this.branchId}
+                        base-url="/flows" display="page" profile="editor_test"
+                    ></platform-flow-ui></div>
+                `;
+        }
         const agentLayout = this._isAgentLayoutActive(state);
+        const dismissSafe = this._flowSettingsOpen ? 'flow-settings-dismiss-safe' : '';
         return html`
-            ${this._flowSettingsOpen
-                ? html`<div class="flow-settings-dismiss-layer" @click=${() => this._onDismissFlowSettingsBackdrop()}></div>`
-                : ''}
-            <div class="editor-chrome">
-                <div class="editor-breadcrumbs">
-                    <platform-breadcrumbs compact current-label=${this._branchDisplayLabel()}></platform-breadcrumbs>
-                </div>
-                <flows-editor-header
-                    class="editor-chrome-panel ${dismissSafe}"
-                    .flowId=${this.flowId}
-                    .branchId=${this.branchId}
-                ></flows-editor-header>
-            </div>
-            <div class="editor-shell">
                 ${agentLayout
                     ? ''
                     : html`
@@ -565,6 +618,29 @@ export class FlowEditorPage extends PlatformPage {
                         </div>
                     `}
                 ${this._renderRightRail()}
+                `;
+    }
+
+    render() {
+        this._scheduleDataflowRefresh(asObject(this._editor.state));
+        const dismissSafe = this._flowSettingsOpen ? 'flow-settings-dismiss-safe' : '';
+        const state = asObject(this._editor.state);
+        return html`
+            ${this._flowSettingsOpen
+                ? html`<div class="flow-settings-dismiss-layer" @click=${() => this._onDismissFlowSettingsBackdrop()}></div>`
+                : ''}
+            <div class="editor-chrome">
+                <div class="editor-breadcrumbs">
+                    <platform-breadcrumbs compact current-label=${this._branchDisplayLabel()}></platform-breadcrumbs>
+                </div>
+                <flows-editor-header
+                    class="editor-chrome-panel ${dismissSafe}"
+                    .flowId=${this.flowId}
+                    .branchId=${this.branchId}
+                ></flows-editor-header>
+            </div>
+            <div class="editor-shell">
+                ${this._renderWorkspaceShell(state)}
             </div>
         `;
     }

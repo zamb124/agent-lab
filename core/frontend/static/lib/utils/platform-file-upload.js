@@ -243,6 +243,8 @@ export function isPlatformFileRef(value) {
  *   onProgress?: (p: { loaded: number, total: number, fileName: string }) => void,
  *   chunkSizeBytes?: number,
  *   maxUploadBytes?: number,
+ *   filesApiBase?: string,
+ *   routeSegment?: string,
  * }} opts
  */
 export async function resolvePlatformFileRefs(files, opts) {
@@ -280,6 +282,8 @@ export async function resolvePlatformFileRefs(files, opts) {
             fetchImpl: opts.fetchImpl,
             chunkSizeBytes: opts.chunkSizeBytes,
             maxUploadBytes: opts.maxUploadBytes,
+            filesApiBase: opts.filesApiBase,
+            routeSegment: opts.routeSegment,
             onProgress:
                 typeof opts.onProgress === 'function'
                     ? (p) => opts.onProgress({ ...p, fileName: item.name })

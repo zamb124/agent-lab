@@ -8,6 +8,11 @@ alwaysApply: false
 ---
 # Agent Skills
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 ## Сущность
 
 **Agent Skill** — DB-first catalog entry с progressive disclosure для `llm_node`.
@@ -61,7 +66,7 @@ alwaysApply: false
 - Platform icon для Skill везде один: `AGENT_SKILL_ICON` (`scroll-text`) из `apps/flows/ui/_helpers/agent-skill-map.js` — chips, list, picker, sidebar, llm_node. Core chat chip `platform.skill_loaded` — `AGENT_SKILL_ICON_NAME` из `core/frontend/static/lib/chat/agent-skill-icon.js` (то же имя `scroll-text`). Цвет — `var(--accent)` / `--flows-chat-accent` через `currentColor`.
 - Tool chips в Skill editor используют тот же visual meta, что llm_node (`getToolRefVisualMeta` / language icon).
 - Skill Library page и skill picker при открытии вызывают `ensure-seed`, затем list — backfill каталога без полного company re-init.
-- Chat: `load_agent_skill` → ui_event `platform.skill_loaded` → чипы в `<platform-chat>` (SPA/embed/editor). Mute: `FlowChatSettings.show_skill_loads` / embed `chat_override`.
+- Flow UI: `load_agent_skill` возвращает typed `SkillActivity` effect/ordinary Artifact; negotiated A2UI client получает trusted catalog component, остальные — generic data/text projection. Visibility задаёт `FlowInterfacePolicy` (`show_skill_loads`); в conversation `ArtifactFeed` skills/tools рисуются inline chips через `projectConversationActivity`, toast overlay на chat выключен. Special UI event branch отсутствует.
 
 ## Lara (канон)
 

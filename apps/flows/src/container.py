@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from apps.flows.config import get_settings
+from apps.flows.src.a2a import A2ATaskProjectionService
 from apps.flows.src.channels.factory import get_channel as build_channel
 from apps.flows.src.channels.registry import ChannelRegistry, create_default_channel_registry
 from apps.flows.src.container_contracts import FlowRuntimeContainer, as_flow_runtime_container
@@ -14,10 +15,12 @@ from apps.flows.src.container_state import (
     set_current_container,
 )
 from apps.flows.src.db import (
+    A2ATaskRepository,
     AgentSkillRepository,
     AgentToolkitRepository,
     EvaluationLabRepository,
     FlowRepository,
+    FlowUIShareRepository,
     NodeRepository,
     ResourceRepository,
     ToolRepository,
@@ -38,6 +41,8 @@ from apps.flows.src.services.agent_skill_service import AgentSkillService
 from apps.flows.src.services.employee_inbox_service import EmployeeInboxService
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from apps.flows.src.services.flow_factory import FlowFactory
+from apps.flows.src.services.flow_ui_session_service import FlowUISessionService
+from apps.flows.src.services.flow_ui_share_service import FlowUIShareService
 from apps.flows.src.services.handoff_context_service import (
     HandoffContextService,
 )
@@ -73,6 +78,7 @@ from core.db.repositories.embed_config_repository import EmbedConfigRepository
 from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
 from core.logging import get_logger
 from core.scheduler import SchedulerTaskRepository
+from core.utils.tokens import get_token_service
 from core.worktracker.db import WorktrackerDatabase
 from core.worktracker.repository import WorktrackerRepository
 from core.worktracker.service import WorkItemService
@@ -137,10 +143,38 @@ class FlowContainer(BaseContainer):
         return DurableWorkflowRepository(storage=self.storage)
 
     @lazy
+    def a2a_task_repository(self) -> A2ATaskRepository:
+        return A2ATaskRepository(storage=self.storage)
+
+    @lazy
+    def flow_ui_share_repository(self) -> FlowUIShareRepository:
+        return FlowUIShareRepository(storage=self.storage)
+
+    @lazy
+    def a2a_task_projection_service(self) -> A2ATaskProjectionService:
+        return A2ATaskProjectionService(
+            repository=self.a2a_task_repository,
+            redis_client=self.redis_client,
+        )
+
+    @lazy
     def workflow_runtime(self) -> DurableWorkflowRuntime:
         return DurableWorkflowRuntime(
             repository=self.durable_workflow_repository,
             redis_client=self.redis_client,
+        )
+
+    @lazy
+    def flow_ui_session_service(self) -> FlowUISessionService:
+        return FlowUISessionService(self.workflow_runtime)
+
+    @lazy
+    def flow_ui_share_service(self) -> FlowUIShareService:
+        return FlowUIShareService(
+            repository=self.flow_ui_share_repository,
+            workflow_runtime=self.workflow_runtime,
+            short_link_service=self.short_link_service,
+            token_service=get_token_service(),
         )
 
     @lazy
@@ -222,6 +256,7 @@ class FlowContainer(BaseContainer):
             work_item_service=self.work_item_service,
             workflow_runtime=self.workflow_runtime,
             redis_client=self.redis_client,
+            a2a_task_projection_service=self.a2a_task_projection_service,
         )
 
     @lazy
@@ -243,6 +278,7 @@ class FlowContainer(BaseContainer):
             flow_repository=self.flow_repository,
             redis_client=self.redis_client,
             handoff_context_service=self.handoff_context_service,
+            a2a_task_projection_service=self.a2a_task_projection_service,
         )
 
     # rag_repository наследуется из BaseContainer (core/container/base.py)

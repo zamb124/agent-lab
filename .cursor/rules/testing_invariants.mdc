@@ -5,6 +5,12 @@ alwaysApply: false
 ---
 # Тесты: инварианты и стиль
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+Тесты не закрепляют glue/compat/legacy alias и не требуют сохранения устаревших контрактов «ради зелёных тестов» — обновляй фикстуры и ассерты под новый end-to-end контракт.
+
 Дополняет **`testing.mdc`**: фикстуры, клиенты, команды, MockLLM, timeout, UI — только там. Здесь — **как** писать проверки (инварианты контрактов, без дублирования канона из `testing.mdc`).
 
 ## Суть
@@ -35,6 +41,10 @@ alwaysApply: false
 ## Персистентность и контракт вместе
 
 Запись в домене (в т.ч. после воркера) → проверяй **ответ** и **состояние**: GET/list по тому же контракту и/или строки в БД. Чтение состояния — по уровню теста: клиент → сервис → репозиторий.
+
+Для A2A/Flow UI один сценарий обязан сопоставлять streaming frames, blocking Task, `GetTask` после rehydrate и durable projection: Artifact order/Parts/metadata/extensions и document revision/hash совпадают. Для autosync/share проверяется новый browser/device после server acknowledgement, а не только локальный reducer/DOM.
+
+Geometry parity — контракт: editor production frame и production route получают один `FlowUIRenderContext`; assert идёт по каждому semantic component ID и exact bounds. Screenshot без geometry/data-model assert недостаточен.
 
 ## Изоляция не только строковыми суффиксами
 

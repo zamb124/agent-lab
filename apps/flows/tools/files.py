@@ -9,7 +9,8 @@ from typing import ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.files.state_file_refs import upsert_state_file
-from apps.flows.src.runtime_helpers.state_utils import find_file, push_ui_event
+from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
+from apps.flows.src.runtime_helpers.state_utils import find_file
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.files.file_ref import FileRef
@@ -239,11 +240,11 @@ async def create_file(
     payload = require_json_object(response.model_dump(mode="json"), "create_file.response")
     file_item = FileRef.from_response(response)
     upsert_state_file(state, file_item)
-    _ = push_ui_event(
+    _ = present_flow_ui_artifact(
         state,
-        event_type="files.added",
-        payload={"files": [file_item.to_json_object()]},
+        kind="file_collection",
+        data={"operation": "added", "files": [file_item.to_json_object()]},
         source="files",
-        correlation_id=response.file_id,
+        artifact_id=response.file_id,
     )
     return payload

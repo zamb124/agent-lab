@@ -242,7 +242,9 @@ class MappingResolver:
                 "JSON body template @state value",
             )
         if _VAR_FULL_VAR.match(s):
-            resolved = VarResolver.resolve_ref(s, variables)
+            effective_vars: JsonObject = dict(_state_variables(state))
+            effective_vars.update(dict(variables))
+            resolved = VarResolver.resolve_ref(s, effective_vars)
             return require_json_value(resolved, "JSON body template @var value")
         if "@state:" in s:
             raise ValueError(

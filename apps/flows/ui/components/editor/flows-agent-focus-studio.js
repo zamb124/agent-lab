@@ -248,11 +248,17 @@ export class FlowsAgentFocusStudio extends PlatformElement {
         this._editor.setEditorLayout({ layout: EDITOR_LAYOUT_CANVAS });
     }
 
+    _toggleExecutionPanel() {
+        const state = asObject(this._editor.state);
+        this._editor.setExecutionPanelOpen({ open: !Boolean(state.executionPanelOpen) });
+    }
+
     render() {
         const nodeId = this._soleNodeId();
         const section = FOCUS_SECTIONS.includes(this._focusSection)
             ? this._focusSection
             : 'prompt';
+        const executionOpen = Boolean(asObject(this._editor.state).executionPanelOpen);
         return html`
             <div class="studio-atmosphere" aria-hidden="true"></div>
             <div class="studio-chrome">
@@ -265,6 +271,21 @@ export class FlowsAgentFocusStudio extends PlatformElement {
                 </div>
                 <div class="studio-chrome-actions">
                     <div class="studio-run-host"></div>
+                    <platform-button
+                        class="layout-toggle"
+                        variant=${executionOpen ? 'secondary' : 'ghost'}
+                        density="compact"
+                        icon-only
+                        title=${executionOpen
+                            ? this.t('canvas.toolbar.close_execution_panel')
+                            : this.t('canvas.toolbar.open_execution_panel')}
+                        aria-label=${executionOpen
+                            ? this.t('canvas.toolbar.close_execution_panel')
+                            : this.t('canvas.toolbar.open_execution_panel')}
+                        @click=${() => this._toggleExecutionPanel()}
+                    >
+                        <platform-icon name="chat" size="18"></platform-icon>
+                    </platform-button>
                     <platform-button
                         class="layout-toggle"
                         variant="secondary"

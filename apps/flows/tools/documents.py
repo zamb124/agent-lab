@@ -1,6 +1,6 @@
 """Tools для привязки существующих файлов flow к редактору Documents.
 
-Тонкие обёртки над DocumentsClient; state.files / push_ui_event / with_document_capability
+Тонкие обёртки над DocumentsClient; state.files / Flow UI / with_document_capability
 остаются в tools.
 """
 
@@ -11,7 +11,8 @@ from typing import Literal
 
 from apps.flows.src.files.state_file_refs import upsert_state_file, with_document_capability
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
-from apps.flows.src.runtime_helpers.state_utils import find_file, push_ui_event
+from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
+from apps.flows.src.runtime_helpers.state_utils import find_file
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.documents_client import DocumentsClient
@@ -127,12 +128,12 @@ async def _apply_document_mutation(
         update={"file_size": mutation_file_size, "checksum": mutation_checksum}
     )
     upsert_state_file(state, enriched)
-    _ = push_ui_event(
+    _ = present_flow_ui_artifact(
         state,
-        event_type="files.updated",
-        payload={"files": [enriched.to_json_object()]},
+        kind="file_collection",
+        data={"operation": "updated", "files": [enriched.to_json_object()]},
         source="documents",
-        correlation_id=document_file_id,
+        artifact_id=document_file_id,
     )
     document = enriched.capabilities.document
     if document is None:
@@ -177,12 +178,12 @@ async def documents_open_file(
     enriched = with_document_capability(item, office_document, namespace)
     upsert_state_file(state, enriched)
     document_file_id = _require_document_file_id(office_document, "documents.open_file")
-    _ = push_ui_event(
+    _ = present_flow_ui_artifact(
         state,
-        event_type="files.updated",
-        payload={"files": [enriched.to_json_object()]},
+        kind="file_collection",
+        data={"operation": "updated", "files": [enriched.to_json_object()]},
         source="documents",
-        correlation_id=document_file_id,
+        artifact_id=document_file_id,
     )
     document = enriched.capabilities.document
     if document is None:

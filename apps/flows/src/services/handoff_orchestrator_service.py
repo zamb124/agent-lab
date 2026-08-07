@@ -10,6 +10,7 @@ import uuid
 from dataclasses import dataclass
 
 from apps.flows.config import get_settings
+from apps.flows.src.a2a import A2ATaskProjectionService
 from apps.flows.src.channels.types import FlowExecutionTarget, PreparedTaskParams
 from apps.flows.src.db import FlowRepository
 from apps.flows.src.durable_execution import (
@@ -22,12 +23,14 @@ from apps.flows.src.durable_execution import (
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.observability.handoff_timing import maybe_record_handoff_wall_time
 from apps.flows.src.runtime.a2a_messages import build_tool_result_message
+from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
 from apps.flows.src.services.handoff_context_service import (
     HandoffContextService,
     handoff_context_resource_key_from_body,
 )
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming.emitter import Emitter
+from apps.flows.src.streaming.flow_ui import emit_flow_ui_transitions
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows.src.tools.json_schema_parameters import validate_tool_args_against_parameters_schema
 from apps.flows.src.tracing.handoff_tracing import (
@@ -38,6 +41,7 @@ from apps.flows.src.tracing.handoff_tracing import (
     trace_context_to_kiq_payload,
 )
 from core.clients.redis_client import RedisClient
+from core.context import Context
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.state.interrupt import HandoffInterrupt, InterruptKind
@@ -61,6 +65,7 @@ class HandoffOrchestratorService:
     _flow_repository: FlowRepository
     _redis: RedisClient
     _handoff_context_service: HandoffContextService
+    _a2a_projection: A2ATaskProjectionService
 
     def __init__(
         self,
@@ -69,11 +74,13 @@ class HandoffOrchestratorService:
         flow_repository: FlowRepository,
         redis_client: RedisClient,
         handoff_context_service: HandoffContextService,
+        a2a_task_projection_service: A2ATaskProjectionService,
     ) -> None:
         self._workflow_runtime = workflow_runtime
         self._flow_repository = flow_repository
         self._redis = redis_client
         self._handoff_context_service = handoff_context_service
+        self._a2a_projection = a2a_task_projection_service
 
     @staticmethod
     def build_child_session_ids(
@@ -365,6 +372,10 @@ class HandoffOrchestratorService:
         trace_context: TraceContext | None,
         parent_session_id: str,
     ) -> None:
+        execution_context = Context.from_dict(context_data)
+        if execution_context.active_company is None:
+            raise ValueError("handback requires active_company for durable A2A projection")
+        company_id = execution_context.active_company.company_id
         parent_state = await self._workflow_runtime.get_state(parent_session_id)
         if parent_state is None:
             raise ValueError(f"parent state not found for handback: {parent_session_id}")
@@ -413,6 +424,36 @@ class HandoffOrchestratorService:
 
         handoff_trace_id = child_state.handoff_trace_id or parent_state.handoff_trace_id
 
+        parent_flow_config = await self._flow_repository.get(parent_flow_id)
+        parent_flow_name = parent_flow_id
+        if parent_flow_config is not None:
+            parent_flow_name = parent_flow_config.name
+
+        child_flow_config = await self._flow_repository.get(child_state.session_flow_id)
+        child_flow_name = child_state.session_flow_id
+        if child_flow_config is not None:
+            child_flow_name = child_flow_config.name
+
+        handback_payload: JsonObject = {
+            "activity": "handback_completed",
+            "response": handback_response,
+            "handoff_depth": child_state.handoff_depth,
+            "child_flow_id": child_state.session_flow_id,
+            "child_flow_name": child_flow_name,
+            "parent_flow_name": parent_flow_name,
+        }
+        if handoff_trace_id is not None:
+            handback_payload["trace_id"] = handoff_trace_id
+        _ = present_flow_ui_artifact(
+            parent_state,
+            kind="activity",
+            data=handback_payload,
+            source="handoff",
+            artifact_id=(
+                f"handback:{child_state.session_flow_id}:{child_state.handoff_depth}"
+            ),
+        )
+
         _ = await self._workflow_runtime.save_state(
             parent_session_id,
             parent_state,
@@ -428,24 +469,14 @@ class HandoffOrchestratorService:
             ),
         )
 
-        parent_flow_config = await self._flow_repository.get(parent_flow_id)
-        parent_flow_name = parent_flow_id
-        if parent_flow_config is not None:
-            parent_flow_name = parent_flow_config.name
-
-        child_flow_config = await self._flow_repository.get(child_state.session_flow_id)
-        child_flow_name = child_state.session_flow_id
-        if child_flow_config is not None:
-            child_flow_name = child_flow_config.name
-
-        parent_emitter = Emitter(self._redis, parent_state)
-        await parent_emitter.emit_handback_completed(
-            response=handback_response,
-            handoff_depth=child_state.handoff_depth,
-            child_flow_id=child_state.session_flow_id,
-            child_flow_name=child_flow_name,
-            parent_flow_name=parent_flow_name,
-            trace_id=handoff_trace_id,
+        parent_emitter = Emitter(
+            self._a2a_projection,
+            parent_state,
+            company_id=company_id,
+        )
+        await emit_flow_ui_transitions(
+            emitter=parent_emitter,
+            state=parent_state,
         )
 
         parent_trace_payload: JsonObject | None = None

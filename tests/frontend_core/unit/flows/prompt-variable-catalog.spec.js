@@ -66,6 +66,43 @@ describe('prompt variable catalog', () => {
         expect(result.catalog.find((entry) => entry.name === 'topic').source).toBe('local');
     });
 
+    it('catalogs ui_values.* from incoming_state as nested values', () => {
+        const result = buildPromptVariableContext({
+            dataflowNode: {
+                incoming_state: [
+                    {
+                        path: 'ui_values.email',
+                        type: 'string',
+                        sample_value: 'lead@example.com',
+                        availability: 'guaranteed',
+                    },
+                    { path: 'topic', type: 'string', sample_value: 'must-not-leak', availability: 'guaranteed' },
+                ],
+                input_mapping: [],
+            },
+            now: new Date(2026, 0, 2, 3, 4, 5),
+        });
+
+        expect(result.values.ui_values).toEqual({ email: 'lead@example.com' });
+        expect(result.values['ui_values.email']).toBeUndefined();
+        expect(result.values.topic).toBeUndefined();
+        const emailEntry = result.catalog.find((entry) => entry.name === 'ui_values.email');
+        expect(emailEntry).toMatchObject({
+            source: 'ui_value',
+            availability: 'guaranteed',
+            hasValue: true,
+        });
+    });
+
+    it('merges previewExecutionState.ui_values into nested values', () => {
+        const result = buildPromptVariableContext({
+            previewExecutionState: { ui_values: { email: 'preview@example.com' } },
+            now: new Date(2026, 0, 2, 3, 4, 5),
+        });
+        expect(result.values.ui_values.email).toBe('preview@example.com');
+        expect(result.catalog.find((entry) => entry.name === 'ui_values.email')?.source).toBe('ui_value');
+    });
+
     it('catalogs context variables without inventing preview values', () => {
         const result = buildPromptVariableContext({ now: new Date(2026, 0, 2, 3, 4, 5) });
         const userName = result.catalog.find((entry) => entry.name === 'user_name');

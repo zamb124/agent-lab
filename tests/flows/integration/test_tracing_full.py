@@ -270,8 +270,8 @@ class TestLlmNodeTracing:
         task_result = result.get("result", {})
         task_id = task_result.get("id")
         status = task_result.get("status", {})
-        assert status.get("state") == "input-required", \
-            f"Ожидаем input-required, получили: {status}"
+        assert status.get("state") == "TASK_STATE_INPUT_REQUIRED", \
+            f"Ожидаем TASK_STATE_INPUT_REQUIRED, получили: {status}"
 
         spans = await _wait_spans(container, task_id, "example_react")
 

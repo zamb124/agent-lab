@@ -207,7 +207,17 @@ class ServiceClient:
                 response_text=e.response.text,
             ) from e
         except Exception as e:
-            raise ServiceClientError(f"Ошибка запроса к {service}: {e}") from e
+            detail = str(e).strip()
+            if detail == "":
+                detail = type(e).__name__
+                cause = e.__cause__
+                if cause is not None:
+                    cause_detail = str(cause).strip()
+                    detail = (
+                        f"{detail} caused by {type(cause).__name__}"
+                        + (f": {cause_detail}" if cause_detail else "")
+                    )
+            raise ServiceClientError(f"Ошибка запроса к {service}: {detail}") from e
 
     async def get(
         self,

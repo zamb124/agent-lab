@@ -1,163 +1,82 @@
 /**
- * chat-page: toolbar + platform-chat mount + observability bubble → modals.
+ * chat-page mounts production `<platform-flow-ui>` for SPA profile
+ * and builds breadcrumbs from flow/branch names (not routes.flow_chat="Flow").
  */
-
-import { fixture, fixtureCleanup, html, expect, elementUpdated, waitUntil } from '../helpers/render.js';
+import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
-import { collectFactories, getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
-import { registerFactory } from '@platform/lib/events/factory-registry.js';
+import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
 import { flowsResource } from '../../../../apps/flows/ui/events/resources/flows.resource.js';
-import { sessionStateOp } from '../../../../apps/flows/ui/events/resources/sessions.resource.js';
-import {
-    tracesBySessionOp,
-    tracesByTaskOp,
-    tracesByTraceOp,
-} from '../../../../apps/flows/ui/events/resources/traces.resource.js';
-import {
-    logsBySessionOp,
-    logsByTraceOp,
-    logsByRequestOp,
-    logsBySpanOp,
-    logsByUserOp,
-} from '../../../../apps/flows/ui/events/resources/logs.resource.js';
-import { installChatProfileFetchStub } from '../helpers/chat-profile-stub.js';
-import '@platform/lib/components/platform-button.js';
-import '@platform/lib/components/platform-modal-stack.js';
 import '../../../../apps/flows/ui/pages/chat-page.js';
-import '../../../../apps/flows/ui/modals/flows-tracing-modal.js';
-import '../../../../apps/flows/ui/modals/flows-logs-modal.js';
 
-const FACTORIES = [
-    flowsResource,
-    sessionStateOp,
-    tracesBySessionOp,
-    tracesByTaskOp,
-    tracesByTraceOp,
-    logsBySessionOp,
-    logsByTraceOp,
-    logsByRequestOp,
-    logsBySpanOp,
-    logsByUserOp,
+const FLOWS_CHAT_ROUTES = [
+    { key: 'list', path: '', titleKey: 'routes.list' },
+    { key: 'flow_chat', path: ':flowId', parent: 'list', titleKey: 'routes.flow_chat' },
+    { key: 'flow_chat_branch', path: ':flowId/branch/:branchId', parent: 'list', titleKey: 'routes.flow_chat_branch' },
 ];
 
-function cleanupPortaledModals() {
-    for (const el of document.querySelectorAll('flows-tracing-modal, flows-logs-modal')) {
-        el.remove();
-    }
+function seedRouter(routeKey, params) {
+    const bus = getPlatformBus();
+    bus.dispatch(CoreEvents.ROUTER_ROUTES_REGISTERED, { routes: FLOWS_CHAT_ROUTES });
+    bus.dispatch(CoreEvents.ROUTER_ROUTE_CHANGED, { routeKey, params, pathname: '/', search: '' });
 }
 
-describe('chat-page toolbar', () => {
-    let restoreProfileFetch;
+function seedFlow(bus, flow) {
+    bus.dispatch('flows/flows/list_loaded', { items: [flow] });
+}
 
-    beforeEach(() => {
-        cleanupPortaledModals();
-        resetPlatformState();
-        for (const factory of FACTORIES) {
-            registerFactory(factory);
-        }
-        const collected = collectFactories(FACTORIES);
-        bootstrapTestBus({ slices: collected.slices, effects: [] });
-        restoreProfileFetch = installChatProfileFetchStub({ flowId: 'demo_flow' });
+function crumbLabels(chatPage) {
+    const crumbs = chatPage.shadowRoot.querySelector('platform-breadcrumbs');
+    return [...crumbs.shadowRoot.querySelectorAll('.breadcrumb-item')].map((node) =>
+        node.textContent.trim(),
+    );
+}
+
+describe('chat-page Flow UI mount', () => {
+    beforeEach(async () => {
+        await resetPlatformState();
+        bootstrapTestBus({ factories: [flowsResource] });
     });
 
     afterEach(() => {
-        restoreProfileFetch();
-        cleanupPortaledModals();
         fixtureCleanup();
     });
 
-    it('desktop header actions render platform-button', async () => {
+    it('mounts platform-flow-ui display=page profile=spa', async () => {
         const el = await fixture(html`
-            <chat-page flow-id="demo_flow" branch-id="base"></chat-page>
+            <chat-page flow-id="demo-flow" branch-id="base"></chat-page>
         `);
         await elementUpdated(el);
-
-        const actions = el.shadowRoot.querySelector('.flow-chat-header-actions');
-        expect(actions).to.not.equal(null);
-        const buttons = actions.querySelectorAll('platform-button');
-        expect(buttons.length).to.be.greaterThan(0);
-
-        const settingsBtn = actions.querySelector('[data-action="flow-settings"]');
-        expect(settingsBtn).to.not.equal(null);
-        expect(settingsBtn.localName).to.equal('platform-button');
+        const surface = el.shadowRoot.querySelector('platform-flow-ui');
+        expect(surface).to.not.equal(null);
+        expect(surface.getAttribute('display')).to.equal('page');
+        expect(surface.getAttribute('profile')).to.equal('spa');
+        expect(surface.getAttribute('flow-id')).to.equal('demo-flow');
     });
 
-    it('mobile overflow menu uses block ghost-danger for clear action', async () => {
+    it('breadcrumbs use flow name and branch name, not generic Flow/Flow', async () => {
+        const bus = getPlatformBus();
+        seedRouter('flow_chat_branch', { flowId: 'example_graph', branchId: 'orders_only' });
+        seedFlow(bus, {
+            flow_id: 'example_graph',
+            name: 'Пример графового агента',
+            branches: {
+                orders_only: { name: 'Только заказы', description: 'orders' },
+            },
+        });
+
         const el = await fixture(html`
-            <chat-page flow-id="demo_flow" branch-id="base"></chat-page>
-        `);
-        el._isMobile = true;
-        el._overflowOpen = true;
-        await elementUpdated(el);
-
-        const flyout = el.shadowRoot.querySelector('.menu-flyout');
-        expect(flyout).to.not.equal(null);
-
-        const menuButtons = flyout.querySelectorAll('platform-button[block]');
-        expect(menuButtons.length).to.be.greaterThan(0);
-
-        const clearBtn = menuButtons[menuButtons.length - 1];
-        expect(clearBtn.hasAttribute('danger')).to.equal(true);
-        expect(clearBtn.shadowRoot.querySelector('button.ghost-danger')).to.not.equal(null);
-        expect(clearBtn.shadowRoot.querySelector('button.danger')).to.equal(null);
-    });
-
-    it('mounts platform-chat display=page profile=spa without chat-profile 404', async () => {
-        const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
-        const el = await fixture(html`
-            <chat-page flow-id="demo_flow" branch-id="base"></chat-page>
+            <chat-page
+                flow-id="example_graph"
+                branch-id="orders_only"
+            ></chat-page>
         `);
         await elementUpdated(el);
+        await elementUpdated(el.shadowRoot.querySelector('platform-breadcrumbs'));
 
-        const chat = el.shadowRoot.querySelector('platform-chat');
-        expect(chat).to.not.equal(null);
-        expect(chat.getAttribute('display')).to.equal('page');
-        expect(chat.getAttribute('profile')).to.equal('spa');
-
-        await chat.updateComplete;
-        await waitUntil(
-            () => chat.shadowRoot?.querySelector('flows-chat-input'),
-            'composer after chat-profile stub',
-            { timeout: 2000 },
-        );
-        expect(stack).to.not.equal(null);
-    });
-
-    it('bubble show-tracing and show-logs open flows modals via chat-page handlers', async () => {
-        await fixture(html`<platform-modal-stack></platform-modal-stack>`);
-        const el = await fixture(html`
-            <chat-page flow-id="demo_flow" branch-id="base"></chat-page>
-        `);
-        await elementUpdated(el);
-
-        const chat = el.shadowRoot.querySelector('platform-chat');
-        await chat.updateComplete;
-
-        chat.dispatchEvent(new CustomEvent('show-tracing', {
-            bubbles: true,
-            composed: true,
-            detail: { taskId: 'task-toolbar-1', traceId: 'trace-toolbar-1' },
-        }));
-        await elementUpdated(el);
-        await waitUntil(
-            () => document.querySelector('flows-tracing-modal'),
-            'tracing modal after show-tracing',
-            { timeout: 2000 },
-        );
-
-        getPlatformBus().dispatch(CoreEvents.UI_MODAL_CLOSE, { kind: 'flows.tracing' });
-        await elementUpdated(el);
-
-        chat.dispatchEvent(new CustomEvent('show-logs', {
-            bubbles: true,
-            composed: true,
-            detail: { sessionId: 'demo_flow:ctx-toolbar', taskId: 'task-toolbar-1' },
-        }));
-        await elementUpdated(el);
-        await waitUntil(
-            () => document.querySelector('flows-logs-modal'),
-            'logs modal after show-logs',
-            { timeout: 2000 },
-        );
+        expect(crumbLabels(el)).to.deep.equal([
+            'routes.list',
+            'Пример графового агента',
+            'Только заказы',
+        ]);
     });
 });

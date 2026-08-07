@@ -20,12 +20,14 @@ from a2a.types import (
 )
 from google.protobuf.struct_pb2 import Struct
 
+from apps.flows.src.a2a.representation_service import FlowUIRepresentationService
 from apps.flows.src.runtime.message_author import build_flow_message_author
 from core.a2a import make_task_status
 from core.a2a.codec import struct_from_mapping
 from core.state import ExecutionState
+from core.state.flow_ui import FlowUITransition
 from core.state.interrupt import InterruptKind
-from core.types import JsonObject, JsonValue, parse_json_object
+from core.types import JsonArray, JsonObject, JsonValue, parse_json_object
 
 if TYPE_CHECKING:
     from core.state import InterruptData
@@ -64,11 +66,26 @@ class BaseEmitter(ABC):
         self.state = state
         self._span_context = None
         self._node_run_counts: dict[str, int] = {}
+        self._artifact_stream_ids: dict[str, str] = {}
+        self._closed_artifact_streams: set[str] = set()
+        self._flow_ui_representation: FlowUIRepresentationService = (
+            FlowUIRepresentationService()
+        )
 
     def next_node_run_index(self, node_id: str) -> int:
         current = self._node_run_counts.get(node_id, 0)
         self._node_run_counts[node_id] = current + 1
         return current
+
+    def _artifact_stream_id(self, artifact_name: str) -> str:
+        if artifact_name.strip() == "":
+            raise ValueError("artifact_name must be non-empty")
+        artifact_id = self._artifact_stream_ids.get(artifact_name)
+        if artifact_id is None or artifact_name in self._closed_artifact_streams:
+            artifact_id = str(uuid.uuid4())
+            self._artifact_stream_ids[artifact_name] = artifact_id
+            self._closed_artifact_streams.discard(artifact_name)
+        return artifact_id
 
     def _create_message(
         self,
@@ -97,7 +114,7 @@ class BaseEmitter(ABC):
     ) -> None:
         """Публикует текстовый чанк (LLM: response; оператор: operator_reply)."""
         artifact = Artifact(
-            artifact_id=str(uuid.uuid4()),
+            artifact_id=self._artifact_stream_id(artifact_name),
             name=artifact_name,
             parts=[_text_part(text)],
         )
@@ -115,6 +132,45 @@ class BaseEmitter(ABC):
         )
 
         await self._publish(event)
+        if last_chunk:
+            self._closed_artifact_streams.add(artifact_name)
+
+    async def emit_user_message(
+        self,
+        text: str,
+        *,
+        mutation_id: str,
+        files: JsonArray | None = None,
+    ) -> None:
+        """Per-turn user bubble Artifact.
+
+        `metadata.mutation_id` — идентичность submit'а: клиент строго по ней
+        consume'ит optimistic pending turn (никакого текстового сравнения).
+        """
+        if mutation_id.strip() == "":
+            raise ValueError("emit_user_message requires mutation_id")
+        parts: list[Part] = []
+        if text != "":
+            parts.append(_text_part(text))
+        if files:
+            parts.append(_data_part({"files": files}))
+        if not parts:
+            raise ValueError("emit_user_message requires text or files")
+        artifact = Artifact(
+            artifact_id=self._artifact_stream_id("user_message"),
+            name="user_message",
+            parts=parts,
+        )
+        _apply_struct_metadata(artifact.metadata, {"mutation_id": mutation_id})
+        event = TaskArtifactUpdateEvent(
+            task_id=self.state.task_id,
+            context_id=self.state.context_id,
+            artifact=artifact,
+            append=False,
+            last_chunk=True,
+        )
+        await self._publish(event)
+        self._closed_artifact_streams.add("user_message")
 
     async def emit_reasoning(self, text: str) -> None:
         """Публикует чанк reasoning (тот же контракт, что emit_text с именем артефакта reasoning)."""
@@ -128,9 +184,12 @@ class BaseEmitter(ABC):
         react_role: str = "standard",
     ) -> None:
         """Публикует событие вызова инструмента."""
+        if tool_call_id.strip() == "":
+            raise ValueError("tool_call_id must be non-empty")
+        stream_name = f"tool_call:{tool_call_id}"
         artifact = Artifact(
-            artifact_id=str(uuid.uuid4()),
-            name=f"tool_call_{tool_call_id}",
+            artifact_id=self._artifact_stream_id(stream_name),
+            name=stream_name,
             parts=[_data_part({
                 "tool": tool_name,
                 "args": tool_args,
@@ -143,9 +202,12 @@ class BaseEmitter(ABC):
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             artifact=artifact,
+            append=False,
+            last_chunk=True,
         )
 
         await self._publish(event)
+        self._closed_artifact_streams.add(stream_name)
 
     async def emit_tool_result(
         self,
@@ -154,9 +216,12 @@ class BaseEmitter(ABC):
         tool_call_id: str,
     ) -> None:
         """Публикует результат выполнения инструмента."""
+        if tool_call_id.strip() == "":
+            raise ValueError("tool_call_id must be non-empty")
+        stream_name = f"tool_result:{tool_call_id}"
         artifact = Artifact(
-            artifact_id=str(uuid.uuid4()),
-            name=f"tool_result_{tool_call_id}",
+            artifact_id=self._artifact_stream_id(stream_name),
+            name=stream_name,
             parts=[_data_part({
                 "tool": tool_name,
                 "result": result,
@@ -168,9 +233,12 @@ class BaseEmitter(ABC):
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             artifact=artifact,
+            append=False,
+            last_chunk=True,
         )
 
         await self._publish(event)
+        self._closed_artifact_streams.add(stream_name)
 
     async def emit_complete(
         self,
@@ -179,15 +247,22 @@ class BaseEmitter(ABC):
         has_artifact: bool = False,
     ) -> None:
         """Публикует событие завершения выполнения."""
+        resolved_message_id = message_id or f"status:{self.state.task_id}:completed"
         event = TaskStatusUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             status=make_task_status(
                 TaskState.TASK_STATE_COMPLETED,
-                message=self._create_message(response, message_id=message_id),
+                message=self._create_message(response, message_id=resolved_message_id),
             ),
         )
-        _apply_struct_metadata(event.metadata, {"has_artifact": has_artifact})
+        _apply_struct_metadata(
+            event.metadata,
+            {
+                "has_artifact": has_artifact,
+                "platformEventId": f"terminal:{self.state.task_id}:completed",
+            },
+        )
 
         await self._publish(event)
 
@@ -212,7 +287,9 @@ class BaseEmitter(ABC):
             status=make_task_status(
                 TaskState.TASK_STATE_INPUT_REQUIRED,
                 message=self._create_message(
-                    interrupt.question, metadata=meta, message_id=message_id
+                    interrupt.question,
+                    metadata=meta,
+                    message_id=message_id,
                 ),
             ),
         )
@@ -227,8 +304,15 @@ class BaseEmitter(ABC):
             context_id=self.state.context_id,
             status=make_task_status(
                 TaskState.TASK_STATE_CANCELED,
-                message=self._create_message("Task cancelled"),
+                message=self._create_message(
+                    "Task cancelled",
+                    message_id=f"status:{self.state.task_id}:canceled",
+                ),
             ),
+        )
+        _apply_struct_metadata(
+            event.metadata,
+            {"platformEventId": f"terminal:{self.state.task_id}:canceled"},
         )
         await self._publish(event)
 
@@ -238,13 +322,18 @@ class BaseEmitter(ABC):
         message_id: str | None = None,
     ) -> None:
         """Публикует событие ошибки."""
+        resolved_message_id = message_id or f"status:{self.state.task_id}:failed"
         event = TaskStatusUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             status=make_task_status(
                 TaskState.TASK_STATE_FAILED,
-                message=self._create_message(error, message_id=message_id),
+                message=self._create_message(error, message_id=resolved_message_id),
             ),
+        )
+        _apply_struct_metadata(
+            event.metadata,
+            {"platformEventId": f"terminal:{self.state.task_id}:failed"},
         )
 
         await self._publish(event)
@@ -466,42 +555,75 @@ class BaseEmitter(ABC):
 
         await self._publish(event)
 
-    async def emit_ui_event(
+    async def emit_exact_artifact(
         self,
-        event_type: str,
-        payload: JsonObject,
+        artifact: Artifact,
         *,
-        event_id: str | None = None,
-        version: str = "1.0.0",
-        timestamp: str,
-        source: str = "assistant",
-        correlation_id: str | None = None,
+        append: bool = False,
+        last_chunk: bool = True,
     ) -> None:
-        """Публикует UI событие в A2A stream как artifact 'ui_event'."""
-        normalized_event_id = event_id or str(uuid.uuid4())
-        artifact = Artifact(
-            artifact_id=str(uuid.uuid4()),
-            name="ui_event",
-            parts=[
-                _data_part({
-                    "id": normalized_event_id,
-                    "type": event_type,
-                    "payload": payload,
-                    "version": version,
-                    "timestamp": timestamp,
-                    "source": source,
-                    "correlation_id": correlation_id,
-                })
-            ],
-        )
+        """Publish a fully materialised Artifact without re-synthesizing Parts."""
+        if artifact.artifact_id.strip() == "":
+            raise ValueError("emit_exact_artifact requires artifact.artifact_id")
         event = TaskArtifactUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             artifact=artifact,
-            append=False,
-            last_chunk=True,
+            append=append,
+            last_chunk=last_chunk,
         )
         await self._publish(event)
+        if last_chunk and artifact.name.strip() != "":
+            self._closed_artifact_streams.add(artifact.name)
+
+    async def emit_flow_ui_transition(self, transition: FlowUITransition) -> None:
+        """Encode one accepted domain transition into exactly one negotiated representation."""
+        artifacts = self._flow_ui_representation.encode_transition(
+            transition,
+            self.state.a2a_representation,
+        )
+        for artifact in artifacts:
+            event = TaskArtifactUpdateEvent(
+                task_id=self.state.task_id,
+                context_id=self.state.context_id,
+                artifact=artifact,
+                append=False,
+                last_chunk=False,
+                metadata=struct_from_mapping(
+                    {
+                        "platformEventId": (
+                            f"flow-ui:{transition.transition_id}:{artifact.artifact_id}"
+                        )
+                    }
+                ),
+            )
+            await self._publish(event)
+
+    async def emit_flow_ui_snapshot(self) -> None:
+        """Publish the authoritative current screen for bootstrap/reconnect."""
+        artifacts = self._flow_ui_representation.encode_snapshot(
+            self.state.ui_document,
+            self.state.a2a_representation,
+        )
+        for artifact in artifacts:
+            event = TaskArtifactUpdateEvent(
+                task_id=self.state.task_id,
+                context_id=self.state.context_id,
+                artifact=artifact,
+                append=False,
+                # Stable Flow UI artifact_id is replaced across the Task lifetime;
+                # lastChunk would forbid later document revisions.
+                last_chunk=False,
+                metadata=struct_from_mapping(
+                    {
+                        "platformEventId": (
+                            f"flow-ui:snapshot:{self.state.task_id}:"
+                            f"{self.state.ui_document.revision}:{artifact.artifact_id}"
+                        )
+                    }
+                ),
+            )
+            await self._publish(event)
 
     async def emit_breakpoint(
         self,

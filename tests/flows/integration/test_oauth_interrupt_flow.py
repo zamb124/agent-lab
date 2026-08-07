@@ -59,20 +59,21 @@ def _build_flow_config(flow_id: str) -> FlowConfig:
 
 def _patch_oauth_config(monkeypatch) -> None:
     from core.config import get_settings
-    from core.config.models import AuthConfig, AuthProviderConfig
+    from core.config.models import AuthProviderConfig
 
     settings = get_settings()
-    auth = AuthConfig(
-        jwt_secret_key="test-secret-key-32-bytes-minimum-!",
-        providers={
-            "google": AuthProviderConfig(
-                client_id="test-client-id",
-                client_secret="test-secret",
-                auth_url="https://accounts.google.com/o/oauth2/v2/auth",
-                token_url="https://oauth2.googleapis.com/token",
-            ),
-        },
-    )
+    # Preserve jwt_secret_key: ASGI ServiceClient verifies internal context HMAC
+    # against app.state.settings, which keeps the process JWT secret.
+    auth = settings.auth.model_copy(deep=True)
+    auth.providers = {
+        **auth.providers,
+        "google": AuthProviderConfig(
+            client_id="test-client-id",
+            client_secret="test-secret",
+            auth_url="https://accounts.google.com/o/oauth2/v2/auth",
+            token_url="https://oauth2.googleapis.com/token",
+        ),
+    }
     monkeypatch.setattr(settings, "auth", auth)
 
 

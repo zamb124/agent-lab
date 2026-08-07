@@ -211,7 +211,7 @@
       },
       "embed_api_subdomain": "api",
       "embed_cdn_subdomain": "cdn",
-      "embed_script_path": "/lib/embed-chat/humanitec-embed-autoload.js"
+      "embed_script_path": "/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     },
     "agents-lab.ru": {
       "platform_name": "Humanitec",
@@ -234,7 +234,7 @@
       },
       "embed_api_subdomain": "api",
       "embed_cdn_subdomain": "cdn",
-      "embed_script_path": "/lib/embed-chat/humanitec-embed-autoload.js"
+      "embed_script_path": "/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     },
     "linnex.io": {
       "platform_name": "Linnex",
@@ -268,7 +268,7 @@
       },
       "embed_api_subdomain": "api",
       "embed_cdn_subdomain": "cdn",
-      "embed_script_path": "/lib/embed-chat/humanitec-embed-autoload.js",
+      "embed_script_path": "/lib/embed-flow-ui/flow-ui-embed-autoload.js",
       "auth_apple_client_id": "app.linnex.io",
       "vapid_email": "admin@linnex.io"
     },
@@ -283,7 +283,7 @@
       "logo_path": "/static/core/assets/service_logos/frontend_logo.svg",
       "embed_api_subdomain": "api",
       "embed_cdn_subdomain": "cdn",
-      "embed_script_path": "/lib/embed-chat/humanitec-embed-autoload.js"
+      "embed_script_path": "/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     },
     "lvh.me": {
       "platform_name": "Linnex",
@@ -296,7 +296,7 @@
       "logo_path": "/static/core/assets/service_logos/frontend_logo.svg",
       "embed_api_subdomain": "api",
       "embed_cdn_subdomain": "cdn",
-      "embed_script_path": "/lib/embed-chat/humanitec-embed-autoload.js"
+      "embed_script_path": "/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     }
   },
   "secrets": {

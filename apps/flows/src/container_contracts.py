@@ -10,8 +10,11 @@ from core.types import JsonObject, JsonValue
 from core.worktracker.service import WorkItemService
 
 if TYPE_CHECKING:
+    from apps.flows.src.a2a import A2ATaskProjectionService
     from apps.flows.src.db import (
+        A2ATaskRepository,
         FlowRepository,
+        FlowUIShareRepository,
         NodeRepository,
         ResourceRepository,
         ToolRepository,
@@ -42,6 +45,8 @@ if TYPE_CHECKING:
     from apps.flows.src.runners.remote import RemoteCodeRunner
     from apps.flows.src.services.agent_skill_service import AgentSkillService
     from apps.flows.src.services.flow_discovery import FlowDiscoveryService
+    from apps.flows.src.services.flow_ui_session_service import FlowUISessionService
+    from apps.flows.src.services.flow_ui_share_service import FlowUIShareService
     from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
     from apps.flows.src.services.hitl_conversation_service import HitlConversationService
     from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
@@ -279,6 +284,21 @@ class EvaluationLabServiceProtocol(Protocol):
 class FlowRuntimeContainer(Protocol):
     @property
     def redis_client(self) -> RedisClient: ...
+
+    @property
+    def a2a_task_repository(self) -> A2ATaskRepository: ...
+
+    @property
+    def a2a_task_projection_service(self) -> A2ATaskProjectionService: ...
+
+    @property
+    def flow_ui_session_service(self) -> "FlowUISessionService": ...
+
+    @property
+    def flow_ui_share_repository(self) -> FlowUIShareRepository: ...
+
+    @property
+    def flow_ui_share_service(self) -> "FlowUIShareService": ...
 
     @property
     def mail_service(self) -> MailService: ...

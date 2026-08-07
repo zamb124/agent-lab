@@ -6,8 +6,8 @@
  * Презентационный компонент core UI Kit. Не знает про A2A, flows и чат-UI.
  *
  * Подключается в:
- *   - `apps/flows/ui/` — assistant и user сообщения в `chat-message`;
- *   - `core/frontend/static/lib/chat/chat-message.js` — assistant/user.
+ *   - `apps/flows/ui/` — assistant и user сообщения в Flow UI catalog;
+ *   - `core/frontend/static/lib/flow-ui/` — production surface.
  *
  * Contract:
  *   - `text` (string, обязательный);

@@ -10,6 +10,11 @@ globs:
 ---
 # RAG (Retrieval-Augmented Generation)
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 **Продуктовый статус:** отдельный Lara Tier-1 `rag-platform` и branch `rag` удалены; company knowledge в Lara идёт через `documents-platform` → `knowledge-rag`. Полный decommission сервиса `apps/rag` (API/UI/helm → Documents) — **отдельный эпик**; до него этот rule и `/rag/api/v1/` остаются каноном backend knowledge.
 
 Сервис документов и семантического поиска с провайдерами `pgvector` (PostgreSQL+pgvector) и `agentset` (внешний SaaS). Изоляция через namespaces, асинхронная индексация через TaskIQ, оригиналы файлов в S3/MinIO. Парсинг — канонический `FileReader.read(source, ReadFileArgs) → FileExtract` (hybrid PDF OCR / vision / STT); отдельного парсера в `core/rag` нет. Embeddings — OpenAI-compatible API; дефолт в Pydantic и продуктовом `conf.json` — **`provider_litserve`** с **Qwen3-Embedding-0.6B** и размерностью из `rag.embedding.api`; альтернатива — **`openrouter`** (`rag.embedding.base_url` или ключ из `llm`).

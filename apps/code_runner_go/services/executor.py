@@ -221,6 +221,9 @@ class GoSandboxExecutor:
             "code": request.code,
             "entrypoint": entrypoint,
             "capability_manifest": request.capability_manifest.model_dump(mode="json"),
+            "runner_source": self._runner_source(),
+            "entrypoint_source": self._entrypoint_source(entrypoint),
+            "sdk_source": self._sdk_source(request),
         }
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -550,6 +553,7 @@ class GoSandboxExecutor:
                 State map[string]any `json:"state"`
                 Context map[string]any `json:"context"`
                 CapabilityManifest map[string]any `json:"capability_manifest"`
+                PlatformEffects []any `json:"-"`
             }}
 
             var currentRequest ExecutionRequest
@@ -601,6 +605,13 @@ class GoSandboxExecutor:
                 return fmt.Errorf("capability method is not declared in manifest: %s.%s", namespace, method)
             }}
 
+            func platformEffectsPayload() []any {{
+                if currentRequest.PlatformEffects == nil {{
+                    return []any{{}}
+                }}
+                return currentRequest.PlatformEffects
+            }}
+
             func emitFailure(stage string, err any) {{
                 message := fmt.Sprint(err)
                 traceback := fmt.Sprintf("%s\\n%s", message, string(debug.Stack()))
@@ -619,6 +630,7 @@ class GoSandboxExecutor:
                         "trace_id": contextString("trace_id"),
                     }},
                     "logs": []any{{}},
+                    "platform_effects": platformEffectsPayload(),
                 }}
                 responseBytes, marshalErr := json.Marshal(responsePayload)
                 if marshalErr != nil {{
@@ -635,6 +647,7 @@ class GoSandboxExecutor:
                     "state": currentRequest.State,
                     "interrupt": payload["interrupt"],
                     "logs": []any{{}},
+                    "platform_effects": platformEffectsPayload(),
                 }}
                 responseBytes, marshalErr := json.Marshal(responsePayload)
                 if marshalErr != nil {{
@@ -694,6 +707,13 @@ class GoSandboxExecutor:
                         currentRequest.State[key] = value
                     }}
                 }}
+                if rawEffects, exists := decoded["platform_effects"]; exists {{
+                    effects, ok := rawEffects.([]any)
+                    if !ok {{
+                        return nil, fmt.Errorf("capability %s returned invalid platform_effects", name)
+                    }}
+                    currentRequest.PlatformEffects = append(currentRequest.PlatformEffects, effects...)
+                }}
                 statusValue, ok := decoded["status"].(string)
                 if !ok {{
                     return nil, fmt.Errorf("capability %s returned invalid status", name)
@@ -722,6 +742,9 @@ class GoSandboxExecutor:
                 if err := json.Unmarshal(requestBytes, &currentRequest); err != nil {{
                     panic(err)
                 }}
+                if currentRequest.PlatformEffects == nil {{
+                    currentRequest.PlatformEffects = []any{{}}
+                }}
                 stage = "user"
                 result, err := callEntrypoint(currentRequest.Args, currentRequest.State)
                 if err != nil {{
@@ -742,6 +765,7 @@ class GoSandboxExecutor:
                     "state": currentRequest.State,
                     "state_returned": stateReturned,
                     "logs": []any{{}},
+                    "platform_effects": platformEffectsPayload(),
                 }}
                 if !stateReturned {{
                     responsePayload["result"] = result

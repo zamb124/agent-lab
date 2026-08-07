@@ -108,7 +108,9 @@ import {
     chipRefKeysForWireKeys,
     countNodeDataflowProblems,
     dataWireKey,
+    dataWireChipKind,
     dataflowChipAnchor,
+    dataflowChipKind,
     dataflowChipLabel,
     dataflowChipRect,
     dataflowNodeChipLayout,
@@ -719,6 +721,15 @@ export class FlowsFlowCanvas extends PlatformElement {
                 line-height: 1.1;
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
             }
+            .node-dataflow-chip[data-chip-kind="ui_value"] {
+                --flows-dataflow-ui-value: var(--info);
+                border-color: color-mix(in oklab, var(--flows-dataflow-ui-value) 34%, var(--glass-border-subtle));
+                background: color-mix(in oklab, var(--glass-solid-strong) 86%, var(--flows-dataflow-ui-value) 14%);
+                color: color-mix(in oklab, var(--flows-dataflow-ui-value) 52%, var(--text-secondary));
+            }
+            .node-dataflow-chip[data-chip-kind="ui_value"] .req {
+                color: var(--flows-dataflow-ui-value);
+            }
             .node-dataflow-chip[data-has-producer="true"] {
                 height: 30px;
             }
@@ -729,6 +740,9 @@ export class FlowsFlowCanvas extends PlatformElement {
             }
             .node-dataflow-chip[data-required="true"] {
                 border-color: color-mix(in oklab, var(--node-accent) 46%, var(--glass-border-subtle));
+            }
+            .node-dataflow-chip[data-chip-kind="ui_value"][data-required="true"] {
+                border-color: color-mix(in oklab, var(--flows-dataflow-ui-value) 52%, var(--glass-border-subtle));
             }
             .node-dataflow-chip .body {
                 display: flex;
@@ -897,6 +911,9 @@ export class FlowsFlowCanvas extends PlatformElement {
                     stroke var(--motion-duration-micro) var(--motion-ease-standard),
                     stroke-width var(--motion-duration-micro) var(--motion-ease-standard);
             }
+            .data-wire-path[data-wire-kind="ui_value"] {
+                stroke: color-mix(in oklab, var(--info) 72%, transparent);
+            }
             .data-wire-path[data-dimmed] {
                 opacity: 0.12;
             }
@@ -907,6 +924,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                 stroke-dasharray: none;
                 filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 35%, transparent));
             }
+            .data-wire-path[data-wire-kind="ui_value"][data-highlighted] {
+                stroke: var(--info);
+                filter: drop-shadow(0 0 6px color-mix(in srgb, var(--info) 35%, transparent));
+            }
             .data-wire-label[data-highlighted] {
                 fill: var(--accent);
                 font-size: 10px;
@@ -915,6 +936,11 @@ export class FlowsFlowCanvas extends PlatformElement {
                 border-color: color-mix(in oklab, var(--accent) 65%, var(--glass-border-subtle));
                 background: color-mix(in oklab, var(--accent) 18%, var(--glass-solid-strong));
                 box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent);
+            }
+            .node-dataflow-chip[data-chip-kind="ui_value"][data-wire-highlight="true"] {
+                border-color: color-mix(in oklab, var(--info) 65%, var(--glass-border-subtle));
+                background: color-mix(in oklab, var(--info) 18%, var(--glass-solid-strong));
+                box-shadow: 0 0 0 1px color-mix(in oklab, var(--info) 40%, transparent);
             }
             .data-wire-label {
                 fill: var(--accent);
@@ -2635,6 +2661,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         const { start, end } = endpoints;
         const mid = midpoint(start.x, start.y, end.x, end.y);
         const wireKey = dataWireKey(wire);
+        const wireKind = dataWireChipKind(wire);
         const chipWireHighlightActive = this._highlightWireKeys instanceof Set && this._highlightWireKeys.size > 0;
         const highlighted = chipWireHighlightActive && this._highlightWireKeys.has(wireKey);
         const dimmed = chipWireHighlightActive && !highlighted;
@@ -2642,6 +2669,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             <g class="data-wire" data-wire-key=${wireKey}>
                 <path
                     class="data-wire-path"
+                    data-wire-kind=${wireKind}
                     d=${dataWirePathFor(start.x, start.y, end.x, end.y)}
                     ?data-highlighted=${highlighted}
                     ?data-dimmed=${dimmed}
@@ -2777,10 +2805,12 @@ export class FlowsFlowCanvas extends PlatformElement {
                         required ? ` — ${this.t('canvas.dataflow.required')}` : '',
                     ].join('');
                     const wireHighlighted = isChipWireHighlighted(side, chipIndex);
+                    const chipKind = dataflowChipKind(chip);
                     return html`
                         <span
                             class="node-dataflow-chip"
                             data-status=${status}
+                            data-chip-kind=${chipKind}
                             data-required=${required ? 'true' : 'false'}
                             data-draggable=${side === 'out' ? 'true' : 'false'}
                             data-has-producer=${side === 'in' && producer ? 'true' : 'false'}

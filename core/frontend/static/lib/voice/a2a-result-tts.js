@@ -9,7 +9,7 @@ import {
     isA2aInterruptedState,
     isA2aStreamBoundaryState,
     unwrapA2aStreamResult,
-} from '../chat/a2a-chat-runtime.js';
+} from '../flow-ui/protocol/a2a-result-helpers.js';
 import { extractSpeakableText } from './speakable.js';
 
 /**

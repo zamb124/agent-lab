@@ -10,6 +10,14 @@ from pydantic import ConfigDict, Field
 
 from core.models import StrictBaseModel
 from core.state import ChildWorkflowStatus, ExecutionTaskState
+from core.state.flow_ui import (
+    FlowUIComponent,
+    FlowUIContainerLayout,
+    FlowUIInteraction,
+    FlowUIPage,
+    FlowUIResponsivePlacement,
+    FlowUISurface,
+)
 from core.state.interrupt import HandoffMode
 from core.types import JsonArray, JsonObject, JsonValue, require_json_object
 
@@ -78,6 +86,13 @@ class WorkflowEventType(StrEnum):
     handback_requested = "HandbackRequested"
     handback_completed = "HandbackCompleted"
     conversation_message_appended = "ConversationMessageAppended"
+    a2a_task_opened = "A2ATaskOpened"
+    a2a_message_appended = "A2AMessageAppended"
+    a2a_artifact_updated = "A2AArtifactUpdated"
+    a2a_task_status_changed = "A2ATaskStatusChanged"
+    ui_interaction_accepted = "UIInteractionAccepted"
+    ui_document_patched = "UIDocumentPatched"
+    ui_representation_selected = "UIRepresentationSelected"
 
 
 class ActivityStatus(StrEnum):
@@ -94,6 +109,59 @@ class SideEffectPolicy(StrEnum):
     non_idempotent = "non_idempotent"
 
 
+class UIDataPathValue(DurableStrictBaseModel):
+    surface_id: str | None = None
+    path: str = Field(..., pattern=r"^/")
+    value: JsonValue
+
+
+class UIDataPathRef(DurableStrictBaseModel):
+    surface_id: str | None = None
+    path: str = Field(..., pattern=r"^/")
+
+
+class UIComponentPropertyPatch(DurableStrictBaseModel):
+    surface_id: str = Field(..., min_length=1)
+    component_id: str = Field(..., min_length=1)
+    properties: JsonObject = Field(default_factory=dict)
+
+
+class UIComponentPropertyDelete(DurableStrictBaseModel):
+    surface_id: str = Field(..., min_length=1)
+    component_id: str = Field(..., min_length=1)
+    property_keys: list[str] = Field(..., min_length=1)
+
+
+class UIContainerLayoutPatch(DurableStrictBaseModel):
+    surface_id: str = Field(..., min_length=1)
+    component_id: str = Field(..., min_length=1)
+    layout: FlowUIContainerLayout
+
+
+class UIContainerLayoutUnset(DurableStrictBaseModel):
+    surface_id: str = Field(..., min_length=1)
+    component_id: str = Field(..., min_length=1)
+
+
+class UIComponentPlacementPatch(DurableStrictBaseModel):
+    surface_id: str = Field(..., min_length=1)
+    component_id: str = Field(..., min_length=1)
+    placement: FlowUIResponsivePlacement
+
+
+class UIComponentPlacementUnset(DurableStrictBaseModel):
+    surface_id: str = Field(..., min_length=1)
+    component_id: str = Field(..., min_length=1)
+
+
+class UIClientMutationRef(DurableStrictBaseModel):
+    mutation_id: str | None = None
+    mutation_hash: str | None = Field(
+        default=None,
+        pattern=r"^sha256:[0-9a-f]{64}$",
+    )
+
+
 class ExecutionStateDelta(DurableStrictBaseModel):
     """Доменная delta для проекции ExecutionState."""
 
@@ -108,6 +176,39 @@ class ExecutionStateDelta(DurableStrictBaseModel):
     child_workflows_delete: list[str] = Field(default_factory=list)
     fields_set: dict[str, JsonValue] = Field(default_factory=dict)
     fields_unset: list[str] = Field(default_factory=list)
+    ui_components_upsert: dict[str, dict[str, FlowUIComponent]] = Field(
+        default_factory=dict
+    )
+    ui_components_delete: dict[str, list[str]] = Field(default_factory=dict)
+    ui_component_properties_set: list[UIComponentPropertyPatch] = Field(
+        default_factory=list
+    )
+    ui_component_properties_delete: list[UIComponentPropertyDelete] = Field(
+        default_factory=list
+    )
+    ui_container_layout_set: list[UIContainerLayoutPatch] = Field(default_factory=list)
+    ui_container_layout_unset: list[UIContainerLayoutUnset] = Field(
+        default_factory=list
+    )
+    ui_component_placement_set: list[UIComponentPlacementPatch] = Field(
+        default_factory=list
+    )
+    ui_component_placement_unset: list[UIComponentPlacementUnset] = Field(
+        default_factory=list
+    )
+    ui_data_set: list[UIDataPathValue] = Field(default_factory=list)
+    ui_data_delete: list[UIDataPathRef] = Field(default_factory=list)
+    ui_surfaces_upsert: dict[str, FlowUISurface] = Field(default_factory=dict)
+    ui_surfaces_delete: list[str] = Field(default_factory=list)
+    ui_pages_upsert: dict[str, FlowUIPage] = Field(default_factory=dict)
+    ui_pages_delete: list[str] = Field(default_factory=list)
+    ui_active_page_set: str | None = None
+    ui_session_view_state_set: JsonObject = Field(default_factory=dict)
+    ui_session_view_state_delete: list[str] = Field(default_factory=list)
+    ui_revision_set: int | None = Field(default=None, ge=1)
+    ui_interaction_set: FlowUIInteraction | None = None
+    ui_interaction_unset: bool = False
+    ui_last_client_mutation_set: UIClientMutationRef | None = None
 
     def is_empty(self) -> bool:
         return (
@@ -122,6 +223,27 @@ class ExecutionStateDelta(DurableStrictBaseModel):
             and not self.child_workflows_delete
             and not self.fields_set
             and not self.fields_unset
+            and not self.ui_components_upsert
+            and not self.ui_components_delete
+            and not self.ui_component_properties_set
+            and not self.ui_component_properties_delete
+            and not self.ui_container_layout_set
+            and not self.ui_container_layout_unset
+            and not self.ui_component_placement_set
+            and not self.ui_component_placement_unset
+            and not self.ui_data_set
+            and not self.ui_data_delete
+            and not self.ui_surfaces_upsert
+            and not self.ui_surfaces_delete
+            and not self.ui_pages_upsert
+            and not self.ui_pages_delete
+            and self.ui_active_page_set is None
+            and not self.ui_session_view_state_set
+            and not self.ui_session_view_state_delete
+            and self.ui_revision_set is None
+            and self.ui_interaction_set is None
+            and not self.ui_interaction_unset
+            and self.ui_last_client_mutation_set is None
         )
 
 
@@ -154,6 +276,78 @@ class UserInputAppliedPayload(DurableStrictBaseModel):
     task_id: str = Field(..., min_length=1)
     context_id: str = Field(..., min_length=1)
     is_resume: bool
+
+
+class A2ATaskOpenedPayload(DurableStrictBaseModel):
+    task_id: str = Field(..., min_length=1)
+    context_id: str = Field(..., min_length=1)
+    document_id: str = Field(..., min_length=1)
+    revision: int = Field(..., ge=1)
+    action_id: str = Field(..., min_length=1)
+    previous_task_id: str | None = Field(default=None, min_length=1)
+
+
+class A2AMessageAppendedPayload(DurableStrictBaseModel):
+    task_id: str = Field(..., min_length=1)
+    context_id: str = Field(..., min_length=1)
+    message_id: str = Field(..., min_length=1)
+    role: Literal["user", "agent"]
+    ordinal: int = Field(..., ge=0)
+
+
+class A2AArtifactUpdatedPayload(DurableStrictBaseModel):
+    task_id: str = Field(..., min_length=1)
+    context_id: str = Field(..., min_length=1)
+    artifact_id: str = Field(..., min_length=1)
+    sequence: int = Field(..., ge=1)
+    payload_hash: str = Field(..., min_length=1)
+    event_identity: str = Field(..., min_length=1)
+    event_json: JsonObject
+
+
+class A2ATaskStatusChangedPayload(DurableStrictBaseModel):
+    task_id: str = Field(..., min_length=1)
+    context_id: str = Field(..., min_length=1)
+    status_state: str = Field(..., min_length=1)
+    sequence: int = Field(..., ge=1)
+    event_identity: str = Field(..., min_length=1)
+    terminal: bool
+    event_json: JsonObject
+
+
+class UIDocumentPatchedPayload(DurableStrictBaseModel):
+    task_id: str = Field(..., min_length=1)
+    context_id: str = Field(..., min_length=1)
+    document_id: str = Field(..., min_length=1)
+    base_revision: int = Field(..., ge=1)
+    accepted_revision: int = Field(..., ge=1)
+    source: str = Field(..., min_length=1)
+    client_mutation_id: str | None = Field(default=None, min_length=1)
+    effect_ids: list[str] = Field(default_factory=list)
+    surface_ids: list[str] = Field(default_factory=list)
+
+
+class UIInteractionAcceptedPayload(DurableStrictBaseModel):
+    task_id: str = Field(..., min_length=1)
+    context_id: str = Field(..., min_length=1)
+    document_id: str = Field(..., min_length=1)
+    base_revision: int = Field(..., ge=1)
+    accepted_revision: int = Field(..., ge=1)
+    action_id: str = Field(..., min_length=1)
+    interaction_id: str = Field(..., min_length=1)
+    surface_id: str = Field(..., min_length=1)
+    source_component_id: str = Field(..., min_length=1)
+    previous_task_id: str | None = Field(default=None, min_length=1)
+    opened_new_task: bool = False
+
+
+class UIRepresentationSelectedPayload(DurableStrictBaseModel):
+    task_id: str = Field(..., min_length=1)
+    context_id: str = Field(..., min_length=1)
+    representation: str = Field(..., min_length=1)
+    extension_uri: str | None = None
+    catalog_id: str | None = None
+    output_mime_type: str | None = None
 
 
 class VariablesResolvedPayload(DurableStrictBaseModel):
@@ -383,6 +577,13 @@ WorkflowEventPayload: TypeAlias = (
     | FlowHandoffInitiatedPayload
     | FlowHandbackCompletedPayload
     | ConversationMessageAppendedPayload
+    | A2ATaskOpenedPayload
+    | A2AMessageAppendedPayload
+    | A2AArtifactUpdatedPayload
+    | A2ATaskStatusChangedPayload
+    | UIDocumentPatchedPayload
+    | UIInteractionAcceptedPayload
+    | UIRepresentationSelectedPayload
 )
 
 _PAYLOAD_BY_EVENT_TYPE: dict[WorkflowEventType, type[DurableStrictBaseModel]] = {
@@ -419,6 +620,13 @@ _PAYLOAD_BY_EVENT_TYPE: dict[WorkflowEventType, type[DurableStrictBaseModel]] = 
     WorkflowEventType.handoff_initiated: FlowHandoffInitiatedPayload,
     WorkflowEventType.handback_completed: FlowHandbackCompletedPayload,
     WorkflowEventType.conversation_message_appended: ConversationMessageAppendedPayload,
+    WorkflowEventType.a2a_task_opened: A2ATaskOpenedPayload,
+    WorkflowEventType.a2a_message_appended: A2AMessageAppendedPayload,
+    WorkflowEventType.a2a_artifact_updated: A2AArtifactUpdatedPayload,
+    WorkflowEventType.a2a_task_status_changed: A2ATaskStatusChangedPayload,
+    WorkflowEventType.ui_document_patched: UIDocumentPatchedPayload,
+    WorkflowEventType.ui_interaction_accepted: UIInteractionAcceptedPayload,
+    WorkflowEventType.ui_representation_selected: UIRepresentationSelectedPayload,
 }
 
 

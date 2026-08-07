@@ -19,6 +19,7 @@ class TokenType(str, Enum):
     SESSION = "session"  # Обычный токен авторизации (7 дней)
     API = "api"          # Перманентный API токен (до 2 лет)
     EMBED_SESSION = "embed_session"  # Короткоживущий токен встраиваемого чата
+    FLOW_UI_SHARE = "flow_ui_share"  # Scoped live-session viewer/collaborator
 
 class TokenData(BaseModel):
     """Данные токена"""
@@ -39,6 +40,7 @@ class TokenService:
     SESSION_EXPIRES: ClassVar[int] = 86400 * 7           # 7 дней
     API_TOKEN_EXPIRES: ClassVar[int] = 86400 * 365 * 2   # 2 года
     EMBED_SESSION_EXPIRES: ClassVar[int] = 300           # 5 минут
+    FLOW_UI_SHARE_EXPIRES: ClassVar[int] = 900           # 15 минут; grant остаётся revocable
 
     def __init__(self) -> None:
         settings = get_settings()
@@ -82,6 +84,8 @@ class TokenService:
                 expires_in = self.API_TOKEN_EXPIRES
             elif token_type == TokenType.EMBED_SESSION:
                 expires_in = self.EMBED_SESSION_EXPIRES
+            elif token_type == TokenType.FLOW_UI_SHARE:
+                expires_in = self.FLOW_UI_SHARE_EXPIRES
             else:
                 expires_in = self.SESSION_EXPIRES
 
@@ -153,6 +157,24 @@ class TokenService:
             company_id=company_id,
             roles=roles,
             token_type=TokenType.EMBED_SESSION,
+            expires_in=expires_in,
+            metadata=metadata,
+        )
+
+    def create_flow_ui_share_token(
+        self,
+        *,
+        user_id: str,
+        company_id: str,
+        expires_in: int = FLOW_UI_SHARE_EXPIRES,
+        metadata: JsonObject,
+    ) -> str:
+        """Mint a short-lived JWT whose authority is a revocable share grant."""
+        return self.create_token(
+            user_id=user_id,
+            company_id=company_id,
+            roles=["flow_ui_share"],
+            token_type=TokenType.FLOW_UI_SHARE,
             expires_in=expires_in,
             metadata=metadata,
         )

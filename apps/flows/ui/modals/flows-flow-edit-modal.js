@@ -1,10 +1,10 @@
 /**
  * flows-flow-edit-modal — редактирование метаданных flow (name, description, обложка)
- * и политики поведения чата (`FlowConfig.chat`, все поля FlowChatSettings).
+ * и политики Flow UI (`FlowConfig.interface.policy`).
  *
  * Обновление — `PUT /flows/api/v1/flows/{flow_id}`. Загрузка файла — `platform/file_create`.
- * Политика чата доставляется пользователям через chat-profile endpoint; в режиме
- * editor_test (`<platform-chat profile="editor_test">`) она игнорируется — редактор видит всё.
+ * Политика интерфейса — `FlowConfig.interface.policy`; в режиме
+ * editor_test (`<platform-flow-ui profile="editor_test">`) она игнорируется — редактор видит всё.
  */
 
 import { html, css } from 'lit';
@@ -13,7 +13,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { buildFlowAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/chat/chat-settings-fields.js';
+import '@platform/lib/flow-ui/components/flow-ui-policy-fields.js';
 import { asArray } from '../_helpers/flows-resolvers.js';
 
 export class FlowsFlowEditModal extends PlatformFormModal {
@@ -26,7 +26,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         _name: { state: true },
         _description: { state: true },
         _cardImageUrl: { state: true },
-        _chat: { state: true },
+        _policy: { state: true },
         _hydrated: { state: true },
     };
 
@@ -78,7 +78,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         this._name = '';
         this._description = '';
         this._cardImageUrl = '';
-        this._chat = null;
+        this._policy = null;
         this._hydrated = false;
         this._flows = this.useResource('flows/flows');
         this._update = this.useOp('flows/flow_update');
@@ -92,7 +92,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
             this._name = '';
             this._description = '';
             this._cardImageUrl = '';
-            this._chat = null;
+            this._policy = null;
         }
         if (!this._hydrated && this.flowId) {
             const item = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
@@ -101,10 +101,10 @@ export class FlowsFlowEditModal extends PlatformFormModal {
                 this._description = typeof item.description === 'string' ? item.description : '';
                 const c = item.store_card_image_url;
                 this._cardImageUrl = typeof c === 'string' ? c : '';
-                if (!item.chat || typeof item.chat !== 'object') {
-                    throw new Error('flows-flow-edit-modal: flow item missing chat settings');
+                if (!item.interface || typeof item.interface !== 'object' || !item.interface.policy) {
+                    throw new Error('flows-flow-edit-modal: flow item missing interface.policy');
                 }
-                this._chat = { ...item.chat };
+                this._policy = { ...item.interface.policy };
                 this._hydrated = true;
             } else {
                 this._flows.get(this.flowId);
@@ -112,22 +112,22 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         }
     }
 
-    _setChat(patch) {
-        this._chat = { ...this._chat, ...patch };
+    _setPolicy(patch) {
+        this._policy = { ...this._policy, ...patch };
         this.isDirty = true;
     }
 
-    _renderChatSection() {
-        if (!this._chat) {
+    _renderPolicySection() {
+        if (!this._policy) {
             return null;
         }
         return html`
             <h4 class="chat-section-title">${this.t('chat_settings.section_title')}</h4>
             <p class="chat-section-hint">${this.t('chat_settings.section_hint')}</p>
-            <platform-chat-settings-fields
-                .chat=${this._chat}
-                @chat-changed=${(e) => this._setChat(e.detail.patch)}
-            ></platform-chat-settings-fields>
+            <flow-ui-policy-fields
+                .policy=${this._policy}
+                @policy-changed=${(e) => this._setPolicy(e.detail.patch)}
+            ></flow-ui-policy-fields>
         `;
     }
 
@@ -196,7 +196,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         : null}
                 </div>
             </div>
-            ${this._renderChatSection()}
+            ${this._renderPolicySection()}
         `;
     }
 
@@ -244,15 +244,29 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         const item = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
         if (!item) return;
         const trimmedCard = this._cardImageUrl.trim();
-        if (!this._chat) {
-            throw new Error('flows-flow-edit-modal: chat settings not hydrated');
+        if (!this._policy) {
+            throw new Error('flows-flow-edit-modal: interface policy not hydrated');
         }
+        if (!item.interface || typeof item.interface !== 'object') {
+            throw new Error('flows-flow-edit-modal: flow item missing interface');
+        }
+        const interfaceConfig = {
+            ...item.interface,
+            policy: this._policy,
+            template: {
+                ...item.interface.template,
+                document: {
+                    ...item.interface.template.document,
+                    policy: this._policy,
+                },
+            },
+        };
         const body = {
             ...item,
             name: this._name.trim(),
             description: this._description,
             store_card_image_url: trimmedCard.length > 0 ? trimmedCard : null,
-            chat: this._chat,
+            interface: interfaceConfig,
         };
         this._update.run({ flow_id: this.flowId, body });
         this.closeAfterSave();

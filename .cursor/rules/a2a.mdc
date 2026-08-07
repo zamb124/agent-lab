@@ -1,9 +1,15 @@
 ---
-description: "A2A Protocol 1.0 hard cut: JSON-RPC methods, Parts, SSE StreamResponse, fixtures pin, no 0.3"
+description: "A2A Protocol 1.0 hard cut: lossless Tasks/Artifacts/Parts, SSE StreamResponse, optional A2UI extension, fixtures pin, no 0.3"
 alwaysApply: false
 ---
 
 # A2A Protocol 1.0 (hard cut)
+
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+Wire-boundary mapping внешней A2A-спеки (ProtoJSON / TaskStatus.state) допустим только на границе codec. Внутри платформы — единые доменные типы; внутренние twin-модели и glue вокруг устаревших platform-контрактов запрещены.
 
 Платформа реализует **только** [A2A Protocol 1.0.0](https://a2a-protocol.org/v1.0.0/specification/). Binding: **JSON-RPC 2.0 + SSE**. gRPC / HTTP+JSON REST — вне scope.
 
@@ -15,7 +21,7 @@ alwaysApply: false
 | JSON Schema | `tests/flows/a2a_conformance/fixtures/official/a2a.json` |
 | Pin metadata | `VERSION` + `scripts/pin_a2a_official_fixtures.py` (`make check-a2a-fixtures`) |
 | SDK | `a2a-sdk>=1.0,<2` (protobuf types в `a2a.types`) |
-| Platform helpers | `core/a2a/` (`methods`, `errors`, `codec`, `task_states`) |
+| Platform helpers | `core/a2a/` (`methods`, `errors`, `codec`, `task_states`, `artifact_accumulator`, `task_projection`, `extensions`) |
 
 Запрещено править pin «под код». Drift → чинить платформу или осознанно bump pin.
 
@@ -42,6 +48,8 @@ Capabilities согласованы с кодом: `streaming=true`, `pushNotifi
 `skills` — **обязательное** поле A2A 1.0 (ветки flow как `AgentSkill[]`).  
 Платформенные extensions: `branches` (зеркало `skills`), `variables` — не заменяют и не удаляют `skills`.
 
+Optional Flow UI/A2UI extension объявляется стандартным extension descriptor с официальным URI `https://a2ui.org/a2a-extension/a2ui/v0.9.1`. Linnex catalog ID — `https://linnex.io/a2ui/catalog/platform/v1`; он строится из primary domain, а не request Host. A2UI v0.9.1 находится только в обычном `Artifact.parts[].data`, активируется через `A2A-Extensions` и не вводит отдельный method/endpoint/SSE envelope. Полный контракт → **`flow_ui.mdc`**.
+
 `RegistryFlowCard` (`apps/flows/src/api/registry.py`, поле `protocolVersion`) — **не** A2A Agent Card: это platform registry discovery, отдельный контракт от `GET /{flow_id}/.well-known/agent-card.json`.
 
 ## SendMessage blocking
@@ -52,11 +60,15 @@ Capabilities согласованы с кодом: `streaming=true`, `pushNotifi
 
 Запрещён proprietary async через `metadata.execution_mode` / `metadata.mode`.
 
+Blocking `Task`, streaming shadow state, `GetTask`, `ListTasks`, `SubscribeToTask` и outbound client materialize Artifacts одним `core.a2a.ArtifactAccumulator`. Произвольные names, все четыре Part variants, metadata и extensions сохраняются lossless. Text extraction — только derived convenience; пересборка standard Artifact из текста/`res` запрещена.
+
+Artifact stream имеет stable непустой `artifactId`: `append=false` заменяет Artifact, `append=true` добавляет Parts, `lastChunk=true` закрывает identity. Первый encounter задаёт ordering. Duplicate event identity idempotent только при идентичном payload.
+
 ## Files
 
 - Inbound `Part.raw` → S3 + `FileRecord` (external/conformance; platform chat **не** шлёт raw).
 - Inbound `Part.url`: platform download → reuse `file_id` (без повторной записи bytes); external → SSRF-safe fetch (`apps/flows/src/files/ssrf_fetch.py`) → persist. Fail closed.
-- Platform UI (`platform-chat`): upload через Files API → A2A только `Part.url`; уже `FileRef` — без re-upload.
+- Platform Flow UI: upload через Files API → A2A только `Part.url`; уже `FileRef` — без re-upload. External/conformance клиенты по-прежнему могут использовать `Part.raw`.
 
 ## Historical ledger / Redis projections
 
@@ -65,8 +77,8 @@ Capabilities согласованы с кодом: `streaming=true`, `pushNotifi
 ## Clients
 
 - HTTP API: `apps/flows/src/api/a2a.py` + `A2AChannel`.
-- Chat UI: `core/frontend/static/lib/chat/runtime/a2a-stream.js`, `a2a-chat-runtime.js`.
-- Outbound: `core/clients/a2a_client.py` (`RemoteFlowNode` — direct URL; Skill ID = `branch_id` → `metadata.branch`; `metadata_template` → `params.metadata` с `@state:`/`@var:`).
+- Universal Flow UI: `core/frontend/static/lib/flow-ui/protocol/` + `<platform-flow-ui>`; host pages не имеют собственного transport/reducer.
+- Outbound: `core/clients/a2a_client.py` возвращает structured Task/Artifacts/Parts; text — derived convenience. `RemoteFlowNode` сохраняет/проецирует exact remote artifacts (direct URL; Skill ID = `branch_id` → `metadata.branch`; `metadata_template` → `params.metadata` с `@state:`/`@var:`).
 - Internal platform `ExecutionTaskState` остаётся kebab-case; маппинг на wire — `core.a2a.task_states`.
 
 ## Tests
@@ -83,3 +95,4 @@ Capabilities согласованы с кодом: `streaming=true`, `pushNotifi
 3. Alias старых method names.
 4. `final=` на `TaskStatusUpdateEvent`.
 5. Моки транспорта A2A в conformance suite.
+6. `artifact.name="ui_event"`, второй UI envelope/endpoint или dual emit A2UI + fallback одного результата.

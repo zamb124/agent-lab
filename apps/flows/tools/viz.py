@@ -10,7 +10,8 @@ from xml.sax.saxutils import escape
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from apps.flows.src.files.state_file_refs import upsert_state_file
-from apps.flows.src.runtime_helpers.state_utils import find_file, push_ui_event
+from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
+from apps.flows.src.runtime_helpers.state_utils import find_file
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.files_client import FilesClient
@@ -247,12 +248,12 @@ async def create_viz(
     response = await _write_viz_file(document, name)
     file_item = FileRef.from_response(response)
     upsert_state_file(state, file_item)
-    _ = push_ui_event(
+    _ = present_flow_ui_artifact(
         state,
-        event_type="files.added",
-        payload={"files": [file_item.to_json_object()]},
+        kind="file_collection",
+        data={"operation": "added", "files": [file_item.to_json_object()]},
         source="viz",
-        correlation_id=response.file_id,
+        artifact_id=response.file_id,
     )
     return {
         "success": True,
@@ -305,12 +306,12 @@ async def update_viz(
     response = await _write_viz_file(document, item.original_name or _slug_filename(document.title))
     file_item = FileRef.from_response(response)
     upsert_state_file(state, file_item)
-    _ = push_ui_event(
+    _ = present_flow_ui_artifact(
         state,
-        event_type="files.added",
-        payload={"files": [file_item.to_json_object()]},
+        kind="file_collection",
+        data={"operation": "updated", "files": [file_item.to_json_object()]},
         source="viz",
-        correlation_id=response.file_id,
+        artifact_id=response.file_id,
     )
     return {
         "success": True,
@@ -362,12 +363,12 @@ async def export_viz(
     response = FileResponse.from_record(record)
     file_item = FileRef.from_response(response)
     upsert_state_file(state, file_item)
-    _ = push_ui_event(
+    _ = present_flow_ui_artifact(
         state,
-        event_type="files.added",
-        payload={"files": [file_item.to_json_object()]},
+        kind="file_collection",
+        data={"operation": "added", "files": [file_item.to_json_object()]},
         source="viz",
-        correlation_id=response.file_id,
+        artifact_id=response.file_id,
     )
     return {
         "success": True,

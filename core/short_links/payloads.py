@@ -25,6 +25,13 @@ class FlowPreviewEmbedPayload(StrictBaseModel):
     handoff_id: ShortLinkPayloadField
 
 
+class FlowUISessionSharePayload(StrictBaseModel):
+    grant_id: ShortLinkPayloadField
+
+
 ShortLinkPayload: TypeAlias = (
-    SyncCallJoinPayload | CompanyInvitePayload | FlowPreviewEmbedPayload
+    SyncCallJoinPayload
+    | CompanyInvitePayload
+    | FlowPreviewEmbedPayload
+    | FlowUISessionSharePayload
 )

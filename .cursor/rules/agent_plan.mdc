@@ -5,10 +5,15 @@ globs:
   - "apps/flows/tools/agent_plan_tools.py"
   - "apps/flows/bundles/_seed/agent_skills/agent-planning/**"
   - "core/frontend/static/lib/components/platform-agent-plan.js"
-  - "core/frontend/static/lib/chat/blocks/flows-chat-ui-agent-plan.js"
+  - "core/frontend/static/lib/flow-ui/catalog/**"
 alwaysApply: false
 ---
 # AgentPlan
+
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 
 Structured flat checklist for multi-step `llm_node` runs. **Not** WorkItem, **not** `reason.plan` prose.
 
@@ -38,7 +43,7 @@ Child of `platform-workspace`. Attach/load on any `llm_node` — do **not** put 
 ## UI
 
 - Core: `<platform-agent-plan .plan=${...}>` (`core/frontend/static/lib/components/platform-agent-plan.js`)
-- Chat block: `type: agent_plan` → `flows-chat-ui-agent-plan` (thin host)
+- Flow UI catalog: AgentPlan surface/component renders the same core host
 - i18n: `platform.agent_plan.*` (ru/en)
 
 ## Boundaries

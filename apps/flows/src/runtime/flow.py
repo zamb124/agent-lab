@@ -62,7 +62,7 @@ from apps.flows.src.runtime.state_diff import (
 from apps.flows.src.state.cancellation import FlowCancelled, check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
-from apps.flows.src.streaming.ui_events import emit_pending_ui_events
+from apps.flows.src.streaming.flow_ui import emit_flow_ui_transitions
 from core.errors import (
     FlowInfiniteLoopError,
     FlowPrematureCompletionError,
@@ -141,8 +141,8 @@ class Flow:
 
         self._join_required: dict[str, frozenset[str]] = self._build_join_required_predecessors()
 
-    async def _emit_pending_ui_events(self, emitter: Emitter, state: ExecutionState) -> None:
-        await emit_pending_ui_events(emitter=emitter, state=state)
+    async def _emit_flow_ui_transitions(self, emitter: Emitter, state: ExecutionState) -> None:
+        await emit_flow_ui_transitions(emitter=emitter, state=state)
 
     async def _checkpoint_state(
         self,
@@ -442,7 +442,7 @@ class Flow:
         iterations = 0
         max_graph_iterations = get_graph_max_iterations()
 
-        emitter = Emitter(self.container.redis_client, state)
+        emitter = await Emitter.create_ensured(self.container, state)
 
         trace_ctx = None
         if is_tracing_enabled():
@@ -564,7 +564,6 @@ class Flow:
                             primary_field,
                         )
                         diff_payload = [item.model_dump(mode="json") for item in diff_items]
-                        await self._emit_pending_ui_events(emitter, result_state)
                         await emitter.emit_node_complete(
                             node_id,
                             node_type=node_type,
@@ -687,6 +686,7 @@ class Flow:
                             event_type=event_type,
                             payload=event_payload,
                         )
+                        await self._emit_flow_ui_transitions(emitter, state)
                         return state
 
                     errors = [exc for _, _, exc, _run_state in outcomes if exc is not None]
@@ -707,11 +707,21 @@ class Flow:
                                 preserved_node_writes=successful_node_writes,
                             ),
                         )
+                        if result_states:
+                            persisted_results = self._merge_results(
+                                superstep_base_state,
+                                result_states,
+                            )
+                            await self._emit_flow_ui_transitions(
+                                emitter,
+                                persisted_results,
+                            )
                         raise errors[0]
                     if result_states:
                         state = self._merge_results(superstep_base_state, result_states)
                     else:
                         state = self._clone_state(superstep_base_state)
+                    await self._emit_flow_ui_transitions(emitter, state)
                 except FlowInterrupt as e:
                     node_id = current_nodes[0]
                     logger.info(f"Flow {self.flow_id}: interrupt at '{node_id}': {e.question}")
@@ -833,6 +843,7 @@ class Flow:
         original_exc_count = len(original_state.execution_exceptions)
 
         for result in results:
+            merged.queue_ui_transitions(result.drain_ui_transitions())
             # messages — добавляем новые
             new_messages = result.messages[original_msg_count:]
             merged.messages.extend(new_messages)

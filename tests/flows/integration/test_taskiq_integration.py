@@ -80,6 +80,7 @@ class TestTaskIQToolExecution:
             {"a": 10, "b": 5, "op": "add"},
             state_dict,
             context_data=mock_context.to_dict(),
+            background_kind="background",
         )
         try:
             result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
@@ -114,7 +115,8 @@ class TestTaskIQToolExecution:
                 {"a": i, "b": i * 2, "op": "mul"},
                 state_dict,
                 context_data=mock_context.to_dict(),
-            )
+            background_kind="background",
+        )
             tasks.append((i, task))
         results = []
         for i, task in tasks:
@@ -150,7 +152,8 @@ class TestTaskIQToolExecution:
         }
         task = await enqueue(
             TASK_EXECUTE_TOOL,
-            tool_config, {"value": "test"}, state_dict, context_data=mock_context.to_dict()
+            tool_config, {"value": "test"}, state_dict, context_data=mock_context.to_dict(),
+            background_kind="background",
         )
         result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result.is_err
@@ -199,10 +202,10 @@ class TestTaskIQToolExecution:
             LLMToolCall(name=tool2_id, arguments={"x": 10}, id="call_2"),
         ]
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             content="test",
         )
         await ensure_workflow_started(
@@ -270,6 +273,7 @@ class TestTaskIQFlowExecution:
             user_id="test-user",
             content="Test",
             context_data=mock_context.model_dump(),
+            background_kind="background",
         )
         result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result.is_err, f"Task failed: {result.error}"
@@ -328,6 +332,7 @@ class TestTaskIQInterruptResume:
             user_id="test-user",
             content="Start",
             context_data=mock_context.model_dump(),
+            background_kind="background",
         )
         result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result.is_err, f"Task failed: {result.error}"
@@ -355,6 +360,7 @@ class TestTaskIQInterruptResume:
             user_id="test-user",
             content="Start",
             context_data=mock_context.model_dump(),
+            background_kind="background",
         )
         result1 = await task1.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         if result1.is_err:
@@ -370,6 +376,7 @@ class TestTaskIQInterruptResume:
             content="Alice",
             is_resume=True,
             context_data=mock_context.model_dump(),
+            background_kind="background",
         )
         result2 = await task2.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result2.is_err, f"Resume failed: {result2.error}"

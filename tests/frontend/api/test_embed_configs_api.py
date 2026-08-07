@@ -251,6 +251,7 @@ async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_
     assert data["branch_id"] == "default"
     assert data["allowed_origins"] == ["https://example.com", "https://test.com"]
     assert data["status"] == "active"
+    assert data["presentation"] == "drawer"
     assert data["theme"] == "dark"
     assert data["placeholder"] == "Type your message..."
     assert data["usage_count"] == 0
@@ -264,6 +265,47 @@ async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_
     await frontend_client.delete(
         f"/frontend/api/embed/configs/{embed_id}",
         headers=auth_headers
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_embed_config_presentation_page(
+    frontend_client: AsyncClient,
+    test_auth_with_agent,
+):
+    auth_headers, _, _ = test_auth_with_agent
+    create_response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={
+            "name": "Page Widget",
+            "flow_id": "test_agent",
+            "presentation": "page",
+            "show_launcher": True,
+            "position": "bottom-left",
+        },
+    )
+    assert create_response.status_code == 200
+    created = create_response.json()
+    assert created["presentation"] == "page"
+    assert created["show_launcher"] is False
+    assert created["position"] == "bottom-right"
+    embed_id = created["embed_id"]
+
+    code_response = await frontend_client.get(
+        f"/frontend/api/embed/configs/{embed_id}/code",
+        headers=auth_headers,
+    )
+    assert code_response.status_code == 200
+    code = code_response.json()
+    assert code["presentation"] == "page"
+    assert code["page_url"].endswith(f"/flow-embed-page?embed={embed_id}")
+    assert 'data-presentation="page"' in code["html_code"]
+    assert 'data-show-launcher="false"' in code["html_code"]
+
+    await frontend_client.delete(
+        f"/frontend/api/embed/configs/{embed_id}",
+        headers=auth_headers,
     )
 
 
@@ -401,8 +443,8 @@ async def test_update_embed_config(frontend_client: AsyncClient, test_auth_with_
 
 
 @pytest.mark.asyncio
-async def test_embed_config_chat_override_crud(frontend_client: AsyncClient, test_auth_with_agent):
-    """CRUD chat_override: create с override, PATCH null сброс, PATCH partial update."""
+async def test_embed_config_interface_override_crud(frontend_client: AsyncClient, test_auth_with_agent):
+    """CRUD interface_override: create с override, PATCH null сброс, PATCH partial update."""
 
     auth_headers, _, _ = test_auth_with_agent
 
@@ -410,38 +452,40 @@ async def test_embed_config_chat_override_crud(frontend_client: AsyncClient, tes
         "/frontend/api/embed/configs",
         headers=auth_headers,
         json={
-            "name": "Chat override widget",
+            "name": "Interface override widget",
             "flow_id": "test_agent",
-            "chat_override": {
-                "show_reasoning": True,
-                "tool_calls_display": "detailed",
+            "interface_override": {
+                "policy": {
+                    "show_reasoning": True,
+                    "tool_calls_display": "detailed",
+                },
             },
         },
     )
     assert create_response.status_code == 200
     created = create_response.json()
     embed_id = created["embed_id"]
-    assert created["chat_override"] is not None
-    assert created["chat_override"]["show_reasoning"] is True
-    assert created["chat_override"]["tool_calls_display"] == "detailed"
+    assert created["interface_override"] is not None
+    assert created["interface_override"]["policy"]["show_reasoning"] is True
+    assert created["interface_override"]["policy"]["tool_calls_display"] == "detailed"
 
     patch_reset = await frontend_client.patch(
         f"/frontend/api/embed/configs/{embed_id}",
         headers=auth_headers,
-        json={"chat_override": None},
+        json={"interface_override": None},
     )
     assert patch_reset.status_code == 200
-    assert patch_reset.json()["chat_override"] is None
+    assert patch_reset.json()["interface_override"] is None
 
     patch_override = await frontend_client.patch(
         f"/frontend/api/embed/configs/{embed_id}",
         headers=auth_headers,
-        json={"chat_override": {"show_files_panel": False}},
+        json={"interface_override": {"policy": {"show_files_panel": False}}},
     )
     assert patch_override.status_code == 200
-    override_payload = patch_override.json()["chat_override"]
+    override_payload = patch_override.json()["interface_override"]
     assert override_payload is not None
-    assert override_payload["show_files_panel"] is False
+    assert override_payload["policy"]["show_files_panel"] is False
 
     await frontend_client.delete(
         f"/frontend/api/embed/configs/{embed_id}",
@@ -518,14 +562,19 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     assert "html_code" in data
     assert "script_url" in data
     assert data["embed_id"] == embed_id
-    assert data["script_url"].endswith("/humanitec-embed-autoload.js")
+    assert data["script_url"].endswith("/flow-ui-embed-autoload.js")
+    assert data["presentation"] == "drawer"
+    assert data["page_url"].endswith(f"/flow-embed-page?embed={embed_id}")
+    assert 'data-presentation="drawer"' in data["html_code"]
+    assert 'data-position="bottom-right"' in data["html_code"]
 
     # Проверяем что в коде есть нужные элементы
     html_code = data["html_code"]
     te_parts = urlparse(data["token_endpoint"])
     apex_from_token = f"{te_parts.scheme}://{te_parts.netloc}"
     assert f'data-platform-ui-origin="{apex_from_token}"' in html_code
-    assert "humanitec-embed-autoload.js" in html_code
+    assert "flow-ui-embed-autoload.js" in html_code
+    assert "humanitec-embed-autoload.js" not in html_code
     assert 'type="module"' in html_code
     assert "data-embed-id=" in html_code
     assert embed_id in html_code
@@ -534,7 +583,8 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     assert '<script type="importmap">' not in html_code
     assert "@platform/lib/" not in html_code
     assert "/static/core/assets/js/lit/lit.min.js" not in html_code
-    assert 'data-chat-token-url="/api/chat-token"' in html_code
+    assert 'data-token-url="/api/flow-ui-token"' in html_code
+    assert "data-chat-token-url" not in html_code
     assert 'data-token-expires-seconds="300"' in html_code
     assert "session-token" not in html_code
     assert "credentials: 'include'" not in html_code
@@ -552,7 +602,7 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     assert "hum_<ISSUER_TOKEN>" in prox
     assert embed_id in client_snip
     assert "expires_in_seconds:" in client_snip
-    assert "fetch('/api/chat-token'" in client_snip
+    assert "fetch('/api/flow-ui-token'" in client_snip
     assert 'data-token-expires-seconds="300"' in html_code and "300" in html_code
     assert 'data-voice-enabled="false"' in html_code
     assert 'data-voice-default-on="false"' in html_code
@@ -651,7 +701,8 @@ async def test_get_embed_code_has_no_browser_direct_fallback_patterns(
     assert response.status_code == 200
     html_code = response.json()["html_code"]
 
-    assert 'data-chat-token-url="/api/chat-token"' in html_code
+    assert 'data-token-url="/api/flow-ui-token"' in html_code
+    assert "data-chat-token-url" not in html_code
     assert "data-token-expires-seconds=" in html_code
     assert "const EMBED_ID =" not in html_code
     assert "getEmbedToken()" not in html_code
@@ -1006,7 +1057,7 @@ async def test_get_embed_code_production_urls(
     data = response.json()
     html_code = data["html_code"]
 
-    assert data["script_url"] == "https://cdn.humanitec.ru/lib/embed-chat/humanitec-embed-autoload.js"
+    assert data["script_url"] == "https://cdn.humanitec.ru/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     assert 'data-flows-base-url="https://api.humanitec.ru/flows"' in html_code
     assert 'data-platform-ui-origin="https://api.humanitec.ru"' in html_code
     assert 'data-voice-base-url="https://api.humanitec.ru/voice"' in html_code

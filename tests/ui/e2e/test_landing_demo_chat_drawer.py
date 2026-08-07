@@ -1,4 +1,4 @@
-"""Playwright E2E: публичный landing demo drawer (platform-chat embed_public)."""
+"""Playwright E2E: публичный landing demo drawer (platform-flow-ui embed_public)."""
 
 from __future__ import annotations
 
@@ -47,5 +47,5 @@ async def test_landing_demo_drawer_opens_platform_chat(
     await expect(open_btn).to_be_visible(timeout=30_000)
     await open_btn.click()
 
-    drawer_chat = page.locator("landing-home-demo-agents platform-chat").first
+    drawer_chat = page.locator("landing-home-demo-agents platform-flow-ui").first
     await expect(drawer_chat).to_be_attached(timeout=30_000)

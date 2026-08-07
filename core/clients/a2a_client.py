@@ -1,14 +1,20 @@
-"""
-A2A Client - HTTP клиент для взаимодействия с внешними агентами.
-Реализует A2A Protocol 1.0 (JSON-RPC).
-Автоматически добавляет заголовки из контекста (Authorization, X-Company-Id и т.д.)
-"""
+"""A2A Client — HTTP client for external agents (A2A Protocol 1.0 JSON-RPC)."""
+
+from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
+from typing import cast
 
 import httpx
 from pydantic import Field
 
+from core.a2a.extensions import (
+    A2A_EXTENSIONS_HEADER,
+    A2UI_EXTENSION_URI,
+    A2UI_MIME_TYPE,
+    parse_a2a_extensions_header,
+)
 from core.a2a.methods import SEND_MESSAGE
 from core.a2a.task_json import extract_text_from_parts_json, extract_text_from_task_json
 from core.a2a.task_states import wire_task_state_to_platform
@@ -17,11 +23,7 @@ from core.http import get_httpx_client
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.test_scope import TEST_SCOPE_HEADER, resolve_test_scope
-from core.types import (
-    JsonObject,
-    parse_json_object,
-    require_json_object,
-)
+from core.types import JsonObject, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 
@@ -29,16 +31,28 @@ A2A_PROTOCOL_VERSION = "1.0"
 A2A_VERSION_HEADER = "A2A-Version"
 
 
-class A2ATaskResponse(StrictBaseModel):
-    """Нормализованный ответ A2A `SendMessage`."""
+class A2ATaskResult(StrictBaseModel):
+    """Structured SendMessage result: exact Task JSON plus derived text convenience."""
 
-    response: str = Field(..., description="Склеенный текст из text/data artifacts")
-    status: str = Field(..., description="Platform kebab task status (из TASK_STATE_*)")
-    raw: JsonObject = Field(..., description="Исходный JSON-RPC ответ A2A")
+    task: JsonObject = Field(..., description="Exact A2A Task ProtoJSON from result")
+    artifacts: list[JsonObject] = Field(
+        ...,
+        description="Lossless Task.artifacts list (artifactId required per item)",
+    )
+    status: str = Field(..., description="Platform kebab task status (from TASK_STATE_*)")
+    response: str = Field(..., description="Derived text convenience from Task/history/artifacts")
+    raw: JsonObject = Field(..., description="Full JSON-RPC response envelope")
+    negotiated_extensions: list[str] = Field(
+        default_factory=list,
+        description="Activated extension URIs for this Task",
+    )
+
+
+class A2AClientError(Exception):
+    """A2A client protocol or transport error."""
 
 
 def _extract_task_status_message(status_obj: JsonObject) -> str | None:
-    """Текст из A2A 1.0 TaskStatus.message.parts (ProtoJSON Part.text)."""
     message_value = status_obj.get("message")
     if not isinstance(message_value, dict):
         return None
@@ -46,15 +60,92 @@ def _extract_task_status_message(status_obj: JsonObject) -> str | None:
     return extract_text_from_parts_json(message.get("parts"))
 
 
-class A2AClientError(Exception):
-    """Ошибка A2A клиента."""
+def _unwrap_send_message_task(result_payload: JsonObject) -> JsonObject:
+    """SendMessageResponse ProtoJSON oneof: `task` | `message`.
+
+    Official a2a-sdk wraps Task as `result.task`. Platform channel may still
+    return a bare Task ProtoJSON at `result` (status/artifacts at top level).
+    """
+    if "status" in result_payload or "artifacts" in result_payload or "history" in result_payload:
+        return result_payload
+    task_value = result_payload.get("task")
+    if isinstance(task_value, dict):
+        return require_json_object(task_value, "A2A result.task")
+    message_value = result_payload.get("message")
+    if isinstance(message_value, dict):
+        raise A2AClientError(
+            "A2A SendMessage returned Message payload; Task is required for this client"
+        )
+    raise A2AClientError("A2A response missing result.task / Task fields")
+
+
+def _require_artifacts(task_result: JsonObject) -> list[JsonObject]:
+    artifacts_raw = task_result.get("artifacts")
+    if artifacts_raw is None:
+        return []
+    if not isinstance(artifacts_raw, list):
+        raise A2AClientError("A2A result.artifacts must be a list")
+    artifacts: list[JsonObject] = []
+    for index, item in enumerate(artifacts_raw):
+        artifact = require_json_object(item, f"A2A result.artifacts[{index}]")
+        artifact_id = artifact.get("artifactId")
+        if not isinstance(artifact_id, str) or artifact_id.strip() == "":
+            raise A2AClientError(
+                f"A2A result.artifacts[{index}].artifactId is required"
+            )
+        artifacts.append(artifact)
+    return artifacts
+
+
+def _negotiated_extensions_from_task(task_result: JsonObject) -> list[str]:
+    metadata_raw = task_result.get("metadata")
+    if not isinstance(metadata_raw, dict):
+        return []
+    metadata = require_json_object(metadata_raw, "A2A result.metadata")
+    platform_ui_raw = metadata.get("platformUi")
+    if not isinstance(platform_ui_raw, dict):
+        return []
+    platform_ui = require_json_object(platform_ui_raw, "A2A result.metadata.platformUi")
+    extensions_raw = platform_ui.get("negotiated_extensions")
+    if extensions_raw is None:
+        return []
+    if not isinstance(extensions_raw, list):
+        raise A2AClientError(
+            "A2A result.metadata.platformUi.negotiated_extensions must be strings"
+        )
+    negotiated: list[str] = []
+    for item in extensions_raw:
+        if not isinstance(item, str) or item.strip() == "":
+            raise A2AClientError(
+                "A2A result.metadata.platformUi.negotiated_extensions must be strings"
+            )
+        negotiated.append(item.strip())
+    return negotiated
+
+
+def _agent_card_supports_a2ui(agent_card: JsonObject) -> bool:
+    capabilities_raw = agent_card.get("capabilities")
+    if isinstance(capabilities_raw, dict):
+        capabilities = require_json_object(capabilities_raw, "AgentCard.capabilities")
+        extensions_raw = capabilities.get("extensions")
+        if isinstance(extensions_raw, list):
+            for item in extensions_raw:
+                if isinstance(item, str) and item.strip() == A2UI_EXTENSION_URI:
+                    return True
+                if isinstance(item, dict):
+                    uri = item.get("uri") or item.get("id")
+                    if isinstance(uri, str) and uri.strip() == A2UI_EXTENSION_URI:
+                        return True
+    extensions_top = agent_card.get("extensions")
+    if isinstance(extensions_top, list):
+        for item in extensions_top:
+            if isinstance(item, str) and item.strip() == A2UI_EXTENSION_URI:
+                return True
+    return False
 
 
 class A2AClient:
-    """
-    HTTP клиент для A2A Protocol 1.0.
-    Позволяет взаимодействовать с внешними агентами.
-    """
+    """HTTP client for A2A Protocol 1.0 SendMessage / AgentCard."""
 
     def __init__(self, timeout: float = 30.0) -> None:
         self.timeout: float = timeout
@@ -64,34 +155,102 @@ class A2AClient:
         base_url: str,
         headers: dict[str, str] | None = None,
     ) -> JsonObject:
-        """
-        Получает agent-card.json от внешнего агента.
-
-        Аргументы:
-            base_url: Базовый URL агента
-            headers: Дополнительные HTTP-заголовки
-
-        Возвращает:
-            AgentCard как dict
-
-        Исключения:
-            A2AClientError: При ошибке запроса
-        """
         url = f"{base_url.rstrip('/')}/.well-known/agent-card.json"
         merged_headers = dict(headers or {})
-
         try:
             async with get_httpx_client(timeout=self.timeout) as client:
                 response = await client.get(url, headers=merged_headers)
-
                 if response.status_code != 200:
-                    raise A2AClientError(f"Failed to get agent-card from {url}: {response.status_code}")
-
+                    raise A2AClientError(
+                        f"Failed to get agent-card from {url}: {response.status_code}"
+                    )
                 return parse_json_object(response.content, "A2A agent-card")
-        except httpx.HTTPError as e:
-            raise A2AClientError(f"HTTP error getting agent card from {url}: {e}") from e
-        except ValueError as e:
-            raise A2AClientError(f"Invalid JSON response from {url}: {e}") from e
+        except httpx.HTTPError as exc:
+            raise A2AClientError(f"HTTP error getting agent card from {url}: {exc}") from exc
+        except ValueError as exc:
+            raise A2AClientError(f"Invalid JSON response from {url}: {exc}") from exc
+
+    async def send_message(
+        self,
+        base_url: str,
+        *,
+        parts: Sequence[JsonObject],
+        context_id: str,
+        message_id: str | None = None,
+        role: str = "ROLE_USER",
+        metadata: JsonObject | None = None,
+        headers: dict[str, str] | None = None,
+        accepted_output_modes: Sequence[str] | None = None,
+        activated_extensions: Sequence[str] = (),
+        timeout: float | None = None,
+    ) -> A2ATaskResult:
+        """Send a structured A2A Message (Parts preserved, no text collapse on wire)."""
+        if not parts:
+            raise A2AClientError("SendMessage parts must be non-empty")
+        for index, part in enumerate(parts):
+            _ = require_json_object(part, f"SendMessage.parts[{index}]")
+
+        url = base_url.rstrip("/")
+        rpc_id = str(uuid.uuid4())
+        message_payload: JsonObject = {
+            "role": role,
+            "parts": list(parts),
+            "messageId": message_id or str(uuid.uuid4()),
+            "contextId": context_id,
+        }
+        modes = (
+            list(accepted_output_modes)
+            if accepted_output_modes is not None
+            else ["text", "application/json", A2UI_MIME_TYPE, "*/*"]
+        )
+        params_payload: JsonObject = {
+            "message": message_payload,
+            "configuration": {
+                "acceptedOutputModes": modes,
+            },
+        }
+        if metadata:
+            params_payload["metadata"] = dict(metadata)
+
+        payload: JsonObject = {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "method": SEND_MESSAGE,
+            "params": params_payload,
+        }
+
+        request_headers = self._build_request_headers(
+            headers,
+            activated_extensions=activated_extensions,
+        )
+        effective_timeout = self.timeout if timeout is None else timeout
+        try:
+            async with get_httpx_client(
+                timeout=effective_timeout,
+                follow_redirects=True,
+            ) as client:
+                response = await client.post(url, json=payload, headers=request_headers)
+                if response.status_code != 200:
+                    raise A2AClientError(
+                        f"Failed to send task to {url}: {response.status_code} - {response.text}"
+                    )
+                result = parse_json_object(response.content, "A2A SendMessage response")
+                if "error" in result:
+                    raise A2AClientError(f"A2A error: {result['error']}")
+                extension_header = cast(
+                    str | None,
+                    response.headers.get(A2A_EXTENSIONS_HEADER),
+                )
+                header_extensions = parse_a2a_extensions_header(extension_header)
+                return self._parse_a2a_response(
+                    result,
+                    header_extensions=header_extensions,
+                )
+        except httpx.HTTPError as exc:
+            error_str = str(exc) or type(exc).__name__
+            raise A2AClientError(f"HTTP error sending task to {url}: {error_str}") from exc
+        except ValueError as exc:
+            raise A2AClientError(f"Invalid JSON response from {url}: {exc}") from exc
 
     async def send_task(
         self,
@@ -103,58 +262,43 @@ class A2AClient:
         headers: dict[str, str] | None = None,
         *,
         timeout: float | None = None,
-    ) -> A2ATaskResponse:
-        """
-        Отправляет задачу внешнему агенту через `SendMessage`.
-
-        Аргументы:
-            base_url: Базовый URL агента
-            content: Текст сообщения
-            session_id: ID сессии (опционально)
-            branch_id: ID ветки агента (в metadata уходит как `branch`)
-            metadata: Дополнительные данные
-            headers: Дополнительные HTTP-заголовки (до слияния с контекстом)
-            timeout: Переопределение таймаута HTTP для этого запроса (секунды).
-
-        Возвращает:
-            Ответ агента
-
-        Исключения:
-            A2AClientError: При ошибке запроса
-        """
-        # A2A endpoint без завершающего слэша
-        url = base_url.rstrip("/")
-        task_id = str(uuid.uuid4())
-        session_id = session_id or str(uuid.uuid4())
-
-        message_payload: JsonObject = {
-            "role": "ROLE_USER",
-            "parts": [{"text": content}],
-            "messageId": str(uuid.uuid4()),
-            "contextId": session_id,
-        }
-        params_payload: JsonObject = {
-            "message": message_payload,
-            "configuration": {
-                "acceptedOutputModes": ["text"],
-            },
-        }
-        payload: JsonObject = {
-            "jsonrpc": "2.0",
-            "id": task_id,
-            "method": SEND_MESSAGE,
-            "params": params_payload,
-        }
-
-        # Ветка skill/branch в A2A передаётся как metadata.branch (сервер: BaseChannel._prepare_task_params).
+        negotiate_extensions: bool = True,
+    ) -> A2ATaskResult:
+        """Convenience SendMessage with a single text Part."""
+        context_id = session_id or str(uuid.uuid4())
         final_metadata: JsonObject = dict(metadata) if metadata is not None else {}
         if branch_id and branch_id != "default":
             final_metadata["branch"] = branch_id
 
-        if final_metadata:
-            params_payload["metadata"] = final_metadata
+        activated: list[str] = []
+        accepted_modes: list[str] = ["text", "application/json", "*/*"]
+        if negotiate_extensions:
+            try:
+                agent_card = await self.get_agent_card(base_url, headers=headers)
+            except A2AClientError:
+                agent_card = None
+            if agent_card is not None and _agent_card_supports_a2ui(agent_card):
+                activated.append(A2UI_EXTENSION_URI)
+                accepted_modes.append(A2UI_MIME_TYPE)
 
-        # Автоматически добавляем заголовки из контекста
+        logger.debug(f"A2A send_task to {base_url}: {content[:100]}...")
+        return await self.send_message(
+            base_url,
+            parts=[{"text": content}],
+            context_id=context_id,
+            metadata=final_metadata or None,
+            headers=headers,
+            accepted_output_modes=accepted_modes,
+            activated_extensions=activated,
+            timeout=timeout,
+        )
+
+    def _build_request_headers(
+        self,
+        headers: dict[str, str] | None,
+        *,
+        activated_extensions: Sequence[str],
+    ) -> dict[str, str]:
         request_headers = dict(headers or {})
         context = get_context()
         if context:
@@ -173,54 +317,27 @@ class A2AClient:
         if test_scope is not None and TEST_SCOPE_HEADER not in request_headers:
             request_headers[TEST_SCOPE_HEADER] = test_scope
 
-        logger.debug(f"A2A send_task to {url}: {content[:100]}...")
+        request_headers["Content-Type"] = "application/json"
+        request_headers[A2A_VERSION_HEADER] = A2A_PROTOCOL_VERSION
+        if activated_extensions and A2A_EXTENSIONS_HEADER not in request_headers:
+            request_headers[A2A_EXTENSIONS_HEADER] = ", ".join(
+                dict.fromkeys(item.strip() for item in activated_extensions if item.strip())
+            )
+        return request_headers
 
-        try:
-            effective_timeout = self.timeout if timeout is None else timeout
-            out_headers = {
-                **request_headers,
-                "Content-Type": "application/json",
-                A2A_VERSION_HEADER: A2A_PROTOCOL_VERSION,
-            }
-            async with get_httpx_client(timeout=effective_timeout, follow_redirects=True) as client:
-                response = await client.post(url, json=payload, headers=out_headers)
-
-                if response.status_code != 200:
-                    raise A2AClientError(
-                        f"Failed to send task to {url}: {response.status_code} - {response.text}"
-                    )
-
-                result = parse_json_object(response.content, "A2A SendMessage response")
-
-                if "error" in result:
-                    raise A2AClientError(f"A2A error: {result['error']}")
-
-                logger.debug(f"A2A response from {base_url}: {result}")
-
-                # Нормализуем ответ — парсим artifacts в response
-                return self._parse_a2a_response(result)
-        except httpx.HTTPError as e:
-            error_str = str(e) or type(e).__name__
-            raise A2AClientError(f"HTTP error sending task to {url}: {error_str}") from e
-        except ValueError as e:
-            raise A2AClientError(f"Invalid JSON response from {url}: {e}") from e
-
-    def _parse_a2a_response(self, raw_response: JsonObject) -> A2ATaskResponse:
-        """
-        Парсит A2A JSONRPC ответ и извлекает response из artifacts.
-
-        Аргументы:
-            raw_response: Raw JSONRPC response
-
-        Возвращает:
-            Нормализованный ответ с полями response и status
-        """
+    def _parse_a2a_response(
+        self,
+        raw_response: JsonObject,
+        *,
+        header_extensions: tuple[str, ...] = (),
+    ) -> A2ATaskResult:
         task_result_value = raw_response.get("result")
-        task_result = (
+        result_payload = (
             require_json_object(task_result_value, "A2A result")
             if task_result_value is not None
             else raw_response
         )
+        task_result = _unwrap_send_message_task(result_payload)
 
         status_value = task_result.get("status")
         if status_value is None:
@@ -231,22 +348,32 @@ class A2AClient:
             raise A2AClientError("A2A response missing result.status.state")
         try:
             status = wire_task_state_to_platform(state_value)
-        except ValueError as e:
-            raise A2AClientError(f"A2A response unknown result.status.state: {state_value!r}") from e
+        except ValueError as exc:
+            raise A2AClientError(
+                f"A2A response unknown result.status.state: {state_value!r}"
+            ) from exc
 
         if status == "failed":
             error_msg = _extract_task_status_message(status_obj)
             raise A2AClientError(f"A2A task failed: {error_msg or 'unknown error'}")
 
+        artifacts = _require_artifacts(task_result)
         try:
             response_text = extract_text_from_task_json(task_result)
         except ValueError:
             response_text = ""
 
-        return A2ATaskResponse(
-            response=response_text,
+        negotiated = _negotiated_extensions_from_task(task_result)
+        if not negotiated and header_extensions:
+            negotiated = list(header_extensions)
+
+        return A2ATaskResult(
+            task=task_result,
+            artifacts=artifacts,
             status=status,
+            response=response_text,
             raw=raw_response,
+            negotiated_extensions=negotiated,
         )
 
     async def check_health(
@@ -254,22 +381,8 @@ class A2AClient:
         base_url: str,
         headers: dict[str, str] | None = None,
     ) -> bool:
-        """
-        Проверяет доступность агента.
-
-        Аргументы:
-            base_url: Базовый URL агента
-            headers: Дополнительные HTTP-заголовки
-
-        Возвращает:
-            True если агент доступен
-        """
         try:
             _ = await self.get_agent_card(base_url, headers)
             return True
         except (A2AClientError, httpx.HTTPError, ValueError):
-            return False
-        except Exception as e:
-            # Логируем неожиданные ошибки, но не даём им упасть
-            logger.warning(f"Unexpected error checking health of {base_url}: {e}")
             return False

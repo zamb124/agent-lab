@@ -1,0 +1,227 @@
+"""Live same-context Flow UI share grants and scoped token exchange."""
+
+from __future__ import annotations
+
+import secrets
+from datetime import UTC, datetime, timedelta
+from typing import final
+
+from apps.flows.src.db.flow_ui_share_repository import FlowUIShareRepository
+from apps.flows.src.durable_execution import DurableWorkflowRuntime
+from core.models.flow_ui_share import (
+    FlowUIShareCreateRequest,
+    FlowUIShareCreateResponse,
+    FlowUIShareExchangeResponse,
+    FlowUIShareGrant,
+)
+from core.short_links.service import ShortLinkService
+from core.state import ExecutionState
+from core.state.flow_ui_share_redaction import validate_share_redacted_paths
+from core.utils.tokens import TokenService
+
+_FLOWS_SERVICE_BASE_URL = "/flows"
+
+_SHARE_TOKEN_MAX_SECONDS = 900
+
+
+def _session_id(flow_id: str, context_id: str) -> str:
+    return f"{flow_id}:{context_id}"
+
+
+def _assert_owner(state: ExecutionState, user_id: str) -> None:
+    if user_id not in {state.user_id, state.initiator_user_id}:
+        raise PermissionError("Only the Flow UI session owner can manage share grants")
+
+
+@final
+class FlowUIShareService:
+    def __init__(
+        self,
+        *,
+        repository: FlowUIShareRepository,
+        workflow_runtime: DurableWorkflowRuntime,
+        short_link_service: ShortLinkService,
+        token_service: TokenService,
+    ) -> None:
+        self._repository = repository
+        self._workflow_runtime = workflow_runtime
+        self._short_links = short_link_service
+        self._tokens = token_service
+
+    async def create(
+        self,
+        *,
+        request: FlowUIShareCreateRequest,
+        company_id: str,
+        user_id: str,
+        public_host: str,
+    ) -> FlowUIShareCreateResponse:
+        state = await self._workflow_runtime.get_state(
+            _session_id(request.flow_id, request.context_id)
+        )
+        if state is None:
+            raise ValueError("Flow UI session does not exist")
+        _assert_owner(state, user_id)
+        if state.session_flow_id != request.flow_id or state.context_id != request.context_id:
+            raise ValueError("Flow UI share target identity mismatch")
+        document = state.ui_document
+        if document.document_id != request.document_id:
+            raise ValueError("Flow UI share document identity mismatch")
+        if document.revision != request.minimum_revision:
+            raise ValueError(
+                "Flow UI share requires the latest server-acknowledged revision"
+            )
+
+        now = datetime.now(UTC)
+        expires_at = now + timedelta(seconds=request.expires_in_seconds)
+        grant = FlowUIShareGrant(
+            grant_id=secrets.token_urlsafe(32),
+            company_id=company_id,
+            flow_id=request.flow_id,
+            branch_id=state.branch_id,
+            context_id=request.context_id,
+            document_id=document.document_id,
+            minimum_revision=document.revision,
+            permission=request.permission,
+            redacted_value_paths=validate_share_redacted_paths(
+                list(request.redacted_value_paths)
+            ),
+            created_by_user_id=user_id,
+            expires_at=expires_at,
+            created_at=now,
+        )
+        _ = await self._repository.create(grant)
+        try:
+            share_url = await self._short_links.mint_flow_ui_session_share(
+                grant.grant_id,
+                expires_at,
+                host=public_host,
+            )
+        except Exception:
+            # Never leave a usable orphan grant when public-link minting fails.
+            _ = await self._repository.revoke(
+                grant_id=grant.grant_id,
+                company_id=company_id,
+                created_by_user_id=user_id,
+            )
+            raise
+        return FlowUIShareCreateResponse(grant=grant, share_url=share_url)
+
+    async def list_for_owner(
+        self,
+        *,
+        company_id: str,
+        user_id: str,
+        flow_id: str,
+        context_id: str,
+    ) -> list[FlowUIShareGrant]:
+        state = await self._workflow_runtime.get_state(_session_id(flow_id, context_id))
+        if state is None:
+            raise ValueError("Flow UI session does not exist")
+        _assert_owner(state, user_id)
+        return await self._repository.list_for_owner(
+            company_id=company_id,
+            flow_id=flow_id,
+            context_id=context_id,
+            created_by_user_id=user_id,
+        )
+
+    async def revoke(
+        self,
+        *,
+        grant_id: str,
+        company_id: str,
+        user_id: str,
+    ) -> bool:
+        return await self._repository.revoke(
+            grant_id=grant_id,
+            company_id=company_id,
+            created_by_user_id=user_id,
+        )
+
+    async def authorize(
+        self,
+        *,
+        grant_id: str,
+        company_id: str,
+        flow_id: str,
+        context_id: str,
+        document_id: str | None = None,
+        require_interact: bool = False,
+    ) -> FlowUIShareGrant:
+        grant = await self._repository.get_active(grant_id)
+        if grant is None:
+            raise PermissionError("Flow UI share grant is missing, expired or revoked")
+        if (
+            grant.company_id != company_id
+            or grant.flow_id != flow_id
+            or grant.context_id != context_id
+        ):
+            raise PermissionError("Flow UI share grant scope mismatch")
+        if document_id is not None and document_id != grant.document_id:
+            raise PermissionError("Flow UI share document scope mismatch")
+        if require_interact and grant.permission != "interact":
+            raise PermissionError("Flow UI share grant is read-only")
+        state = await self._workflow_runtime.get_state(
+            _session_id(flow_id, context_id),
+            company_id=grant.company_id,
+        )
+        if state is None:
+            raise PermissionError("Shared Flow UI session no longer exists")
+        if (
+            state.ui_document.document_id != grant.document_id
+            or state.ui_document.revision < grant.minimum_revision
+            or state.branch_id != grant.branch_id
+        ):
+            raise PermissionError("Shared Flow UI durable identity no longer matches the grant")
+        return grant
+
+    async def exchange(
+        self,
+        *,
+        grant_id: str,
+        origin: str,
+    ) -> FlowUIShareExchangeResponse:
+        grant = await self._repository.get_active(grant_id)
+        if grant is None:
+            raise PermissionError("Flow UI share grant is missing, expired or revoked")
+        _ = await self.authorize(
+            grant_id=grant_id,
+            company_id=grant.company_id,
+            flow_id=grant.flow_id,
+            context_id=grant.context_id,
+            document_id=grant.document_id,
+        )
+        now = datetime.now(UTC)
+        seconds_left = max(1, int((grant.expires_at - now).total_seconds()))
+        token_seconds = min(_SHARE_TOKEN_MAX_SECONDS, seconds_left)
+        token = self._tokens.create_flow_ui_share_token(
+            user_id=f"flow-ui-share:{grant.grant_id}",
+            company_id=grant.company_id,
+            expires_in=token_seconds,
+            metadata={
+                "issued_by": "flow_ui_share_exchange",
+                "flow_ui_share_grant_id": grant.grant_id,
+                "flow_ui_share_permission": grant.permission,
+                "flow_ui_share_flow_id": grant.flow_id,
+                "flow_ui_share_branch_id": grant.branch_id,
+                "flow_ui_share_context_id": grant.context_id,
+                "flow_ui_share_document_id": grant.document_id,
+                "flow_ui_share_origin": origin,
+            },
+        )
+        return FlowUIShareExchangeResponse(
+            token=token,
+            expires_at=now + timedelta(seconds=token_seconds),
+            flow_id=grant.flow_id,
+            branch_id=grant.branch_id,
+            context_id=grant.context_id,
+            document_id=grant.document_id,
+            minimum_revision=grant.minimum_revision,
+            permission=grant.permission,
+            redacted_value_paths=list(grant.redacted_value_paths),
+            flows_base_url=_FLOWS_SERVICE_BASE_URL,
+        )
+
+
+__all__ = ["FlowUIShareService"]

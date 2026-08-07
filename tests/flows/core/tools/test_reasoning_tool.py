@@ -14,13 +14,13 @@ class TestReasonTool:
     """Тесты reason tool."""
 
     @pytest.mark.asyncio
-    async def test_reason_saves_to_state(self):
+    async def test_reason_saves_to_state(self, unique_id):
         """Рассуждения сохраняются в state.reasoning_history."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context"
+            session_id=f"test-agent:test-context-{unique_id}"
         )
 
         result = await reason.run(
@@ -45,13 +45,13 @@ class TestReasonTool:
         assert "ask_user" in result
 
     @pytest.mark.asyncio
-    async def test_reason_sets_pending_flag(self):
+    async def test_reason_sets_pending_flag(self, unique_id):
         """reason устанавливает pending_reasoning."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context"
+            session_id=f"test-agent:test-context-{unique_id}"
         )
 
         await reason.run(
@@ -68,13 +68,13 @@ class TestReasonTool:
         assert state.pending_reasoning["observation"] == "Тест"
 
     @pytest.mark.asyncio
-    async def test_multiple_reasoning_calls_accumulate(self):
+    async def test_multiple_reasoning_calls_accumulate(self, unique_id):
         """Несколько вызовов накапливаются в истории."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context"
+            session_id=f"test-agent:test-context-{unique_id}"
         )
 
         await reason.run(

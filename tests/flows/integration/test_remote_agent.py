@@ -38,9 +38,8 @@ class TestRemoteFlowNode:
                 "jsonrpc": "2.0",
                 "id": data["id"],
                 "result": {
-                    "status": {"state": "completed"},
-                    "artifacts": [
-                        {"parts": [{"type": "text", "text": f"Remote says: {content}"}]}
+                    "status": {"state": "TASK_STATE_COMPLETED"},
+                    "artifacts": [{"artifactId": "remote-artifact-1", "name": "response", "parts": [{"text": f"Remote says: {content}"}]}
                     ],
                 },
             })
@@ -143,9 +142,8 @@ class TestFlowWithRemoteAgent:
                 "jsonrpc": "2.0",
                 "id": data["id"],
                 "result": {
-                    "status": {"state": "completed"},
-                    "artifacts": [
-                        {"parts": [{"type": "text", "text": f"Processed: {content}"}]}
+                    "status": {"state": "TASK_STATE_COMPLETED"},
+                    "artifacts": [{"artifactId": "remote-artifact-1", "name": "response", "parts": [{"text": f"Processed: {content}"}]}
                     ],
                 },
             })
@@ -304,9 +302,8 @@ class TestRemoteAgentInputMapping:
                 "jsonrpc": "2.0",
                 "id": data["id"],
                 "result": {
-                    "status": {"state": "completed"},
-                    "artifacts": [
-                        {"parts": [{"type": "text", "text": f"Received: {content}"}]}
+                    "status": {"state": "TASK_STATE_COMPLETED"},
+                    "artifacts": [{"artifactId": "remote-artifact-1", "name": "response", "parts": [{"text": f"Received: {content}"}]}
                     ],
                 },
             })

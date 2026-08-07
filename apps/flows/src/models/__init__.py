@@ -1,3 +1,16 @@
+from core.models.flow_interface import (
+    EmbedInterfaceOverride,
+    EmbedInterfacePolicyOverride,
+    FlowInterfaceConfig,
+    FlowInterfaceOverride,
+    FlowInterfacePolicy,
+    FlowUIDocumentTemplate,
+    apply_embed_interface_override,
+    compact_embed_interface_override,
+    default_flow_interface_config,
+    resolve_flow_interface_config,
+)
+
 from .agent_skill import AgentSkill, AgentSkillIndexEntry
 from .branch_contracts import (
     BranchCreateRequest,
@@ -15,6 +28,7 @@ from .channel_config import ChannelNodeConfig, OutputAction
 from .dataflow import (
     DataflowAvailability,
     DataflowCanvasChip,
+    DataflowCanvasChipKind,
     DataflowCanvasOutputChip,
     DataflowCanvasSummary,
     DataflowConfidence,
@@ -47,14 +61,6 @@ from .external_api import (
     ResponseSchema,
     ResponseStatus,
     ResponseType,
-)
-from .flow_chat_settings import (
-    ChatErrorsDisplay,
-    ChatToolCallsDisplay,
-    EmbedChatPolicyOverride,
-    FlowChatSettings,
-    compact_embed_chat_policy_override,
-    resolve_effective_flow_chat,
 )
 from .flow_config import (
     BranchConfig,
@@ -144,6 +150,7 @@ __all__ = [
     "CronTriggerConfig",
     "DataflowAvailability",
     "DataflowCanvasChip",
+    "DataflowCanvasChipKind",
     "DataflowCanvasOutputChip",
     "DataflowCanvasSummary",
     "DataflowConfidence",
@@ -185,12 +192,16 @@ __all__ = [
     "ResponseStatus",
     "ResponseType",
     "SimpleEdgeCondition",
-    "ChatErrorsDisplay",
-    "ChatToolCallsDisplay",
-    "EmbedChatPolicyOverride",
-    "FlowChatSettings",
-    "compact_embed_chat_policy_override",
-    "resolve_effective_flow_chat",
+    "EmbedInterfaceOverride",
+    "EmbedInterfacePolicyOverride",
+    "FlowInterfaceConfig",
+    "FlowInterfaceOverride",
+    "FlowInterfacePolicy",
+    "FlowUIDocumentTemplate",
+    "apply_embed_interface_override",
+    "compact_embed_interface_override",
+    "default_flow_interface_config",
+    "resolve_flow_interface_config",
     "FlowSpeechSettings",
     "FlowSpeechSttBlock",
     "FlowSpeechTtsBlock",

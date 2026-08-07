@@ -9,11 +9,13 @@ from core.platform_brand.resolver import resolve_public_base_url
 from core.short_links.kinds import (
     SHORT_LINK_KIND_COMPANY_INVITE,
     SHORT_LINK_KIND_FLOW_PREVIEW_EMBED,
+    SHORT_LINK_KIND_FLOW_UI_SESSION_SHARE,
     SHORT_LINK_KIND_SYNC_CALL_JOIN,
 )
 from core.short_links.payloads import (
     CompanyInvitePayload,
     FlowPreviewEmbedPayload,
+    FlowUISessionSharePayload,
     SyncCallJoinPayload,
 )
 from core.short_links.repository import ShortLinkRepository
@@ -114,6 +116,26 @@ class ShortLinkService:
 
         raise RuntimeError("Не удалось выделить уникальный код короткой ссылки")
 
+    async def mint_flow_ui_session_share(
+        self,
+        grant_id: str,
+        expires_at: datetime,
+        *,
+        host: str | None = None,
+    ) -> str:
+        payload = FlowUISessionSharePayload(grant_id=grant_id)
+        for _ in range(12):
+            code = _random_code()
+            ok = await self._repo.insert_try(
+                code,
+                SHORT_LINK_KIND_FLOW_UI_SESSION_SHARE,
+                payload,
+                expires_at,
+            )
+            if ok:
+                return self.public_short_url(code, host=host)
+        raise RuntimeError("Не удалось выделить уникальный код live-session ссылки")
+
     async def resolve_absolute_redirect_url(
         self,
         code: str,
@@ -137,6 +159,10 @@ class ShortLinkService:
 
         if row.kind == SHORT_LINK_KIND_COMPANY_INVITE:
             return f"{base}/join?c={quote(code, safe='')}"
+
+        if row.kind == SHORT_LINK_KIND_FLOW_UI_SESSION_SHARE:
+            payload = FlowUISessionSharePayload.model_validate(row.payload)
+            return f"{base}/flow-session-share?grant={quote(payload.grant_id, safe='')}"
 
         return None
 

@@ -465,15 +465,9 @@ class TestHandoffA2A:
         assert len(input_required) > 0
         meta = input_required[-1]["result"]["statusUpdate"]["status"]["message"]["metadata"]
         assert meta.get("platform_handoff_continue") is True
-        ui_event_types = [
-            part.get("data", {}).get("type")
-            for event in events
-            for part in (
-                event.get("result", {}).get("artifactUpdate", {}).get("artifact", {}).get("parts", [])
-            )
-            if isinstance(part, dict)
-        ]
-        assert "platform.handoff_initiated" in ui_event_types
+        # Handoff is presented as Flow UI activity (ActivityCard data.activity),
+        # streamed via ui.document A2UI updates — not legacy platform.* UIEvent.
+        assert "handoff_initiated" in resp.text
 
     @pytest.mark.asyncio
     async def test_demo_bundles_handoff_roundtrip(

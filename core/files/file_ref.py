@@ -101,6 +101,23 @@ class FileRef(StrictBaseModel):
         )
 
 
+def format_a2a_files_content(files_data: list[FileRef]) -> str:
+    """Append-only [FILE]...[/FILE] blocks for state.content / A2A text."""
+    if not files_data:
+        return ""
+
+    parts: list[str] = []
+    for file_ref in files_data:
+        parts.append(
+            "\n[FILE]\n"
+            + f"original_name: {file_ref.original_name}\n"
+            + f"url: {file_ref.url}\n"
+            + f"content_type: {file_ref.content_type}\n"
+            + "[/FILE]"
+        )
+    return "".join(parts)
+
+
 FileRefSource: TypeAlias = FileRef | FileRecord | FileResponse | JsonObject
 
 __all__ = [
@@ -110,4 +127,5 @@ __all__ = [
     "FileRef",
     "FileRefSource",
     "file_id_from_download_url",
+    "format_a2a_files_content",
 ]

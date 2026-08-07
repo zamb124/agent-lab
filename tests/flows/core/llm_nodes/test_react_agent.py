@@ -121,25 +121,25 @@ class TestToolExecution:
     """Тесты выполнения отдельных tools."""
 
     @pytest.mark.asyncio
-    async def test_calculator_tool_executes_correctly(self):
+    async def test_calculator_tool_executes_correctly(self, unique_id):
         """Calculator tool выполняет вычисления корректно."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
         result = await calculator.run({"expression": "2 + 2"}, state=state)
         assert "4" in result
 
     @pytest.mark.asyncio
-    async def test_calculator_tool_handles_complex_math(self):
+    async def test_calculator_tool_handles_complex_math(self, unique_id):
         """Calculator tool обрабатывает сложные выражения."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
         result = await calculator.run({"expression": "sin(pi/2)"}, state=state)
         # sin(pi/2) = 1.0
@@ -198,13 +198,13 @@ class TestToolExecution:
         assert exc_info.value.tool_call.name == "ask_user"
 
     @pytest.mark.asyncio
-    async def test_calculator_tool_raises_on_invalid_expression(self):
+    async def test_calculator_tool_raises_on_invalid_expression(self, unique_id):
         """Calculator tool бросает исключение на невалидное выражение."""
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
         with pytest.raises(Exception):
             await calculator.run({"expression": "invalid_func()"}, state=state)

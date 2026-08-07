@@ -22,9 +22,6 @@ import {
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-modal-stack.js';
 import '@platform/lib/components/platform-file-viewer-modal.js';
-import '../../../../core/frontend/static/lib/chat/chat-message.js';
-import '../../../../core/frontend/static/lib/chat/chat-files-panel.js';
-import '../../../../core/frontend/static/lib/chat/blocks/flows-chat-ui-file-card.js';
 import '../../../../apps/sync/ui/components/sync-message-bubble.js';
 import '../../../../apps/crm/ui/components/entity-card.js';
 import '../../../../apps/crm/ui/components/note-card-view.js';
@@ -649,58 +646,6 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
         fetchMock.uninstall();
         fixtureCleanup();
         document.querySelectorAll('platform-file-viewer-modal, iframe[name="frameEditor"]').forEach((node) => node.remove());
-    });
-
-    it('flows chat surfaces open FileRecords through FILES_EVENTS.OPEN_REQUESTED', async () => {
-        setupBusWithFactories();
-        getPlatformBus().subscribeAny((event) => events.push(event));
-        await mountStack();
-
-        const message = await fixture(html`
-            <flows-chat-message
-                role="assistant"
-                .files=${[{
-                    file_id: 'flows-message-docx',
-                    original_name: 'Message.docx',
-                    content_type: DOCX_MIME,
-                }]}
-                .showAvatar=${false}
-                .showHeader=${false}
-            ></flows-chat-message>
-        `);
-        await elementUpdated(message);
-        expect(message.shadowRoot.querySelector('.file-item platform-icon[file-icon]').name).to.equal('word');
-        message.shadowRoot.querySelector('.file-item').click();
-        await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'flows-message-docx', 'flows message opened file');
-
-        const panel = await fixture(html`
-            <flows-chat-files-panel
-                inline
-                .files=${[{
-                    file_id: 'flows-panel-docx',
-                    original_name: 'Panel.docx',
-                    content_type: DOCX_MIME,
-                }]}
-            ></flows-chat-files-panel>
-        `);
-        await elementUpdated(panel);
-        panel.shadowRoot.querySelector('.trigger').click();
-        await elementUpdated(panel);
-        expect(panel.shadowRoot.querySelector('.file-row platform-icon[file-icon]').name).to.equal('word');
-        panel.shadowRoot.querySelector('.file-row').click();
-        await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'flows-panel-docx', 'flows file panel opened file');
-
-        const card = await fixture(html`
-            <flows-chat-ui-file-card
-                file-id="flows-card-docx"
-                name="Card.docx"
-                mime-type=${DOCX_MIME}
-            ></flows-chat-ui-file-card>
-        `);
-        await elementUpdated(card);
-        expect(card.shadowRoot.querySelector('platform-icon[file-icon]').name).to.equal('word');
-        card.shadowRoot.querySelector('button').click();
-        await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'flows-card-docx', 'flows file card opened file');
     });
 
     it('sync message file attachment opens through the same global viewer event', async () => {

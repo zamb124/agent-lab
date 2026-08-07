@@ -67,16 +67,16 @@ def code_node(container: FlowRuntimeContainer, *, node_id: str, config: JsonObje
 class TestBaseNodeInputMapping:
     """Тесты для BaseNode._resolve_inputs и _prepare_state."""
 
-    def test_no_mapping_returns_empty_dict(self, container: FlowRuntimeContainer):
+    def test_no_mapping_returns_empty_dict(self, container: FlowRuntimeContainer, unique_id):
         """Без input_mapping возвращается пустой dict"""
         node = llm_node(
             container, node_id="test_agent", config={"prompt": "Test prompt", "input_mapping": None}
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             content="Hello",
             messages=[],
             variables={"x": 1},
@@ -86,7 +86,7 @@ class TestBaseNodeInputMapping:
 
         assert inputs == {}
 
-    def test_simple_state_mapping(self, container: FlowRuntimeContainer):
+    def test_simple_state_mapping(self, container: FlowRuntimeContainer, unique_id):
         """Простой маппинг @state:field"""
         node = llm_node(
             container,
@@ -97,10 +97,10 @@ class TestBaseNodeInputMapping:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             user_query="Привет!",
             user_name="Иван",
             other_field="should_not_be_in_inputs",
@@ -115,7 +115,8 @@ class TestBaseNodeInputMapping:
         assert "user_query" not in inputs
 
     def test_llm_mapped_inputs_are_prompt_variables_with_explicit_precedence(
-        self, container: FlowRuntimeContainer
+        self, container: FlowRuntimeContainer,
+        unique_id,
     ):
         node = llm_node(
             container,
@@ -126,10 +127,10 @@ class TestBaseNodeInputMapping:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             upstream_topic="mapped topic",
             variables={"topic": "old topic", "company": "ACME"},
         )
@@ -141,7 +142,7 @@ class TestBaseNodeInputMapping:
         assert prepared.variables == {"topic": "mapped topic", "company": "ACME"}
         assert rendered == "Topic=mapped topic; company=ACME"
 
-    def test_nested_state_mapping(self, container: FlowRuntimeContainer):
+    def test_nested_state_mapping(self, container: FlowRuntimeContainer, unique_id):
         """Маппинг с вложенными путями @state:user.profile.name"""
         node = llm_node(
             container,
@@ -155,10 +156,10 @@ class TestBaseNodeInputMapping:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             user={
                 "profile": {"name": "Иван", "age": 30},
                 "address": {"city": "Москва", "street": "Ленина"},
@@ -171,7 +172,7 @@ class TestBaseNodeInputMapping:
         assert inputs["user_name"] == "Иван"
         assert inputs["user_city"] == "Москва"
 
-    def test_var_mapping(self, container: FlowRuntimeContainer):
+    def test_var_mapping(self, container: FlowRuntimeContainer, unique_id):
         """Маппинг с @var: для переменных"""
         node = llm_node(
             container,
@@ -186,10 +187,10 @@ class TestBaseNodeInputMapping:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             query="Hello!",
             variables={"company_name": "ACME Corp", "config": {"api_key": "secret123"}},
         )
@@ -200,7 +201,7 @@ class TestBaseNodeInputMapping:
         assert inputs["company"] == "ACME Corp"
         assert inputs["api_key"] == "secret123"
 
-    def test_constant_values(self, container: FlowRuntimeContainer):
+    def test_constant_values(self, container: FlowRuntimeContainer, unique_id):
         """Маппинг с константами"""
         node = llm_node(
             container,
@@ -216,10 +217,10 @@ class TestBaseNodeInputMapping:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             query="Hello!",
             variables={},
         )
@@ -231,7 +232,7 @@ class TestBaseNodeInputMapping:
         assert inputs["number"] == 42
         assert inputs["flag"] is True
 
-    def test_missing_path_returns_none(self, container: FlowRuntimeContainer):
+    def test_missing_path_returns_none(self, container: FlowRuntimeContainer, unique_id):
         """Отсутствующий путь -> None"""
         node = llm_node(
             container,
@@ -242,10 +243,10 @@ class TestBaseNodeInputMapping:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             existing="value",
             variables={},
         )
@@ -259,7 +260,7 @@ class TestBaseNodeInputMapping:
 class TestPrepareState:
     """Тесты для BaseNode._prepare_state."""
 
-    def test_prepare_state_applies_inputs(self, container: FlowRuntimeContainer):
+    def test_prepare_state_applies_inputs(self, container: FlowRuntimeContainer, unique_id):
         """_prepare_state применяет inputs к state"""
         node = llm_node(
             container,
@@ -267,12 +268,12 @@ class TestPrepareState:
             config={"prompt": "Test prompt", "input_mapping": {"content": "@state:query"}},
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="123",
             query="Hello!",
             variables={"x": 1},
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
 
         inputs = node._resolve_inputs(state)
@@ -281,13 +282,13 @@ class TestPrepareState:
         assert result.content == "Hello!"
         assert result.variables == {"x": 1}
         assert result.user_id == "123"
-        assert result.session_id == "test-agent:test-context"
+        assert result.session_id == f"test-agent:test-context-{unique_id}"
 
 
 class TestAgentNodeInputMapping:
     """Тесты для FlowNode с input_mapping."""
 
-    def test_no_mapping_returns_empty_inputs(self, container: FlowRuntimeContainer):
+    def test_no_mapping_returns_empty_inputs(self, container: FlowRuntimeContainer, unique_id):
         """Без input_mapping inputs пустой"""
         node = flow_node(
             container,
@@ -295,10 +296,10 @@ class TestAgentNodeInputMapping:
             config={"flow_id": "inner_flow", "input_mapping": None},
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             content="Hello",
             variables={"x": 1},
         )
@@ -309,7 +310,7 @@ class TestAgentNodeInputMapping:
         assert result.model_dump() == state.model_dump()
         assert result is not state
 
-    def test_simple_mapping(self, container: FlowRuntimeContainer):
+    def test_simple_mapping(self, container: FlowRuntimeContainer, unique_id):
         """Простой маппинг"""
         node = flow_node(
             container,
@@ -320,10 +321,10 @@ class TestAgentNodeInputMapping:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             user_query="Привет!",
             ctx={"key": "value"},
             other="not_mapped",
@@ -337,7 +338,7 @@ class TestAgentNodeInputMapping:
         assert result.context == {"key": "value"}
         assert result.variables == {"company": "ACME"}
 
-    def test_nested_paths(self, container: FlowRuntimeContainer):
+    def test_nested_paths(self, container: FlowRuntimeContainer, unique_id):
         """Вложенные пути"""
         node = flow_node(
             container,
@@ -351,10 +352,10 @@ class TestAgentNodeInputMapping:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             user={"profile": {"name": "Иван"}},
             delivery={"address": {"city": "Москва"}},
             variables={},
@@ -366,7 +367,7 @@ class TestAgentNodeInputMapping:
         assert result.name == "Иван"
         assert result.city == "Москва"
 
-    def test_var_mapping(self, container: FlowRuntimeContainer):
+    def test_var_mapping(self, container: FlowRuntimeContainer, unique_id):
         """Маппинг с @var:"""
         node = flow_node(
             container,
@@ -377,10 +378,10 @@ class TestAgentNodeInputMapping:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             query="Hello!",
             variables={"config": {"api_url": "https://api.example.com"}},
         )
@@ -395,7 +396,7 @@ class TestAgentNodeInputMapping:
 class TestRemoteFlowNodeInputMapping:
     """Тесты для RemoteFlowNode с input_mapping."""
 
-    def test_input_mapping_simple(self, container: FlowRuntimeContainer):
+    def test_input_mapping_simple(self, container: FlowRuntimeContainer, unique_id):
         """input_mapping: {"content": "@state:field"}"""
         node = remote_flow_node(
             container,
@@ -403,10 +404,10 @@ class TestRemoteFlowNodeInputMapping:
             config={"url": "http://agent:8080", "input_mapping": {"content": "@state:user_query"}},
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             user_query="Привет, агент!",
             variables={},
         )
@@ -415,7 +416,7 @@ class TestRemoteFlowNodeInputMapping:
 
         assert inputs["content"] == "Привет, агент!"
 
-    def test_input_mapping_nested_path(self, container: FlowRuntimeContainer):
+    def test_input_mapping_nested_path(self, container: FlowRuntimeContainer, unique_id):
         """input_mapping с вложенным путём"""
         node = remote_flow_node(
             container,
@@ -426,10 +427,10 @@ class TestRemoteFlowNodeInputMapping:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             request={"body": {"text": "Nested query"}},
             variables={},
         )
@@ -438,7 +439,7 @@ class TestRemoteFlowNodeInputMapping:
 
         assert inputs["content"] == "Nested query"
 
-    def test_input_mapping_with_var(self, container: FlowRuntimeContainer):
+    def test_input_mapping_with_var(self, container: FlowRuntimeContainer, unique_id):
         """input_mapping с @var:"""
         node = remote_flow_node(
             container,
@@ -449,10 +450,10 @@ class TestRemoteFlowNodeInputMapping:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"default_prompt": "Default message"},
         )
 
@@ -460,16 +461,16 @@ class TestRemoteFlowNodeInputMapping:
 
         assert inputs["content"] == "Default message"
 
-    def test_no_mapping_uses_state_content(self, container: FlowRuntimeContainer):
+    def test_no_mapping_uses_state_content(self, container: FlowRuntimeContainer, unique_id):
         """Без input_mapping используется state.content"""
         node = remote_flow_node(
             container, node_id="test_remote", config={"url": "http://agent:8080"}
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             content="Default content",
             variables={},
         )
@@ -482,15 +483,15 @@ class TestRemoteFlowNodeInputMapping:
 class TestHeadersWithNestedVars:
     """Тесты для headers/URL с вложенными @var: путями."""
 
-    def test_remote_flow_resolve_value_simple(self):
+    def test_remote_flow_resolve_value_simple(self, unique_id):
         """Простой @var: в строке заголовка через MappingResolver."""
         from apps.flows.src.mapping import MappingResolver
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"token": "abc123"},
         )
 
@@ -502,15 +503,15 @@ class TestHeadersWithNestedVars:
 
         assert result == "Bearer abc123"
 
-    def test_remote_flow_resolve_value_nested(self):
+    def test_remote_flow_resolve_value_nested(self, unique_id):
         """Строковый заголовок/URL с вложенным @var: через MappingResolver."""
         from apps.flows.src.mapping import MappingResolver
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"auth": {"bearer": "eyJhbGciOiJIUzI1NiJ9.test"}},
         )
 
@@ -522,7 +523,7 @@ class TestHeadersWithNestedVars:
 
         assert result == "Bearer eyJhbGciOiJIUzI1NiJ9.test"
 
-    def test_remote_flow_resolve_headers_dict(self, container: FlowRuntimeContainer):
+    def test_remote_flow_resolve_headers_dict(self, container: FlowRuntimeContainer, unique_id):
         """RemoteFlowNode._resolve_headers_dict с вложенными @var:"""
         node = remote_flow_node(
             container,
@@ -536,10 +537,10 @@ class TestHeadersWithNestedVars:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={
                 "auth": {"token": "jwt_token_123"},
                 "api": {"keys": {"primary": "pk_live_abc"}},
@@ -551,15 +552,15 @@ class TestHeadersWithNestedVars:
         assert result["Authorization"] == "Bearer jwt_token_123"
         assert result["X-API-Key"] == "pk_live_abc"
 
-    def test_remote_flow_url_with_nested_var(self):
+    def test_remote_flow_url_with_nested_var(self, unique_id):
         """URL с вложенным @var:"""
         from apps.flows.src.mapping import MappingResolver
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"config": {"api": {"host": "api.example.com"}}},
         )
 
@@ -575,12 +576,12 @@ class TestHeadersWithNestedVars:
 class TestExternalAPIClientHeaders:
     """Тесты для ExternalAPIClient и MappingResolver (@var:@state: в url/headers)."""
 
-    def _state(self, variables):
+    def _state(self, variables, unique_id: str = "headers"):
         return ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables=variables,
         )
 
@@ -714,7 +715,7 @@ class TestExternalAPIClientHeaders:
 class TestRealWorldScenarios:
     """Реальные сценарии использования input_mapping."""
 
-    def test_order_processing_agent(self, container: FlowRuntimeContainer):
+    def test_order_processing_agent(self, container: FlowRuntimeContainer, unique_id):
         """Агент обработки заказов с вложенными данными"""
         node = llm_node(
             container,
@@ -731,10 +732,10 @@ class TestRealWorldScenarios:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             order={
                 "id": "ORD-12345",
                 "customer": {"name": "Иван Петров", "email": "ivan@example.com"},
@@ -753,16 +754,16 @@ class TestRealWorldScenarios:
         assert result.total == 999.99
         assert result.company == "ACME Corp"
 
-    def test_api_call_with_auth(self):
+    def test_api_call_with_auth(self, unique_id):
         """API вызов с авторизацией из переменных"""
         from apps.flows.src.mapping import MappingResolver
 
         auth_mapping = {"Authorization": "@var:auth.bearer_token", "X-API-Key": "@var:auth.api_key"}
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"auth": {"bearer_token": "Bearer eyJ...", "api_key": "pk_live_abc123"}},
         )
 
@@ -771,7 +772,7 @@ class TestRealWorldScenarios:
         assert headers["Authorization"] == "Bearer eyJ..."
         assert headers["X-API-Key"] == "pk_live_abc123"
 
-    def test_subflow_with_filtered_data(self, container: FlowRuntimeContainer):
+    def test_subflow_with_filtered_data(self, container: FlowRuntimeContainer, unique_id):
         """Subflow получает только нужные данные"""
         node = flow_node(
             container,
@@ -786,10 +787,10 @@ class TestRealWorldScenarios:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             document={
                 "id": "doc-123",
                 "text": "Document content here",
@@ -807,7 +808,7 @@ class TestRealWorldScenarios:
         assert result.metadata == {"author": "John", "date": "2024-01-01"}
         assert result.analysis_type == "sentiment"
 
-    def test_remote_flow_context_injection(self, container: FlowRuntimeContainer):
+    def test_remote_flow_context_injection(self, container: FlowRuntimeContainer, unique_id):
         """Remote agent получает контекст из переменных"""
         node = remote_flow_node(
             container,
@@ -822,10 +823,10 @@ class TestRealWorldScenarios:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             user_message="Какая погода в Москве?",
             session={"user": {"name": "Иван", "lang": "ru"}},
             variables={"agent": {"system_prompt": "Ты помощник по погоде"}},
@@ -1060,13 +1061,13 @@ class TestMessagesFilter:
 class TestSaveToMessages:
     """Тесты для save_to_messages."""
 
-    def test_append_to_messages_adds_message_with_node_id(self, container: FlowRuntimeContainer):
+    def test_append_to_messages_adds_message_with_node_id(self, container: FlowRuntimeContainer, unique_id):
         """_append_to_messages добавляет сообщение с node_id в metadata"""
         node = llm_node(
             container, node_id="my_node", config={"prompt": "Test", "save_to_messages": True}
         )
         state = ExecutionState(
-            task_id="test-task",
+            task_id=f"test-task-{unique_id}",
             context_id="ctx",
             user_id="u",
             session_id="test:ctx",

@@ -170,7 +170,7 @@ async def test_mcp_multi_tool_discovery_and_sync(client, mcp_modes_stub, unique_
     names = sorted(tool["name"] for tool in sync_response.json()["tools"])
     assert names == ["alpha_tool", "beta-tool"]
 
-    tools_response = await client.get("/flows/api/v1/tools/all")
+    tools_response = await client.get("/flows/api/v1/tools/all?picker_category=mcp")
     mcp_tools = [
         tool for tool in tools_response.json()["items"] if tool.get("mcp_server_id") == server_id
     ]

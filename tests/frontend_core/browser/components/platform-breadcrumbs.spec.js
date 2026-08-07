@@ -102,6 +102,35 @@ describe('platform-breadcrumbs', () => {
         expect(el.shadowRoot.querySelector('.breadcrumbs')).to.equal(null);
     });
 
+    it('клик по родителю наследует path-params текущего маршрута', async () => {
+        const routes = [
+            { key: 'list', path: '' },
+            { key: 'flow_chat', path: ':flowId', parent: 'list' },
+            { key: 'flow_editor', path: ':flowId/editor', parent: 'flow_chat' },
+        ];
+        const bus = getPlatformBus();
+        bus.dispatch(CoreEvents.ROUTER_ROUTES_REGISTERED, { routes });
+        bus.dispatch(CoreEvents.ROUTER_ROUTE_CHANGED, {
+            routeKey: 'flow_editor',
+            params: { flowId: 'demo-flow' },
+        });
+
+        const el = await fixture(html`<platform-breadcrumbs></platform-breadcrumbs>`);
+        el.currentLabel = 'Editor';
+        await elementUpdated(el);
+        const events = [];
+        bus.subscribeAny((event) => events.push(event));
+
+        el.shadowRoot.querySelectorAll('button.breadcrumb-item')[1].click();
+
+        const navigate = events.find((event) => event.type === CoreEvents.ROUTER_NAVIGATE_REQUESTED);
+        expect(navigate).to.exist;
+        expect(navigate.payload).to.deep.equal({
+            routeKey: 'flow_chat',
+            params: { flowId: 'demo-flow' },
+        });
+    });
+
     it('элемент trail без routeKey — ошибка, а не молчаливый пропуск', () => {
         seedRouter('wiki_page', { pageId: 'child' });
         // Элемент не подключаем: render не должен успеть бросить в микротаске,

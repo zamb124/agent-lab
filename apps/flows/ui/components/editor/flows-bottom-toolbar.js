@@ -5,10 +5,10 @@
  *   1. zoom: zoom_in / zoom_out / zoom_100 / fit_view
  *   2. tools: select / pan
  *   3. history: undo / redo
- *   4. actions: variables / smart-guides / data-wires / help (модалка shortcuts)
+ *   4. actions: execution panel / variables / smart-guides / data-wires / help
  *
  * Источник state: useOp('flows/editor').state.{activeTool,canUndo,canRedo,
- * smartGuidesEnabled,showDataWires,viewBox,skillsData,flowConfig}.
+ * smartGuidesEnabled,showDataWires,executionPanelOpen,viewBox,skillsData,flowConfig}.
  */
 
 import { html, css } from 'lit';
@@ -99,6 +99,10 @@ export class FlowsBottomToolbar extends PlatformElement {
     }
     _toggleGuides() { this._editor.toggleSmartGuides({}); }
     _toggleDataWires() { this._editor.toggleDataWires({}); }
+    _toggleExecutionPanel() {
+        const state = asObject(this._editor.state);
+        this._editor.setExecutionPanelOpen({ open: !Boolean(state.executionPanelOpen) });
+    }
     _help() { this.openModal('flows.canvas_help', {}); }
 
     _renderIconButton({ icon, title, onClick, active = false, disabled = false }) {
@@ -122,6 +126,7 @@ export class FlowsBottomToolbar extends PlatformElement {
         const activeTool = typeof state.activeTool === 'string' && state.activeTool.length > 0 ? state.activeTool : 'select';
         const guidesOn = state.smartGuidesEnabled !== false;
         const wiresOn = Boolean(state.showDataWires);
+        const executionOpen = Boolean(state.executionPanelOpen);
         return html`
             ${this._renderIconButton({ icon: 'plus', title: this.t('canvas.toolbar.zoom_in'), onClick: () => this._zoomIn() })}
             ${this._renderIconButton({ icon: 'minus', title: this.t('canvas.toolbar.zoom_out'), onClick: () => this._zoomOut() })}
@@ -160,6 +165,14 @@ export class FlowsBottomToolbar extends PlatformElement {
 
             <span class="divider"></span>
 
+            ${this._renderIconButton({
+                icon: 'chat',
+                title: executionOpen
+                    ? this.t('canvas.toolbar.close_execution_panel')
+                    : this.t('canvas.toolbar.open_execution_panel'),
+                onClick: () => this._toggleExecutionPanel(),
+                active: executionOpen,
+            })}
             ${this._renderIconButton({ icon: 'code', title: this.t('canvas.toolbar.open_variables'), onClick: () => this._openVariables() })}
             ${this._renderIconButton({
                 icon: 'schema',

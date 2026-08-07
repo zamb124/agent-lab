@@ -2,8 +2,8 @@ import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import { flowsChatMarkdownToHtml } from '@platform/lib/chat/markdown.js';
-import { applyInlineCitations } from '@platform/lib/chat/citations.js';
+import { flowsChatMarkdownToHtml } from '@platform/lib/flow-ui/utils/markdown.js';
+import { applyInlineCitations } from '@platform/lib/flow-ui/utils/citations.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import {

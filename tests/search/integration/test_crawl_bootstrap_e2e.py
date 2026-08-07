@@ -58,7 +58,8 @@ async def test_bootstrap_queues_tranco_import_via_search_worker(
         crawl_profile_id,
         "tranco",
         _TRANCO_IMPORT_LIMIT,
-    )
+            background_kind="background",
+        )
     worker_result = await task.wait_result(timeout=_TASKIQ_WAIT_SECONDS)
     assert not worker_result.is_err, f"tranco import task failed: {worker_result.error}"
     import_payload = worker_result.return_value

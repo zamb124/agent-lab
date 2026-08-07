@@ -56,7 +56,7 @@ async def test_platform_search_mcp_sync_endpoint(search_service, client, contain
         "search_suggest",
     ]
 
-    tools_response = await client.get("/flows/api/v1/tools/all")
+    tools_response = await client.get("/flows/api/v1/tools/all?picker_category=mcp")
     assert tools_response.status_code == 200
     mcp_tools = [
         tool

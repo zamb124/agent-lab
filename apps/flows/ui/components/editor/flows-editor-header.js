@@ -1,12 +1,12 @@
 /**
  * flows-editor-header — шапка редактора flow.
  *
- * Desktop: одна chrome-row (~60px) — back / title / branches / mode / actions.
+ * Desktop: одна chrome-row (~60px) — back / title / branches / workspace / actions.
  * Mobile: branches — вторая строка; overflow-menu для tiered actions.
  *
  * Источники state:
  *   - useOp('flows/editor').state.flowConfig — текущая модель flow.
- *   - useOp('flows/editor').state.{isDirty, isSaving, mode, publishedAt}.
+ *   - useOp('flows/editor').state.{isDirty, isSaving, workspace, publishedAt}.
  *   - useResource('flows/flows') — флаг has_bundle_update и список branches.
  *
  * Ops:
@@ -31,7 +31,7 @@ import {
     buildFlowPublishBody,
     getBranchNodes,
 } from '../../_helpers/flows-resolvers.js';
-import { openPlatformLaraAssistant } from '@platform/lib/chat/chat-window-toggle.js';
+import { openPlatformLaraAssistant } from '@platform/lib/flow-ui/shell/preferences.js';
 
 const MENU_PORTAL_GAP_PX = 4;
 const MENU_PORTAL_VIEWPORT_INSET_PX = 16;
@@ -595,14 +595,26 @@ export class FlowsEditorHeader extends PlatformElement {
         this._editor.setName({ name: detail.value });
     }
 
-    _setMode(mode) {
-        this._editor.setMode({ mode });
-        this._editor.setExecutionPanelOpen({ open: mode === 'run' });
+    _setWorkspace(workspace) {
+        this._editor.setWorkspace({ workspace });
+    }
+
+    _toggleExecutionPanel() {
+        const state = asObject(this._editor.state);
+        this._editor.setExecutionPanelOpen({ open: !Boolean(state.executionPanelOpen) });
     }
 
     _back() {
-        if (this.flowId) this.navigate('flow_chat', { flowId: this.flowId });
-        else this.navigate('list', {});
+        if (!this.flowId) {
+            this.navigate('list', {});
+            return;
+        }
+        // Leaving a branch editor returns to that branch, not to the base flow.
+        if (typeof this.branchId === 'string' && this.branchId !== '' && this.branchId !== 'base') {
+            this.navigate('flow_chat_branch', { flowId: this.flowId, branchId: this.branchId });
+            return;
+        }
+        this.navigate('flow_chat', { flowId: this.flowId });
     }
 
     async _save() {
@@ -975,7 +987,7 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems, issues, employeeActive) {
+    _renderPrimaryRow(state, flowName, workspace, saving, status, hasBundleUpdate, branchItems, issues, employeeActive) {
         const showBranches = typeof this.flowId === 'string' && this.flowId.length > 0;
         return html`
             <div class="chrome-row chrome-row-primary">
@@ -1013,14 +1025,25 @@ export class FlowsEditorHeader extends PlatformElement {
                     <platform-segmented-control
                         icon-only
                         density="dense"
-                        .value=${mode}
+                        .value=${workspace}
                         .items=${[
-                            { value: 'edit', icon: 'edit', title: this.t('editor_header.mode_edit') },
+                            { value: 'logic', icon: 'workflow', title: this.t('editor_header.mode_logic') },
+                            { value: 'interface', icon: 'layers', title: this.t('editor_header.mode_interface') },
                             { value: 'run', icon: 'play', title: this.t('editor_header.mode_run') },
                         ]}
                         aria-label=${this.t('editor_header.mode_group_aria')}
-                        @change=${(e) => this._setMode(e.detail.value)}
+                        @change=${(e) => this._setWorkspace(e.detail.value)}
                     ></platform-segmented-control>
+                    ${workspace === 'logic'
+                        ? this._renderHeaderIconButton({
+                            title: Boolean(state.executionPanelOpen)
+                                ? this.t('editor_header.close_execution_panel')
+                                : this.t('editor_header.open_execution_panel'),
+                            icon: 'chat',
+                            dataAction: 'execution-panel',
+                            onClick: () => this._toggleExecutionPanel(),
+                        })
+                        : nothing}
                 </div>
 
                 <div class="row-right">
@@ -1084,7 +1107,10 @@ export class FlowsEditorHeader extends PlatformElement {
         } else {
             flowName = '';
         }
-        const mode = typeof state.mode === 'string' && state.mode.length > 0 ? state.mode : 'edit';
+        const workspace = state.workspace;
+        if (workspace !== 'logic' && workspace !== 'interface' && workspace !== 'run') {
+            throw new Error(`flows-editor-header: unsupported workspace ${String(workspace)}`);
+        }
         const saving = Boolean(state.isSaving);
         const status = this._resolveStatusBadge(state);
         const flow = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
@@ -1100,7 +1126,7 @@ export class FlowsEditorHeader extends PlatformElement {
         }
 
         return html`
-            ${this._renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems, issues, employeeActive)}
+            ${this._renderPrimaryRow(state, flowName, workspace, saving, status, hasBundleUpdate, branchItems, issues, employeeActive)}
             ${this._renderBranchesRow(branchItems)}
         `;
     }

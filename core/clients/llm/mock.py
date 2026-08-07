@@ -568,6 +568,7 @@ class MockLLM:
                     task_id=task_id,
                     artifact=Artifact(
                         artifact_id=artifact_id,
+                        name="response",
                         parts=[Part(text=chunk)],
                     ),
                     append=True,

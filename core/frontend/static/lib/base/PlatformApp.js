@@ -56,7 +56,7 @@ import {
 import { setDefaultI18nNamespace } from '../utils/i18n-namespace.js';
 import { prefersReducedMotion } from '../utils/motion.js';
 import { resolveVoiceHttpOrigin } from '../voice/voice-http-origin.js';
-import { PLATFORM_LARA_TOGGLE_EVENT } from '../chat/chat-window-toggle.js';
+import { PLATFORM_LARA_TOGGLE_EVENT } from '../flow-ui/shell/preferences.js';
 import { setPlatformFilesRouteSegment } from '../utils/platform-files-url.js';
 
 const AGENT_DEVICES_POLL_MS = 45000;
@@ -75,7 +75,7 @@ import '../components/platform-services-modal.js';
 import '../components/platform-file-viewer-modal.js';
 import '../components/platform-file-picker-modal.js';
 import './platform-services-page.js';
-import '../chat/platform-chat.js';
+import '../flow-ui/shell/drawer.js';
 
 export function renderPlatformAppShell(app) {
     if (app._fatalShell === 'server-error') {
@@ -318,18 +318,28 @@ export class PlatformApp extends PlatformElement {
         if (typeof document.startViewTransition !== 'function') return;
         if (this._activeRouteTransition) return;
 
-        const transition = document.startViewTransition(async () => {
-            await this.updateComplete;
-        });
+        let transition;
+        try {
+            transition = document.startViewTransition(async () => {
+                await this.updateComplete;
+            });
+        } catch (error) {
+            const name = error && typeof error.name === 'string' ? error.name : '';
+            if (name === 'AbortError' || name === 'InvalidStateError') return;
+            throw error;
+        }
         this._activeRouteTransition = transition;
+        const swallowRouteTransitionAbort = (error) => {
+            const name = error && typeof error.name === 'string' ? error.name : '';
+            if (name !== 'AbortError' && name !== 'InvalidStateError') {
+                // Оставляем неожиданные ошибки transition видимыми, но не показываем штатные abort как uncaught promise.
+                console.warn('PlatformApp route transition failed', error);
+            }
+        };
+        // Both settled promises can reject on rapid route changes; catch each.
+        transition.updateCallbackDone.catch(swallowRouteTransitionAbort);
         transition.finished
-            .catch((error) => {
-                const name = error && typeof error.name === 'string' ? error.name : '';
-                if (name !== 'AbortError' && name !== 'InvalidStateError') {
-                    // Оставляем неожиданные ошибки transition видимыми, но не показываем штатные abort как uncaught promise.
-                    console.warn('PlatformApp route transition failed', error);
-                }
-            })
+            .catch(swallowRouteTransitionAbort)
             .finally(() => {
                 if (this._activeRouteTransition === transition) {
                     this._activeRouteTransition = null;
@@ -434,25 +444,25 @@ export class PlatformApp extends PlatformElement {
             ? 'bottom-left'
             : 'bottom-right';
         return html`
-            <platform-chat
-                display="drawer"
-                profile="spa"
-                toggle-event-name=${PLATFORM_LARA_TOGGLE_EVENT}
-                event-namespace="assistant"
-                flow-id="lara"
-                branch-id=${config.branchId}
-                launcher-storage-scope=${config.serviceId}
+            <flow-ui-drawer
                 data-embed-position=${launcherPosition}
-                .flowsBaseUrl=${'/flows'}
-                ?use-credentials=${true}
-                .showLauncher=${config.showLauncher}
-                assistant-title="Lara"
-                ?voice-enabled=${voiceEnabled}
-                voice-base-url=${voiceBaseUrl}
-                company-id=${companyId.trim()}
-                active-device-name=${activeDeviceName}
-                .getExtraMetadataVariables=${this._platformAssistantContextProvider}
-            ></platform-chat>
+                .config=${{
+                    flowId: 'lara',
+                    branchId: config.branchId,
+                    baseUrl: '/flows',
+                    profile: 'spa',
+                    showLauncher: config.showLauncher,
+                    launcherPosition,
+                    getRequestHeaders: async () => ({}),
+                    serviceId: config.serviceId,
+                    companyId: companyId.trim(),
+                    voiceEnabled,
+                    voiceBaseUrl,
+                    activeDeviceName,
+                    getExtraMetadataVariables: this._platformAssistantContextProvider,
+                    toggleEventName: PLATFORM_LARA_TOGGLE_EVENT,
+                }}
+            ></flow-ui-drawer>
         `;
     }
 

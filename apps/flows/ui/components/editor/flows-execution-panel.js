@@ -2,7 +2,7 @@
  * flows-execution-panel — плавающая панель «Запуск агента» в редакторе.
  *
  * Тонкий хост единого чат-компонента: вкладка Chat — это
- * `<platform-chat display="panel" profile="editor_test">` (весь чат, файлы,
+ * `<platform-flow-ui display="panel" profile="editor_test">` (весь чат, файлы,
  * voice/TTS и SSE A2A живут внутри компонента; в editor_test виден весь runtime
  * независимо от политики flow). Панель добавляет только editor-специфику:
  *   - useOp('flows/editor') — режим, currentBranchId, breakpointNodeIds;
@@ -27,9 +27,9 @@ import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-button.js';
-import '@platform/lib/chat/platform-chat.js';
+import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
-import '@platform/lib/chat/chat-run-trace.js';
+import '@platform/lib/flow-ui/components/flow-ui-run-trace.js';
 import {
     asArray,
     asObject,
@@ -38,7 +38,7 @@ import {
     deriveRunPanelStatus,
     isPlainObject,
 } from '../../_helpers/flows-resolvers.js';
-import { resolveFlowsChatTaskId } from '../../_helpers/resolve-flows-chat-task-id.js';
+import { resolveFlowsActiveTaskId } from '../../_helpers/resolve-flows-active-task-id.js';
 
 const EMPTY_TRACE = Object.freeze([]);
 const PANEL_VIEWPORT_MARGIN = 12;
@@ -63,7 +63,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         PlatformElement.styles,
         css`
             :host {
-                /* Зазор под FAB чат-виджета (56px + bottom 16px + запас), см. platform-chat display="drawer" .fab */
+                /* Зазор под FAB чат-виджета (56px + bottom 16px + запас), см. flow-ui-drawer launcher */
                 --flows-exec-fab-gutter: calc(56px + max(16px, env(safe-area-inset-bottom, 0px)) + 12px);
                 position: absolute;
                 top: 12px;
@@ -281,7 +281,7 @@ export class FlowsExecutionPanel extends PlatformElement {
             .tab-panel[hidden] {
                 display: none;
             }
-            .tab-panel platform-chat {
+            .tab-panel platform-flow-ui {
                 flex: 1;
                 min-height: 0;
             }
@@ -292,7 +292,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                 flex-direction: column;
                 overflow: hidden;
             }
-            .trace-panel-inner chat-run-trace {
+            .trace-panel-inner flow-ui-run-trace {
                 flex: 1;
                 min-height: 0;
             }
@@ -362,15 +362,30 @@ export class FlowsExecutionPanel extends PlatformElement {
         super.disconnectedCallback();
     }
 
-    /** @returns {import('@platform/lib/chat/platform-chat.js').PlatformChat|null} */
+    /** @returns {HTMLElement|null} */
     _platformChat() {
-        const el = this.renderRoot?.querySelector('platform-chat');
+        const el = this.renderRoot?.querySelector('platform-flow-ui');
         return el || null;
     }
 
     _chatRuntimeState() {
-        const chat = this._platformChat();
-        return chat ? asObject(chat.runtimeState) : {};
+        const host = this._platformChat();
+        if (!host) return {};
+        const state = asObject(host.runtimeState);
+        const activeContextId = typeof state.activeContextId === 'string'
+            ? state.activeContextId
+            : (typeof host.contextId === 'string' ? host.contextId : null);
+        const context = activeContextId && state.contextsById
+            ? asObject(state.contextsById[activeContextId])
+            : asObject(host.controller && host.controller.activeContext);
+        const activeTaskId = typeof context.activeTaskId === 'string' ? context.activeTaskId : null;
+        return {
+            currentContextId: activeContextId,
+            currentTaskId: activeTaskId,
+            streaming: context.saveStatus === 'pending',
+            messagesByContextId: {},
+            runTraceByContextId: {},
+        };
     }
 
     updated(changedProperties) {
@@ -380,9 +395,9 @@ export class FlowsExecutionPanel extends PlatformElement {
             this.removeAttribute('data-panel-closed');
         } else {
             this.setAttribute('data-panel-closed', '');
-            const chat = this._platformChat();
-            if (chat) {
-                void chat.stopVoice();
+            const host = this._platformChat();
+            if (host) {
+                void host.stopVoice();
             }
         }
         super.updated(changedProperties);
@@ -474,10 +489,6 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
         const chatState = this._chatRuntimeState();
         if (Boolean(chatState.streaming)) {
-            return false;
-        }
-        const chat = this._platformChat();
-        if (chat && chat._controller.sending) {
             return false;
         }
         return true;
@@ -877,7 +888,6 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._clearFloatingPanelRect();
         this.removeAttribute('data-layout-expanded');
         this._editor.setExecutionPanelOpen({ open: false });
-        this._editor.setMode({ mode: 'edit' });
     }
 
     _buildSessionId() {
@@ -921,7 +931,7 @@ export class FlowsExecutionPanel extends PlatformElement {
     _openLogs() {
         const sessionId = this._buildSessionId();
         if (!sessionId) return;
-        const taskId = resolveFlowsChatTaskId(this._chatRuntimeState());
+        const taskId = resolveFlowsActiveTaskId(this._chatRuntimeState());
         const props = { sessionId };
         if (taskId.length > 0) {
             props.taskId = taskId;
@@ -933,16 +943,16 @@ export class FlowsExecutionPanel extends PlatformElement {
      * Новая сессия чата: остановка текущей задачи при необходимости и сброс контекста.
      */
     async _onResetChat() {
-        const chat = this._platformChat();
-        if (!chat) {
+        const host = this._platformChat();
+        if (!host) {
             return;
         }
-        const chatState = asObject(chat.runtimeState);
+        const chatState = this._chatRuntimeState();
         if (Boolean(chatState.streaming)) {
-            await chat.cancelActiveTask();
+            await host.cancelActiveTask();
         }
         this._editor.setAgentExecutionRunning({ running: false });
-        chat.startNewChat();
+        host.startNewContext();
     }
 
     _setPanelTab(tab) {
@@ -1118,40 +1128,28 @@ export class FlowsExecutionPanel extends PlatformElement {
 
                 <div class="panel-body">
                     <div class="tab-panel" data-tab="chat" ?hidden=${tab !== 'chat'}>
-                        <platform-chat
+                        <platform-flow-ui
                             display="panel"
                             profile="editor_test"
-                            hide-header
                             flow-id=${this.flowId}
                             branch-id=${this.branchId}
-                            .flowsBaseUrl=${'/flows'}
-                            ?use-credentials=${true}
-                            company-id=${companyId}
-                            ?voice-enabled=${voiceReady}
-                            voice-base-url=${this._voiceBaseUrl}
-                            interface-locale=${locale || 'auto'}
-                            ?fresh-context-per-turn=${!ui.persistContext}
-                            .getSendMetadata=${() => this._sendMetadataForRun()}
-                            .labels=${{ placeholder: this.t(placeholderKey) }}
-                            @chat-state-changed=${this._onChatStateChanged}
-                            @chat-run-event=${this._onChatRunEvent}
-                            @show-tracing=${this._onChatShowTracing}
-                            @show-logs=${this._onChatShowLogs}
-                            @show-durable-history=${this._onChatShowDurableHistory}
-                            @view-breakpoint-state=${this._onViewBreakpointState}
-                            @browser-preview-open=${this._onBrowserPreviewOpen}
-                        ></platform-chat>
+                            base-url="/flows"
+                            theme="auto"
+                            locale=${locale || 'ru'}
+                            @flow-ui-state-changed=${this._onChatStateChanged}
+                            @flow-ui-ready=${this._onChatStateChanged}
+                        ></platform-flow-ui>
                     </div>
 
                     ${tab === 'trace' ? html`
                         <div class="tab-panel" data-tab="trace">
                             <div class="trace-panel-inner">
-                                <chat-run-trace
+                                <flow-ui-run-trace
                                     .entries=${runTrace}
                                     compact
                                     .showSectionHeader=${false}
                                     .fillAvailable=${true}
-                                ></chat-run-trace>
+                                ></flow-ui-run-trace>
                             </div>
                         </div>
                     ` : nothing}

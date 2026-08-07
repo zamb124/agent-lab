@@ -83,6 +83,8 @@ class InterruptManager:
         if isinstance(saved, dict):
             saved = NestedStateData.model_validate(saved)
 
+        # Nested runs render inside the parent interface: the document is
+        # inherited, never re-materialized as a second authoritative UI.
         result = ExecutionState(
             task_id=parent_state.task_id,
             context_id=parent_state.context_id,
@@ -92,6 +94,8 @@ class InterruptManager:
             variables=parent_state.variables.copy(),
             interrupt_path=list(saved.interrupt_path),
             nested_states=dict(saved.nested_states),
+            ui_document=parent_state.ui_document,
+            ui_template_version=parent_state.ui_template_version,
         )
 
         logger.debug(f"load_nested_state: {nested_id}, messages: {len(result.messages)}")

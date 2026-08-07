@@ -7,7 +7,7 @@ Hard cut: только PascalCase методы из core.a2a.methods; 0.3 names 
 import hashlib
 import json
 from collections.abc import AsyncGenerator, Mapping
-from typing import TypeVar, cast
+from typing import Literal, TypeVar, cast
 
 from a2a.types import (
     CancelTaskRequest,
@@ -19,7 +19,6 @@ from a2a.types import (
     ListTasksResponse,
     Message,
     SendMessageRequest,
-    StreamResponse,
     SubscribeToTaskRequest,
     Task,
     TaskArtifactUpdateEvent,
@@ -42,9 +41,7 @@ from apps.flows.src.durable_execution.repository import WorkflowProjectionMismat
 from apps.flows.src.models import (
     BranchCreateRequest,
     BranchUpdateRequest,
-    FlowChatSettings,
     FlowConfig,
-    resolve_effective_flow_chat,
 )
 from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
 from core.a2a import (
@@ -64,6 +61,16 @@ from core.a2a import (
     A2AApplicationError,
     A2AErrorCode,
 )
+from core.a2a.codec import stream_response_from_event, stream_response_to_json_dict
+from core.a2a.extensions import (
+    A2A_EXTENSIONS_HEADER,
+    A2UI_EXTENSION_URI,
+    A2UI_PLATFORM_CATALOG_ID,
+    A2UI_VERSION,
+    extract_subscribe_after_sequence,
+    parse_a2a_extensions_header,
+    strip_subscribe_platform_metadata,
+)
 from core.context import get_context
 from core.events import publish_event_to_user
 from core.identity.embed_guest_turns import (
@@ -73,7 +80,11 @@ from core.identity.embed_guest_turns import (
 )
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
-from core.models.embed_models import EmbedChatLook
+from core.models.embed_models import EmbedInterfaceLook
+from core.models.flow_interface import (
+    apply_embed_interface_override,
+    resolve_flow_interface_config,
+)
 from core.models.identity_models import User
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 from core.utils.tokens import TokenData, TokenType
@@ -150,7 +161,15 @@ router = APIRouter(tags=["public", "a2a"])
 
 _STREAM_METHODS = frozenset({SEND_STREAMING_MESSAGE, SUBSCRIBE_TO_TASK})
 _EMBED_MESSAGE_METHODS = frozenset({SEND_MESSAGE, SEND_STREAMING_MESSAGE})
-_EMBED_SESSION_METHODS = _EMBED_MESSAGE_METHODS | {CANCEL_TASK}
+# Flow UI hydrate/reconnect needs task-read methods on both scoped guest tokens.
+_SCOPED_SESSION_A2A_METHODS = _EMBED_MESSAGE_METHODS | {
+    GET_TASK,
+    LIST_TASKS,
+    SUBSCRIBE_TO_TASK,
+    CANCEL_TASK,
+}
+_EMBED_SESSION_METHODS = _SCOPED_SESSION_A2A_METHODS
+_FLOW_UI_SHARE_METHODS = _SCOPED_SESSION_A2A_METHODS
 _SSE_HEADERS = {
     "Cache-Control": "no-cache, no-transform",
     "X-Accel-Buffering": "no",
@@ -178,15 +197,7 @@ def _proto_result(message: ProtoMessage) -> JsonObject:
 def _stream_response_result(
     event: Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent,
 ) -> JsonObject:
-    if isinstance(event, TaskStatusUpdateEvent):
-        stream = StreamResponse(status_update=event)
-    elif isinstance(event, TaskArtifactUpdateEvent):
-        stream = StreamResponse(artifact_update=event)
-    elif isinstance(event, Task):
-        stream = StreamResponse(task=event)
-    else:
-        stream = StreamResponse(message=event)
-    return _proto_result(stream)
+    return stream_response_to_json_dict(stream_response_from_event(event))
 
 
 def _parse_proto_params(params_dict: JsonObject, proto_cls: type[_TProto]) -> _TProto:
@@ -219,6 +230,87 @@ def _is_embed_session_token(token_data: TokenData | None) -> bool:
     return token_data is not None and token_data.token_type == TokenType.EMBED_SESSION
 
 
+def _is_flow_ui_share_token(token_data: TokenData | None) -> bool:
+    return token_data is not None and token_data.token_type == TokenType.FLOW_UI_SHARE
+
+
+def _validate_flow_ui_share_claims(
+    *,
+    request: Request,
+    token_data: TokenData,
+    flow_id: str,
+    branch_id: str | None = None,
+) -> str | None:
+    metadata = token_data.metadata
+    expected: dict[str, set[str] | None] = {
+        "flow_ui_share_grant_id": None,
+        "flow_ui_share_permission": {"view", "interact"},
+        "flow_ui_share_flow_id": None,
+        "flow_ui_share_branch_id": None,
+        "flow_ui_share_context_id": None,
+        "flow_ui_share_document_id": None,
+        "flow_ui_share_origin": None,
+    }
+    for key, allowed in expected.items():
+        value = metadata.get(key)
+        if not isinstance(value, str) or not value.strip():
+            return f"Invalid Flow UI share token: {key} is required"
+        if allowed is not None and value not in allowed:
+            return f"Invalid Flow UI share token: {key} is invalid"
+    if metadata["flow_ui_share_flow_id"] != flow_id:
+        return "Flow UI share token is not allowed for this flow"
+    if branch_id is not None and metadata["flow_ui_share_branch_id"] != branch_id:
+        return "Flow UI share token is not allowed for this branch"
+    request_origin = (
+        request.headers.get("origin", "").strip()
+        or build_service_base_url(request).rstrip("/")
+    )
+    if request_origin != metadata["flow_ui_share_origin"]:
+        return "Origin is not allowed for this Flow UI share token"
+    return None
+
+
+def _validate_flow_ui_share_request(
+    *,
+    request: Request,
+    token_data: TokenData,
+    flow_id: str,
+    method: str,
+    params_dict: JsonObject,
+) -> JsonObject | None:
+    claims_error = _validate_flow_ui_share_claims(
+        request=request,
+        token_data=token_data,
+        flow_id=flow_id,
+    )
+    if claims_error is not None:
+        return {"code": -32000, "message": claims_error}
+    if method not in _FLOW_UI_SHARE_METHODS:
+        return {
+            "code": -32000,
+            "message": "Flow UI share token cannot access this A2A method",
+        }
+    if method in _EMBED_MESSAGE_METHODS:
+        context_id = _a2a_message_context_id(params_dict)
+        if context_id != token_data.metadata["flow_ui_share_context_id"]:
+            return {"code": -32000, "message": "Flow UI share context mismatch"}
+        metadata_raw = params_dict.get("metadata")
+        if metadata_raw is None:
+            params_dict["metadata"] = {
+                "branch": token_data.metadata["flow_ui_share_branch_id"]
+            }
+        elif isinstance(metadata_raw, dict):
+            requested = _metadata_effective_branch(metadata_raw)
+            expected_branch = token_data.metadata["flow_ui_share_branch_id"]
+            if requested is None:
+                metadata_raw["branch"] = expected_branch
+            elif requested != expected_branch:
+                return {"code": -32000, "message": "Flow UI share branch mismatch"}
+        else:
+            return {"code": -32602, "message": "Invalid params: metadata must be object"}
+    return None
+
+
 _EMBED_GUEST_TURN_LUA = """
 local raw = redis.call("GET", KEYS[1])
 local cur = 0
@@ -243,6 +335,14 @@ def _a2a_message_context_id(params_dict: JsonObject) -> str:
         v = msg.get(key)
         if isinstance(v, str) and v.strip():
             return v.strip()
+    return ""
+
+
+def _list_tasks_context_id(params_dict: JsonObject) -> str:
+    for key in ("contextId", "context_id"):
+        value = params_dict.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
     return ""
 
 
@@ -397,11 +497,15 @@ def _validate_embed_session_request(
     if method not in _EMBED_SESSION_METHODS:
         return {
             "code": -32000,
-            "message": (
-                "Embed session token supports only SendMessage, "
-                "SendStreamingMessage and CancelTask"
-            ),
+            "message": "Embed session token cannot access this A2A method",
         }
+
+    if method == LIST_TASKS:
+        if not _list_tasks_context_id(params_dict):
+            return {
+                "code": -32000,
+                "message": "Embed session ListTasks requires contextId",
+            }
 
     allowed_branch_id = _embed_session_branch_from_token_metadata(metadata)
     if method in _EMBED_MESSAGE_METHODS and isinstance(allowed_branch_id, str) and allowed_branch_id.strip():
@@ -548,9 +652,13 @@ async def _handle_streaming(
 
 
 async def _handle_subscribe_streaming(
-    handler: A2AChannel, params: SubscribeToTaskRequest, rpc_id: JsonRpcId
+    handler: A2AChannel,
+    params: SubscribeToTaskRequest,
+    rpc_id: JsonRpcId,
+    *,
+    after_sequence: int,
 ) -> AsyncGenerator[str, None]:
-    async for event in handler.on_subscribe_to_task(params):
+    async for event in handler.on_subscribe_to_task(params, after_sequence=after_sequence):
         response = {
             "jsonrpc": "2.0",
             "id": rpc_id,
@@ -644,6 +752,17 @@ async def _json_rpc_handler_internal(
         if embed_error is not None:
             return {"jsonrpc": "2.0", "id": rpc_id, "error": embed_error}
 
+    if token_data is not None and _is_flow_ui_share_token(token_data):
+        share_error = _validate_flow_ui_share_request(
+            request=request,
+            token_data=token_data,
+            flow_id=flow_id,
+            method=method,
+            params_dict=params_dict,
+        )
+        if share_error is not None:
+            return {"jsonrpc": "2.0", "id": rpc_id, "error": share_error}
+
     if embed_target is not None and method in _EMBED_MESSAGE_METHODS:
         metadata_dict = params_dict.get("metadata")
         if metadata_dict is None:
@@ -716,6 +835,12 @@ async def _json_rpc_handler_internal(
         context=context,
         flow_config=config,
         container=as_flow_runtime_container(container),
+        activated_extensions=parse_a2a_extensions_header(
+            request.headers.get(A2A_EXTENSIONS_HEADER)
+        ),
+        interface_override=(
+            None if embed_target is None else embed_target.interface_override
+        ),
     )
 
     # Группы пользователя для проверки прав доступа
@@ -794,9 +919,18 @@ async def _json_rpc_handler_internal(
             return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
 
         if method == SUBSCRIBE_TO_TASK:
-            params = _parse_proto_params(params_dict, SubscribeToTaskRequest)
+            after_sequence = extract_subscribe_after_sequence(params_dict)
+            params = _parse_proto_params(
+                strip_subscribe_platform_metadata(params_dict),
+                SubscribeToTaskRequest,
+            )
             return StreamingResponse(
-                _handle_subscribe_streaming(handler, params, rpc_id),
+                _handle_subscribe_streaming(
+                    handler,
+                    params,
+                    rpc_id,
+                    after_sequence=after_sequence,
+                ),
                 media_type="text/event-stream",
                 headers=_SSE_HEADERS,
             )
@@ -944,37 +1078,55 @@ async def json_rpc_embed_handler(
     )
 
 
-class ChatProfileViewer(BaseModel):
-    """Права текущего зрителя чата."""
+class InterfaceProfileViewer(BaseModel):
+    """Control-plane permissions; runtime state is intentionally absent."""
 
     can_edit_flow: bool
+    can_interact: bool
+    can_share: bool
+    auth_mode: Literal["platform", "embed", "share"]
 
 
-class ChatProfileResponse(BaseModel):
-    """
-    Эффективный профиль чата для `<platform-chat>`.
+class InterfaceCatalogProfile(BaseModel):
+    extension_uri: str = A2UI_EXTENSION_URI
+    version: str = A2UI_VERSION
+    platform_catalog_id: str = A2UI_PLATFORM_CATALOG_ID
 
-    `chat` — effective политика поведения: FlowConfig.chat для session-пути,
-    resolve_effective_flow_chat(FlowConfig.chat, EmbedConfig.chat_override) для embed;
-    `look` — look&feel embed-виджета, только для embed-маршрута.
-    """
+
+class InterfaceCapabilitiesProfile(BaseModel):
+    bootstrap: bool = True
+    autosync: bool = True
+    cancel: bool
+    files: bool
+    voice: bool
+
+
+class InterfaceFlowIdentity(BaseModel):
+    title: str
+    image_url: str | None = None
+
+
+class InterfaceProfileResponse(BaseModel):
+    """Narrow control plane; document, values and artifacts travel only in A2A."""
 
     flow_id: str
     branch_id: str
-    chat: FlowChatSettings
-    viewer: ChatProfileViewer
-    look: EmbedChatLook | None = None
+    viewer: InterfaceProfileViewer
+    look: EmbedInterfaceLook | None = None
+    catalog: InterfaceCatalogProfile
+    capabilities: InterfaceCapabilitiesProfile
+    flow_identity: InterfaceFlowIdentity
 
 
-async def _chat_profile_internal(
+async def _interface_profile_internal(
     *,
     flow_id: str,
     branch_id: str,
     request: Request,
     container: FlowContainer,
     embed_target: EmbedTarget | None = None,
-) -> ChatProfileResponse:
-    """Один handler chat-profile для обоих auth-путей (session/API key и embed_session)."""
+) -> InterfaceProfileResponse:
+    """Resolve host controls without exposing a second runtime UI representation."""
     config = await _get_flow_config(flow_id, container)
     if config is None:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -985,6 +1137,7 @@ async def _chat_profile_internal(
     token_data_raw = _request_state_mapping(request).get("token_data")
     token_data = token_data_raw if isinstance(token_data_raw, TokenData) else None
     is_embed_session = _is_embed_session_token(token_data)
+    is_share_session = _is_flow_ui_share_token(token_data)
     if is_embed_session and isinstance(token_data, TokenData):
         claims_error = _validate_embed_session_claims(
             request=request,
@@ -997,29 +1150,83 @@ async def _chat_profile_internal(
         if claims_error is not None:
             raise HTTPException(status_code=403, detail=claims_error)
 
-    effective_chat = (
-        config.chat
-        if embed_target is None
-        else resolve_effective_flow_chat(config.chat, embed_target.chat_override)
+    share_permission: str | None = None
+    if is_share_session and isinstance(token_data, TokenData):
+        claims_error = _validate_flow_ui_share_claims(
+            request=request,
+            token_data=token_data,
+            flow_id=flow_id,
+            branch_id=branch_id,
+        )
+        if claims_error is not None:
+            raise HTTPException(status_code=403, detail=claims_error)
+        try:
+            grant = await container.flow_ui_share_service.authorize(
+                grant_id=str(token_data.metadata["flow_ui_share_grant_id"]),
+                company_id=token_data.company_id,
+                flow_id=flow_id,
+                context_id=str(token_data.metadata["flow_ui_share_context_id"]),
+                document_id=str(token_data.metadata["flow_ui_share_document_id"]),
+                require_interact=False,
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        share_permission = grant.permission
+
+    branch = config.branches.get(branch_id)
+    effective_interface = resolve_flow_interface_config(
+        config.interface,
+        branch_override=None if branch is None else branch.interface_override,
     )
-    return ChatProfileResponse(
+    effective_interface = apply_embed_interface_override(
+        effective_interface,
+        None if embed_target is None else embed_target.interface_override,
+    )
+    policy = effective_interface.policy
+    look = embed_target.look if embed_target is not None else None
+    return InterfaceProfileResponse(
         flow_id=flow_id,
         branch_id=branch_id,
-        chat=effective_chat,
-        viewer=ChatProfileViewer(can_edit_flow=not is_embed_session),
-        look=embed_target.look if embed_target is not None else None,
+        viewer=InterfaceProfileViewer(
+            can_edit_flow=not is_embed_session and not is_share_session,
+            can_interact=share_permission != "view",
+            can_share=not is_embed_session and not is_share_session,
+            auth_mode=(
+                "share"
+                if is_share_session
+                else "embed"
+                if is_embed_session
+                else "platform"
+            ),
+        ),
+        look=look,
+        catalog=InterfaceCatalogProfile(),
+        capabilities=InterfaceCapabilitiesProfile(
+            autosync=share_permission != "view",
+            cancel=policy.allow_cancel and share_permission != "view",
+            files=policy.show_files_panel and not is_share_session,
+            voice=(
+                policy.allow_voice
+                and share_permission != "view"
+                and (look is None or look.voice_enabled)
+            ),
+        ),
+        flow_identity=InterfaceFlowIdentity(
+            title=config.name,
+            image_url=config.store_card_image_url,
+        ),
     )
 
 
-@router.get("/{flow_id}/chat-profile", response_model=ChatProfileResponse)
-async def get_flow_chat_profile(
+@router.get("/{flow_id}/interface-profile", response_model=InterfaceProfileResponse)
+async def get_flow_interface_profile(
     flow_id: str,
     request: Request,
     container: ContainerDep,
     branch_id: str = "default",
-) -> ChatProfileResponse:
-    """Chat-profile для авторизованных пользователей платформы (session/API key)."""
-    return await _chat_profile_internal(
+) -> InterfaceProfileResponse:
+    """Control plane for an authenticated platform surface."""
+    return await _interface_profile_internal(
         flow_id=flow_id,
         branch_id=branch_id,
         request=request,
@@ -1027,19 +1234,19 @@ async def get_flow_chat_profile(
     )
 
 
-@router.get("/embed/{embed_id}/chat-profile", response_model=ChatProfileResponse)
-async def get_embed_chat_profile(
+@router.get("/embed/{embed_id}/interface-profile", response_model=InterfaceProfileResponse)
+async def get_embed_interface_profile(
     embed_id: str,
     request: Request,
     container: ContainerDep,
-) -> ChatProfileResponse:
-    """Chat-profile для embed-сессий: политика из FlowConfig.chat + look из EmbedConfig."""
+) -> InterfaceProfileResponse:
+    """Control plane for an embed surface; runtime document still comes from A2A."""
     embed_target = await resolve_embed_target(container, embed_id)
     if embed_target is None:
         raise HTTPException(status_code=404, detail=f"Embed not found: {embed_id}")
     if not embed_target.active:
         raise HTTPException(status_code=403, detail=f"Embed disabled: {embed_id}")
-    return await _chat_profile_internal(
+    return await _interface_profile_internal(
         flow_id=embed_target.flow_id,
         branch_id=embed_target.branch_id,
         request=request,

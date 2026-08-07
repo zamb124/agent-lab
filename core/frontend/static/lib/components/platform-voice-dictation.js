@@ -3,7 +3,7 @@
  * MediaRecorder → platform/voice_dictation → POST /voice/api/v1/transcribe.
  * Событие `transcribed` detail: { text, provider }.
  */
-import { html, css } from 'lit';
+import { html, css } from '../../assets/js/lit/lit.min.js';
 import { PlatformElement } from '../platform-element/index.js';
 import {
     getUserMediaCompat,

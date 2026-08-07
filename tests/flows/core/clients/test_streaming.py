@@ -6,6 +6,7 @@
 
 import asyncio
 import uuid
+from typing import cast
 
 import pytest
 from a2a.helpers.proto_helpers import new_text_part
@@ -13,7 +14,9 @@ from a2a.types import (
     Artifact,
     Message,
     Part,
+    Task,
     TaskArtifactUpdateEvent,
+    TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
 )
@@ -28,11 +31,15 @@ from a2a.types.a2a_pb2 import (
 )
 
 from apps.flows.config import get_settings
-from apps.flows.src.streaming import Emitter, EventSubscriber, InMemoryEmitter
+from apps.flows.src.a2a import A2ATaskProjectionService
+from apps.flows.src.db import A2ATaskRepository
+from apps.flows.src.streaming import Emitter, EventSubscriber, InMemoryEmitter, StreamEvent
 from apps.flows.src.streaming.subscriber import is_final_event
 from core.a2a import TERMINAL_A2A_TASK_STATES, mapping_from_struct, struct_from_mapping
 from core.clients.redis_client import RedisClient
+from core.db.storage import Storage
 from core.state import ExecutionState
+from core.types import JsonObject
 
 
 def _status_event(
@@ -40,10 +47,10 @@ def _status_event(
     state: int,
     context_id: str = "ctx",
     task_id: str = "task",
-    metadata: dict[str, object] | None = None,
+    metadata: JsonObject | None = None,
     message: Message | None = None,
 ) -> TaskStatusUpdateEvent:
-    status = TaskStatus(state=state)
+    status = TaskStatus(state=cast(TaskState, state))
     if message is not None:
         status.message.CopyFrom(message)
     event = TaskStatusUpdateEvent(
@@ -163,18 +170,60 @@ class TestIsFinalEvent:
         assert is_final_event(event) is True
 
 
+class TestInMemoryEmitterArtifacts:
+    """Stable artifact identity follows a logical emitter stream."""
+
+    @pytest.mark.asyncio
+    async def test_text_chunks_share_artifact_id_until_last_chunk(self):
+        state = ExecutionState.create(
+            task_id="task-stable-artifact",
+            context_id="context-stable-artifact",
+            user_id="test-user",
+            session_id="test-flow:context-stable-artifact",
+        )
+        emitter = InMemoryEmitter(state)
+
+        await emitter.emit_text("first", artifact_name="response")
+        await emitter.emit_text(
+            "second",
+            artifact_name="response",
+            last_chunk=True,
+        )
+        await emitter.emit_text(
+            "next logical response",
+            artifact_name="response",
+            last_chunk=True,
+        )
+
+        artifact_events = [
+            event
+            for event in emitter.events
+            if isinstance(event, TaskArtifactUpdateEvent)
+        ]
+        assert artifact_events[0].artifact.artifact_id == artifact_events[1].artifact.artifact_id
+        assert artifact_events[2].artifact.artifact_id != artifact_events[1].artifact.artifact_id
+        assert [event.artifact.name for event in artifact_events] == [
+            "response",
+            "response",
+            "response",
+        ]
+
+
 @pytest.mark.real_taskiq
 class TestStreamingWithToolCalls:
     """Интеграционные тесты streaming с tool calls. Реальный Redis."""
 
     @pytest.fixture
-    def redis_client(self):
+    def redis_client(self) -> RedisClient:
         """Создает Redis клиент для тестов."""
         settings = get_settings()
         return RedisClient(settings.database.redis_url)
 
     @pytest.mark.asyncio
-    async def test_subscriber_continues_after_working(self, redis_client):
+    async def test_subscriber_continues_after_working(
+        self,
+        redis_client: RedisClient,
+    ) -> None:
         """
         Подписчик НЕ прекращает подписку при WORKING.
 
@@ -187,8 +236,9 @@ class TestStreamingWithToolCalls:
         """
         await redis_client.connect()
 
-        task_id = "test-tool-call-flow"
-        context_id = "test-context"
+        suffix = uuid.uuid4().hex
+        task_id = f"test-tool-call-flow-{suffix}"
+        context_id = f"test-context-{suffix}"
 
         state = ExecutionState.create(
             task_id=task_id,
@@ -196,18 +246,38 @@ class TestStreamingWithToolCalls:
             user_id="test-user",
             session_id=f"test-agent:{context_id}",
         )
-        emitter = Emitter(redis_client, state)
+        repository = A2ATaskRepository(Storage(db_url=get_settings().database.flows_url))
+        projection_service = A2ATaskProjectionService(
+            repository=repository,
+            redis_client=redis_client,
+        )
+        _ = await repository.ensure_task(
+            company_id="streaming-test-company",
+            session_id=state.session_id,
+            flow_id=state.session_flow_id,
+            owner_user_id="streaming-test-user",
+            task=Task(
+                id=task_id,
+                context_id=context_id,
+                status=TaskStatus(state=TASK_STATE_SUBMITTED),
+            ),
+        )
+        emitter = Emitter(
+            projection_service,
+            state,
+            company_id="streaming-test-company",
+        )
         subscriber = EventSubscriber(redis_client)
 
         ready_event = asyncio.Event()
-        collected_events = []
+        collected_events: list[StreamEvent] = []
 
-        async def collect():
+        async def collect() -> None:
             async for event in subscriber.subscribe(task_id, timeout=5.0, ready_event=ready_event):
                 collected_events.append(event)
 
-        async def emit_sequence():
-            await ready_event.wait()
+        async def emit_sequence() -> None:
+            _ = await ready_event.wait()
             await asyncio.sleep(0.05)
 
             tool_call_msg = Message(
@@ -270,7 +340,7 @@ class TestStreamingWithToolCalls:
             )
 
         try:
-            await asyncio.gather(collect(), emit_sequence())
+            _ = await asyncio.gather(collect(), emit_sequence())
 
             assert len(collected_events) == 4
 

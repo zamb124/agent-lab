@@ -1,8 +1,8 @@
 /**
  * flows/api_console_run — прогон A2A JSON-RPC запроса из консоли API редактора.
  *
- * Единственная фабрика A2A вне `<platform-chat>`: сам чат (send/cancel/reducer)
- * живёт в едином chat runtime `@platform/lib/chat/runtime/*` внутри компонента.
+ * Единственная фабрика A2A вне `<platform-flow-ui>`: обычный Send/stream/GetTask
+ * идёт через Flow UI protocol (`@platform/lib/flow-ui/protocol/*`).
  * Консоль шлёт произвольный JSON-RPC body (`SendStreamingMessage` | `SendMessage` |
  * async submit + `GetTask` polling) и собирает полный request/response
  * exchange для отображения разработчику.
@@ -17,8 +17,8 @@ import {
     resolveA2aContextId as _resolveStreamContextId,
     resolveA2aTaskId as _resolveStreamTaskId,
     unwrapA2aStreamResult as _unwrapA2aStreamResult,
-} from '@platform/lib/chat/a2a-chat-runtime.js';
-import { consumeA2aStream } from '@platform/lib/chat/runtime/a2a-stream.js';
+} from '@platform/lib/flow-ui/protocol/a2a-result-helpers.js';
+import { consumeA2AStream as consumeA2aStream } from '@platform/lib/flow-ui/protocol/a2a-stream.js';
 
 const EMPTY_LIST = Object.freeze([]);
 const EMPTY_OBJECT = Object.freeze({});

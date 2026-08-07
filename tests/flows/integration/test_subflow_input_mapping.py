@@ -29,7 +29,7 @@ def flow_node(container: FlowRuntimeContainer, *, node_id: str, config: JsonObje
 class TestSubflowInputMapping:
     """Тесты input_mapping для FlowNode."""
 
-    def test_resolve_inputs_no_mapping(self, container: FlowRuntimeContainer):
+    def test_resolve_inputs_no_mapping(self, container: FlowRuntimeContainer, unique_id):
         """Без маппинга inputs пустой."""
         node = flow_node(
             container,
@@ -38,10 +38,10 @@ class TestSubflowInputMapping:
         )
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="123",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             content="hello",
             variables={"api_key": "secret"},
         )
@@ -50,7 +50,7 @@ class TestSubflowInputMapping:
 
         assert inputs == {}
 
-    def test_prepare_state_no_mapping(self, container: FlowRuntimeContainer):
+    def test_prepare_state_no_mapping(self, container: FlowRuntimeContainer, unique_id):
         """Без маппинга _prepare_state возвращает копию state."""
         node = flow_node(
             container,
@@ -59,10 +59,10 @@ class TestSubflowInputMapping:
         )
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="123",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             content="hello",
             variables={"api_key": "secret"},
         )
@@ -74,7 +74,7 @@ class TestSubflowInputMapping:
         assert result.user_id == "123"
         assert result.variables == {"api_key": "secret"}
 
-    def test_resolve_inputs_with_state_reference(self, container: FlowRuntimeContainer):
+    def test_resolve_inputs_with_state_reference(self, container: FlowRuntimeContainer, unique_id):
         """@state:field берёт значение из state."""
         node = flow_node(
             container,
@@ -89,10 +89,10 @@ class TestSubflowInputMapping:
         )
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             content="original content",
             prepared_query="processed query",
             user_name="John",
@@ -106,7 +106,7 @@ class TestSubflowInputMapping:
         assert inputs["user_name"] == "John"
         assert "extra_field" not in inputs
 
-    def test_resolve_inputs_with_nested_path(self, container: FlowRuntimeContainer):
+    def test_resolve_inputs_with_nested_path(self, container: FlowRuntimeContainer, unique_id):
         """@state:nested.path берёт вложенное значение."""
         node = flow_node(
             container,
@@ -121,10 +121,10 @@ class TestSubflowInputMapping:
         )
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="1",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             user={
                 "name": "Alice",
                 "profile": {
@@ -139,7 +139,7 @@ class TestSubflowInputMapping:
         assert inputs["email"] == "alice@example.com"
         assert inputs["name"] == "Alice"
 
-    def test_resolve_inputs_with_constant(self, container: FlowRuntimeContainer):
+    def test_resolve_inputs_with_constant(self, container: FlowRuntimeContainer, unique_id):
         """Строка без @state: передаётся как константа."""
         node = flow_node(
             container,
@@ -155,10 +155,10 @@ class TestSubflowInputMapping:
         )
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             query="user question",
             variables={},
         )
@@ -169,7 +169,7 @@ class TestSubflowInputMapping:
         assert inputs["version"] == "v2"
         assert inputs["content"] == "user question"
 
-    def test_resolve_inputs_missing_field_returns_none(self, container: FlowRuntimeContainer):
+    def test_resolve_inputs_missing_field_returns_none(self, container: FlowRuntimeContainer, unique_id):
         """Отсутствующее поле возвращает None."""
         node = flow_node(
             container,
@@ -183,10 +183,10 @@ class TestSubflowInputMapping:
         )
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             other="data",
         )
 
@@ -197,6 +197,7 @@ class TestSubflowInputMapping:
     def test_resolve_inputs_missing_nested_path_returns_none(
         self,
         container: FlowRuntimeContainer,
+        unique_id,
     ):
         """Отсутствующий вложенный путь возвращает None."""
         node = flow_node(
@@ -211,10 +212,10 @@ class TestSubflowInputMapping:
         )
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             a={"x": 1},
         )
 
@@ -225,6 +226,7 @@ class TestSubflowInputMapping:
     def test_resolve_inputs_non_string_value_passed_as_is(
         self,
         container: FlowRuntimeContainer,
+        unique_id,
     ):
         """Нестроковые значения передаются как есть."""
         node = flow_node(
@@ -241,10 +243,10 @@ class TestSubflowInputMapping:
         )
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
 
         inputs = node._resolve_inputs(state)
@@ -253,7 +255,7 @@ class TestSubflowInputMapping:
         assert inputs["enabled"] is True
         assert inputs["items"] == ["a", "b", "c"]
 
-    def test_prepare_state_applies_inputs(self, container: FlowRuntimeContainer):
+    def test_prepare_state_applies_inputs(self, container: FlowRuntimeContainer, unique_id):
         """_prepare_state применяет inputs к state."""
         node = flow_node(
             container,
@@ -267,13 +269,13 @@ class TestSubflowInputMapping:
         )
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="1",
             query="test",
             user_data="skip",
             variables={"key": "value"},
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
 
         inputs = node._resolve_inputs(state)
@@ -281,4 +283,4 @@ class TestSubflowInputMapping:
 
         assert result.content == "test"
         assert result.variables == {"key": "value"}
-        assert result.session_id == "test-agent:test-context"
+        assert result.session_id == f"test-agent:test-context-{unique_id}"

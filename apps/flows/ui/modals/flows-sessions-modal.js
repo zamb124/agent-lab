@@ -16,6 +16,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/platform-searchable-combobox.js';
 import { asArray, asString } from '../_helpers/flows-resolvers.js';
+import { flowSessionRoute } from '../_helpers/flow-session-route.js';
 
 export class FlowsSessionsModal extends PlatformModal {
     static modalKind = 'flows.sessions';
@@ -429,7 +430,11 @@ export class FlowsSessionsModal extends PlatformModal {
         if (flowForNav.length === 0) {
             return;
         }
-        this.navigate('flow_chat_session', { flowId: flowForNav, sessionId });
+        const route = flowSessionRoute({ ...session, flow_id: flowForNav, session_id: sessionId });
+        if (route === null) {
+            return;
+        }
+        this.navigate(route.routeKey, route.params);
         this.close();
     }
 

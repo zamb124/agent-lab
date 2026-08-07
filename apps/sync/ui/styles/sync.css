@@ -9,7 +9,7 @@
     --sync-overlay-z: 4000;
     --sync-banner-z: 3500;
     /* Sync: FAB слева (launcherPosition bottom-left); bottom на случай override позиции. */
-    --platform-chat-drawer-fab-bottom: 24px;
+    --flow-ui-drawer-fab-bottom: 24px;
     --sync-typing-color: var(--text-secondary);
     --sync-composer-capsule-bg: #f3f4f6;
     --sync-composer-capsule-border: rgba(15, 23, 42, 0.1);

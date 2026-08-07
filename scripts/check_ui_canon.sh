@@ -146,16 +146,21 @@ if rg -q "new CustomEvent\(\s*['\"]navigate['\"]" "${LEGACY_GLOBS[@]}"; then
     rg -n "new CustomEvent\(\s*['\"]navigate['\"]" "${LEGACY_GLOBS[@]}" >&2 || true
 fi
 
-# 11. Запрет старых геттеров в core/frontend/static/lib (кроме standalone chat-surface —
-#     у platform-chat свой бутстрап, а `theme` — его reactive property/attribute,
-#     контракт embed-виджета, не ThemeService).
+# 11. Запрет старых геттеров в core/frontend/static/lib (кроме standalone Flow UI surface —
+#     у platform-flow-ui / production-render-frame `theme` — reactive property/attribute,
+#     контракт render-context и embed-виджета, не ThemeService).
 #     `icon` удалён из списка: reactive property Lit-компонентов
 #     (`<sidebar-nav-item icon="...">`, `<platform-panel icon="...">`), а не
 #     IconService (его нет).
-CORE_LIB_GLOBS=( core/frontend/static/lib -g '*.js' --glob '!core/frontend/static/lib/chat/platform-chat.js' )
+CORE_LIB_GLOBS=( core/frontend/static/lib -g '*.js' --glob '!core/frontend/static/lib/flow-ui/**' )
 if rg -q 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' "${CORE_LIB_GLOBS[@]}"; then
     fail "this.services/this.calendarApi/... в core/lib — используйте dispatch(<SLICE_EVENTS>) и select"
     rg -n 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' "${CORE_LIB_GLOBS[@]}" >&2 || true
+fi
+# Flow UI: запрет старых геттеров, но `this.theme` — допустимое Lit property.
+if rg -q 'this\.(services|auth|notify|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' core/frontend/static/lib/flow-ui -g '*.js'; then
+    fail "запрещённые геттеры в flow-ui — используйте dispatch/select"
+    rg -n 'this\.(services|auth|notify|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' core/frontend/static/lib/flow-ui -g '*.js' >&2 || true
 fi
 
 # 12. Имена событий: this.dispatch('<scope>/<entity>/<verb>') — snake_case, >= 3 сегмента.

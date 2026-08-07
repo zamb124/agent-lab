@@ -24,7 +24,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from typing import ClassVar, Literal, TypeAlias, cast, overload, override
 
-from a2a.types import Message, Part
+from a2a.types import Artifact, Message, Part
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
 
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
@@ -67,15 +67,16 @@ from apps.flows.src.runtime.llm_resource_config import (
     resolve_llm_config_with_resource_key,
 )
 from apps.flows.src.runtime.runners import LlmNodeRunner
-from apps.flows.src.runtime_helpers.state_utils import push_ui_event
+from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
 from apps.flows.src.services.hitl_work_item_service import HANDOFF_PREVIEW_MAX_LEN
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.src.state.interrupt_manager import InterruptManager
+from apps.flows.src.streaming.emitter import Emitter
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.registry import ToolMaterializeInput
 from apps.flows.src.variables import VariableResolver, VarResolver
 from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
-from core.a2a import mapping_from_struct, struct_from_mapping
+from core.a2a import artifact_from_json_dict, mapping_from_struct, struct_from_mapping
 from core.ai.runtime import create_llm_client_from_call_config
 from core.clients.llm.mock_control import (
     MOCK_MISS,
@@ -1818,6 +1819,8 @@ class FlowNode(BaseNode):
             child_state[key] = value
         child_state.session_id = child_session_id
         child_state.context_id = child_context_id
+        # Child workflow has its own A2A projection scope (session/context/flow).
+        child_state.task_id = str(uuid.uuid4())
         child_state.branch_id = self.branch_id
         child_state.flow_config_version = self._child_config_version(nested_flow)
         child_state.current_nodes = []
@@ -2110,6 +2113,22 @@ class RemoteFlowNode(BaseNode):
 
             state.response = result.response
             state["remote_status"] = result.status
+            state["remote_artifacts"] = result.artifacts
+            state["remote_negotiated_extensions"] = result.negotiated_extensions
+
+            emitter = await Emitter.create_ensured(self.container, state)
+            for artifact_payload in result.artifacts:
+                remote_artifact = artifact_from_json_dict(artifact_payload)
+                # Parent task may already own the remote's artifact_id (e.g. "response")
+                # from a prior remote hop or local stream — scope into this node.
+                scoped_artifact = Artifact()
+                scoped_artifact.CopyFrom(remote_artifact)
+                remote_artifact_id = remote_artifact.artifact_id.strip()
+                if remote_artifact_id == "":
+                    raise ValueError("remote artifact.artifact_id is required")
+                scoped_artifact.artifact_id = f"remote:{self.node_id}:{remote_artifact_id}"
+                await emitter.emit_exact_artifact(scoped_artifact, last_chunk=True)
+
             return result.response
 
         return await self._run_durable_activity(
@@ -2744,7 +2763,7 @@ class ReflectionNode(BaseNode):
             result.model_dump(mode="json"),
             "reflection.validation",
         )
-        self._push_reflection_resolved_ui_event(state, result)
+        self._present_reflection_result(state, result)
         logger.info(
             "reflection.gate_completed",
             node_id=self.node_id,
@@ -2757,7 +2776,7 @@ class ReflectionNode(BaseNode):
         )
         return None
 
-    def _push_reflection_resolved_ui_event(
+    def _present_reflection_result(
         self,
         state: ExecutionState,
         result: ReflectionGateResult,
@@ -2776,10 +2795,10 @@ class ReflectionNode(BaseNode):
                     "finding": issue.finding,
                 }
             )
-        _ = push_ui_event(
+        _ = present_flow_ui_artifact(
             state,
-            event_type="platform.reflection_resolved",
-            payload={
+            kind="reflection_result",
+            data={
                 "node_id": self.node_id,
                 "policy_id": result.policy_id,
                 "gate": result.gate,
@@ -2792,7 +2811,7 @@ class ReflectionNode(BaseNode):
                 "issues": issues_payload,
             },
             source="reflection",
-            correlation_id=f"{self.node_id}:{result.exit_id}",
+            artifact_id=f"{self.node_id}:{result.exit_id}",
         )
 
     def _resolve_target_snapshot(self, state: ExecutionState) -> ReflectionTargetSnapshot:

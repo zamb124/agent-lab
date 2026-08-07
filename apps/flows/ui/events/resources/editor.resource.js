@@ -313,7 +313,7 @@ export const editorResource = createAsyncOp({
         previewExecutionState: null,
         dataflow: null,
         dataflowObservations: {},
-        mode: 'edit',
+        workspace: 'logic',
         editorLayout: EDITOR_LAYOUT_CANVAS,
         isDirty: false,
         isSaving: false,
@@ -358,7 +358,7 @@ export const editorResource = createAsyncOp({
         EXECUTION_PANEL_SET: 'execution_panel_set',
         AGENT_EXECUTION_SET: 'agent_execution_set',
         ACTIVE_TOOL_SET: 'active_tool_set',
-        MODE_SET: 'mode_set',
+        WORKSPACE_SET: 'workspace_set',
         EDITOR_LAYOUT_SET: 'editor_layout_set',
         NAME_SET: 'name_set',
         FLOW_CONFIG_PATCHED: 'flow_config_patched',
@@ -400,7 +400,7 @@ export const editorResource = createAsyncOp({
         setExecutionPanelOpen: 'execution_panel_set',
         setAgentExecutionRunning: 'agent_execution_set',
         setActiveTool: 'active_tool_set',
-        setMode: 'mode_set',
+        setWorkspace: 'workspace_set',
         setEditorLayout: 'editor_layout_set',
         setName: 'name_set',
         patchFlowConfig: 'flow_config_patched',
@@ -655,9 +655,12 @@ export const editorResource = createAsyncOp({
             return { ...state, activeTool: typeof p.tool === 'string' ? p.tool : 'select' };
         }
 
-        if (t === 'flows/editor/mode_set') {
-            const mode = p.mode === 'run' ? 'run' : 'edit';
-            return { ...state, mode };
+        if (t === 'flows/editor/workspace_set') {
+            const workspace = p.workspace;
+            if (workspace !== 'logic' && workspace !== 'interface' && workspace !== 'run') {
+                throw new Error(`flows/editor: unsupported workspace ${String(workspace)}`);
+            }
+            return { ...state, workspace };
         }
 
         if (t === 'flows/editor/name_set') {

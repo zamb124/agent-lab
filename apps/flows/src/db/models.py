@@ -305,6 +305,154 @@ class WorkflowSnapshots(Base):
     )
 
 
+class A2ATaskProjections(Base):
+    """Materialized standard A2A Task snapshot for query methods."""
+
+    __tablename__: str = "a2a_task_projections"
+
+    task_id: Mapped[str] = mapped_column(String, primary_key=True)
+    company_id: Mapped[str] = mapped_column(String, nullable=False)
+    context_id: Mapped[str] = mapped_column(String, nullable=False)
+    session_id: Mapped[str] = mapped_column(String, nullable=False)
+    flow_id: Mapped[str] = mapped_column(String, nullable=False)
+    owner_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    execution_branch_id: Mapped[str | None] = mapped_column(String, default=None)
+    task_state: Mapped[str] = mapped_column(String, nullable=False)
+    task_json: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
+    task_metadata: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
+    negotiated_extensions: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    representation: Mapped[str] = mapped_column(String, nullable=False, default="generic-a2a")
+    input_message_id: Mapped[str | None] = mapped_column(String, default=None)
+    flow_config_version: Mapped[str | None] = mapped_column(String, default=None)
+    ui_template_version: Mapped[str | None] = mapped_column(String, default=None)
+    latest_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    is_terminal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now
+    )
+
+    __table_args__: tuple[UniqueConstraint | Index, ...] = (
+        UniqueConstraint("company_id", "task_id", name="uq_a2a_tasks_company_task"),
+        Index("ix_a2a_tasks_company_context_updated", "company_id", "context_id", "updated_at"),
+        Index("ix_a2a_tasks_company_flow_updated", "company_id", "flow_id", "updated_at"),
+        Index("ix_a2a_tasks_company_session", "company_id", "session_id"),
+        Index("ix_a2a_tasks_company_owner_updated", "company_id", "owner_user_id", "updated_at"),
+        Index("ix_a2a_tasks_company_state", "company_id", "task_state"),
+    )
+
+
+class A2ATaskMessages(Base):
+    """Ordered lossless Message projection for an A2A Task."""
+
+    __tablename__: str = "a2a_task_messages"
+
+    task_message_id: Mapped[str] = mapped_column(String, primary_key=True)
+    company_id: Mapped[str] = mapped_column(String, nullable=False)
+    task_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("a2a_task_projections.task_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    message_id: Mapped[str] = mapped_column(String, nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    message_json: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+
+    __table_args__: tuple[UniqueConstraint | Index, ...] = (
+        UniqueConstraint("task_id", "message_id", name="uq_a2a_task_messages_task_message"),
+        UniqueConstraint("task_id", "ordinal", name="uq_a2a_task_messages_task_ordinal"),
+        Index("ix_a2a_task_messages_company_task", "company_id", "task_id"),
+    )
+
+
+class A2AArtifactProjections(Base):
+    """Ordered lossless Artifact materialization with stream closure state."""
+
+    __tablename__: str = "a2a_artifact_projections"
+
+    artifact_projection_id: Mapped[str] = mapped_column(String, primary_key=True)
+    company_id: Mapped[str] = mapped_column(String, nullable=False)
+    task_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("a2a_task_projections.task_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    artifact_id: Mapped[str] = mapped_column(String, nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    artifact_json: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    is_closed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    latest_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now
+    )
+
+    __table_args__: tuple[UniqueConstraint | Index, ...] = (
+        UniqueConstraint("task_id", "artifact_id", name="uq_a2a_artifacts_task_artifact"),
+        UniqueConstraint("task_id", "ordinal", name="uq_a2a_artifacts_task_ordinal"),
+        Index("ix_a2a_artifacts_company_task", "company_id", "task_id"),
+    )
+
+
+class A2ATaskEventDedup(Base):
+    """Append-only A2A task event ledger and delivery idempotency registry."""
+
+    __tablename__: str = "a2a_task_event_dedup"
+
+    task_event_id: Mapped[str] = mapped_column(String, primary_key=True)
+    company_id: Mapped[str] = mapped_column(String, nullable=False)
+    task_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("a2a_task_projections.task_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    event_identity: Mapped[str] = mapped_column(String, nullable=False)
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    event_kind: Mapped[str] = mapped_column(String, nullable=False)
+    event_json: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+
+    __table_args__: tuple[UniqueConstraint | Index, ...] = (
+        UniqueConstraint("task_id", "event_identity", name="uq_a2a_events_task_identity"),
+        UniqueConstraint("task_id", "sequence", name="uq_a2a_events_task_sequence"),
+        Index("ix_a2a_events_company_task_sequence", "company_id", "task_id", "sequence"),
+        Index("ix_a2a_events_unpublished", "published_at", "created_at"),
+    )
+
+
+class FlowUIShareGrants(Base):
+    """Revocable live-session share grants; no UI snapshot or bearer token."""
+
+    __tablename__: str = "flow_ui_share_grants"
+
+    grant_id: Mapped[str] = mapped_column(String, primary_key=True)
+    company_id: Mapped[str] = mapped_column(String, nullable=False)
+    flow_id: Mapped[str] = mapped_column(String, nullable=False)
+    branch_id: Mapped[str] = mapped_column(String, nullable=False)
+    context_id: Mapped[str] = mapped_column(String, nullable=False)
+    document_id: Mapped[str] = mapped_column(String, nullable=False)
+    minimum_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    permission: Mapped[str] = mapped_column(String, nullable=False)
+    redacted_value_paths: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    created_by_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+
+    __table_args__: tuple[Index, ...] = (
+        Index("ix_flow_ui_share_company_context", "company_id", "context_id"),
+        Index("ix_flow_ui_share_expiry", "expires_at", "revoked_at"),
+    )
+
+
 class ActivityTasks(Base):
     """Logical durable activity identity scoped by workflow branch."""
 
@@ -1021,5 +1169,3 @@ class Resources(Base):
     @override
     def __repr__(self) -> str:
         return f"<Resources(key='{self.key}', updated_at='{self.updated_at}')>"
-
-

@@ -1764,25 +1764,6 @@
         ],
         "title": "Body_payment_webhook_frontend_api_v1_payments_webhook__provider_name__post"
       },
-      "Body_upload_file_frontend_api_v1_files__post": {
-        "properties": {
-          "file": {
-            "type": "string",
-            "contentMediaType": "application/octet-stream",
-            "title": "File"
-          },
-          "spec": {
-            "type": "string",
-            "title": "Spec"
-          }
-        },
-        "type": "object",
-        "required": [
-          "file",
-          "spec"
-        ],
-        "title": "Body_upload_file_frontend_api_v1_files__post"
-      },
       "CalendarAttendee": {
         "properties": {
           "attendee_id": {
@@ -1828,10 +1809,34 @@
         "type": "object",
         "title": "CalendarAttendee"
       },
+      "CalendarAutolinkStatus": {
+        "type": "string",
+        "enum": [
+          "linked",
+          "unsupported",
+          "needs_oauth",
+          "needs_password",
+          "failed",
+          "disabled"
+        ],
+        "title": "CalendarAutolinkStatus",
+        "description": "Итог авто-подъёма календаря для почтового ящика. Хранится на MailboxBinding,\nвозвращается календарём в CalendarAutolinkOutcome."
+      },
       "CalendarConnectIntegrationRequest": {
         "properties": {
           "provider": {
             "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
           },
           "username": {
             "anyOf": [
@@ -2237,6 +2242,17 @@
           "provider": {
             "$ref": "#/components/schemas/CalendarProvider"
           },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
+          },
           "settings": {
             "$ref": "#/components/schemas/CalendarIntegrationSettings"
           },
@@ -2390,8 +2406,9 @@
       },
       "CalendarSyncRequest": {
         "properties": {
-          "provider": {
-            "$ref": "#/components/schemas/CalendarProvider"
+          "integration_id": {
+            "type": "string",
+            "title": "Integration Id"
           },
           "start_at": {
             "type": "string",
@@ -2406,7 +2423,7 @@
         },
         "type": "object",
         "required": [
-          "provider",
+          "integration_id",
           "start_at",
           "end_at"
         ],
@@ -2619,6 +2636,101 @@
           "slug"
         ],
         "title": "CheckSlugResponse"
+      },
+      "ChunkedUploadInitRequest": {
+        "properties": {
+          "spec": {
+            "$ref": "#/components/schemas/FileCreateSpec"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "File Size"
+          },
+          "content_sha256_hex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Sha256 Hex"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "spec",
+          "original_name",
+          "content_type",
+          "file_size"
+        ],
+        "title": "ChunkedUploadInitRequest"
+      },
+      "ChunkedUploadInitResult": {
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "title": "Upload Id"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "chunk_size_bytes": {
+            "type": "integer",
+            "title": "Chunk Size Bytes"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "upload_id",
+          "file_id",
+          "chunk_size_bytes",
+          "file_size"
+        ],
+        "title": "ChunkedUploadInitResult"
+      },
+      "ChunkedUploadPartRecord": {
+        "properties": {
+          "part_number": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Part Number"
+          },
+          "etag": {
+            "type": "string",
+            "title": "Etag"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "part_number",
+          "etag",
+          "size"
+        ],
+        "title": "ChunkedUploadPartRecord"
       },
       "CompanyMailConnectionPublic": {
         "properties": {
@@ -5260,16 +5372,16 @@
             "description": "Автоматически включать голосовой режим при открытии виджета",
             "default": false
           },
-          "chat_override": {
+          "interface_override": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EmbedChatPolicyOverride"
+                "$ref": "#/components/schemas/EmbedInterfaceOverride"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Частичное переопределение FlowChatSettings для виджета; null — наследовать flow"
+            "description": "Частичное переопределение policy/initial content Flow UI; null — наследовать interface flow"
           }
         },
         "type": "object",
@@ -5986,6 +6098,7 @@
               "rag_document",
               "rag_namespace",
               "mail_message",
+              "wiki_page",
               "office_manual",
               "manual"
             ],
@@ -6232,159 +6345,8 @@
               }
             ],
             "title": "Mail Subject"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "source_kind"
-        ],
-        "title": "DocsPlacementAnchor"
-      },
-      "EmbedChatPolicyOverride": {
-        "properties": {
-          "show_reasoning": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Reasoning",
-            "description": "Переопределить показ reasoning; None — наследовать из flow"
           },
-          "tool_calls_display": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "hidden",
-                  "compact",
-                  "detailed"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tool Calls Display",
-            "description": "Переопределить отображение вызовов инструментов; None — наследовать"
-          },
-          "show_activity": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Activity",
-            "description": "Переопределить строку активности; None — наследовать"
-          },
-          "show_skill_loads": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Skill Loads",
-            "description": "Переопределить показ активации Agent Skills; None — наследовать"
-          },
-          "show_reflection": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Reflection",
-            "description": "Переопределить показ reflection gate в чате; None — наследовать"
-          },
-          "errors_display": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "generic",
-                  "detailed"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Errors Display",
-            "description": "Переопределить режим ошибок; None — наследовать"
-          },
-          "show_run_trace": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Run Trace",
-            "description": "Переопределить показ run trace; None — наследовать"
-          },
-          "show_trace_actions": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Trace Actions",
-            "description": "Переопределить действия трейсов/логов; None — наследовать"
-          },
-          "show_browser_previews": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Browser Previews",
-            "description": "Переопределить live-превью браузера; None — наследовать"
-          },
-          "show_files_panel": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Files Panel",
-            "description": "Переопределить панель файлов; None — наследовать"
-          },
-          "allow_cancel": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Allow Cancel",
-            "description": "Переопределить возможность отмены; None — наследовать"
-          },
-          "greeting_message": {
+          "wiki_page_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -6393,29 +6355,15 @@
                 "type": "null"
               }
             ],
-            "title": "Greeting Message",
-            "description": "Переопределить приветствие; None — наследовать из flow"
-          },
-          "suggested_prompts": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Suggested Prompts",
-            "description": "Переопределить подсказки первых сообщений; None — наследовать"
+            "title": "Wiki Page Id"
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "title": "EmbedChatPolicyOverride",
-        "description": "Частичное переопределение FlowChatSettings для одного embed-виджета.\n\nВсе поля опциональны: None = поле наследуется из FlowConfig.chat.\nExplicit false — валидное переопределение (например скрыть tool calls\nтолько на внешнем сайте). Merge — `resolve_effective_flow_chat`."
+        "required": [
+          "source_kind"
+        ],
+        "title": "DocsPlacementAnchor"
       },
       "EmbedCodeResponse": {
         "properties": {
@@ -6569,10 +6517,10 @@
             "type": "boolean",
             "title": "Voice Default On"
           },
-          "chat_override": {
+          "interface_override": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EmbedChatPolicyOverride"
+                "$ref": "#/components/schemas/EmbedInterfaceOverride"
               },
               {
                 "type": "null"
@@ -6636,7 +6584,7 @@
           "guest_max_user_messages",
           "voice_enabled",
           "voice_default_on",
-          "chat_override",
+          "interface_override",
           "preview_share_link",
           "usage_count",
           "last_used_at",
@@ -6646,6 +6594,194 @@
         ],
         "title": "EmbedConfigResponse",
         "description": "Ответ с конфигурацией виджета"
+      },
+      "EmbedInterfaceOverride": {
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/EmbedInterfacePolicyOverride"
+          },
+          "initial_content": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Initial Content"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EmbedInterfaceOverride",
+        "description": "Embed-scoped look policy and initial template data, never a second document."
+      },
+      "EmbedInterfacePolicyOverride": {
+        "properties": {
+          "show_reasoning": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Reasoning"
+          },
+          "tool_calls_display": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "hidden",
+                  "compact",
+                  "detailed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Calls Display"
+          },
+          "show_activity": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Activity"
+          },
+          "show_skill_loads": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Skill Loads"
+          },
+          "show_reflection": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Reflection"
+          },
+          "errors_display": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "generic",
+                  "detailed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors Display"
+          },
+          "show_run_trace": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Run Trace"
+          },
+          "show_trace_actions": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Trace Actions"
+          },
+          "show_browser_previews": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Browser Previews"
+          },
+          "show_files_panel": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Files Panel"
+          },
+          "allow_cancel": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Cancel"
+          },
+          "allow_voice": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Voice"
+          },
+          "embed_safe_mode": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embed Safe Mode"
+          },
+          "initial_page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Page Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EmbedInterfacePolicyOverride"
       },
       "EmbedSessionTokenRequest": {
         "properties": {
@@ -6962,6 +7098,7 @@
           "generated_ephemeral",
           "rag_document",
           "office_document",
+          "wiki_page",
           "platform_default"
         ],
         "title": "FileRetentionKind"
@@ -7006,6 +7143,7 @@
           "office_document",
           "calendar_event",
           "mail_message",
+          "wiki_page",
           "platform_auxiliary",
           "generated_ephemeral"
         ],
@@ -7243,11 +7381,49 @@
               }
             ],
             "title": "Import Id"
+          },
+          "wiki_page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wiki Page Id"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "FileSourceRef"
+      },
+      "FilesUploadConfigResponse": {
+        "properties": {
+          "max_upload_bytes": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Upload Bytes"
+          },
+          "chunk_size_bytes": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Chunk Size Bytes"
+          },
+          "upload_session_ttl_seconds": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Upload Session Ttl Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "max_upload_bytes",
+          "chunk_size_bytes",
+          "upload_session_ttl_seconds"
+        ],
+        "title": "FilesUploadConfigResponse"
       },
       "GenerateInviteRequest": {
         "properties": {
@@ -8908,6 +9084,17 @@
               }
             ],
             "title": "Parse Error"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
           }
         },
         "additionalProperties": false,
@@ -8917,7 +9104,7 @@
           "content_type"
         ],
         "title": "MailAttachment",
-        "description": "Вложение письма (MIME part). content может быть пустым при list/ошибке разбора."
+        "description": "Вложение письма (MIME part). content может быть пустым при list/ошибке разбора.\n\nOutbound MailSendPayload: только ``file_id`` (байты уже в Files через chunked upload).\nInbound MIME / SMTP после resolve: ``content`` in-process."
       },
       "MailAttachmentPublic": {
         "properties": {
@@ -10529,6 +10716,20 @@
             "type": "string",
             "title": "Calendar Color"
           },
+          "calendar_autolink_status": {
+            "$ref": "#/components/schemas/CalendarAutolinkStatus"
+          },
+          "calendar_autolink_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Autolink Detail"
+          },
           "has_password": {
             "type": "boolean",
             "title": "Has Password"
@@ -10612,6 +10813,7 @@
           "sync_enabled",
           "is_default",
           "calendar_color",
+          "calendar_autolink_status",
           "has_password",
           "created_at",
           "updated_at"
@@ -15116,10 +15318,10 @@
             ],
             "title": "Voice Default On"
           },
-          "chat_override": {
+          "interface_override": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EmbedChatPolicyOverride"
+                "$ref": "#/components/schemas/EmbedInterfaceOverride"
               },
               {
                 "type": "null"

@@ -190,7 +190,7 @@ async def run(args, state):
 
     @pytest.mark.asyncio
     async def test_sgr_with_remote_flow(
-        self, container: FlowRuntimeContainer, mock_llm_with_queue, test_a2a_sample
+        self, container: FlowRuntimeContainer, mock_llm_with_queue, test_a2a_sample, unique_id
     ):
         """
         SGR flow с RemoteFlowNode.
@@ -293,7 +293,9 @@ async def run(args, state):
         )
 
         state = make_state(
-            flow_id="sgr_remote_test", unique_id="remote-flow", content="Start remote flow"
+            flow_id="sgr_remote_test",
+            unique_id=f"remote-flow-{unique_id}",
+            content="Start remote flow",
         )
         result = await run_flow(container=container, flow=flow, state=state)
 
@@ -541,7 +543,7 @@ async def run(args, state):
 
     @pytest.mark.asyncio
     async def test_sgr_all_node_types(
-        self, container: FlowRuntimeContainer, mock_llm_with_queue, test_a2a_sample
+        self, container: FlowRuntimeContainer, mock_llm_with_queue, test_a2a_sample, unique_id
     ):
         """
         Полный тест SGR со ВСЕМИ типами нод:
@@ -677,7 +679,9 @@ async def run(args, state):
         )
 
         state = make_state(
-            flow_id="sgr_all_types", unique_id="all-types", content="Execute all steps"
+            flow_id="sgr_all_types",
+            unique_id=f"all-types-{unique_id}",
+            content="Execute all steps",
         )
         result = await run_flow(container=container, flow=flow, state=state)
 

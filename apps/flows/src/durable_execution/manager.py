@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -45,6 +45,7 @@ from core.clients.redis_client import RedisClient
 from core.context import get_context
 from core.logging import get_logger
 from core.state import TERMINAL_TASK_STATES, ExecutionState, ExecutionTaskState
+from core.state.flow_ui import FlowUIDocument
 from core.types import JsonObject, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
@@ -58,8 +59,15 @@ def create_initial_state(
     content: str | None = None,
     branch_id: str = "default",
     initiator_user_id: str | None = None,
+    ui_document: FlowUIDocument | None = None,
 ) -> ExecutionState:
     """Создаёт новую проекцию ExecutionState для сессии workflow."""
+    if ui_document is None:
+        from core.models.flow_interface import default_flow_interface_config
+
+        ui_document = default_flow_interface_config().template.materialize(
+            document_id=f"flow-ui:{context_id}"
+        )
     return ExecutionState(
         task_id=task_id,
         context_id=context_id,
@@ -68,6 +76,8 @@ def create_initial_state(
         session_id=session_id,
         content=content,
         branch_id=branch_id,
+        ui_document=ui_document,
+        ui_template_version=ui_document.template_version,
     )
 
 
@@ -197,20 +207,28 @@ class DurableWorkflowRuntime:
         payload.pop("flow_config", None)
         return require_json_object(payload, "ExecutionState")
 
-    async def get_state(self, session_id: str) -> ExecutionState | None:
-        company_id = self._company_id()
-        cached = await self._get_cached_head(company_id=company_id, session_id=session_id)
+    async def get_state(
+        self,
+        session_id: str,
+        *,
+        company_id: str | None = None,
+    ) -> ExecutionState | None:
+        resolved_company_id = company_id if company_id is not None else self._company_id()
+        cached = await self._get_cached_head(
+            company_id=resolved_company_id,
+            session_id=session_id,
+        )
         if cached is not None:
             return cached.state
 
         instance = await self._repository.get_instance(
-            company_id=company_id,
+            company_id=resolved_company_id,
             session_id=session_id,
         )
         if instance is None:
             return None
 
-        cache_key = self._cache_key(company_id, session_id)
+        cache_key = self._cache_key(resolved_company_id, session_id)
         raw = await self._redis.get(cache_key)
         if raw:
             payload = parse_json_object(raw, "workflow_projection_cache")
@@ -222,7 +240,7 @@ class DurableWorkflowRuntime:
                 return ExecutionState.model_validate(data)
 
         loaded = await self._repository.load_state_at_head(
-            company_id=company_id,
+            company_id=resolved_company_id,
             session_id=session_id,
         )
         if loaded is None:
@@ -234,7 +252,7 @@ class DurableWorkflowRuntime:
         state_json = self._dump_state(state)
         try:
             await self._cache_projection(
-                company_id=company_id,
+                company_id=resolved_company_id,
                 session_id=session_id,
                 state_json=state_json,
                 head_sequence=int(refreshed_instance.head_sequence),
@@ -407,6 +425,80 @@ class DurableWorkflowRuntime:
             snapshot=snapshot,
         )
         return True
+
+    async def update_state_atomic(
+        self,
+        session_id: str,
+        *,
+        event_type: WorkflowEventType,
+        transform: Callable[[ExecutionState], ExecutionState],
+        payload_factory: Callable[
+            [ExecutionState, ExecutionState], WorkflowEventPayload
+        ],
+        snapshot: bool = False,
+        workflow_status: WorkflowStatus | None = None,
+    ) -> tuple[ExecutionState, ExecutionState, WorkflowAppendResult | None]:
+        """Apply a pure transform against the current head with OCC retries.
+
+        This is the command boundary for user-driven state such as Flow UI
+        autosync. Validation is rerun against the freshly loaded head on every
+        retry, so a stale client revision can never overwrite a concurrent
+        accepted mutation.
+        """
+        company_id = self._company_id()
+        for attempt_index in range(5):
+            before, expected_sequence, expected_branch_id, current_status = (
+                await self._load_head_for_append(
+                    company_id=company_id,
+                    session_id=session_id,
+                )
+            )
+            if before is None or expected_sequence is None or current_status is None:
+                raise ValueError(f"Workflow instance not found: {session_id!r}")
+            after = transform(before.model_copy(deep=True))
+            if after.session_id != session_id:
+                raise ValueError("Atomic state transform changed session identity")
+            delta = build_state_delta(before, after)
+            if delta.is_empty():
+                return before, after, None
+            state_json = self._dump_state(after)
+            status = workflow_status or current_status
+            payload = payload_factory(before, after)
+            try:
+                result = await self._repository.append_state_transition(
+                    company_id=company_id,
+                    session_id=session_id,
+                    event_type=event_type,
+                    payload=self._resolve_event_payload(event_type, payload),
+                    state_delta=delta,
+                    state_json=state_json,
+                    status=status,
+                    snapshot=self._should_snapshot(
+                        requested=snapshot,
+                        event_type=event_type,
+                        delta=delta,
+                        expected_head_sequence=expected_sequence,
+                    ),
+                    expected_head_sequence=expected_sequence,
+                    expected_execution_branch_id=expected_branch_id,
+                )
+            except WorkflowConcurrencyError:
+                if attempt_index == 4:
+                    raise
+                continue
+            await self._cache_projection(
+                company_id=company_id,
+                session_id=session_id,
+                state_json=state_json,
+                head_sequence=result.sequence,
+                head_state_hash=result.state_hash,
+                execution_branch_id=result.execution_branch_id,
+                status=status,
+            )
+            return before, after, result
+        raise WorkflowConcurrencyError(
+            f"Failed to update workflow state atomically: {session_id!r}"
+        )
 
     async def record_state_event(
         self,
@@ -639,6 +731,7 @@ class DurableWorkflowRuntime:
                     channel="a2a",
                     user_id=state.user_id,
                     flow_id=resolved_flow_id,
+                    branch_id=state.branch_id,
                     context_id=context_id,
                     status=SessionStatus.ACTIVE,
                     metadata={

@@ -4,6 +4,11 @@ alwaysApply: false
 ---
 # События платформы: единая шина + event-driven UI
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 Два слоя одного канона:
 
 1. **Backend — шина `platform:events`** (`core/events/`): один Redis Stream,
@@ -339,6 +344,12 @@ array скаляров (`contains`). Не фильтруются: array объе
 Save/create trigger с неизвестным path/op → HTTP 400. Wake-up
 flow-сотрудника (worktracker assigned, sync DM/@mention) — системный
 маршрут той же consumer group `flows` (`flow_employee.mdc`).
+
+## A2A / Flow UI не являются второй platform event bus
+
+`platform:events` доставляет доменные push-события между сервисами/UI factories. A2A Task lifecycle, Artifact updates, Flow UI revisions/effects/autosync относятся к durable flow execution и идут через A2A projection/stream. Они не публикуются как `PlatformEvent` ради рендера и не получают отдельную Redis event bus.
+
+Запрещены `UIEvent`, `ui_events_pending`, `artifact.name="ui_event"` и дублирование одного Flow UI effect в `platform:events` + A2A. Доменные последствия Submit могут после durable commit публиковать обычный catalogued `PlatformEvent`; это другой факт с собственным `event_id`/causation.
 
 ## DevTools
 

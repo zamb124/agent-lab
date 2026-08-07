@@ -194,7 +194,7 @@ async def test_flows_home_tour(
         ),
     )
     await chat_button.click(force=True)
-    await expect(page.locator("chat-page platform-chat")).to_be_visible(timeout=30_000)
+    await expect(page.locator("chat-page platform-flow-ui")).to_be_visible(timeout=30_000)
     await scenario.step(
         "Откройте чат агента",
         page,
@@ -426,7 +426,7 @@ async def test_flows_chat_with_lara(
     )
 
     await flows_e2e_open_lara_chat(page, flows_ui)
-    chat = page.locator('platform-chat[flow-id="lara"]').first
+    chat = page.locator('platform-flow-ui[flow-id="lara"]').first
     await expect(chat).to_be_attached(timeout=30_000)
     await expect(chat).to_have_attribute("open", "", timeout=15_000)
     await scenario.step(
@@ -475,7 +475,7 @@ async def test_flows_chat_with_lara(
     await flows_chat_send_message(
         page,
         "Где библиотека Skills?",
-        chat_selector='platform-chat[flow-id="lara"]',
+        chat_selector='platform-flow-ui[flow-id="lara"]',
     )
     reply = chat.get_by_text(re.compile(r"Skills|процедур", re.I), exact=False).first
     await expect(reply).to_be_visible(timeout=60_000)
@@ -528,6 +528,6 @@ async def test_lara_is_attached_in_all_platform_spa_shells(
             await page.goto(f"{app_ui.origin}{path_override}", wait_until="domcontentloaded")
         await expect(page.locator(shell_selector)).to_be_visible(timeout=30_000)
         chat = page.locator(
-            f'platform-chat[flow-id="lara"][branch-id="{branch_id}"]'
+            f'platform-flow-ui[flow-id="lara"][branch-id="{branch_id}"]'
         ).first
         await expect(chat).to_be_attached(timeout=30_000)

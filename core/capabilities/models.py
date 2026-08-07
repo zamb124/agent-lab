@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import ClassVar, Literal, Self, TypeAlias
+from datetime import datetime
+from typing import Annotated, ClassVar, Literal, Self, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from core.state.flow_ui import FlowUICommand
 from core.types import JsonObject as JsonObject
 from core.types import JsonScalar as JsonScalar
 from core.types import JsonValue as JsonValue
@@ -265,6 +267,68 @@ class CapabilityInterruptEnvelope(BaseModel):
     correlation_id: str | None = Field(default=None, min_length=1)
 
 
+class UIApplyEffect(BaseModel):
+    """Atomic trusted mutation of the materialized Flow UI document."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    kind: Literal["ui.apply"] = "ui.apply"
+    commands: list[FlowUICommand] = Field(..., min_length=1)
+    expected_revision: int | None = Field(default=None, ge=1)
+
+
+class UINavigateEffect(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    kind: Literal["ui.navigate"] = "ui.navigate"
+    page_id: str = Field(..., min_length=1)
+    expected_revision: int | None = Field(default=None, ge=1)
+
+
+class UIResetEffect(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    kind: Literal["ui.reset"] = "ui.reset"
+    template_id: str = Field(..., min_length=1)
+    template_version: str = Field(..., min_length=1)
+    expected_revision: int | None = Field(default=None, ge=1)
+
+
+PlatformEffect = Annotated[
+    UIApplyEffect | UINavigateEffect | UIResetEffect,
+    Field(discriminator="kind"),
+]
+
+
+class PlatformEffectOrigin(BaseModel):
+    """Cryptographic/scope binding issued only by the capability gateway."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    issuer: Literal["linnex.capability-gateway"] = "linnex.capability-gateway"
+    capability_call_id: str = Field(..., min_length=1)
+    causation_id: str = Field(..., min_length=1)
+    capability_name: str = Field(..., min_length=1)
+    execution_token_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    company_id: str = Field(..., min_length=1)
+    flow_id: str = Field(..., min_length=1)
+    branch_id: str = Field(..., min_length=1)
+    session_id: str = Field(..., min_length=1)
+    task_id: str = Field(..., min_length=1)
+    context_id: str = Field(..., min_length=1)
+    source_node_id: str | None = Field(default=None, min_length=1)
+    source_tool_call_id: str | None = Field(default=None, min_length=1)
+
+
+class PlatformEffectEnvelope(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    effect_id: str = Field(..., min_length=1)
+    issued_at: datetime
+    origin: PlatformEffectOrigin
+    effect: PlatformEffect
+
+
 class CapabilityCallResponse(BaseModel):
     """Ответ capability gateway."""
 
@@ -274,6 +338,7 @@ class CapabilityCallResponse(BaseModel):
     result: JsonValue = None
     state: JsonObject | None = None
     interrupt: CapabilityInterruptEnvelope | None = None
+    platform_effects: list[PlatformEffectEnvelope] = Field(default_factory=list)
 
 
 class CodeExecutionRequest(BaseModel):
@@ -363,6 +428,7 @@ class CodeExecutionResponse(BaseModel):
     interrupt: CapabilityInterruptEnvelope | None = None
     error: CodeExecutionErrorEnvelope | None = None
     logs: list[CodeExecutionLogRecord] = Field(default_factory=list)
+    platform_effects: list[PlatformEffectEnvelope] = Field(default_factory=list)
 
 
 class CodeValidationResponse(BaseModel):

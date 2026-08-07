@@ -256,6 +256,9 @@ class CsharpSandboxExecutor:
             "capability_manifest": request.capability_manifest.model_dump(mode="json"),
             "target": "net10.0",
             "lang_version": "14.0",
+            "runner_source": self._runner_source(),
+            "sdk_source": self._sdk_source(request),
+            "project_source": self._project_source(),
         }
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -681,6 +684,9 @@ class CsharpSandboxExecutor:
 
                 [JsonPropertyName("capability_manifest")]
                 public Dictionary<string, object?> CapabilityManifest {{ get; set; }} = new();
+
+                [JsonIgnore]
+                public List<object?> PlatformEffects {{ get; set; }} = new();
             }}
 
             public sealed class CapabilityInterruptError : Exception
@@ -746,6 +752,14 @@ class CsharpSandboxExecutor:
                         {{
                             CurrentRequest.State[pair.Key] = pair.Value;
                         }}
+                    }}
+                    if (decoded.TryGetValue("platform_effects", out var rawEffects))
+                    {{
+                        if (rawEffects is not List<object?> effects)
+                        {{
+                            throw new InvalidOperationException($"Capability {{name}} returned invalid platform_effects");
+                        }}
+                        CurrentRequest.PlatformEffects.AddRange(effects);
                     }}
                     if (decoded.TryGetValue("status", out var status) && status is string statusValue && statusValue == "interrupt")
                     {{
@@ -819,6 +833,7 @@ class CsharpSandboxExecutor:
                             ["state"] = request.State,
                             ["state_returned"] = stateReturned,
                             ["logs"] = new List<object?>(),
+                            ["platform_effects"] = request.PlatformEffects,
                         }});
                     }}
                     catch (CapabilityInterruptError interrupt)
@@ -830,6 +845,7 @@ class CsharpSandboxExecutor:
                             ["state"] = request.State,
                             ["interrupt"] = interrupt.Payload.TryGetValue("interrupt", out var interruptPayload) ? interruptPayload : null,
                             ["logs"] = new List<object?>(),
+                            ["platform_effects"] = request.PlatformEffects,
                         }});
                     }}
                     catch (Exception exc)
@@ -851,6 +867,7 @@ class CsharpSandboxExecutor:
                                 ["trace_id"] = ContextString(request, "trace_id"),
                             }},
                             ["logs"] = new List<object?>(),
+                            ["platform_effects"] = request.PlatformEffects,
                         }});
                     }}
                 }}

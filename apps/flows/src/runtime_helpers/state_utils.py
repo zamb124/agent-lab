@@ -3,14 +3,9 @@
 from __future__ import annotations
 
 import unicodedata
-import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
 
-from core.errors import SafeEvalError
 from core.files.file_ref import FileRef
-from core.state import ExecutionState, PendingUIEvent
-from core.types import JsonObject
 
 
 def normalize_file_lookup_name(value: str | None) -> str:
@@ -49,40 +44,3 @@ def find_file(files: Sequence[FileRef], name: str | None = None) -> FileRef | No
         if name_key and name_key in file_key:
             return file_ref
     return None
-
-
-def push_ui_event(
-    state: ExecutionState,
-    event_type: str,
-    payload: JsonObject,
-    *,
-    event_id: str | None = None,
-    version: str = "1.0.0",
-    source: str = "assistant",
-    correlation_id: str | None = None,
-) -> PendingUIEvent:
-    """Добавляет UI событие в очередь ExecutionState для публикации в stream."""
-    if not event_type.strip():
-        raise SafeEvalError("event_type must be a non-empty string")
-    if not version.strip():
-        raise SafeEvalError("version must be a non-empty string")
-    if not source.strip():
-        raise SafeEvalError("source must be a non-empty string")
-
-    event = PendingUIEvent(
-        event_id=(
-            event_id.strip() if event_id is not None and event_id.strip() else str(uuid.uuid4())
-        ),
-        event_type=event_type.strip(),
-        payload=payload,
-        version=version.strip(),
-        timestamp=datetime.now(UTC).isoformat(),
-        source=source.strip(),
-        correlation_id=(
-            correlation_id.strip()
-            if correlation_id is not None and correlation_id.strip()
-            else None
-        ),
-    )
-    state.ui_events_pending.append(event)
-    return event

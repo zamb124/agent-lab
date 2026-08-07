@@ -142,17 +142,64 @@ def extract_public_token(public_url: str) -> str:
     return match.group(1)
 
 
+def extract_query_token(url: str) -> str:
+    query = urlparse(url).query
+    for part in query.split("&"):
+        if part.startswith("token="):
+            token = part.removeprefix("token=")
+            if token == "":
+                raise AssertionError(f"empty token in url: {url}")
+            return token
+    raise AssertionError(f"token query param required in url: {url}")
+
+
+def parse_download_url(open_body: dict[str, object]) -> str:
+    download_url = open_body.get("download_url")
+    if not isinstance(download_url, str) or download_url == "":
+        raise AssertionError("public open: download_url required")
+    return download_url
+
+
+def parse_text_stream_url(open_body: dict[str, object]) -> str:
+    text = open_body.get("text")
+    if not isinstance(text, dict):
+        raise AssertionError("public open: text payload required")
+    stream_url = text.get("stream_url")
+    if not isinstance(stream_url, str) or stream_url == "":
+        raise AssertionError("public open: text.stream_url required")
+    return stream_url
+
+
+def parse_text_save_url(open_body: dict[str, object]) -> str:
+    text = open_body.get("text")
+    if not isinstance(text, dict):
+        raise AssertionError("public open: text payload required")
+    save_url = text.get("save_url")
+    if not isinstance(save_url, str) or save_url == "":
+        raise AssertionError("public open: text.save_url required")
+    return save_url
+
+
+async def public_open(office_client: AsyncClient, token: str) -> dict[str, object]:
+    response = await office_client.get(f"/documents/api/v1/public/open/{token}")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    if not isinstance(body, dict):
+        raise AssertionError("public open: JSON object required")
+    return body
+
+
 async def enable_catalog_link(
     office_client: AsyncClient,
     headers: dict[str, str],
     catalog_id: str,
     *,
-    permission: OfficeLinkPermission = "view",
+    link_permission: OfficeLinkPermission = "view",
 ) -> tuple[str, dict[str, object]]:
     response = await office_client.patch(
         f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=headers,
-        json={"link_enabled": True, "link_permission": permission},
+        json={"link_enabled": True, "link_permission": link_permission},
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -166,12 +213,12 @@ async def enable_document_link(
     headers: dict[str, str],
     file_id: str,
     *,
-    permission: OfficeLinkPermission = "view",
+    link_permission: OfficeLinkPermission = "view",
 ) -> tuple[str, dict[str, object]]:
     response = await office_client.patch(
         f"/documents/api/v1/documents/{file_id}/access",
         headers=headers,
-        json={"link_enabled": True, "link_permission": permission},
+        json={"link_enabled": True, "link_permission": link_permission},
     )
     assert response.status_code == 200, response.text
     body = response.json()

@@ -57,6 +57,12 @@ def patch_service_clients_asgi(
     from core.clients.service_client import ServiceClient
     from core.config import get_settings, set_settings
     from core.config.base import BaseSettings
+    from core.internal_context_headers import (
+        HEADER_COMPANY_ID,
+        HEADER_SIGNATURE,
+        HEADER_USER_ID,
+        build_internal_context_headers,
+    )
 
     _apps_cache: dict[str, Any] = {}
 
@@ -181,6 +187,23 @@ def patch_service_clients_asgi(
         service_settings = getattr(app.state, "settings", None)
         if isinstance(service_settings, BaseSettings):
             set_settings(service_settings)
+            # Headers were signed under caller settings; target app verifies with
+            # its own settings.jwt_secret_key. Re-sign after the switch.
+            context_company_id = headers.get(HEADER_COMPANY_ID)
+            context_user_id = headers.get(HEADER_USER_ID)
+            if (
+                HEADER_SIGNATURE in headers
+                and isinstance(context_company_id, str)
+                and context_company_id.strip()
+                and isinstance(context_user_id, str)
+                and context_user_id.strip()
+            ):
+                headers.update(
+                    build_internal_context_headers(
+                        company_id=context_company_id,
+                        user_id=context_user_id,
+                    )
+                )
         try:
             async with AsyncClient(
                 transport=transport,

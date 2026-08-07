@@ -12,6 +12,8 @@
 import { CoreEvents } from '../contract.js';
 import { resolveInitialUiLocale } from '../../utils/i18n-initial-locale.js';
 
+// До ответа GET /api/i18n/{locale}: только common.loading.
+// Не считать !!translations[locale] признаком полного бандла.
 const BOOTSTRAP_COMMON_STUB_RU = Object.freeze({
     common: Object.freeze({
         loading: 'Загрузка...',

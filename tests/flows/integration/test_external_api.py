@@ -164,7 +164,7 @@ class TestExternalAPINode:
         assert node.node_id == "echo_node"
 
     @pytest.mark.asyncio
-    async def test_external_api_node_with_asgi(self, container, asgi_api_client, monkeypatch):
+    async def test_external_api_node_with_asgi(self, container, asgi_api_client, monkeypatch, unique_id):
         """ExternalAPINode с ASGI транспортом."""
         import httpx
 
@@ -188,10 +188,10 @@ class TestExternalAPINode:
             container=container,
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             message="Hello",
         )
         result = await run_node(container=container, node=node, state=state)
@@ -199,7 +199,7 @@ class TestExternalAPINode:
         assert result["api_response"]["result"] == "Hello from API"
 
     @pytest.mark.asyncio
-    async def test_external_api_node_interrupt(self, container, monkeypatch):
+    async def test_external_api_node_interrupt(self, container, monkeypatch, unique_id):
         """ExternalAPINode с interrupt."""
         import httpx
 
@@ -224,17 +224,17 @@ class TestExternalAPINode:
             container=container,
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
         result = await run_node(container=container, node=node, state=state)
         assert result.interrupt is not None
         assert result.interrupt.question == "Need more info"
 
     @pytest.mark.asyncio
-    async def test_external_api_node_with_var(self, container, monkeypatch):
+    async def test_external_api_node_with_var(self, container, monkeypatch, unique_id):
         """ExternalAPINode с @var: переменными."""
         import httpx
 
@@ -256,10 +256,10 @@ class TestExternalAPINode:
             container=container,
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             variables={"auth_token": "Bearer secret123"},
         )
         await run_node(container=container, node=node, state=state)
@@ -288,7 +288,7 @@ class TestExternalAPITool:
         assert "message" in tool.parameters["required"]
 
     @pytest.mark.asyncio
-    async def test_external_api_tool_execute(self, monkeypatch):
+    async def test_external_api_tool_execute(self, monkeypatch, unique_id):
         """Выполнение ExternalAPITool через _run_impl (обходит test mock)."""
         import httpx
 
@@ -309,10 +309,10 @@ class TestExternalAPITool:
             },
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
         result = await tool._run_impl({"input": "test data"}, state)
         assert result["result"] == "processed"
@@ -342,7 +342,7 @@ class TestExternalAPITool:
         assert "a" in req and "b" in req
 
     @pytest.mark.asyncio
-    async def test_external_api_tool_with_response_mapping(self, monkeypatch):
+    async def test_external_api_tool_with_response_mapping(self, monkeypatch, unique_id):
         """ExternalAPITool с маппингом ответа."""
         import httpx
 
@@ -363,10 +363,10 @@ class TestExternalAPITool:
             parameters_schema={"type": "object", "properties": {}, "required": []},
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
         )
         result = await tool._run_impl({}, state)
         assert result == {"answer": 42}
@@ -376,7 +376,7 @@ class TestFlowWithExternalAPI:
     """Тесты Agent с ExternalAPINode."""
 
     @pytest.mark.asyncio
-    async def test_flow_with_external_api_node(self, app, monkeypatch):
+    async def test_flow_with_external_api_node(self, app, monkeypatch, unique_id):
         """Agent с ExternalAPINode."""
         from apps.flows.src.clients.external_api_client import ExternalAPIClient
         from apps.flows.src.container import get_container
@@ -404,11 +404,12 @@ class TestFlowWithExternalAPI:
         )
         await container.flow_repository.set(flow_config)
         flow = await container.flow_factory.get_flow("external_api_flow")
+        context_id = f"test-context-{unique_id}"
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=context_id,
             user_id="test-user",
-            session_id="external_api_flow:test-context",
+            session_id=f"external_api_flow:{context_id}",
         )
         result = await run_flow(container=container, flow=flow, state=state)
         assert result["api_status"] == "completed"

@@ -17,7 +17,7 @@
  *    вызывает `AbortController.abort` на этом fetch (иначе UI успевает показать
  *    сообщение пользователя из `beforeA2aStream`, а ответ гаснет).
  *  - Авто-TTS из ответа обрабатывается отдельно: потребитель SSE-кадров
- *    (фабрика `flows/chat` или `<platform-chat>`) вызывает
+ *    (фабрика flows A2A или `<platform-flow-ui>`) вызывает
  *    `feedStreamTtsFromA2aResult` (registry — `stream-tts-registry.js`, см. `voice.mdc`).
  *  - Barge-in: `vad` с непрерывной речью ≥ ~0,3 s (как порог на шлюзе)
  *    во время TTS **или** пока живёт A2A fetch (фаза SSE до первого TTS) →
@@ -37,14 +37,14 @@
  * в модулях friend'ах.
  */
 
-import { unwrapA2aStreamResult } from '../chat/a2a-chat-runtime.js';
+import { unwrapA2aStreamResult } from '../flow-ui/protocol/a2a-result-helpers.js';
 import {
     A2A_PROTOCOL_VERSION,
     a2aEndpointUrl,
-    buildA2aCancelBody,
     buildA2aSendStreamingMessageBody,
-    consumeA2aStream,
-} from '../chat/runtime/a2a-stream.js';
+    buildCancelTaskBody,
+} from '../flow-ui/protocol/a2a-codec.js';
+import { consumeA2AStream } from '../flow-ui/protocol/a2a-stream.js';
 import { isVoiceClientDebugEnabled } from './voice-media-session.js';
 
 /** Минимальная длительность сегмента речи (VAD open) до client barge-in, мс — как `vad_speech_seconds < 0.3` в `BargeInController`. */
@@ -60,10 +60,10 @@ const CLIENT_BARGE_MIN_SPEECH_MS = 300;
  * @property {() => Promise<Record<string,string>>} [getHeaders]
  * @property {RequestCredentials} [credentials='omit']
  * @property {string|null} [initialContextId]
- * @property {() => string|null|undefined} [getContextId] — перед каждым SendStreamingMessage подставляется актуальный contextId из UI (например `<platform-chat>`).
+ * @property {() => string|null|undefined} [getContextId] — перед каждым SendStreamingMessage подставляется актуальный contextId из UI (например `<platform-flow-ui>`).
  * @property {() => Promise<Record<string, unknown>|null|undefined>} [getStreamMetadata] — metadata для A2A (как у текстовой отправки: variables и т.д.).
  * @property {(text: string) => Promise<void>} [beforeA2aStream] — перед fetch (например добавить user/assistant пузыри в чат).
- * @property {(event: object) => void} [onA2aStreamEvent] — каждый SSE-кадр для UI; потребитель вызывает релей/reducer и там же `feedStreamTtsFromA2aResult` (flows: `relayA2aVoiceStreamRpcFrame`, standalone: `<platform-chat>.applyVoiceA2aStreamEvent`). Сам `VoiceAgentBridge` авто-TTS не вызывает.
+ * @property {(event: object) => void} [onA2aStreamEvent] — каждый SSE-кадр для UI; потребитель вызывает релей/reducer и там же `feedStreamTtsFromA2aResult` (flows: `relayA2aVoiceStreamRpcFrame`, standalone: `<platform-flow-ui>.applyA2AFrame`). Сам `VoiceAgentBridge` авто-TTS не вызывает.
  */
 
 export class VoiceAgentBridge extends EventTarget {
@@ -328,7 +328,7 @@ export class VoiceAgentBridge extends EventTarget {
                 }
             }
             const extraHeaders = await this._getHeaders();
-            await consumeA2aStream(
+            await consumeA2AStream(
                 {
                     url: a2aEndpointUrl({
                         baseUrl: this._a2aBaseUrl,
@@ -446,7 +446,7 @@ export class VoiceAgentBridge extends EventTarget {
                     'A2A-Version': A2A_PROTOCOL_VERSION,
                     ...extraHeaders,
                 },
-                body: JSON.stringify(buildA2aCancelBody(taskId)),
+                body: JSON.stringify(buildCancelTaskBody(taskId)),
             });
         } catch (err) {
             this._dispatch('error', {

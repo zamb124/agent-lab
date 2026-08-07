@@ -3,15 +3,24 @@
 from __future__ import annotations
 
 import pytest
+from a2a.helpers.proto_helpers import new_data_part, new_text_part
+from a2a.types import Artifact, Message, Part, Role, StreamResponse, Task, TaskState, TaskStatus
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
 from google.protobuf.json_format import ParseError
 
 from core.a2a.codec import (
+    artifact_from_json_dict,
+    artifact_to_json_dict,
     get_part_text,
     message_from_json_dict,
     message_to_json_dict,
     messages_from_json_list,
     normalize_message_json_for_proto,
+    stream_response_from_event,
+    stream_response_from_json_dict,
+    stream_response_to_json_dict,
+    task_from_json_dict,
+    task_to_json_dict,
 )
 
 
@@ -92,3 +101,78 @@ def test_message_from_json_still_rejects_unknown_proto_fields() -> None:
                 "notAField": True,
             }
         )
+
+
+def test_artifact_codec_round_trips_mixed_parts_metadata_and_extensions() -> None:
+    artifact = Artifact(
+        artifact_id="artifact-1",
+        name="custom",
+        description="mixed",
+        parts=[
+            new_text_part("text"),
+            Part(raw=b"raw", filename="raw.bin", media_type="application/octet-stream"),
+            Part(url="https://files.linnex.io/download/1"),
+            new_data_part({"nested": {"value": True}}),
+        ],
+        extensions=["https://linnex.io/a2a/extensions/example/v1"],
+    )
+
+    dumped = artifact_to_json_dict(artifact)
+    restored = artifact_from_json_dict(dumped)
+
+    assert artifact_to_json_dict(restored) == dumped
+
+
+def test_task_codec_round_trips_complete_lossless_snapshot() -> None:
+    task = Task(
+        id="task-1",
+        context_id="context-1",
+        status=TaskStatus(
+            state=TaskState.TASK_STATE_COMPLETED,
+            message=Message(
+                message_id="agent-1",
+                role=Role.ROLE_AGENT,
+                parts=[new_text_part("done")],
+            ),
+        ),
+        artifacts=[
+            Artifact(
+                artifact_id="artifact-1",
+                name="custom",
+                parts=[new_data_part({"value": 1})],
+            )
+        ],
+        history=[
+            Message(
+                message_id="user-1",
+                role=Role.ROLE_USER,
+                parts=[new_text_part("start")],
+            )
+        ],
+    )
+
+    dumped = task_to_json_dict(task)
+    restored = task_from_json_dict(dumped)
+
+    assert task_to_json_dict(restored) == dumped
+
+
+def test_stream_response_codec_requires_exactly_one_payload() -> None:
+    task = Task(
+        id="task-1",
+        context_id="context-1",
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+    )
+    stream = stream_response_from_event(task)
+    dumped = stream_response_to_json_dict(stream)
+    assert "task" in dumped
+    restored = stream_response_from_json_dict(dumped)
+    assert restored.HasField("task")
+    assert restored.task.id == "task-1"
+
+    with pytest.raises(ValueError, match="exactly one"):
+        _ = stream_response_from_json_dict({})
+
+    empty = StreamResponse()
+    with pytest.raises(ValueError, match="payload oneof is required"):
+        _ = stream_response_to_json_dict(empty)

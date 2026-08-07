@@ -283,7 +283,7 @@
         }
       }
     },
-    "/flows/api/v1/{flow_id}/chat-profile": {
+    "/flows/api/v1/{flow_id}/interface-profile": {
       "get": {
         "tags": [
           "public",
@@ -291,9 +291,9 @@
           "public",
           "a2a"
         ],
-        "summary": "Get Flow Chat Profile",
-        "description": "Chat-profile для авторизованных пользователей платформы (session/API key).",
-        "operationId": "get_flow_chat_profile_flows_api_v1__flow_id__chat_profile_get",
+        "summary": "Get Flow Interface Profile",
+        "description": "Control plane for an authenticated platform surface.",
+        "operationId": "get_flow_interface_profile_flows_api_v1__flow_id__interface_profile_get",
         "parameters": [
           {
             "name": "flow_id",
@@ -321,7 +321,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ChatProfileResponse"
+                  "$ref": "#/components/schemas/InterfaceProfileResponse"
                 }
               }
             }
@@ -339,7 +339,7 @@
         }
       }
     },
-    "/flows/api/v1/embed/{embed_id}/chat-profile": {
+    "/flows/api/v1/embed/{embed_id}/interface-profile": {
       "get": {
         "tags": [
           "public",
@@ -347,9 +347,9 @@
           "public",
           "a2a"
         ],
-        "summary": "Get Embed Chat Profile",
-        "description": "Chat-profile для embed-сессий: политика из FlowConfig.chat + look из EmbedConfig.",
-        "operationId": "get_embed_chat_profile_flows_api_v1_embed__embed_id__chat_profile_get",
+        "summary": "Get Embed Interface Profile",
+        "description": "Control plane for an embed surface; runtime document still comes from A2A.",
+        "operationId": "get_embed_interface_profile_flows_api_v1_embed__embed_id__interface_profile_get",
         "parameters": [
           {
             "name": "embed_id",
@@ -367,7 +367,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ChatProfileResponse"
+                  "$ref": "#/components/schemas/InterfaceProfileResponse"
                 }
               }
             }
@@ -1063,6 +1063,260 @@
   },
   "components": {
     "schemas": {
+      "A2AArtifactUpdatedPayload": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Id"
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Sequence"
+          },
+          "payload_hash": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Payload Hash"
+          },
+          "event_identity": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Event Identity"
+          },
+          "event_json": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Event Json"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "context_id",
+          "artifact_id",
+          "sequence",
+          "payload_hash",
+          "event_identity",
+          "event_json"
+        ],
+        "title": "A2AArtifactUpdatedPayload"
+      },
+      "A2AMessageAppendedPayload": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "message_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "agent"
+            ],
+            "title": "Role"
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Ordinal"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "context_id",
+          "message_id",
+          "role",
+          "ordinal"
+        ],
+        "title": "A2AMessageAppendedPayload"
+      },
+      "A2ARepresentation": {
+        "type": "string",
+        "enum": [
+          "generic-a2a",
+          "a2ui-0.9.1"
+        ],
+        "title": "A2ARepresentation"
+      },
+      "A2ARepresentationSnapshot": {
+        "properties": {
+          "representation": {
+            "$ref": "#/components/schemas/A2ARepresentation",
+            "default": "generic-a2a"
+          },
+          "negotiated_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Negotiated Extensions"
+          },
+          "extension_uri": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extension Uri"
+          },
+          "catalog_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Id"
+          },
+          "output_mime_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Output Mime Type",
+            "default": "application/json"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "A2ARepresentationSnapshot"
+      },
+      "A2ATaskOpenedPayload": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "document_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Document Id"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "action_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Action Id"
+          },
+          "previous_task_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Task Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "context_id",
+          "document_id",
+          "revision",
+          "action_id"
+        ],
+        "title": "A2ATaskOpenedPayload"
+      },
+      "A2ATaskStatusChangedPayload": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "status_state": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Status State"
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Sequence"
+          },
+          "event_identity": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Event Identity"
+          },
+          "terminal": {
+            "type": "boolean",
+            "title": "Terminal"
+          },
+          "event_json": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Event Json"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "context_id",
+          "status_state",
+          "sequence",
+          "event_identity",
+          "terminal",
+          "event_json"
+        ],
+        "title": "A2ATaskStatusChangedPayload"
+      },
       "ActAsResponse": {
         "properties": {
           "user_id": {
@@ -2733,10 +2987,34 @@
         "type": "object",
         "title": "CalendarAttendee"
       },
+      "CalendarAutolinkStatus": {
+        "type": "string",
+        "enum": [
+          "linked",
+          "unsupported",
+          "needs_oauth",
+          "needs_password",
+          "failed",
+          "disabled"
+        ],
+        "title": "CalendarAutolinkStatus",
+        "description": "Итог авто-подъёма календаря для почтового ящика. Хранится на MailboxBinding,\nвозвращается календарём в CalendarAutolinkOutcome."
+      },
       "CalendarConnectIntegrationRequest": {
         "properties": {
           "provider": {
             "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
           },
           "username": {
             "anyOf": [
@@ -3142,6 +3420,17 @@
           "provider": {
             "$ref": "#/components/schemas/CalendarProvider"
           },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
+          },
           "settings": {
             "$ref": "#/components/schemas/CalendarIntegrationSettings"
           },
@@ -3295,8 +3584,9 @@
       },
       "CalendarSyncRequest": {
         "properties": {
-          "provider": {
-            "$ref": "#/components/schemas/CalendarProvider"
+          "integration_id": {
+            "type": "string",
+            "title": "Integration Id"
           },
           "start_at": {
             "type": "string",
@@ -3311,7 +3601,7 @@
         },
         "type": "object",
         "required": [
-          "provider",
+          "integration_id",
           "start_at",
           "end_at"
         ],
@@ -3515,6 +3805,13 @@
                 "type": "null"
               }
             ]
+          },
+          "platform_effects": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformEffectEnvelope"
+            },
+            "type": "array",
+            "title": "Platform Effects"
           }
         },
         "additionalProperties": false,
@@ -3755,6 +4052,19 @@
               }
             ],
             "title": "Source Tool Call Id"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace",
+            "description": "Active platform namespace for ServiceClient X-Platform-Namespace (wiki, documents, …)."
           }
         },
         "additionalProperties": false,
@@ -4036,57 +4346,6 @@
         "title": "ChannelType",
         "description": "Типы каналов для отправки сообщений.\n\nИспользуется в ChannelNode и output_actions триггеров."
       },
-      "ChatProfileResponse": {
-        "properties": {
-          "flow_id": {
-            "type": "string",
-            "title": "Flow Id"
-          },
-          "branch_id": {
-            "type": "string",
-            "title": "Branch Id"
-          },
-          "chat": {
-            "$ref": "#/components/schemas/FlowChatSettings"
-          },
-          "viewer": {
-            "$ref": "#/components/schemas/ChatProfileViewer"
-          },
-          "look": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EmbedChatLook"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "flow_id",
-          "branch_id",
-          "chat",
-          "viewer"
-        ],
-        "title": "ChatProfileResponse",
-        "description": "Эффективный профиль чата для `<platform-chat>`.\n\n`chat` — effective политика поведения: FlowConfig.chat для session-пути,\nresolve_effective_flow_chat(FlowConfig.chat, EmbedConfig.chat_override) для embed;\n`look` — look&feel embed-виджета, только для embed-маршрута."
-      },
-      "ChatProfileViewer": {
-        "properties": {
-          "can_edit_flow": {
-            "type": "boolean",
-            "title": "Can Edit Flow"
-          }
-        },
-        "type": "object",
-        "required": [
-          "can_edit_flow"
-        ],
-        "title": "ChatProfileViewer",
-        "description": "Права текущего зрителя чата."
-      },
       "ChildWorkflowLifecyclePayload": {
         "properties": {
           "node_id": {
@@ -4238,6 +4497,101 @@
         ],
         "title": "ChildWorkflowLink",
         "description": "Durable связь родительской ноды с отдельной child workflow-сессией."
+      },
+      "ChunkedUploadInitRequest": {
+        "properties": {
+          "spec": {
+            "$ref": "#/components/schemas/FileCreateSpec"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "File Size"
+          },
+          "content_sha256_hex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Sha256 Hex"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "spec",
+          "original_name",
+          "content_type",
+          "file_size"
+        ],
+        "title": "ChunkedUploadInitRequest"
+      },
+      "ChunkedUploadInitResult": {
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "title": "Upload Id"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "chunk_size_bytes": {
+            "type": "integer",
+            "title": "Chunk Size Bytes"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "upload_id",
+          "file_id",
+          "chunk_size_bytes",
+          "file_size"
+        ],
+        "title": "ChunkedUploadInitResult"
+      },
+      "ChunkedUploadPartRecord": {
+        "properties": {
+          "part_number": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Part Number"
+          },
+          "etag": {
+            "type": "string",
+            "title": "Etag"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "part_number",
+          "etag",
+          "size"
+        ],
+        "title": "ChunkedUploadPartRecord"
       },
       "CodeCompletionsResponse": {
         "properties": {
@@ -5714,6 +6068,360 @@
         "title": "DiffItem",
         "description": "Элемент diff между state-снимками."
       },
+      "DocsPlacement": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "path_segments": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path Segments"
+          },
+          "anchor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocsPlacementAnchor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retention": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileRetentionSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "namespace",
+          "file_id"
+        ],
+        "title": "DocsPlacement"
+      },
+      "DocsPlacementAnchor": {
+        "properties": {
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "crm_entity",
+              "crm_knowledge_import",
+              "flow_session",
+              "flow_asset",
+              "work_item",
+              "work_item_comment",
+              "work_item_resolution",
+              "sync_message",
+              "sync_channel_message",
+              "sync_call_recording",
+              "sync_speech_segment",
+              "sync_channel_asset",
+              "calendar_event",
+              "browser_artifact",
+              "browser_session",
+              "rag_document",
+              "rag_namespace",
+              "mail_message",
+              "wiki_page",
+              "office_manual",
+              "manual"
+            ],
+            "title": "Source Kind"
+          },
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
+          },
+          "entity_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Title"
+          },
+          "import_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Id"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "flow_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Slug"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "work_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Item Id"
+          },
+          "work_queue_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Queue Id"
+          },
+          "board_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Board Id"
+          },
+          "comment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment Id"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "recording_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "browser_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Browser Session Id"
+          },
+          "namespace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace Id"
+          },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
+          },
+          "mail_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Uid"
+          },
+          "mailbox_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Email"
+          },
+          "mail_subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Subject"
+          },
+          "wiki_page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wiki Page Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_kind"
+        ],
+        "title": "DocsPlacementAnchor"
+      },
       "Edge": {
         "properties": {
           "from_node": {
@@ -5815,7 +6523,7 @@
         ],
         "title": "EdgeActivatedPayload"
       },
-      "EmbedChatLook": {
+      "EmbedInterfaceLook": {
         "properties": {
           "theme": {
             "type": "string",
@@ -5878,8 +6586,8 @@
           "voice_enabled",
           "voice_default_on"
         ],
-        "title": "EmbedChatLook",
-        "description": "Look&feel-проекция EmbedConfig для доставки в chat-profile.\n\nТолько внешний вид виджета; политика поведения чата живёт в FlowConfig.chat."
+        "title": "EmbedInterfaceLook",
+        "description": "Look&feel проекция EmbedConfig для interface-profile.\n\nТолько host look; документ и values через profile не доставляются."
       },
       "EmptyWorkflowEventPayload": {
         "properties": {},
@@ -11498,13 +12206,87 @@
             "title": "Prompt History",
             "description": "История изменений системного промпта"
           },
-          "ui_events_pending": {
+          "a2a_representation": {
+            "$ref": "#/components/schemas/A2ARepresentationSnapshot",
+            "description": "Immutable representation negotiation snapshot for the current A2A Task"
+          },
+          "ui_document": {
+            "$ref": "#/components/schemas/FlowUIDocument"
+          },
+          "ui_interaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowUIInteraction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ui_effect_cursor": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Ui Effect Cursor",
+            "default": 0
+          },
+          "ui_applied_effect_ids": {
             "items": {
-              "$ref": "#/components/schemas/PendingUIEvent"
+              "type": "string"
             },
             "type": "array",
-            "title": "Ui Events Pending",
-            "description": "UI events, ожидающие публикации в A2A stream"
+            "title": "Ui Applied Effect Ids",
+            "description": "Ordered idempotency keys of accepted capability UI effects"
+          },
+          "ui_template_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Ui Template Version",
+            "default": "1.0.0"
+          },
+          "ui_last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Last Synced At"
+          },
+          "ui_last_accepted_client_mutation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Last Accepted Client Mutation Id"
+          },
+          "ui_last_accepted_client_mutation_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Last Accepted Client Mutation Hash"
+          },
+          "ui_conflict": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowUIConflict"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "llm_context_memory_cursor": {
             "additionalProperties": {
@@ -11521,7 +12303,8 @@
           "task_id",
           "context_id",
           "user_id",
-          "session_id"
+          "session_id",
+          "ui_document"
         ],
         "title": "ExecutionState",
         "description": "Типизированное состояние выполнения агента.\n\nЗамена dict state с магическими __полями__.\nВсе системные поля явно типизированы и доступны через свойства.\n\nZero-Guess принципы:\n- FlexibleBaseModel (extra='allow') - для runtime данных\n- Явные типы для системных полей\n- Нет магии, все через свойства\n\nПримеры:\n    >>> state = ExecutionState.create(\n    ...     task_id=\"task-123\",\n    ...     context_id=\"ctx-456\",\n    ...     user_id=\"user-789\",\n    ...     content=\"Hello\"\n    ... )\n    >>> state.task_id  # Типизированный доступ\n    'task-123'"
@@ -11604,6 +12387,172 @@
             },
             "type": "array",
             "title": "Fields Unset"
+          },
+          "ui_components_upsert": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/FlowUIComponent"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Ui Components Upsert"
+          },
+          "ui_components_delete": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Ui Components Delete"
+          },
+          "ui_component_properties_set": {
+            "items": {
+              "$ref": "#/components/schemas/UIComponentPropertyPatch"
+            },
+            "type": "array",
+            "title": "Ui Component Properties Set"
+          },
+          "ui_component_properties_delete": {
+            "items": {
+              "$ref": "#/components/schemas/UIComponentPropertyDelete"
+            },
+            "type": "array",
+            "title": "Ui Component Properties Delete"
+          },
+          "ui_container_layout_set": {
+            "items": {
+              "$ref": "#/components/schemas/UIContainerLayoutPatch"
+            },
+            "type": "array",
+            "title": "Ui Container Layout Set"
+          },
+          "ui_container_layout_unset": {
+            "items": {
+              "$ref": "#/components/schemas/UIContainerLayoutUnset"
+            },
+            "type": "array",
+            "title": "Ui Container Layout Unset"
+          },
+          "ui_component_placement_set": {
+            "items": {
+              "$ref": "#/components/schemas/UIComponentPlacementPatch"
+            },
+            "type": "array",
+            "title": "Ui Component Placement Set"
+          },
+          "ui_component_placement_unset": {
+            "items": {
+              "$ref": "#/components/schemas/UIComponentPlacementUnset"
+            },
+            "type": "array",
+            "title": "Ui Component Placement Unset"
+          },
+          "ui_data_set": {
+            "items": {
+              "$ref": "#/components/schemas/UIDataPathValue"
+            },
+            "type": "array",
+            "title": "Ui Data Set"
+          },
+          "ui_data_delete": {
+            "items": {
+              "$ref": "#/components/schemas/UIDataPathRef"
+            },
+            "type": "array",
+            "title": "Ui Data Delete"
+          },
+          "ui_surfaces_upsert": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FlowUISurface"
+            },
+            "type": "object",
+            "title": "Ui Surfaces Upsert"
+          },
+          "ui_surfaces_delete": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ui Surfaces Delete"
+          },
+          "ui_pages_upsert": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FlowUIPage"
+            },
+            "type": "object",
+            "title": "Ui Pages Upsert"
+          },
+          "ui_pages_delete": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ui Pages Delete"
+          },
+          "ui_active_page_set": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Active Page Set"
+          },
+          "ui_session_view_state_set": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Ui Session View State Set"
+          },
+          "ui_session_view_state_delete": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ui Session View State Delete"
+          },
+          "ui_revision_set": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Revision Set"
+          },
+          "ui_interaction_set": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowUIInteraction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ui_interaction_unset": {
+            "type": "boolean",
+            "title": "Ui Interaction Unset",
+            "default": false
+          },
+          "ui_last_client_mutation_set": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UIClientMutationRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -11638,6 +12587,75 @@
         "type": "object",
         "title": "FileCapabilities",
         "description": "Typed capabilities attached to a FileRef."
+      },
+      "FileCreateSpec": {
+        "properties": {
+          "source_kind": {
+            "$ref": "#/components/schemas/FileSourceKind"
+          },
+          "source_ref": {
+            "$ref": "#/components/schemas/FileSourceRef"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/FileRetentionSpec"
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocsPlacement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "post_create": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FilePostCreate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_kind",
+          "source_ref",
+          "retention"
+        ],
+        "title": "FileCreateSpec"
       },
       "FileDocumentCapability": {
         "properties": {
@@ -11695,6 +12713,108 @@
         ],
         "title": "FileDocumentCapability",
         "description": "Documents library capability attached to a FileRef (keyed by file_id)."
+      },
+      "FilePostCreate": {
+        "properties": {
+          "rag_index_namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rag Index Namespace"
+          },
+          "rag_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rag Metadata"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FilePostCreate"
+      },
+      "FileReadPreviewResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Извлечённый текст (может быть усечён для UI)"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "Усечён ли текст по лимиту превью"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count",
+            "description": "Число страниц после чтения",
+            "default": 0
+          },
+          "detected_kind": {
+            "type": "string",
+            "title": "Detected Kind",
+            "description": "Тип файла по FileReader"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type",
+            "description": "Content-Type после распознавания"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Предупреждения парсера"
+          },
+          "preview_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Note",
+            "description": "Пояснение для пользователя (например для изображений)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "truncated",
+          "detected_kind"
+        ],
+        "title": "FileReadPreviewResponse",
+        "description": "Текстовое превью содержимого файла (извлечение без vision для изображений)."
       },
       "FileRef": {
         "properties": {
@@ -11774,84 +12894,29 @@
         "title": "FileRef",
         "description": "Канонический элемент `ExecutionState.files`."
       },
-      "FlowChatSettings": {
+      "FileResponse": {
         "properties": {
-          "show_reasoning": {
-            "type": "boolean",
-            "title": "Show Reasoning",
-            "description": "Показывать блоки reasoning ассистента",
-            "default": false
-          },
-          "tool_calls_display": {
+          "file_id": {
             "type": "string",
-            "enum": [
-              "hidden",
-              "compact",
-              "detailed"
-            ],
-            "title": "Tool Calls Display",
-            "description": "Отображение вызовов инструментов: hidden, compact или detailed",
-            "default": "compact"
+            "title": "File Id"
           },
-          "show_activity": {
-            "type": "boolean",
-            "title": "Show Activity",
-            "description": "Показывать строку активности агента (текущая нода/инструмент)",
-            "default": true
-          },
-          "show_skill_loads": {
-            "type": "boolean",
-            "title": "Show Skill Loads",
-            "description": "Показывать в чате события активации Agent Skill (load_agent_skill)",
-            "default": true
-          },
-          "show_reflection": {
-            "type": "boolean",
-            "title": "Show Reflection",
-            "description": "Показывать в чате результат reflection gate (platform.reflection_resolved)",
-            "default": true
-          },
-          "errors_display": {
+          "original_name": {
             "type": "string",
-            "enum": [
-              "generic",
-              "detailed"
-            ],
-            "title": "Errors Display",
-            "description": "Ошибки выполнения: generic (обезличенный текст) или detailed (текст ошибки)",
-            "default": "generic"
+            "title": "Original Name"
           },
-          "show_run_trace": {
-            "type": "boolean",
-            "title": "Show Run Trace",
-            "description": "Показывать таймлайн выполнения (run trace) под ответом",
-            "default": false
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
           },
-          "show_trace_actions": {
-            "type": "boolean",
-            "title": "Show Trace Actions",
-            "description": "Показывать действия перехода к трейсам/логам",
-            "default": false
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
           },
-          "show_browser_previews": {
-            "type": "boolean",
-            "title": "Show Browser Previews",
-            "description": "Показывать live-превью browser-сессий агента",
-            "default": true
+          "url": {
+            "type": "string",
+            "title": "Url"
           },
-          "show_files_panel": {
-            "type": "boolean",
-            "title": "Show Files Panel",
-            "description": "Показывать панель файлов диалога",
-            "default": true
-          },
-          "allow_cancel": {
-            "type": "boolean",
-            "title": "Allow Cancel",
-            "description": "Разрешить пользователю отменять сообщение (CancelTask)",
-            "default": true
-          },
-          "greeting_message": {
+          "checksum": {
             "anyOf": [
               {
                 "type": "string"
@@ -11860,22 +12925,376 @@
                 "type": "null"
               }
             ],
-            "title": "Greeting Message",
-            "description": "Приветственное сообщение при открытии чата"
+            "title": "Checksum"
           },
-          "suggested_prompts": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Suggested Prompts",
-            "description": "Подсказки-примеры первых сообщений"
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "original_name",
+          "content_type",
+          "file_size",
+          "url",
+          "is_public",
+          "created_at"
+        ],
+        "title": "FileResponse",
+        "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
+      },
+      "FileRetentionKind": {
+        "type": "string",
+        "enum": [
+          "permanent",
+          "flow_session",
+          "flow_asset",
+          "crm_entity",
+          "crm_knowledge_import",
+          "work_item",
+          "sync_message_attachment",
+          "sync_channel_asset",
+          "sync_call_recording",
+          "sync_speech_segment",
+          "calendar_event_attachment",
+          "mail_attachment",
+          "browser_artifact",
+          "generated_ephemeral",
+          "rag_document",
+          "office_document",
+          "wiki_page",
+          "platform_default"
+        ],
+        "title": "FileRetentionKind"
+      },
+      "FileRetentionSpec": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/FileRetentionKind"
+          },
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Seconds"
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "title": "FlowChatSettings",
-        "description": "Per-flow настройки видимости и поведения единого чат-компонента."
+        "required": [
+          "kind"
+        ],
+        "title": "FileRetentionSpec"
+      },
+      "FileSourceKind": {
+        "type": "string",
+        "enum": [
+          "crm_entity",
+          "flow_session",
+          "flow_asset",
+          "work_item",
+          "sync_message",
+          "sync_call_recording",
+          "sync_speech_segment",
+          "sync_channel_asset",
+          "browser_artifact",
+          "rag_document",
+          "office_document",
+          "calendar_event",
+          "mail_message",
+          "wiki_page",
+          "platform_auxiliary",
+          "generated_ephemeral"
+        ],
+        "title": "FileSourceKind"
+      },
+      "FileSourceRef": {
+        "properties": {
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
+          },
+          "entity_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Title"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "flow_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Slug"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "work_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Item Id"
+          },
+          "work_queue_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Queue Id"
+          },
+          "board_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Board Id"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "recording_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Id"
+          },
+          "namespace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "mailbox_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Binding Id"
+          },
+          "mail_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Uid"
+          },
+          "mailbox_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Email"
+          },
+          "mail_subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Subject"
+          },
+          "browser_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Browser Session Id"
+          },
+          "import_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Id"
+          },
+          "wiki_page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wiki Page Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FileSourceRef"
+      },
+      "FilesUploadConfigResponse": {
+        "properties": {
+          "max_upload_bytes": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Upload Bytes"
+          },
+          "chunk_size_bytes": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Chunk Size Bytes"
+          },
+          "upload_session_ttl_seconds": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Upload Session Ttl Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "max_upload_bytes",
+          "chunk_size_bytes",
+          "upload_session_ttl_seconds"
+        ],
+        "title": "FilesUploadConfigResponse"
       },
       "FlowCreateRequest": {
         "properties": {
@@ -11972,10 +13391,10 @@
               }
             ]
           },
-          "chat": {
+          "interface": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/FlowChatSettings"
+                "$ref": "#/components/schemas/FlowInterfaceConfig"
               },
               {
                 "type": "null"
@@ -12348,6 +13767,329 @@
         ],
         "title": "FlowHandoffInitiatedPayload"
       },
+      "FlowInterfaceConfig": {
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Schema Version",
+            "default": 1
+          },
+          "template": {
+            "$ref": "#/components/schemas/FlowUIDocumentTemplate"
+          },
+          "catalog_id": {
+            "type": "string",
+            "title": "Catalog Id",
+            "default": "https://linnex.io/a2ui/catalog/platform/v1"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/FlowInterfacePolicy"
+          },
+          "submit_action_name": {
+            "type": "string",
+            "const": "platform.ui.submit",
+            "title": "Submit Action Name",
+            "default": "platform.ui.submit"
+          },
+          "fallback_policy": {
+            "$ref": "#/components/schemas/FlowInterfaceFallbackPolicy"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "template"
+        ],
+        "title": "FlowInterfaceConfig"
+      },
+      "FlowInterfaceFallbackPolicy": {
+        "properties": {
+          "unsupported_component": {
+            "type": "string",
+            "enum": [
+              "artifact-card",
+              "json-inspector",
+              "text"
+            ],
+            "title": "Unsupported Component",
+            "default": "artifact-card"
+          },
+          "unsupported_catalog": {
+            "type": "string",
+            "enum": [
+              "ordinary-artifact",
+              "reject"
+            ],
+            "title": "Unsupported Catalog",
+            "default": "ordinary-artifact"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowInterfaceFallbackPolicy"
+      },
+      "FlowInterfacePolicy": {
+        "properties": {
+          "show_reasoning": {
+            "type": "boolean",
+            "title": "Show Reasoning",
+            "default": false
+          },
+          "tool_calls_display": {
+            "type": "string",
+            "enum": [
+              "hidden",
+              "compact",
+              "detailed"
+            ],
+            "title": "Tool Calls Display",
+            "default": "compact"
+          },
+          "show_activity": {
+            "type": "boolean",
+            "title": "Show Activity",
+            "default": true
+          },
+          "show_skill_loads": {
+            "type": "boolean",
+            "title": "Show Skill Loads",
+            "default": true
+          },
+          "show_reflection": {
+            "type": "boolean",
+            "title": "Show Reflection",
+            "default": true
+          },
+          "errors_display": {
+            "type": "string",
+            "enum": [
+              "generic",
+              "detailed"
+            ],
+            "title": "Errors Display",
+            "default": "generic"
+          },
+          "show_run_trace": {
+            "type": "boolean",
+            "title": "Show Run Trace",
+            "default": false
+          },
+          "show_trace_actions": {
+            "type": "boolean",
+            "title": "Show Trace Actions",
+            "default": false
+          },
+          "show_browser_previews": {
+            "type": "boolean",
+            "title": "Show Browser Previews",
+            "default": true
+          },
+          "show_files_panel": {
+            "type": "boolean",
+            "title": "Show Files Panel",
+            "default": true
+          },
+          "allow_cancel": {
+            "type": "boolean",
+            "title": "Allow Cancel",
+            "default": true
+          },
+          "allow_voice": {
+            "type": "boolean",
+            "title": "Allow Voice",
+            "default": true
+          },
+          "embed_safe_mode": {
+            "type": "boolean",
+            "title": "Embed Safe Mode",
+            "default": false
+          },
+          "allowed_catalog_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Catalog Ids"
+          },
+          "allowed_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Actions"
+          },
+          "allowed_functions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Functions"
+          },
+          "max_pages": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Pages",
+            "default": 24
+          },
+          "max_surfaces": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Max Surfaces",
+            "default": 48
+          },
+          "max_components_per_surface": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Max Components Per Surface",
+            "default": 500
+          },
+          "max_patch_bytes": {
+            "type": "integer",
+            "maximum": 10000000.0,
+            "minimum": 1024.0,
+            "title": "Max Patch Bytes",
+            "default": 1000000
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowInterfacePolicy",
+        "description": "Editable policy; frozen into the runtime document on materialization."
+      },
+      "FlowInterfacePolicySnapshot": {
+        "properties": {
+          "show_reasoning": {
+            "type": "boolean",
+            "title": "Show Reasoning",
+            "default": false
+          },
+          "tool_calls_display": {
+            "type": "string",
+            "enum": [
+              "hidden",
+              "compact",
+              "detailed"
+            ],
+            "title": "Tool Calls Display",
+            "default": "compact"
+          },
+          "show_activity": {
+            "type": "boolean",
+            "title": "Show Activity",
+            "default": true
+          },
+          "show_skill_loads": {
+            "type": "boolean",
+            "title": "Show Skill Loads",
+            "default": true
+          },
+          "show_reflection": {
+            "type": "boolean",
+            "title": "Show Reflection",
+            "default": true
+          },
+          "errors_display": {
+            "type": "string",
+            "enum": [
+              "generic",
+              "detailed"
+            ],
+            "title": "Errors Display",
+            "default": "generic"
+          },
+          "show_run_trace": {
+            "type": "boolean",
+            "title": "Show Run Trace",
+            "default": false
+          },
+          "show_trace_actions": {
+            "type": "boolean",
+            "title": "Show Trace Actions",
+            "default": false
+          },
+          "show_browser_previews": {
+            "type": "boolean",
+            "title": "Show Browser Previews",
+            "default": true
+          },
+          "show_files_panel": {
+            "type": "boolean",
+            "title": "Show Files Panel",
+            "default": true
+          },
+          "allow_cancel": {
+            "type": "boolean",
+            "title": "Allow Cancel",
+            "default": true
+          },
+          "allow_voice": {
+            "type": "boolean",
+            "title": "Allow Voice",
+            "default": true
+          },
+          "embed_safe_mode": {
+            "type": "boolean",
+            "title": "Embed Safe Mode",
+            "default": false
+          },
+          "allowed_catalog_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Catalog Ids"
+          },
+          "allowed_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Actions"
+          },
+          "allowed_functions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Functions"
+          },
+          "max_pages": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Pages",
+            "default": 24
+          },
+          "max_surfaces": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Max Surfaces",
+            "default": 48
+          },
+          "max_components_per_surface": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Max Components Per Surface",
+            "default": 500
+          },
+          "max_patch_bytes": {
+            "type": "integer",
+            "maximum": 10000000.0,
+            "minimum": 1024.0,
+            "title": "Max Patch Bytes",
+            "default": 1000000
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowInterfacePolicySnapshot"
+      },
       "FlowMetadataRequest": {
         "properties": {
           "sticky_notes": {
@@ -12660,8 +14402,8 @@
             ],
             "title": "Speech"
           },
-          "chat": {
-            "$ref": "#/components/schemas/FlowChatSettings"
+          "interface": {
+            "$ref": "#/components/schemas/FlowInterfaceConfig"
           },
           "employee": {
             "$ref": "#/components/schemas/FlowEmployeeConfig"
@@ -13158,6 +14900,1508 @@
         ],
         "title": "FlowType",
         "description": "Тип flow"
+      },
+      "FlowUIAction": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "local",
+              "event"
+            ],
+            "title": "Kind",
+            "default": "event"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "context": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "FlowUIAction"
+      },
+      "FlowUIComponent": {
+        "properties": {
+          "component_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Component Id"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Type"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "container",
+              "leaf",
+              "overlay"
+            ],
+            "title": "Kind",
+            "default": "leaf"
+          },
+          "properties": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Properties"
+          },
+          "children": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Children"
+          },
+          "container_layout": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowUIContainerLayout"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "placement": {
+            "$ref": "#/components/schemas/FlowUIResponsivePlacement"
+          },
+          "bindings": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Bindings"
+          },
+          "actions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FlowUIAction"
+            },
+            "type": "object",
+            "title": "Actions"
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility"
+          },
+          "checks": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Checks"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowUIProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "component_id",
+          "type"
+        ],
+        "title": "FlowUIComponent"
+      },
+      "FlowUIConflict": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "client_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Client Revision"
+          },
+          "server_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Server Revision"
+          },
+          "mutation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mutation Id"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "stale",
+              "future",
+              "duplicate-conflict"
+            ],
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document_id",
+          "client_revision",
+          "server_revision",
+          "reason"
+        ],
+        "title": "FlowUIConflict"
+      },
+      "FlowUIContainerLayout": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "grid",
+              "stack",
+              "flex"
+            ],
+            "title": "Mode"
+          },
+          "grid": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowUIGridDefinition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stack": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowUIStackDefinition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "flex": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowUIFlexDefinition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "FlowUIContainerLayout"
+      },
+      "FlowUICreateSurfaceCommand": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "surface.create",
+            "title": "Kind",
+            "default": "surface.create"
+          },
+          "surface": {
+            "$ref": "#/components/schemas/FlowUISurface"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface"
+        ],
+        "title": "FlowUICreateSurfaceCommand"
+      },
+      "FlowUIDataModel": {
+        "properties": {
+          "content": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Content"
+          },
+          "values": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Values"
+          },
+          "system": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "System"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowUIDataModel"
+      },
+      "FlowUIDeleteComponentsCommand": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "components.delete",
+            "title": "Kind",
+            "default": "components.delete"
+          },
+          "surface_id": {
+            "type": "string",
+            "title": "Surface Id"
+          },
+          "component_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Component Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface_id",
+          "component_ids"
+        ],
+        "title": "FlowUIDeleteComponentsCommand"
+      },
+      "FlowUIDeleteDataCommand": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "data.delete",
+            "title": "Kind",
+            "default": "data.delete"
+          },
+          "surface_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surface Id"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^/",
+            "title": "Path"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "FlowUIDeleteDataCommand"
+      },
+      "FlowUIDeleteSurfaceCommand": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "surface.delete",
+            "title": "Kind",
+            "default": "surface.delete"
+          },
+          "surface_id": {
+            "type": "string",
+            "title": "Surface Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface_id"
+        ],
+        "title": "FlowUIDeleteSurfaceCommand"
+      },
+      "FlowUIDocument": {
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Schema Version",
+            "default": 1
+          },
+          "document_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Document Id"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision",
+            "default": 1
+          },
+          "template_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Template Version"
+          },
+          "catalog_id": {
+            "type": "string",
+            "title": "Catalog Id",
+            "default": "https://linnex.io/a2ui/catalog/platform/v1"
+          },
+          "active_page_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Active Page Id"
+          },
+          "session_view_state": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Session View State"
+          },
+          "last_accepted_client_mutation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Accepted Client Mutation Id"
+          },
+          "pages": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FlowUIPage"
+            },
+            "type": "object",
+            "title": "Pages"
+          },
+          "surfaces": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FlowUISurface"
+            },
+            "type": "object",
+            "title": "Surfaces"
+          },
+          "global_data_model": {
+            "$ref": "#/components/schemas/FlowUIDataModel"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/FlowInterfacePolicySnapshot"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document_id",
+          "template_version",
+          "active_page_id",
+          "pages",
+          "surfaces"
+        ],
+        "title": "FlowUIDocument"
+      },
+      "FlowUIDocumentTemplate": {
+        "properties": {
+          "template_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Template Id"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Version"
+          },
+          "document": {
+            "$ref": "#/components/schemas/FlowUIDocument"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "template_id",
+          "version",
+          "document"
+        ],
+        "title": "FlowUIDocumentTemplate"
+      },
+      "FlowUIFlexDefinition": {
+        "properties": {
+          "direction": {
+            "type": "string",
+            "enum": [
+              "row",
+              "column"
+            ],
+            "title": "Direction",
+            "default": "row"
+          },
+          "wrap": {
+            "type": "boolean",
+            "title": "Wrap",
+            "default": true
+          },
+          "gap_token": {
+            "type": "string",
+            "title": "Gap Token",
+            "default": "space.4"
+          },
+          "align_items": {
+            "type": "string",
+            "enum": [
+              "start",
+              "center",
+              "end",
+              "stretch"
+            ],
+            "title": "Align Items",
+            "default": "stretch"
+          },
+          "justify_content": {
+            "type": "string",
+            "enum": [
+              "start",
+              "center",
+              "end",
+              "space-between",
+              "space-around"
+            ],
+            "title": "Justify Content",
+            "default": "start"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowUIFlexDefinition"
+      },
+      "FlowUIGridDefinition": {
+        "properties": {
+          "columns_by_band": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "compact",
+                "medium",
+                "wide"
+              ]
+            },
+            "type": "object",
+            "title": "Columns By Band"
+          },
+          "column_gap_token": {
+            "type": "string",
+            "title": "Column Gap Token",
+            "default": "space.4"
+          },
+          "row_gap_token": {
+            "type": "string",
+            "title": "Row Gap Token",
+            "default": "space.4"
+          },
+          "outer_padding_inline_token": {
+            "type": "string",
+            "title": "Outer Padding Inline Token",
+            "default": "space.4"
+          },
+          "outer_padding_block_token": {
+            "type": "string",
+            "title": "Outer Padding Block Token",
+            "default": "space.4"
+          },
+          "max_content_width_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Content Width Token",
+            "default": "content.wide"
+          },
+          "auto_rows": {
+            "type": "string",
+            "enum": [
+              "content",
+              "equal"
+            ],
+            "title": "Auto Rows",
+            "default": "content"
+          },
+          "auto_flow": {
+            "type": "string",
+            "enum": [
+              "row",
+              "column"
+            ],
+            "title": "Auto Flow",
+            "default": "row"
+          },
+          "align_items": {
+            "type": "string",
+            "enum": [
+              "start",
+              "center",
+              "end",
+              "stretch"
+            ],
+            "title": "Align Items",
+            "default": "stretch"
+          },
+          "justify_items": {
+            "type": "string",
+            "enum": [
+              "start",
+              "center",
+              "end",
+              "stretch"
+            ],
+            "title": "Justify Items",
+            "default": "stretch"
+          },
+          "baseline_step_token": {
+            "type": "string",
+            "title": "Baseline Step Token",
+            "default": "space.1"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowUIGridDefinition"
+      },
+      "FlowUIInteraction": {
+        "properties": {
+          "interaction_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Interaction Id"
+          },
+          "action_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Action Id"
+          },
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "message_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message Id"
+          },
+          "document_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Document Id"
+          },
+          "base_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Base Revision"
+          },
+          "accepted_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Accepted Revision"
+          },
+          "action_name": {
+            "type": "string",
+            "const": "platform.ui.submit",
+            "title": "Action Name",
+            "default": "platform.ui.submit"
+          },
+          "surface_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Surface Id"
+          },
+          "source_component_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source Component Id"
+          },
+          "form_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Form Id"
+          },
+          "page_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Page Id"
+          },
+          "values_patch": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Values Patch"
+          },
+          "validated_values_snapshot": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Validated Values Snapshot"
+          },
+          "original_message": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Original Message"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "interaction_id",
+          "action_id",
+          "task_id",
+          "context_id",
+          "message_id",
+          "document_id",
+          "base_revision",
+          "accepted_revision",
+          "surface_id",
+          "source_component_id",
+          "page_id",
+          "original_message",
+          "submitted_at"
+        ],
+        "title": "FlowUIInteraction"
+      },
+      "FlowUINavigateCommand": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "navigate",
+            "title": "Kind",
+            "default": "navigate"
+          },
+          "page_id": {
+            "type": "string",
+            "title": "Page Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page_id"
+        ],
+        "title": "FlowUINavigateCommand"
+      },
+      "FlowUIPage": {
+        "properties": {
+          "page_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Page Id"
+          },
+          "title": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "route": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/",
+            "title": "Route"
+          },
+          "root_surface_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Root Surface Id"
+          },
+          "navigation": {
+            "$ref": "#/components/schemas/PageNavigationPolicy"
+          },
+          "default_target_profile_id": {
+            "type": "string",
+            "title": "Default Target Profile Id",
+            "default": "runtime"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page_id",
+          "route",
+          "root_surface_id"
+        ],
+        "title": "FlowUIPage"
+      },
+      "FlowUIPlacement": {
+        "properties": {
+          "column_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "auto"
+              }
+            ],
+            "title": "Column Start",
+            "default": "auto"
+          },
+          "column_span": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "full"
+              }
+            ],
+            "title": "Column Span",
+            "default": "full"
+          },
+          "row_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "auto"
+              }
+            ],
+            "title": "Row Start",
+            "default": "auto"
+          },
+          "row_span": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Row Span",
+            "default": 1
+          },
+          "order": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": -1000.0,
+            "title": "Order",
+            "default": 0
+          },
+          "align_self": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "start",
+              "center",
+              "end",
+              "stretch"
+            ],
+            "title": "Align Self",
+            "default": "auto"
+          },
+          "justify_self": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "start",
+              "center",
+              "end",
+              "stretch"
+            ],
+            "title": "Justify Self",
+            "default": "auto"
+          },
+          "min_inline_size_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Inline Size Token"
+          },
+          "max_inline_size_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Inline Size Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowUIPlacement"
+      },
+      "FlowUIPlacementPatch": {
+        "properties": {
+          "column_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "auto"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Start"
+          },
+          "column_span": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "full"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Span"
+          },
+          "row_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "auto"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Start"
+          },
+          "row_span": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Span"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "minimum": -1000.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order"
+          },
+          "align_self": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "start",
+                  "center",
+                  "end",
+                  "stretch"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Align Self"
+          },
+          "justify_self": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "start",
+                  "center",
+                  "end",
+                  "stretch"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Justify Self"
+          },
+          "min_inline_size_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Inline Size Token"
+          },
+          "max_inline_size_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Inline Size Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowUIPlacementPatch"
+      },
+      "FlowUIProvenance": {
+        "properties": {
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
+          "part_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Index"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowUIProvenance"
+      },
+      "FlowUIReplaceSurfaceCommand": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "surface.replace",
+            "title": "Kind",
+            "default": "surface.replace"
+          },
+          "surface": {
+            "$ref": "#/components/schemas/FlowUISurface"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface"
+        ],
+        "title": "FlowUIReplaceSurfaceCommand"
+      },
+      "FlowUIResponsivePlacement": {
+        "properties": {
+          "base": {
+            "$ref": "#/components/schemas/FlowUIPlacement"
+          },
+          "overrides": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FlowUIPlacementPatch"
+            },
+            "propertyNames": {
+              "enum": [
+                "compact",
+                "medium",
+                "wide"
+              ]
+            },
+            "type": "object",
+            "title": "Overrides"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowUIResponsivePlacement"
+      },
+      "FlowUISetDataCommand": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "data.set",
+            "title": "Kind",
+            "default": "data.set"
+          },
+          "surface_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surface Id"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^/",
+            "title": "Path"
+          },
+          "value": {
+            "$ref": "#/components/schemas/JsonValue"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "value"
+        ],
+        "title": "FlowUISetDataCommand"
+      },
+      "FlowUIShareCreateRequest": {
+        "properties": {
+          "flow_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Flow Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "document_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Document Id"
+          },
+          "minimum_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Minimum Revision"
+          },
+          "permission": {
+            "type": "string",
+            "enum": [
+              "view",
+              "interact"
+            ],
+            "title": "Permission",
+            "default": "view"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "maximum": 2592000.0,
+            "minimum": 300.0,
+            "title": "Expires In Seconds",
+            "default": 86400
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "flow_id",
+          "context_id",
+          "document_id",
+          "minimum_revision"
+        ],
+        "title": "FlowUIShareCreateRequest"
+      },
+      "FlowUIShareCreateResponse": {
+        "properties": {
+          "grant": {
+            "$ref": "#/components/schemas/FlowUIShareGrant"
+          },
+          "share_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Share Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "grant",
+          "share_url"
+        ],
+        "title": "FlowUIShareCreateResponse"
+      },
+      "FlowUIShareExchangeResponse": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "token_type": {
+            "type": "string",
+            "const": "Bearer",
+            "title": "Token Type",
+            "default": "Bearer"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "context_id": {
+            "type": "string",
+            "title": "Context Id"
+          },
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "minimum_revision": {
+            "type": "integer",
+            "title": "Minimum Revision"
+          },
+          "permission": {
+            "type": "string",
+            "enum": [
+              "view",
+              "interact"
+            ],
+            "title": "Permission"
+          },
+          "flows_base_url": {
+            "type": "string",
+            "title": "Flows Base Url",
+            "default": "/flows"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "expires_at",
+          "flow_id",
+          "branch_id",
+          "context_id",
+          "document_id",
+          "minimum_revision",
+          "permission"
+        ],
+        "title": "FlowUIShareExchangeResponse"
+      },
+      "FlowUIShareGrant": {
+        "properties": {
+          "grant_id": {
+            "type": "string",
+            "minLength": 24,
+            "title": "Grant Id"
+          },
+          "company_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Company Id"
+          },
+          "flow_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Branch Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "document_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Document Id"
+          },
+          "minimum_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Minimum Revision"
+          },
+          "permission": {
+            "type": "string",
+            "enum": [
+              "view",
+              "interact"
+            ],
+            "title": "Permission"
+          },
+          "created_by_user_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Created By User Id"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "grant_id",
+          "company_id",
+          "flow_id",
+          "branch_id",
+          "context_id",
+          "document_id",
+          "minimum_revision",
+          "permission",
+          "created_by_user_id",
+          "expires_at",
+          "created_at"
+        ],
+        "title": "FlowUIShareGrant"
+      },
+      "FlowUIStackDefinition": {
+        "properties": {
+          "direction": {
+            "type": "string",
+            "enum": [
+              "vertical",
+              "horizontal"
+            ],
+            "title": "Direction",
+            "default": "vertical"
+          },
+          "gap_token": {
+            "type": "string",
+            "title": "Gap Token",
+            "default": "space.4"
+          },
+          "align": {
+            "type": "string",
+            "enum": [
+              "start",
+              "center",
+              "end",
+              "stretch"
+            ],
+            "title": "Align",
+            "default": "stretch"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowUIStackDefinition"
+      },
+      "FlowUISurface": {
+        "properties": {
+          "surface_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Surface Id"
+          },
+          "catalog_id": {
+            "type": "string",
+            "title": "Catalog Id",
+            "default": "https://linnex.io/a2ui/catalog/platform/v1"
+          },
+          "root_component_id": {
+            "type": "string",
+            "title": "Root Component Id",
+            "default": "root"
+          },
+          "components": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FlowUIComponent"
+            },
+            "type": "object",
+            "title": "Components"
+          },
+          "data_model": {
+            "$ref": "#/components/schemas/FlowUIDataModel"
+          },
+          "owner": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "platform"
+            ],
+            "title": "Owner",
+            "default": "platform"
+          },
+          "send_data_model": {
+            "type": "boolean",
+            "title": "Send Data Model",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface_id",
+          "components"
+        ],
+        "title": "FlowUISurface"
+      },
+      "FlowUIUpsertComponentsCommand": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "components.upsert",
+            "title": "Kind",
+            "default": "components.upsert"
+          },
+          "surface_id": {
+            "type": "string",
+            "title": "Surface Id"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/FlowUIComponent"
+            },
+            "type": "array",
+            "title": "Components"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface_id",
+          "components"
+        ],
+        "title": "FlowUIUpsertComponentsCommand"
       },
       "FlowValidateRequest": {
         "properties": {
@@ -14742,6 +17986,163 @@
         ],
         "title": "InitCompanyResponse",
         "description": "Ответ инициализации компании"
+      },
+      "InterfaceCapabilitiesProfile": {
+        "properties": {
+          "bootstrap": {
+            "type": "boolean",
+            "title": "Bootstrap",
+            "default": true
+          },
+          "autosync": {
+            "type": "boolean",
+            "title": "Autosync",
+            "default": true
+          },
+          "cancel": {
+            "type": "boolean",
+            "title": "Cancel"
+          },
+          "files": {
+            "type": "boolean",
+            "title": "Files"
+          },
+          "voice": {
+            "type": "boolean",
+            "title": "Voice"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cancel",
+          "files",
+          "voice"
+        ],
+        "title": "InterfaceCapabilitiesProfile"
+      },
+      "InterfaceCatalogProfile": {
+        "properties": {
+          "extension_uri": {
+            "type": "string",
+            "title": "Extension Uri",
+            "default": "https://a2ui.org/a2a-extension/a2ui/v0.9.1"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": "v0.9.1"
+          },
+          "platform_catalog_id": {
+            "type": "string",
+            "title": "Platform Catalog Id",
+            "default": "https://linnex.io/a2ui/catalog/platform/v1"
+          }
+        },
+        "type": "object",
+        "title": "InterfaceCatalogProfile"
+      },
+      "InterfaceFlowIdentity": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "InterfaceFlowIdentity"
+      },
+      "InterfaceProfileResponse": {
+        "properties": {
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "viewer": {
+            "$ref": "#/components/schemas/InterfaceProfileViewer"
+          },
+          "look": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmbedInterfaceLook"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "catalog": {
+            "$ref": "#/components/schemas/InterfaceCatalogProfile"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/InterfaceCapabilitiesProfile"
+          },
+          "flow_identity": {
+            "$ref": "#/components/schemas/InterfaceFlowIdentity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "flow_id",
+          "branch_id",
+          "viewer",
+          "catalog",
+          "capabilities",
+          "flow_identity"
+        ],
+        "title": "InterfaceProfileResponse",
+        "description": "Narrow control plane; document, values and artifacts travel only in A2A."
+      },
+      "InterfaceProfileViewer": {
+        "properties": {
+          "can_edit_flow": {
+            "type": "boolean",
+            "title": "Can Edit Flow"
+          },
+          "can_interact": {
+            "type": "boolean",
+            "title": "Can Interact"
+          },
+          "can_share": {
+            "type": "boolean",
+            "title": "Can Share"
+          },
+          "auth_mode": {
+            "type": "string",
+            "enum": [
+              "platform",
+              "embed",
+              "share"
+            ],
+            "title": "Auth Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "can_edit_flow",
+          "can_interact",
+          "can_share",
+          "auth_mode"
+        ],
+        "title": "InterfaceProfileViewer",
+        "description": "Control-plane permissions; runtime state is intentionally absent."
       },
       "InterruptData": {
         "properties": {
@@ -16407,6 +19808,25 @@
         "title": "LlmContextResolveParentResponse",
         "description": "Public shape как settings llm_context: resolved + catalogs."
       },
+      "LocalizedText": {
+        "properties": {
+          "default": {
+            "type": "string",
+            "title": "Default",
+            "default": ""
+          },
+          "translations": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Translations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LocalizedText"
+      },
       "MCPCatalogStoreItemResponse": {
         "properties": {
           "catalog_id": {
@@ -17017,6 +20437,17 @@
               }
             ],
             "title": "Parse Error"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
           }
         },
         "additionalProperties": false,
@@ -17026,7 +20457,7 @@
           "content_type"
         ],
         "title": "MailAttachment",
-        "description": "Вложение письма (MIME part). content может быть пустым при list/ошибке разбора."
+        "description": "Вложение письма (MIME part). content может быть пустым при list/ошибке разбора.\n\nOutbound MailSendPayload: только ``file_id`` (байты уже в Files через chunked upload).\nInbound MIME / SMTP после resolve: ``content`` in-process."
       },
       "MailAttachmentPublic": {
         "properties": {
@@ -18638,6 +22069,20 @@
             "type": "string",
             "title": "Calendar Color"
           },
+          "calendar_autolink_status": {
+            "$ref": "#/components/schemas/CalendarAutolinkStatus"
+          },
+          "calendar_autolink_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Autolink Detail"
+          },
           "has_password": {
             "type": "boolean",
             "title": "Has Password"
@@ -18721,6 +22166,7 @@
           "sync_enabled",
           "is_default",
           "calendar_color",
+          "calendar_autolink_status",
           "has_password",
           "created_at",
           "updated_at"
@@ -20047,6 +23493,28 @@
         "title": "OutputAction",
         "description": "Действие отправки сообщения в канал.\n\nИспользуется в trigger.output_actions для автоматической отправки\nпосле выполнения агента.\n\nПример (ответ в тот же чат, chat_id из триггера):\n{\n    \"channel\": \"telegram\",\n    \"action\": \"send_message\",\n    \"mapping\": {\n        \"recipient\": \"@state:triggers.tg_1.context.chat_id\",\n        \"text\": \"@state:response\"\n    },\n    \"config\": {\n        \"parse_mode\": \"HTML\"\n    },\n    \"condition\": \"@state:should_reply == true\"\n}"
       },
+      "PageNavigationPolicy": {
+        "properties": {
+          "visible": {
+            "type": "boolean",
+            "title": "Visible",
+            "default": true
+          },
+          "allow_back": {
+            "type": "boolean",
+            "title": "Allow Back",
+            "default": true
+          },
+          "allow_direct": {
+            "type": "boolean",
+            "title": "Allow Direct",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PageNavigationPolicy"
+      },
       "ParameterInfo": {
         "properties": {
           "type": {
@@ -20156,67 +23624,6 @@
         ],
         "title": "ParseSignatureResponse",
         "description": "Результат парсинга сигнатуры"
-      },
-      "PendingUIEvent": {
-        "properties": {
-          "event_id": {
-            "type": "string",
-            "title": "Event Id",
-            "description": "ID события"
-          },
-          "event_type": {
-            "type": "string",
-            "title": "Event Type",
-            "description": "Тип события"
-          },
-          "payload": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "type": "object",
-            "title": "Payload",
-            "description": "Payload события"
-          },
-          "version": {
-            "type": "string",
-            "title": "Version",
-            "description": "Версия события"
-          },
-          "timestamp": {
-            "type": "string",
-            "title": "Timestamp",
-            "description": "Время создания ISO"
-          },
-          "source": {
-            "type": "string",
-            "title": "Source",
-            "description": "Источник события"
-          },
-          "correlation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Correlation Id",
-            "description": "Correlation id"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "event_id",
-          "event_type",
-          "payload",
-          "version",
-          "timestamp",
-          "source"
-        ],
-        "title": "PendingUIEvent",
-        "description": "Pending client frame в ExecutionState до A2A stream.\n\nНе путать с ``PlatformEvent`` шины ``platform:events``."
       },
       "PersonalMailboxConnectPayload": {
         "properties": {
@@ -20422,6 +23829,154 @@
           "supported_domains"
         ],
         "title": "PlatformBrandResponse"
+      },
+      "PlatformEffectEnvelope": {
+        "properties": {
+          "effect_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Effect Id"
+          },
+          "issued_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Issued At"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/PlatformEffectOrigin"
+          },
+          "effect": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UIApplyEffect"
+              },
+              {
+                "$ref": "#/components/schemas/UINavigateEffect"
+              },
+              {
+                "$ref": "#/components/schemas/UIResetEffect"
+              }
+            ],
+            "title": "Effect",
+            "discriminator": {
+              "propertyName": "kind",
+              "mapping": {
+                "ui.apply": "#/components/schemas/UIApplyEffect",
+                "ui.navigate": "#/components/schemas/UINavigateEffect",
+                "ui.reset": "#/components/schemas/UIResetEffect"
+              }
+            }
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "effect_id",
+          "issued_at",
+          "origin",
+          "effect"
+        ],
+        "title": "PlatformEffectEnvelope"
+      },
+      "PlatformEffectOrigin": {
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "const": "linnex.capability-gateway",
+            "title": "Issuer",
+            "default": "linnex.capability-gateway"
+          },
+          "capability_call_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Capability Call Id"
+          },
+          "causation_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Causation Id"
+          },
+          "capability_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Capability Name"
+          },
+          "execution_token_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Execution Token Sha256"
+          },
+          "company_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Company Id"
+          },
+          "flow_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Branch Id"
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "source_node_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Node Id"
+          },
+          "source_tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Tool Call Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "capability_call_id",
+          "causation_id",
+          "capability_name",
+          "execution_token_sha256",
+          "company_id",
+          "flow_id",
+          "branch_id",
+          "session_id",
+          "task_id",
+          "context_id"
+        ],
+        "title": "PlatformEffectOrigin",
+        "description": "Cryptographic/scope binding issued only by the capability gateway."
       },
       "PlatformEventCatalogEntry": {
         "properties": {
@@ -20985,6 +24540,44 @@
         ],
         "title": "ReflectionTarget",
         "description": "Срез проекции state, который проверяет критик."
+      },
+      "RegisterS3Request": {
+        "properties": {
+          "spec": {
+            "$ref": "#/components/schemas/FileCreateSpec"
+          },
+          "s3_key": {
+            "type": "string",
+            "title": "S3 Key"
+          },
+          "s3_bucket": {
+            "type": "string",
+            "title": "S3 Bucket"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "spec",
+          "s3_key",
+          "s3_bucket",
+          "original_name",
+          "content_type",
+          "file_size"
+        ],
+        "title": "RegisterS3Request"
       },
       "RegistryBranchInfo": {
         "properties": {
@@ -22552,6 +26145,284 @@
         "title": "ToolCreateRequest",
         "description": "Запрос на создание tool"
       },
+      "ToolDefinition": {
+        "properties": {
+          "definition_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Definition Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "machine_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Machine Name"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Description"
+          },
+          "canonical_input_schema": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Canonical Input Schema"
+          },
+          "canonical_output_schema": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Canonical Output Schema"
+          },
+          "argument_sources": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "model",
+                "binding",
+                "runtime",
+                "secret_ref"
+              ]
+            },
+            "type": "object",
+            "title": "Argument Sources"
+          },
+          "effects": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "read",
+                "create",
+                "update",
+                "delete",
+                "external_send",
+                "financial",
+                "admin",
+                "code_execute"
+              ]
+            },
+            "type": "array",
+            "title": "Effects"
+          },
+          "required_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Scopes"
+          },
+          "confirmation_floor": {
+            "type": "string",
+            "enum": [
+              "none",
+              "preview",
+              "approval"
+            ],
+            "title": "Confirmation Floor",
+            "default": "none"
+          },
+          "idempotency": {
+            "type": "string",
+            "enum": [
+              "none",
+              "supported",
+              "required"
+            ],
+            "title": "Idempotency",
+            "default": "none"
+          },
+          "executor_kind": {
+            "type": "string",
+            "enum": [
+              "trusted_builtin",
+              "sandbox_code",
+              "mcp",
+              "flow"
+            ],
+            "title": "Executor Kind"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limits"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provenance"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "definition_id",
+          "version",
+          "machine_name",
+          "title",
+          "description",
+          "canonical_input_schema",
+          "canonical_output_schema",
+          "executor_kind"
+        ],
+        "title": "ToolDefinition",
+        "description": "Immutable versioned platform capability contract."
+      },
+      "ToolPreviewExecutionPlan": {
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "title": "Tool Id"
+          },
+          "effects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Effects"
+          },
+          "confirmation_floor": {
+            "type": "string",
+            "title": "Confirmation Floor"
+          },
+          "resolved_args_masked": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Resolved Args Masked"
+          },
+          "requires_approval": {
+            "type": "boolean",
+            "title": "Requires Approval"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tool_id",
+          "effects",
+          "confirmation_floor",
+          "resolved_args_masked",
+          "requires_approval"
+        ],
+        "title": "ToolPreviewExecutionPlan"
+      },
+      "ToolPreviewModelView": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "parameters": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Parameters"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "parameters"
+        ],
+        "title": "ToolPreviewModelView"
+      },
+      "ToolPreviewRequest": {
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "title": "Tool Id"
+          },
+          "binding_overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Overrides"
+          },
+          "model_args": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Args"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tool_id"
+        ],
+        "title": "ToolPreviewRequest"
+      },
+      "ToolPreviewResponse": {
+        "properties": {
+          "model_view": {
+            "$ref": "#/components/schemas/ToolPreviewModelView"
+          },
+          "execution_plan": {
+            "$ref": "#/components/schemas/ToolPreviewExecutionPlan"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "model_view",
+          "execution_plan"
+        ],
+        "title": "ToolPreviewResponse"
+      },
       "ToolReference": {
         "properties": {
           "tool_id": {
@@ -22663,6 +26534,37 @@
             "type": "array",
             "title": "Permission",
             "description": "Группы с доступом к tool. Пустой список = доступ для всех"
+          },
+          "input_mapping": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Input Mapping",
+            "description": "Маппинг входов при открытии tool как ноды в редакторе / node-as-tool: target -> @state/@var или JSON-константа"
+          },
+          "output_mapping": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Mapping",
+            "description": "Маппинг выходов tool-as-node в state; None = без remapping"
+          },
+          "state_mapping": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "State Mapping",
+            "description": "Дополнительный state mapping tool-as-node (MCP/editor)"
           },
           "tags": {
             "items": {
@@ -22866,6 +26768,43 @@
               }
             ],
             "title": "Parameters Schema"
+          },
+          "output_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
+          },
+          "effects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Effects"
+          },
+          "confirmation_floor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Floor"
+          },
+          "builtin": {
+            "type": "boolean",
+            "title": "Builtin",
+            "default": false
           },
           "tags": {
             "items": {
@@ -23630,6 +27569,600 @@
         ],
         "title": "TtsLitserveVoiceHint",
         "description": "Подсказка по голосу для одной Litserve TTS-модели."
+      },
+      "UIApplyEffect": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "ui.apply",
+            "title": "Kind",
+            "default": "ui.apply"
+          },
+          "commands": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/FlowUIUpsertComponentsCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/FlowUIDeleteComponentsCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/FlowUISetDataCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/FlowUIDeleteDataCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/FlowUINavigateCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/FlowUICreateSurfaceCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/FlowUIReplaceSurfaceCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/FlowUIDeleteSurfaceCommand"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "components.delete": "#/components/schemas/FlowUIDeleteComponentsCommand",
+                  "components.upsert": "#/components/schemas/FlowUIUpsertComponentsCommand",
+                  "data.delete": "#/components/schemas/FlowUIDeleteDataCommand",
+                  "data.set": "#/components/schemas/FlowUISetDataCommand",
+                  "navigate": "#/components/schemas/FlowUINavigateCommand",
+                  "surface.create": "#/components/schemas/FlowUICreateSurfaceCommand",
+                  "surface.delete": "#/components/schemas/FlowUIDeleteSurfaceCommand",
+                  "surface.replace": "#/components/schemas/FlowUIReplaceSurfaceCommand"
+                }
+              }
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Commands"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "commands"
+        ],
+        "title": "UIApplyEffect",
+        "description": "Atomic trusted mutation of the materialized Flow UI document."
+      },
+      "UIClientMutationRef": {
+        "properties": {
+          "mutation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mutation Id"
+          },
+          "mutation_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mutation Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UIClientMutationRef"
+      },
+      "UIComponentPlacementPatch": {
+        "properties": {
+          "surface_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Surface Id"
+          },
+          "component_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Component Id"
+          },
+          "placement": {
+            "$ref": "#/components/schemas/FlowUIResponsivePlacement"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface_id",
+          "component_id",
+          "placement"
+        ],
+        "title": "UIComponentPlacementPatch"
+      },
+      "UIComponentPlacementUnset": {
+        "properties": {
+          "surface_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Surface Id"
+          },
+          "component_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Component Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface_id",
+          "component_id"
+        ],
+        "title": "UIComponentPlacementUnset"
+      },
+      "UIComponentPropertyDelete": {
+        "properties": {
+          "surface_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Surface Id"
+          },
+          "component_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Component Id"
+          },
+          "property_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Property Keys"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface_id",
+          "component_id",
+          "property_keys"
+        ],
+        "title": "UIComponentPropertyDelete"
+      },
+      "UIComponentPropertyPatch": {
+        "properties": {
+          "surface_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Surface Id"
+          },
+          "component_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Component Id"
+          },
+          "properties": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Properties"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface_id",
+          "component_id"
+        ],
+        "title": "UIComponentPropertyPatch"
+      },
+      "UIContainerLayoutPatch": {
+        "properties": {
+          "surface_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Surface Id"
+          },
+          "component_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Component Id"
+          },
+          "layout": {
+            "$ref": "#/components/schemas/FlowUIContainerLayout"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface_id",
+          "component_id",
+          "layout"
+        ],
+        "title": "UIContainerLayoutPatch"
+      },
+      "UIContainerLayoutUnset": {
+        "properties": {
+          "surface_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Surface Id"
+          },
+          "component_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Component Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface_id",
+          "component_id"
+        ],
+        "title": "UIContainerLayoutUnset"
+      },
+      "UIDataPathRef": {
+        "properties": {
+          "surface_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surface Id"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^/",
+            "title": "Path"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "UIDataPathRef"
+      },
+      "UIDataPathValue": {
+        "properties": {
+          "surface_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surface Id"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^/",
+            "title": "Path"
+          },
+          "value": {
+            "$ref": "#/components/schemas/JsonValue"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "value"
+        ],
+        "title": "UIDataPathValue"
+      },
+      "UIDocumentPatchedPayload": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "document_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Document Id"
+          },
+          "base_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Base Revision"
+          },
+          "accepted_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Accepted Revision"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source"
+          },
+          "client_mutation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Mutation Id"
+          },
+          "effect_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Effect Ids"
+          },
+          "surface_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Surface Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "context_id",
+          "document_id",
+          "base_revision",
+          "accepted_revision",
+          "source"
+        ],
+        "title": "UIDocumentPatchedPayload"
+      },
+      "UIInteractionAcceptedPayload": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "document_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Document Id"
+          },
+          "base_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Base Revision"
+          },
+          "accepted_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Accepted Revision"
+          },
+          "action_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Action Id"
+          },
+          "interaction_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Interaction Id"
+          },
+          "surface_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Surface Id"
+          },
+          "source_component_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source Component Id"
+          },
+          "previous_task_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Task Id"
+          },
+          "opened_new_task": {
+            "type": "boolean",
+            "title": "Opened New Task",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "context_id",
+          "document_id",
+          "base_revision",
+          "accepted_revision",
+          "action_id",
+          "interaction_id",
+          "surface_id",
+          "source_component_id"
+        ],
+        "title": "UIInteractionAcceptedPayload"
+      },
+      "UINavigateEffect": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "ui.navigate",
+            "title": "Kind",
+            "default": "ui.navigate"
+          },
+          "page_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Page Id"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page_id"
+        ],
+        "title": "UINavigateEffect"
+      },
+      "UIRepresentationSelectedPayload": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "representation": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Representation"
+          },
+          "extension_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extension Uri"
+          },
+          "catalog_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Id"
+          },
+          "output_mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Mime Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "context_id",
+          "representation"
+        ],
+        "title": "UIRepresentationSelectedPayload"
+      },
+      "UIResetEffect": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "ui.reset",
+            "title": "Kind",
+            "default": "ui.reset"
+          },
+          "template_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Template Id"
+          },
+          "template_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Template Version"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "template_id",
+          "template_version"
+        ],
+        "title": "UIResetEffect"
       },
       "UserInputAppliedPayload": {
         "properties": {
@@ -24671,6 +29204,27 @@
               },
               {
                 "$ref": "#/components/schemas/ConversationMessageAppendedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/A2ATaskOpenedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/A2AMessageAppendedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/A2AArtifactUpdatedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/A2ATaskStatusChangedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/UIDocumentPatchedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/UIInteractionAcceptedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/UIRepresentationSelectedPayload"
               }
             ],
             "title": "Payload"
@@ -24751,7 +29305,14 @@
           "HandoffAccepted",
           "HandbackRequested",
           "HandbackCompleted",
-          "ConversationMessageAppended"
+          "ConversationMessageAppended",
+          "A2ATaskOpened",
+          "A2AMessageAppended",
+          "A2AArtifactUpdated",
+          "A2ATaskStatusChanged",
+          "UIInteractionAccepted",
+          "UIDocumentPatched",
+          "UIRepresentationSelected"
         ],
         "title": "WorkflowEventType"
       },

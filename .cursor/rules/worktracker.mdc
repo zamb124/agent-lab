@@ -5,6 +5,11 @@ alwaysApply: false
 ---
 # WorkItem — платформенное ядро задач
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 `WorkItem` — единственная каноническая единица работы платформы. Сводит в одно ядро HITL/operator-задачи flows и work-семантику задач CRM. Сервис **worktracker** (порт 8021, БД `platform_worktracker`), домен — `core/worktracker/`.
 
 Запрещено имя `task` для этой сущности: `core/tasks/` занято TaskIQ-кикером (`core.tasks.kicker`), а `task_id` в `main.mdc` — runtime/A2A id. Каноническое имя — **`WorkItem` / `work_item_id`**.
@@ -97,7 +102,7 @@ AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API
 1. `hitl_node` / tool `hitl_operator_task` бросает `OperatorTaskInterrupt` (поле `work_item_id`; контракт в `core/state/interrupt.py`) и через `HitlWorkItemService` (flows) создаёт `WorkItem(kind=operator_handoff, blocking=true)` с `hooks.completed` (binding + path=`platform:events`) + `flow_session` link. Resume — consumer `flows` на `worktracker/work_item/completed`. Диалог HITL пишется durable-append'ом в `ExecutionState.messages` (`HitlConversationService`), **не** в `WorkItemComment`.
 2. Оператор:
    - **Доступ:** claim/complete требуют членства в `WorkQueue` задачи. Демо-очередь `example_hitl` при `ensure_example_hitl_queue` получает owner/admin компании как members (иначе UI скрывает «Ответить и завершить», claim → «Нет доступа к очереди»).
-   - **`single_reply`:** ответ через embedded `<platform-chat profile="operator_handoff">` (полный composer, в т.ч. attach); Send = `complete` + closing reply durable-append + Emitter в `stream:{a2a_task_id}`.
+   - **`single_reply`:** ответ через embedded `<platform-flow-ui surface="page">` с operator render context (default template содержит полный input/file/Submit); Submit = `complete` + closing reply durable-append + ordinary A2A Artifact в `stream:{a2a_task_id}`.
    - **`takeover`:** ask через тот же embedded chat → REST `/flows/api/v1/hitl/{work_item_id}/conversation/messages` (+ `file_ids`); live — `SubscribeToTask`. Close — отдельная кнопка Complete.
    - Блок **«Активность»** (`WorkItemComment`) — только внутренние заметки команды; покупатель их не видит.
 3. На первом терминале ядро диспатчит `completed`-хук; flows-endpoint делает closing append при необходимости и возобновляет flow (`process_flow_task(is_resume=True)`, `content=resolution.text`). Маршрутизация по `state.current_nodes`/`interrupt_path`.

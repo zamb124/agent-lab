@@ -132,7 +132,7 @@ Skills остаются в тегах `nodes` и `execution` (отдельный
 - Результат: ответ Lara в чате.
 - Шаги: 1) открыть главную Flows; 2) открыть чат Lara; 3) задать простой вопрос; 4) увидеть ответ (и при необходимости чипы Skill).
 - Демонстрация: диалог с ответом Lara.
-- Фичи: route `/flows/chat/lara`, platform-chat, skill load chips (опционально).
+- Фичи: route `/flows/chat/lara`, platform-flow-ui, skill load chips (опционально).
 
 ### Этап 2. Редактор графа (editor)
 
@@ -407,7 +407,7 @@ Skills остаются в тегах `nodes` и `execution` (отдельный
 - Результат: виджет чата на host page отвечает покупателю.
 - Шаги: 1) создать embed-конфиг; 2) получить snippet; 3) открыть host page; 4) открыть чат; 5) получить ответ.
 - Отличие от `share-demo-link`: embed — snippet/host page; share — гостевая ссылка.
-- Фичи: frontend embed configs, humanitec-embed-autoload, platform-chat на внешнем origin.
+- Фичи: frontend embed configs, humanitec-embed-autoload, platform-flow-ui на внешнем origin.
 
 ### Этап 8. Публикация и управление (operations)
 
@@ -440,7 +440,7 @@ Skills остаются в тегах `nodes` и `execution` (отдельный
 - Для чего: управлять видимостью активаций Skill и смежными рычагами чата.
 - Результат: show_skill_loads включён/выключен с видимым эффектом в чате.
 - Шаги: 1) открыть настройки чата; 2) переключить show_skill_loads; 3) сохранить; 4) прогон чата.
-- Фичи: platform-chat-settings-fields, show_skill_loads.
+- Фичи: Flow UI interface policy fields, show_skill_loads.
 
 #### 8.4 `operations/enable-flow-employee`
 - Title: «Включаем агента как AI-сотрудника» / "Enable the agent as an AI employee"

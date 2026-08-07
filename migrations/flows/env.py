@@ -18,6 +18,10 @@ from sqlalchemy.ext.asyncio import create_async_engine
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from apps.flows.src.db.models import (  # noqa: F401
+    A2AArtifactProjections,
+    A2ATaskEventDedup,
+    A2ATaskMessages,
+    A2ATaskProjections,
     ActivityTasks,
     AgentSkills,
     Base,
@@ -30,6 +34,7 @@ from apps.flows.src.db.models import (  # noqa: F401
     ExecutionBranches,
     Flows,
     FlowsVersions,
+    FlowUIShareGrants,
     Nodes,
     Resources,
     Tools,
@@ -54,6 +59,8 @@ MANAGED_TABLES = {
     "evaluation_suites", "evaluation_cases",
     "evaluation_suite_versions", "evaluation_runs", "evaluation_case_runs",
     "evaluation_run_events", "resources",
+    "a2a_task_projections", "a2a_task_messages", "a2a_artifact_projections",
+    "a2a_task_event_dedup", "flow_ui_share_grants",
 }
 
 

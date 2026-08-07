@@ -26,7 +26,8 @@ def build_tool_context_view(state: ExecutionState) -> JsonObject:
 
     Включено: идентификаторы сессии/контекста/задачи/пользователя, branch_id,
     flow_config_version, content, variables, user_groups, current_nodes,
-    messages, tool_results, ui_events_pending, краткие summaries файлов,
+    messages, tool_results, полный read-only Flow UI document, краткие
+    summaries файлов,
     result, validation, triggers, а также пользовательские extra-поля
     (`json_extra`), кроме имён из FROZEN_STATE_FIELDS.
 
@@ -48,9 +49,8 @@ def build_tool_context_view(state: ExecutionState) -> JsonObject:
         "files": [_file_ref_summary(file_ref) for file_ref in state.files],
         "messages": messages_to_json_list(state.messages),
         "tool_results": dict(state.tool_results),
-        "ui_events_pending": [
-            event.model_dump(mode="json") for event in state.ui_events_pending
-        ],
+        "ui_document": state.ui_document.model_dump(mode="json"),
+        "ui_effect_cursor": state.ui_effect_cursor,
     }
     if state.initiator_user_id is not None:
         view["initiator_user_id"] = state.initiator_user_id

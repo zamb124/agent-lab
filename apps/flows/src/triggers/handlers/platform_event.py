@@ -310,19 +310,20 @@ async def dispatch_platform_event_triggers(
             if company_id != event.company_id:
                 continue
 
+            index_key = platform_event_trigger_index_key(event.type)
             flow_config = await container.flow_repository.get(flow_id)
             if flow_config is None:
                 logger.warning(
                     "platform event trigger dispatch: flow not found flow_id=%s",
                     flow_id,
                 )
+                _ = await container.redis_client.srem(index_key, member)
                 continue
             trigger = flow_config.triggers.get(trigger_id)
-            if (
-                trigger is None
-                or trigger.type != TriggerType.PLATFORM_EVENT
-                or not trigger.enabled
-            ):
+            if trigger is None:
+                _ = await container.redis_client.srem(index_key, member)
+                continue
+            if trigger.type != TriggerType.PLATFORM_EVENT or not trigger.enabled:
                 continue
 
             try:
@@ -341,6 +342,13 @@ async def dispatch_platform_event_triggers(
                 continue
 
             run_id = platform_event_trigger_run_id(event.event_id, trigger_id)
+            session_id = f"{flow_id}:{run_id}"
+            existing_state = await container.workflow_runtime.get_state(session_id)
+            if existing_state is not None:
+                # Deterministic run_id: at-least-once redelivery must not start a second run
+                # (A2A terminal event identity would collide).
+                fired += 1
+                continue
             executor = TriggerExecutor()
             try:
                 _ = await executor.execute(

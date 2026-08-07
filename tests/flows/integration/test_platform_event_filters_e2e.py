@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from enum import StrEnum
 
 import pytest
@@ -49,6 +50,24 @@ async def _await_completed_state(container, session_id: str, *, timeout_sec: flo
         f"session {session_id!r} not completed in {timeout_sec}s; "
         f"terminal={getattr(last_state, 'terminal_task_state', None)!r}"
     )
+
+
+async def _reset_platform_event_index(container, event_type: str) -> None:
+    """Drop shared Redis index so leftover flows from prior runs cannot fire."""
+    _ = await container.redis_client.delete(platform_event_trigger_index_key(event_type))
+
+
+@pytest.fixture(autouse=True)
+async def _isolate_platform_event_indexes(container) -> AsyncIterator[None]:
+    """
+    Index is global per event_type. Prior failed runs leave members for deleted-or-orphaned
+    flows that still exist in DB; absolute fired-count asserts then flake.
+    """
+    for event_type in ("crm/entity/created", WORK_ITEM_COMMENT_CREATED):
+        await _reset_platform_event_index(container, event_type)
+    yield
+    for event_type in ("crm/entity/created", WORK_ITEM_COMMENT_CREATED):
+        await _reset_platform_event_index(container, event_type)
 
 
 async def _ensure_catalog_in_redis() -> None:

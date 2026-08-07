@@ -11,9 +11,6 @@
   "permission": [],
   "branches": {},
   "store_card_image": "tutor.jpg",
-  "chat": {
-    "greeting_message": "Объясню тему простыми словами. Демо, не ответ на ваше контрольное."
-  },
   "entry": "main",
   "nodes": {
     "main": {
@@ -40,5 +37,577 @@
       "to_node": null
     }
   ],
-  "variables": {}
+  "variables": {},
+  "interface": {
+    "schema_version": 1,
+    "template": {
+      "template_id": "linnex.default-chat",
+      "version": "1.0.0",
+      "document": {
+        "schema_version": 1,
+        "document_id": "template:linnex.default-chat:1.0.0",
+        "revision": 1,
+        "template_version": "1.0.0",
+        "catalog_id": "https://linnex.io/a2ui/catalog/platform/v1",
+        "active_page_id": "main",
+        "session_view_state": {},
+        "last_accepted_client_mutation_id": null,
+        "pages": {
+          "main": {
+            "page_id": "main",
+            "title": {
+              "default": "Conversation",
+              "translations": {}
+            },
+            "route": "/",
+            "root_surface_id": "main",
+            "navigation": {
+              "visible": true,
+              "allow_back": true,
+              "allow_direct": true
+            },
+            "default_target_profile_id": "runtime"
+          }
+        },
+        "surfaces": {
+          "main": {
+            "surface_id": "main",
+            "catalog_id": "https://linnex.io/a2ui/catalog/platform/v1",
+            "root_component_id": "root",
+            "components": {
+              "root": {
+                "component_id": "root",
+                "type": "PageShell",
+                "kind": "container",
+                "properties": {},
+                "children": [
+                  "header",
+                  "conversation",
+                  "greeting",
+                  "suggestions",
+                  "message-form"
+                ],
+                "container_layout": {
+                  "mode": "grid",
+                  "grid": {
+                    "columns_by_band": {
+                      "compact": 4,
+                      "medium": 8,
+                      "wide": 12
+                    },
+                    "column_gap_token": "space.4",
+                    "row_gap_token": "space.4",
+                    "outer_padding_inline_token": "space.4",
+                    "outer_padding_block_token": "space.4",
+                    "max_content_width_token": "content.wide",
+                    "auto_rows": "content",
+                    "auto_flow": "row",
+                    "align_items": "stretch",
+                    "justify_items": "stretch",
+                    "baseline_step_token": "space.1"
+                  },
+                  "stack": null,
+                  "flex": null
+                },
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {},
+                "actions": {},
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              },
+              "header": {
+                "component_id": "header",
+                "type": "Section",
+                "kind": "container",
+                "properties": {},
+                "children": [
+                  "agent-identity",
+                  "task-controls"
+                ],
+                "container_layout": {
+                  "mode": "flex",
+                  "grid": null,
+                  "stack": null,
+                  "flex": {
+                    "direction": "row",
+                    "wrap": true,
+                    "gap_token": "space.4",
+                    "align_items": "stretch",
+                    "justify_content": "space-between"
+                  }
+                },
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {},
+                "actions": {},
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              },
+              "agent-identity": {
+                "component_id": "agent-identity",
+                "type": "AgentIdentity",
+                "kind": "leaf",
+                "properties": {},
+                "children": [],
+                "container_layout": null,
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {
+                  "agent": "/system/agent"
+                },
+                "actions": {},
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              },
+              "task-controls": {
+                "component_id": "task-controls",
+                "type": "TaskControls",
+                "kind": "leaf",
+                "properties": {},
+                "children": [],
+                "container_layout": null,
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {
+                  "task": "/system/activeTask"
+                },
+                "actions": {},
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              },
+              "conversation": {
+                "component_id": "conversation",
+                "type": "ConversationFeed",
+                "kind": "container",
+                "properties": {},
+                "children": [
+                  "artifact-feed"
+                ],
+                "container_layout": {
+                  "mode": "stack",
+                  "grid": null,
+                  "stack": {
+                    "direction": "vertical",
+                    "gap_token": "space.3",
+                    "align": "stretch"
+                  },
+                  "flex": null
+                },
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {},
+                "actions": {},
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              },
+              "artifact-feed": {
+                "component_id": "artifact-feed",
+                "type": "ArtifactFeed",
+                "kind": "container",
+                "properties": {
+                  "presentation": "conversation"
+                },
+                "children": [],
+                "container_layout": {
+                  "mode": "stack",
+                  "grid": null,
+                  "stack": {
+                    "direction": "vertical",
+                    "gap_token": "space.3",
+                    "align": "stretch"
+                  },
+                  "flex": null
+                },
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {
+                  "tasks": "/system/tasks"
+                },
+                "actions": {},
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              },
+              "greeting": {
+                "component_id": "greeting",
+                "type": "EmptyState",
+                "kind": "leaf",
+                "properties": {},
+                "children": [],
+                "container_layout": null,
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {
+                  "message": "/content/greeting"
+                },
+                "actions": {},
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              },
+              "suggestions": {
+                "component_id": "suggestions",
+                "type": "SuggestedPrompts",
+                "kind": "leaf",
+                "properties": {},
+                "children": [],
+                "container_layout": null,
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {
+                  "items": "/content/suggestedPrompts",
+                  "value": "/values/message"
+                },
+                "actions": {
+                  "select": {
+                    "kind": "local",
+                    "name": "values.set",
+                    "context": {}
+                  }
+                },
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              },
+              "message-form": {
+                "component_id": "message-form",
+                "type": "Form",
+                "kind": "container",
+                "properties": {
+                  "formId": "message-form"
+                },
+                "children": [
+                  "file-upload",
+                  "message-input",
+                  "submit"
+                ],
+                "container_layout": {
+                  "mode": "stack",
+                  "grid": null,
+                  "stack": {
+                    "direction": "vertical",
+                    "gap_token": "space.3",
+                    "align": "stretch"
+                  },
+                  "flex": null
+                },
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {},
+                "actions": {},
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              },
+              "file-upload": {
+                "component_id": "file-upload",
+                "type": "FileUpload",
+                "kind": "leaf",
+                "properties": {},
+                "children": [],
+                "container_layout": null,
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {
+                  "value": "/values/files"
+                },
+                "actions": {},
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              },
+              "message-input": {
+                "component_id": "message-input",
+                "type": "TextArea",
+                "kind": "leaf",
+                "properties": {
+                  "label": "Message",
+                  "rows": 3
+                },
+                "children": [],
+                "container_layout": null,
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {
+                  "value": "/values/message"
+                },
+                "actions": {},
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              },
+              "submit": {
+                "component_id": "submit",
+                "type": "Button",
+                "kind": "leaf",
+                "properties": {
+                  "label": "Submit",
+                  "variant": "primary"
+                },
+                "children": [],
+                "container_layout": null,
+                "placement": {
+                  "base": {
+                    "column_start": "auto",
+                    "column_span": "full",
+                    "row_start": "auto",
+                    "row_span": 1,
+                    "order": 0,
+                    "align_self": "auto",
+                    "justify_self": "auto",
+                    "min_inline_size_token": null,
+                    "max_inline_size_token": null
+                  },
+                  "overrides": {}
+                },
+                "bindings": {},
+                "actions": {
+                  "press": {
+                    "kind": "event",
+                    "name": "platform.ui.submit",
+                    "context": {
+                      "formId": "message-form"
+                    }
+                  }
+                },
+                "visibility": null,
+                "checks": [],
+                "provenance": null
+              }
+            },
+            "data_model": {
+              "content": {
+                "greeting": "Объясню тему простыми словами. Демо, не ответ на ваше контрольное.",
+                "suggestedPrompts": []
+              },
+              "values": {
+                "message": "",
+                "files": []
+              },
+              "system": {
+                "tasks": [],
+                "activeTask": null,
+                "agent": {}
+              }
+            },
+            "owner": "platform",
+            "send_data_model": true
+          }
+        },
+        "global_data_model": {
+          "content": {},
+          "values": {},
+          "system": {}
+        },
+        "policy": {
+          "show_reasoning": false,
+          "tool_calls_display": "compact",
+          "show_activity": true,
+          "show_skill_loads": true,
+          "show_reflection": true,
+          "errors_display": "generic",
+          "show_run_trace": false,
+          "show_trace_actions": false,
+          "show_browser_previews": true,
+          "show_files_panel": true,
+          "allow_cancel": true,
+          "allow_voice": true,
+          "embed_safe_mode": false,
+          "allowed_catalog_ids": [
+            "https://linnex.io/a2ui/catalog/platform/v1"
+          ],
+          "allowed_actions": [
+            "platform.ui.submit"
+          ],
+          "allowed_functions": [
+            "required",
+            "email",
+            "regex",
+            "minLength",
+            "maxLength"
+          ],
+          "max_pages": 24,
+          "max_surfaces": 48,
+          "max_components_per_surface": 500,
+          "max_patch_bytes": 1000000
+        }
+      }
+    },
+    "catalog_id": "https://linnex.io/a2ui/catalog/platform/v1",
+    "policy": {
+      "show_reasoning": false,
+      "tool_calls_display": "compact",
+      "show_activity": true,
+      "show_skill_loads": true,
+      "show_reflection": true,
+      "errors_display": "generic",
+      "show_run_trace": false,
+      "show_trace_actions": false,
+      "show_browser_previews": true,
+      "show_files_panel": true,
+      "allow_cancel": true,
+      "allow_voice": true,
+      "embed_safe_mode": false,
+      "allowed_catalog_ids": [
+        "https://linnex.io/a2ui/catalog/platform/v1"
+      ],
+      "allowed_actions": [
+        "platform.ui.submit"
+      ],
+      "allowed_functions": [
+        "required",
+        "email",
+        "regex",
+        "minLength",
+        "maxLength"
+      ],
+      "max_pages": 24,
+      "max_surfaces": 48,
+      "max_components_per_surface": 500,
+      "max_patch_bytes": 1000000
+    },
+    "submit_action_name": "platform.ui.submit",
+    "fallback_policy": {
+      "unsupported_component": "artifact-card",
+      "unsupported_catalog": "ordinary-artifact"
+    }
+  }
 }

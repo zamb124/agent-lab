@@ -404,12 +404,22 @@ export class FrontendApp extends PlatformApp {
         this._publicSiteBundle = this.useOp('frontend/public_site_bundle');
         this._companiesSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
-        // Реактивность document.title: ждём bundle, иначе _syncPublicHtmlMeta
-        // записывает сырой ключ и lock'ает sig до смены route.
-        this._i18nPublicMetaSel = this.select((s) => ({
-            locale: s.i18n.locale,
-            hasBundle: !!s.i18n.translations[s.i18n.locale],
-        }));
+        // Реактивность document.title: ждём полный GET /api/i18n/{locale}.
+        // initialI18nState кладёт bootstrap-stub (только common.loading) —
+        // !!translations[locale] всегда true и раньше давал false-positive.
+        this._i18nPublicMetaSel = this.select((s) => {
+            const bundle = s.i18n.translations[s.i18n.locale];
+            return {
+                locale: s.i18n.locale,
+                hasBundle: Boolean(
+                    !s.i18n.loading
+                    && bundle
+                    && typeof bundle === 'object'
+                    && bundle.landing
+                    && typeof bundle.landing === 'object',
+                ),
+            };
+        });
         this._frontendMql = null;
         this._onFrontendMobileMql = null;
         this._frontendMobile =

@@ -4,6 +4,11 @@ alwaysApply: false
 ---
 # LinnexAgent и Platform MCP (LaraOnly)
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 LinnexAgent — desktop-клиент (Goose fork). **Канон продукта: LaraOnly** — единственное platform-окно = flow `lara` на branch `linnex_agent`; локальный ПК — через tunnel device tools внутри Lara. На legacy brand `humanitec.ru` продукт называется **HumanitecAgent**. **Код домена** — `apps/agent/`.
 
 ## Два HTTP-surface

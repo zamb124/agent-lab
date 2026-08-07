@@ -17,7 +17,6 @@ from core.state.execution_state import (
     InterruptPathItem,
     NestedStateData,
     NodeCallInfo,
-    PendingUIEvent,
     PromptHistoryItem,
     State,
 )
@@ -83,7 +82,6 @@ __all__ = [
     "ChildWorkflowStatus",
     "NodeCallInfo",
     "NestedStateData",
-    "PendingUIEvent",
     "PromptHistoryItem",
     "ExecutionExceptionRecord",
     "TriggerRuntimeSnapshot",

@@ -125,6 +125,24 @@ def is_final_event(event: StreamEvent) -> bool:
     return False
 
 
+def _event_platform_sequence(event: StreamEvent) -> int | None:
+    if not event.HasField("metadata"):
+        return None
+    metadata = mapping_from_struct(event.metadata)
+    sequence = metadata.get("platformSequence")
+    if sequence is None:
+        return None
+    if isinstance(sequence, bool):
+        raise ValueError("A2A event metadata.platformSequence must be a positive int")
+    if isinstance(sequence, float):
+        if not sequence.is_integer():
+            raise ValueError("A2A event metadata.platformSequence must be a positive int")
+        sequence = int(sequence)
+    if not isinstance(sequence, int) or sequence < 1:
+        raise ValueError("A2A event metadata.platformSequence must be a positive int")
+    return sequence
+
+
 class EventSubscriber(BaseSubscriber):
     """
     Подписывается на A2A события из Redis Pub/Sub.
@@ -143,6 +161,8 @@ class EventSubscriber(BaseSubscriber):
         task_id: str,
         timeout: float = 300.0,
         ready_event: asyncio.Event | None = None,
+        *,
+        after_sequence: int = 0,
     ) -> AsyncIterator[StreamEvent]:
         """
         Подписывается на события задачи.
@@ -151,10 +171,13 @@ class EventSubscriber(BaseSubscriber):
             task_id: ID задачи
             timeout: Таймаут ожидания в секундах
             ready_event: Event для сигнализации о готовности подписки
+            after_sequence: пропускать live events с platformSequence <= after_sequence
 
         Генерирует:
             A2A-события (TaskStatusUpdateEvent или TaskArtifactUpdateEvent)
         """
+        if after_sequence < 0:
+            raise ValueError("after_sequence must be >= 0")
         channel = f"stream:{task_id}"
         logger.debug(f"[Subscriber] Subscribing to {channel}")
 
@@ -164,6 +187,12 @@ class EventSubscriber(BaseSubscriber):
                 event = parse_event(message)
             except (ValueError, DecodeError, TypeError) as e:
                 logger.error(f"[Subscriber] Error parsing event on {channel}: {e}")
+                continue
+            sequence = _event_platform_sequence(event)
+            if sequence is not None and sequence <= after_sequence:
+                logger.debug(
+                    f"[Subscriber] Skipping duplicate sequence {sequence} on {channel}"
+                )
                 continue
             event_count += 1
             event_kind = message[:50]
@@ -182,6 +211,8 @@ class EventSubscriber(BaseSubscriber):
         task_id: str,
         timeout: float = 300.0,
         ready_event: asyncio.Event | None = None,
+        *,
+        after_sequence: int = 0,
     ) -> list[StreamEvent]:
         """
         Собирает все события до финального.
@@ -190,12 +221,18 @@ class EventSubscriber(BaseSubscriber):
             task_id: ID задачи
             timeout: Таймаут ожидания в секундах
             ready_event: Event для сигнализации о готовности подписки
+            after_sequence: reconnect cursor для live dedup
 
         Возвращает:
             Список всех событий
         """
         events: list[StreamEvent] = []
-        async for event in self.subscribe(task_id, timeout=timeout, ready_event=ready_event):
+        async for event in self.subscribe(
+            task_id,
+            timeout=timeout,
+            ready_event=ready_event,
+            after_sequence=after_sequence,
+        ):
             events.append(event)
         return events
 

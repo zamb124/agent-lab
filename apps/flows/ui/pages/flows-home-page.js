@@ -17,6 +17,7 @@ import { marketingHeroStyles } from '@platform/lib/styles/shared/marketing-secti
 import '../components/flows-catalog-list.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { AGENT_SKILL_ICON } from '../_helpers/agent-skill-map.js';
+import { flowSessionRoute } from '../_helpers/flow-session-route.js';
 
 const QUICK_ACTIONS = Object.freeze([
     Object.freeze({
@@ -882,15 +883,11 @@ export class FlowsHomePage extends PlatformPage {
         if (!isPlainObject(session)) {
             return;
         }
-        const flowId = asString(session.flow_id);
-        const sessionId = asString(session.session_id);
-        if (flowId.length === 0) {
+        const route = flowSessionRoute(session);
+        if (route === null) {
             return;
         }
-        if (sessionId.length === 0) {
-            return;
-        }
-        this.navigate('flow_chat_session', { flowId, sessionId });
+        this.navigate(route.routeKey, route.params);
     }
 
     _formatDateTime(value) {

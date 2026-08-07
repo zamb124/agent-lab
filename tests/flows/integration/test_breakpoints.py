@@ -498,6 +498,7 @@ class TestBreakpointsAPIIntegration:
             content="Start",
             metadata={"breakpoints": {"step2": True}},
             context_data=mock_context.model_dump(),
+            background_kind="background",
         )
         result = await task.wait_result(timeout=5)
         assert not result.is_err, f"Task failed: {result.error}"
@@ -537,8 +538,8 @@ class TestBreakpointsAPIIntegration:
         data = response.json()
         assert "result" in data, f"Expected result in response: {data}"
         task_status = data["result"]["status"]
-        assert task_status["state"] == "input-required", (
-            f"Expected input-required for breakpoint, got: {task_status}"
+        assert task_status["state"] == "TASK_STATE_INPUT_REQUIRED", (
+            f"Expected TASK_STATE_INPUT_REQUIRED for breakpoint on A2A wire, got: {task_status}"
         )
 
     @pytest.mark.asyncio
@@ -561,6 +562,7 @@ class TestBreakpointsAPIIntegration:
             content="Start",
             metadata={"breakpoints": {"step2": True}},
             context_data=mock_context.model_dump(),
+            background_kind="background",
         )
         result1 = await task1.wait_result(timeout=5)
         assert not result1.is_err
@@ -577,6 +579,7 @@ class TestBreakpointsAPIIntegration:
             is_resume=True,
             metadata={"breakpoints": {"step2": True}},
             context_data=mock_context.model_dump(),
+            background_kind="background",
         )
         result2 = await task2.wait_result(timeout=5)
         assert not result2.is_err, f"Resume failed: {result2.error}"
@@ -604,8 +607,8 @@ class TestBreakpointsAPIIntegration:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["status"]["state"] == "input-required", (
-            f"Expected input-required for breakpoint, got: {data['status']}"
+        assert data["status"]["state"] == "TASK_STATE_INPUT_REQUIRED", (
+            f"Expected TASK_STATE_INPUT_REQUIRED for breakpoint on tasks API wire, got: {data['status']}"
         )
 
     @pytest.mark.asyncio
@@ -628,6 +631,7 @@ class TestBreakpointsAPIIntegration:
             content="Start",
             metadata={},
             context_data=mock_context.model_dump(),
+            background_kind="background",
         )
         result = await task.wait_result(timeout=5)
         assert not result.is_err

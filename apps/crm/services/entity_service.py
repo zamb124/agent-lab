@@ -80,7 +80,7 @@ from apps.crm_worker.tasks.task_names import (
     CRM_REBUILD_PERIOD_SUMMARY,
 )
 from core.a2a import iter_json_parts, part_json_has_data, part_json_has_text
-from core.clients.a2a_client import A2AClient, A2ATaskResponse
+from core.clients.a2a_client import A2AClient, A2ATaskResult
 from core.context import get_context, resolve_namespace_or_raise
 from core.llm_context import (
     LLMContextBudgetError,
@@ -3948,7 +3948,7 @@ class EntityService:
     def _looks_like_structured_a2a_payload(payload: JsonObject) -> bool:
         return any(key in payload for key in _A2A_STRUCTURED_DATA_KEYS)
 
-    def _extract_data_from_a2a_response(self, response: A2ATaskResponse) -> JsonObject:
+    def _extract_data_from_a2a_response(self, response: A2ATaskResult) -> JsonObject:
         """
         Извлекает структурированные данные из A2A response.
 

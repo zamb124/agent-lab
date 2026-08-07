@@ -3,6 +3,16 @@ alwaysApply: true
 ---
 # Архитектурные принципы платформы
 
+## Zero Translation / Deep Contract Refactoring
+
+Канон — **`main.mdc`** (принципы Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring; запреты 11–14).
+
+- Одна доменная сущность — одна модель на всех слоях (API payload, service, repository, events, UI state). Не плодить `*DTO` / `*Internal` / twin-модели ради «изоляции слоя».
+- Запрещены helper-модули и функции, которые существуют только чтобы скопировать/переименовать поля между двумя почти одинаковыми моделями.
+- Несовпадение типов/полей между слоями — сигнал менять контракты end-to-end, не писать adapter/mapper/compat.
+- Минимизация blast radius заплатами вокруг устаревшего интерфейса запрещена: обновляй callers, тесты и payload'ы.
+- Конвертация — только на внешней границе (wire спеки, SDK, сырой JSON→typed boundary, ORM→domain в repository). Внутри платформы (`service`↔`api`↔`ui`↔`events`) — общий нативный тип.
+
 ## REST-зеркало команд (платформенный инвариант)
 
 | Тип события | REST-зеркало | WS-доступность | Источник правды |
@@ -161,6 +171,21 @@ config = await get_container().flow_repository.get(flow_id)
 
 Детали — **`durable_execution.mdc`**, **`flows_logic.mdc`**, **`execution_state.mdc`**.
 
+## Flow UI layers
+
+Зависимости однонаправленны:
+
+```text
+core/a2a (wire primitives, no UI domain)
+  ← core/a2ui codec/catalog identity
+  ← core/state/flow_ui domain + semantic delta
+  ← apps/flows A2A negotiation/representation/session/projection services
+  ← core/frontend flow-ui protocol/state/layout/catalog/renderer
+  ← apps/flows Interface editor hosts
+```
+
+Backend domain не импортирует frontend; `core/a2a` не импортирует Flow UI/A2UI. Capability runners возвращают typed `PlatformEffect`, но не знают renderer. A2A durable projection commit предшествует Redis/SSE publish. Chat-specific parallel layers, service locator и host-specific grids запрещены. Канон → **`flow_ui.mdc`**.
+
 ## LLM, мультимодал, NanoBanana
 
 AI model access — только через `core.ai` (`ai_models.mdc`): provider/capability catalog, shared model catalog, resolver, runtime. Прямые импорты LangChain/OpenAI моделей, provider-specific clients и старый `get_llm(...)` service API запрещены.
@@ -194,8 +219,8 @@ ctx = get_context()  # ctx.user, ctx.active_company.id, ctx.trace_id
 - Источник — slice `state.router`: `routes` (`{key, path, parent?}`, регистрация автоматическая в `createRouterEffect` через `CoreEvents.ROUTER_ROUTES_REGISTERED`); `routeKey`/`params` (`ROUTER_ROUTE_CHANGED`).
 - Цепочка — поднятие по `parent` от текущего `routeKey` к корню. Подпись — `this.t('routes.<routeKey>')` (`defaultI18nNamespace`).
 - Импорт: `import '@platform/lib/components/platform-breadcrumbs.js'`.
-- Использование: `<platform-breadcrumbs></platform-breadcrumbs>` в начале контента; динамический хвост — `current-label="..."` или `.currentLabel=${...}`.
+- Использование: `<platform-breadcrumbs></platform-breadcrumbs>` в начале контента; динамический хвост — `current-label="..."` или `.currentLabel=${...}`. Prop `.items` запрещён.
 - Вложенность внутри одного маршрута (дерево страниц wiki, папки) — prop `.trail` из `{ label, routeKey, params }`; вставляется между цепочкой маршрутов и текущей подписью.
-- Клик неактивной крошки → `CoreEvents.ROUTER_NAVIGATE_REQUESTED` с `params` текущего маршрута или `{}`.
+- Клик неактивной крошки → `CoreEvents.ROUTER_NAVIGATE_REQUESTED` с path-params текущего маршрута, пересечёнными с `:param` целевого route (не голый `{}` при общем `:flowId`).
 - i18n: каждый сервисный бандл обязан содержать секцию `"routes": {"<routeKey>": "<подпись>"}` в RU+EN.
 - Запрещено: `window.__PLATFORM_ROUTER__`, `setupRouter()`. Только bus + select.

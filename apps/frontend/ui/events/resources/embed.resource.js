@@ -50,19 +50,22 @@ export const embedConfigsResource = createResourceCollection({
         if (typeof raw.landing_sort_order !== 'number') {
             throw new Error('frontend/embed_configs: landing_sort_order required');
         }
+        if (raw.presentation != null && raw.presentation !== 'drawer' && raw.presentation !== 'page') {
+            throw new Error('frontend/embed_configs: presentation must be drawer or page');
+        }
         if (raw.guest_max_user_messages != null) {
             if (typeof raw.guest_max_user_messages !== 'number' || !Number.isFinite(raw.guest_max_user_messages)) {
                 throw new Error('frontend/embed_configs: guest_max_user_messages invalid');
             }
         }
-        if (raw.chat_override != null && (typeof raw.chat_override !== 'object' || Array.isArray(raw.chat_override))) {
-            throw new Error('frontend/embed_configs: chat_override must be object or null');
+        if (raw.interface_override != null && (typeof raw.interface_override !== 'object' || Array.isArray(raw.interface_override))) {
+            throw new Error('frontend/embed_configs: interface_override must be object or null');
         }
         return {
             ...raw,
             landing_card_image_url:
                 typeof raw.landing_card_image_url === 'string' ? raw.landing_card_image_url : null,
-            chat_override: raw.chat_override != null ? raw.chat_override : null,
+            interface_override: raw.interface_override != null ? raw.interface_override : null,
         };
     },
 });
@@ -96,6 +99,8 @@ export const embedCodeLoadOp = createAsyncOp({
             embed_id: id,
             html_code: typeof r.html_code === 'string' ? r.html_code : '',
             script_url: typeof r.script_url === 'string' ? r.script_url : '',
+            presentation: r.presentation === 'page' ? 'page' : 'drawer',
+            page_url: typeof r.page_url === 'string' ? r.page_url : '',
             token_endpoint: typeof r.token_endpoint === 'string' ? r.token_endpoint : '',
             backend_proxy_code,
             browser_to_host_backend_code,
@@ -121,6 +126,8 @@ export const embedCodeLoadOp = createAsyncOp({
                     [r.embed_id]: {
                         html_code: r.html_code,
                         script_url: r.script_url,
+                        presentation: r.presentation,
+                        page_url: r.page_url,
                         token_endpoint: r.token_endpoint,
                         backend_proxy_code: r.backend_proxy_code,
                         browser_to_host_backend_code: r.browser_to_host_backend_code,

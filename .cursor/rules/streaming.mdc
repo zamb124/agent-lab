@@ -1,8 +1,13 @@
 ---
-description: "Streaming: Stream-First, Emitter/EventSubscriber, A2A 1.0 StreamResponse, OTEL"
+description: "Streaming: Stream-First, stable lossless Artifacts, durable-before-publish, A2A 1.0 StreamResponse, OTEL"
 alwaysApply: false
 ---
 # Streaming
+
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 
 A2A wire — **только Protocol 1.0** (см. **`a2a.mdc`**). На SSE/Redis нет `kind`, нет `final=` на statusUpdate, нет TextPart/DataPart как отдельных wire-типов.
 
@@ -15,6 +20,8 @@ Worker (TaskIQ) → LlmNodeRunner → Emitter → Redis Pub/Sub → EventSubscri
                   ↑ llm.stream()           channel: stream:{task_id}
 ```
 
+Redis Pub/Sub — delivery tail, не источник истины. До publish A2A update должен быть append в durable ledger и atomically reflected в task/artifact projection/outbox. Reconnect сначала получает projected Task, затем sequence-aware tail без повторного применения событий.
+
 `LLMClient.stream` (client создан через `core.ai.runtime`): после чанков при наличии `tool_calls` уходит `TaskStatusUpdateEvent` с `metadata.tool_calls`, затем второй `TaskStatusUpdateEvent` с финальным текстом и `metadata.usage` без `tool_calls`. Оба — **`TASK_STATE_WORKING`**. Конец одного LLM-вызова ≠ конец A2A-задачи: `TASK_STATE_COMPLETED` на wire шлёт только `Emitter.emit_complete` (и аналогичные terminal emit_*). Иначе `EventSubscriber.is_final_event` закрывает `SendMessage`/`SendStreamingMessage` после первой llm_node. В `LlmNodeRunner` поле `tool_calls` обновляется **только если** в `metadata` непустой `tool_calls` — иначе последнее событие затирало бы список вызовов.
 
 ## Emitter
@@ -26,13 +33,15 @@ emitter = Emitter(redis_client, state)
 await emitter.emit_text("Hello")                       # текстовый чанк
 await emitter.emit_tool_call(name, args, call_id)
 await emitter.emit_tool_result(name, result, call_id)
-await emitter.emit_ui_event("patch_applied", payload)  # artifact ui_event
+await emitter.emit_artifact(artifact)                   # ordinary/A2UI Artifact
 await emitter.emit_complete("Done!")
 await emitter.emit_interrupt(state.interrupt)          # TASK_STATE_INPUT_REQUIRED, metadata.platform_interrupt
 await emitter.emit_error("Connection failed")
 ```
 
 К каждому событию автоматически: `task_id`, `context_id`, `trace_id`, `span_id` (OpenTelemetry).
+
+`BaseEmitter` выделяет stable `artifact_id` на логический artifact stream (`response`, `reasoning`, operator reply и т. п.). UUID на каждый text chunk запрещён. Произвольный Artifact публикуется generic методом без text/data re-synthesis. `emit_ui_event` отсутствует; Flow UI effect проходит representation service и становится ровно одним negotiated Artifact.
 
 Redis wire: `Emitter._publish` оборачивает protobuf-событие в `StreamResponse` и публикует `MessageToDict(stream)` — JSON без поля `kind`:
 
@@ -80,7 +89,7 @@ assert emitter.events[1].status.state == TaskState.TASK_STATE_COMPLETED
 
 **Redis subscribe idle-timeout:** `RedisClient.subscribe` использует **idle-таймаут** (сбрасывается при каждом сообщении, default 300 с) + **max-timeout** (3600 с, защита от утечек). Operator handoff при `takeover` может длиться минуты — активные сообщения сбрасывают idle.
 
-**Дедупликация текста statusUpdate:** в `platform-chat.js` / `a2a-chat-runtime.js` текст из `status.message.parts` в `statusUpdate` попадает в content **только** для terminal/interrupted состояний. Для `TASK_STATE_WORKING` текст идёт через `artifactUpdate` — дублирование исключено.
+**Дедупликация текста statusUpdate:** universal Flow UI Part projector берёт текст из `status.message.parts` только для terminal/interrupted состояний. Для `TASK_STATE_WORKING` текст идёт через `artifactUpdate` — дублирование исключено.
 
 **Завершение одного вызова LLM** (`core/clients/llm.stream`) не должно эмитить `TASK_STATE_COMPLETED` — иначе SSE обрывается до `node_complete` следующих нод и до `Emitter.emit_complete`. Конец A2A-задачи — только `emit_complete` / `emit_interrupt` / `emit_error` / `emit_cancelled`.
 
@@ -114,12 +123,13 @@ TaskArtifactUpdateEvent(
 
 Wire SSE `result` — `StreamResponse`: `statusUpdate` | `artifactUpdate` | `task` | `message` (camelCase ProtoJSON). Enums: `TASK_STATE_*`, `ROLE_USER` / `ROLE_AGENT`.
 
-### UI-события в протоколе
+### Flow UI в протоколе
 
-- **`TaskArtifactUpdateEvent`** с `artifact.name = "ui_event"`.
-- В `artifact.parts` — Part с `data` (`new_data_part`): `{"id": "...", "type": "...", "payload": {...}, "version": "1.0"}`.
-- Одно UI-событие = одно stream-сообщение (one-event-per-message).
-- Новый oneof-вариант в A2A для UI **не вводится**.
+- UI не имеет side protocol: A2UI v0.9.1 либо generic fallback находится в standard `TaskArtifactUpdateEvent.artifact.parts`.
+- Representation фиксируется negotiation snapshot Task; один effect не эмитится двумя вариантами.
+- Ordinary arbitrary Artifacts проходят без изменения и отображаются generic Part projector'ом.
+- `ArtifactAccumulator` одинаково применяет append/replace/lastChunk во всех consumers.
+- Новый oneof-вариант A2A для UI не вводится. Канон → **`flow_ui.mdc`**.
 
 **Граф (ноды/рёбра) в data Part:** помимо `node_start`/`node_complete`/`node_error` с `node_id`, рантайн публикует `event: "edge_executed"` с `edge_index` (0-based, тот же порядок, что у рёбер исполняемого flow), `from_node`, `to_node`. UI сопоставляет `edge_index` с `edges[i]`. При исключении в вычислении `condition` — `event: "edge_error"` с теми же полями плюс `error`.
 
@@ -166,5 +176,6 @@ Emitter добавляет trace в `metadata` каждого события а�
 - `apps/flows/src/streaming/subscriber.py` — `EventSubscriber`, `parse_event`, `is_final_event`.
 - `apps/flows/src/streaming/memory.py` — `InMemoryEmitter` (тесты; protobuf list).
 - `apps/flows/src/streaming/base.py` — `BaseEmitter`, `StreamEvent`.
-- Chat UI: `core/frontend/static/lib/chat/platform-chat.js`, `a2a-chat-runtime.js` (и `a2a-stream.js`).
+- Universal Flow UI: `core/frontend/static/lib/flow-ui/protocol/` и `<platform-flow-ui>`.
 - Канон протокола: **`a2a.mdc`**.
+- Канон UI representation/state: **`flow_ui.mdc`**.

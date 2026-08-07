@@ -7,7 +7,7 @@
 import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '../platform-element/index.js';
-import { flowsChatMarkdownToHtml } from '../chat/markdown.js';
+import { flowsChatMarkdownToHtml } from '../flow-ui/utils/markdown.js';
 import './platform-help-hint.js';
 import './platform-icon.js';
 import './platform-button.js';
@@ -637,7 +637,8 @@ export class PlatformMarkdownEditor extends PlatformElement {
             .syntax-chip[data-source="local"] { color: var(--accent); }
             .syntax-chip[data-source="input"] { color: var(--success); }
             .syntax-chip[data-source="upstream"],
-            .syntax-chip[data-source="preview"] { color: var(--info); }
+            .syntax-chip[data-source="preview"],
+            .syntax-chip[data-source="ui_value"] { color: var(--info); }
 
             .syntax-chip:hover {
                 color: var(--accent);
@@ -1277,9 +1278,14 @@ export class PlatformMarkdownEditor extends PlatformElement {
     }
 
     _missingPreviewValue(original, varName) {
-        const entry = Array.isArray(this.variableCatalog)
-            ? this.variableCatalog.find((item) => item?.name === varName.split('.')[0])
-            : null;
+        const catalog = Array.isArray(this.variableCatalog) ? this.variableCatalog : [];
+        const root = typeof varName === 'string' ? varName.split('.')[0] : '';
+        const entry = catalog.find((item) => {
+            const name = item?.name;
+            if (typeof name !== 'string' || name.length === 0) return false;
+            if (name === varName || name === root) return true;
+            return typeof root === 'string' && root.length > 0 && name.startsWith(`${root}.`);
+        });
         if (entry) return `‹${varName}: ${this.t('markdown_editor.runtime_value')}›`;
         return `⚠️${original}`;
     }

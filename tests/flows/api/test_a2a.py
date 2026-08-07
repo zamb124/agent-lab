@@ -256,7 +256,7 @@ class TestA2AMessageSend:
 
     @pytest.mark.asyncio
     async def test_message_send_history(self, client, flow_id, mock_llm_with_queue, sync_tools):
-        """SendMessage возвращает history с валидными Messages."""
+        """SendMessage сохраняет user Message в history; ответ агента — в status/artifacts."""
         mock_llm_with_queue(["Agent response"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -271,10 +271,16 @@ class TestA2AMessageSend:
         data = resp.json()
         task = data["result"]
         _validate_task(task, require_history=True)
-        assert len(task["history"]) >= 2
         roles = [msg["role"] for msg in task["history"]]
         assert "ROLE_USER" in roles, "History MUST contain user message"
-        assert "ROLE_AGENT" in roles, "History MUST contain agent message"
+        status_message = task["status"].get("message")
+        artifacts = task.get("artifacts") or []
+        response_artifacts = [
+            artifact for artifact in artifacts if artifact.get("name") == "response"
+        ]
+        assert status_message is not None or response_artifacts, (
+            "Agent reply must appear in status.message and/or response artifact"
+        )
 
     @pytest.mark.asyncio
     async def test_unknown_flow_error(self, client):
@@ -1250,9 +1256,10 @@ class TestA2AConversation:
     async def test_multi_turn_preserves_context(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):
-        """Несколько сообщений в одном contextId сохраняют историю."""
+        """Несколько Submit в одном contextId: отдельные Tasks, общий context."""
         mock_llm_with_queue(["First response", "Second response", "Third response"])
         context_id = str(uuid.uuid4())
+        task_ids: list[str] = []
         for i in range(3):
             resp = await client.post(
                 f"/flows/api/v1/{flow_id}",
@@ -1266,8 +1273,29 @@ class TestA2AConversation:
             )
             data = resp.json()
             _validate_jsonrpc_response(data)
-            _validate_task(data["result"])
-        resp = await client.post(
+            task = data["result"]
+            _validate_task(task)
+            assert task["contextId"] == context_id
+            task_ids.append(task["id"])
+        assert len(set(task_ids)) == 3, "Each Submit creates a new task_id"
+
+        list_resp = await client.post(
+            f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
+            json={
+                "jsonrpc": "2.0",
+                "id": "list",
+                "method": "ListTasks",
+                "params": {"contextId": context_id},
+            },
+        )
+        list_data = list_resp.json()
+        _validate_jsonrpc_response(list_data)
+        listed = list_data["result"]["tasks"]
+        assert len(listed) == 3
+        assert {item["contextId"] for item in listed} == {context_id}
+
+        get_resp = await client.post(
             f"/flows/api/v1/{flow_id}",
             headers=A2A_HEADERS,
             json={
@@ -1277,10 +1305,22 @@ class TestA2AConversation:
                 "params": {"id": context_id},
             },
         )
-        data = resp.json()
-        task = data["result"]
-        if task and task.get("history"):
-            assert len(task["history"]) >= 6
+        get_data = get_resp.json()
+        _validate_jsonrpc_response(get_data)
+        latest = get_data["result"]
+        assert latest["contextId"] == context_id
+        assert latest["id"] in task_ids
+        history = latest.get("history") or []
+        user_texts = [
+            part.get("text")
+            for message in history
+            if message.get("role") == "ROLE_USER"
+            for part in message.get("parts") or []
+            if "text" in part
+        ]
+        assert "Message 0" in user_texts
+        assert "Message 1" in user_texts
+        assert "Message 2" in user_texts
 
 
 class TestA2AJSONRPCErrors:
@@ -1418,14 +1458,19 @@ class TestA2ARealisticStreaming:
         assert resp.status_code == 200
         events = _parse_sse(resp.text)
         assert len(events) > 0, "Should receive events from Redis"
-        artifact_events = [
-            e for e in events if "artifactUpdate" in e.get("result", {})
+        # Flow UI also streams ui.document; LLM text is only name=response.
+        response_events = [
+            e
+            for e in events
+            if "artifactUpdate" in e.get("result", {})
+            and (e.get("result", {}).get("artifactUpdate", {}).get("artifact") or {}).get("name")
+            == "response"
         ]
-        assert len(artifact_events) >= 5, (
-            f"Expected multiple artifact chunks, got {len(artifact_events)}"
+        assert len(response_events) >= 5, (
+            f"Expected multiple response artifact chunks, got {len(response_events)}"
         )
         full_text = ""
-        for event in artifact_events:
+        for event in response_events:
             result = event.get("result", {}).get("artifactUpdate", {})
             parts = result.get("artifact", {}).get("parts", [])
             for part in parts:
@@ -1437,7 +1482,7 @@ class TestA2ARealisticStreaming:
     async def test_stream_chunks_same_artifact_id(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):
-        """Все чанки одного ответа имеют одинаковый artifactId."""
+        """Все чанки LLM response имеют одинаковый artifactId."""
         mock_llm_with_queue(["Multiple chunks with same artifact ID test."])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -1450,21 +1495,12 @@ class TestA2ARealisticStreaming:
             },
         )
         events = _parse_sse(resp.text)
-        artifact_events = [
-            e for e in events if "artifactUpdate" in e.get("result", {})
-        ]
         text_stream_events = [
             e
-            for e in artifact_events
-            if not str((e.get("result", {}).get("artifactUpdate", {}).get("artifact") or {}).get("name") or "").startswith(
-                "node_"
-            )
-            and any(
-                (
-                    "text" in p
-                    for p in (e.get("result", {}).get("artifactUpdate", {}).get("artifact") or {}).get("parts", [])
-                )
-            )
+            for e in events
+            if "artifactUpdate" in e.get("result", {})
+            and (e.get("result", {}).get("artifactUpdate", {}).get("artifact") or {}).get("name")
+            == "response"
         ]
         assert len(text_stream_events) >= 2, "Should have multiple text artifact chunks"
         artifact_ids = set()
@@ -1479,7 +1515,7 @@ class TestA2ARealisticStreaming:
 
     @pytest.mark.asyncio
     async def test_stream_last_chunk_marked(self, client, flow_id, mock_llm_with_queue, sync_tools):
-        """Последний чанк контента помечен last_chunk=True."""
+        """Последний чанк LLM response помечен last_chunk=True."""
         mock_llm_with_queue(["Content with last chunk marker"])
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -1492,17 +1528,14 @@ class TestA2ARealisticStreaming:
             },
         )
         events = _parse_sse(resp.text)
-        artifact_events = [
-            e for e in events if "artifactUpdate" in e.get("result", {})
-        ]
         content_artifacts = [
             e
-            for e in artifact_events
-            if not str((e.get("result", {}).get("artifactUpdate", {}).get("artifact") or {}).get("name") or "").startswith(
-                "node_"
-            )
+            for e in events
+            if "artifactUpdate" in e.get("result", {})
+            and (e.get("result", {}).get("artifactUpdate", {}).get("artifact") or {}).get("name")
+            == "response"
         ]
-        assert len(content_artifacts) >= 1, "Должен быть хотя бы один контентный artifact chunk"
+        assert len(content_artifacts) >= 1, "Должен быть хотя бы один response artifact chunk"
         last_result = content_artifacts[-1].get("result", {}).get("artifactUpdate", {})
         assert last_result.get("lastChunk") is True, (
             "Last content artifact chunk should have lastChunk=True"

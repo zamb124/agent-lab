@@ -5,6 +5,11 @@ alwaysApply: false
 ---
 # Flow как сотрудник
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 Ось идентичности агента одна — `user_id`. Flow с `FlowConfig.employee.enabled` — обычный `User` `flow_employee_{flow_id}` (`attributes.kind=flow_employee`), не отдельная сущность Agent. `AgentActor` / `AgentAssignment` / `platform-agent:*` запрещены.
 
 ## Identity и provisioning
@@ -65,7 +70,7 @@ alwaysApply: false
 | WorkItem tools (employee parity) | **DONE** | list_mine/get/update/assign/move/claim/complete/cancel/comments + queues/boards + team-directory | HITL operator dialog (N/A) |
 | Sync DM | **DONE** | inbox + sync messaging/channels tools | Sync AI badge в picker |
 | Sync group | **DONE by design** | member + @mention (+ `mentioned_user_ids` на send) | auto-reply без @ |
-| A2A / platform-chat | **DONE** | `resolve_execution_context` в channel entry | — |
+| A2A / Flow UI | **DONE** | `resolve_execution_context` в channel entry; universal `<platform-flow-ui>` | — |
 | Scheduler + curator escalation | **DONE** | runtime + escalation tests | полный E2E schedule-as-employee |
 | Handoff → child employee | **PARTIAL** | последующие replies через `create_task` резолвят identity | kickoff child: `context_data=self.context.to_dict()` parent (`BaseChannel._handle_handoff`), без employee JWT child |
 | HITL operator | **N/A** | HITL = люди/очереди | employee не оператор HITL |

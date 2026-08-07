@@ -104,10 +104,10 @@ class TestReactLoopModeAuto:
         mock_llm_with_queue([{"type": "text", "content": "Привет! Чем могу помочь?"}])
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="Привет",
         )
         result = await run_flow_state(flow, state)
@@ -155,10 +155,10 @@ class TestReactLoopModeAuto:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="5+3?",
         )
         result = await run_flow_state(flow, state)
@@ -185,10 +185,10 @@ class TestReactLoopModeAuto:
         mock_llm_with_queue([{"type": "text", "content": "Ответ по умолчанию"}])
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="test",
         )
         result = await run_flow_state(flow, state)
@@ -228,10 +228,10 @@ class TestReactLoopModeExplicit:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="Завершись",
         )
         result = await run_flow_state(flow, state)
@@ -281,10 +281,10 @@ class TestReactLoopModeExplicit:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="10*5?",
         )
         result = await run_flow_state(flow, state)
@@ -323,10 +323,10 @@ class TestReactLoopModeExplicit:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="test",
         )
         result = await run_flow_state(flow, state)
@@ -366,10 +366,10 @@ class TestReactLoopModeExplicit:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="test",
         )
         result = await run_flow_state(flow, state)
@@ -403,10 +403,10 @@ class TestReactLoopModeExplicit:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="Привет",
         )
         result = await run_flow_state(flow, state)
@@ -461,10 +461,10 @@ class TestReactLoopModeExplicit:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="Выполни",
         )
         result = await run_flow_state(flow, state)
@@ -511,10 +511,10 @@ class TestReactLoopModeStrictAndReminder:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="test",
         )
         result = await run_flow_state(flow, state)
@@ -546,10 +546,10 @@ class TestReactLoopModeStrictAndReminder:
         mock_llm_with_queue([{"type": "text", "content": "Текстовый ответ без finish"}])
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="test",
         )
         result = await run_flow_state(flow, state)
@@ -592,10 +592,10 @@ class TestReactLoopModeStrictAndReminder:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="test",
         )
         result = await run_flow_state(flow, state)
@@ -644,10 +644,10 @@ class TestReactLoopModeStrictAndReminder:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="2*3?",
         )
         result = await run_flow_state(flow, state)
@@ -710,10 +710,10 @@ class TestReactLoopModeMaxIterations:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="Loop",
         )
         with pytest.raises(FlowExecutionError) as exc_info:
@@ -753,10 +753,10 @@ class TestReactLoopModeMaxIterations:
         mock_llm_with_queue([{"type": "text", "content": ""}])
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="Привет",
         )
         with pytest.raises(FlowExecutionError) as exc_info:
@@ -867,7 +867,7 @@ class TestExampleReactExplicitMode:
         )
         assert flow is not None
 
-    async def test_example_relaxed_mode_text_exits(self, app, mock_llm_with_queue):
+    async def test_example_relaxed_mode_text_exits(self, app, mock_llm_with_queue, unique_id):
         """
         В relaxed режиме текстовый ответ принимается.
         """
@@ -877,10 +877,10 @@ class TestExampleReactExplicitMode:
             "example_react", branch_id="explicit_relaxed_mode"
         )
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="Привет",
         )
         result = await run_flow_state(flow, state)
@@ -919,10 +919,10 @@ class TestReactLoopModeEdgeCases:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="",
         )
         result = await run_flow_state(flow, state)
@@ -1000,10 +1000,10 @@ class TestReactLoopModeEdgeCases:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="test",
         )
         result = await run_flow_state(flow, state)
@@ -1049,10 +1049,10 @@ class TestReactLoopModeEdgeCases:
         )
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="test",
         )
         result = await run_flow_state(flow, state)
@@ -1086,10 +1086,10 @@ class TestReactLoopModeEdgeCases:
         mock_llm_with_queue([{"type": "text", "content": "Текстовый ответ в auto режиме"}])
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id=f"{flow.flow_id}:test-context",
+            session_id=f"{flow.flow_id}:test-context-{unique_id}",
             content="test",
         )
         result = await run_flow_state(flow, state)

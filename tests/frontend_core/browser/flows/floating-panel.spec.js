@@ -187,4 +187,43 @@ describe('flows-floating-panel', () => {
         const prefs = readPrefsRoot();
         expect(prefs.assistant_width).to.equal(450);
     });
+
+    it('assistant slot ограничивает высоту slotted-контента под panel height', async () => {
+        const el = await fixture(html`
+            <flows-floating-panel
+                panel-id="assistant-scroll-height"
+                header-icon="code"
+                header-title="X"
+                ai-enabled
+                ai-active
+            >
+                <div slot="editor">Editor</div>
+                <div slot="assistant" id="assistant-fill" style="box-sizing:border-box">
+                    <div style="height:2400px;flex-shrink:0">tall</div>
+                </div>
+            </flows-floating-panel>
+        `);
+        await elementUpdated(el);
+        el._panelViewport = () => ({ width: 1800, height: 1000 });
+        el._applyFloatingPanelRect({
+            left: 24,
+            top: 24,
+            width: 1200,
+            height: 640,
+        });
+        await elementUpdated(el);
+
+        const sheetText = [...el.shadowRoot.adoptedStyleSheets]
+            .map((sheet) => [...sheet.cssRules].map((rule) => rule.cssText).join('\n'))
+            .join('\n');
+        expect(sheetText).to.match(/grid-template-rows:\s*minmax\(0(?:px)?, 1fr\)/);
+
+        const assistantSlot = el.shadowRoot.querySelector('.panel-assistant slot');
+        const assigned = assistantSlot.assignedElements({ flatten: true });
+        expect(assigned.length).to.equal(1);
+        const slotted = assigned[0];
+        expect(slotted.clientHeight).to.be.lessThan(640);
+        expect(slotted.clientHeight).to.be.greaterThan(0);
+        expect(slotted.scrollHeight).to.be.greaterThan(slotted.clientHeight);
+    });
 });

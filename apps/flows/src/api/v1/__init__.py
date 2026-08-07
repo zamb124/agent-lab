@@ -9,6 +9,7 @@ from .certificate import router as certificate_router
 from .code import router as code_router
 from .company import router as company_router
 from .evaluation import router as evaluation_router
+from .flow_ui_shares import router as flow_ui_shares_router
 from .flows import router as flows_router
 from .hitl_conversation import router as hitl_conversation_router
 from .internal_company import router as internal_company_router
@@ -38,6 +39,7 @@ api_v1_router.include_router(flows_voice_providers_catalog_router)
 api_v1_router.include_router(lara_actions_router)
 api_v1_router.include_router(llm_context_router)
 api_v1_router.include_router(flows_router, prefix="/flows")
+api_v1_router.include_router(flow_ui_shares_router)
 api_v1_router.include_router(certificate_router, prefix="/certificate")
 api_v1_router.include_router(evaluation_router, prefix="/evaluation")
 api_v1_router.include_router(metadata_router, prefix="/metadata")

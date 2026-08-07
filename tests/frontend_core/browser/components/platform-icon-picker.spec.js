@@ -2,7 +2,7 @@
  * platform-icon-picker — выбор иконки, слой панели, клавиатура.
  */
 
-import { fixture, html, expect, oneEvent, elementUpdated } from '../helpers/render.js';
+import { fixture, html, expect, oneEvent, elementUpdated, aTimeout } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-icon-picker.js';
 
@@ -111,6 +111,8 @@ describe('platform-icon-picker', () => {
         const el = await mountPicker();
         triggerOf(el).click();
         await elementUpdated(el);
+        // Outside-dismiss вешается после rAF и игнорирует жест открытия (~320ms).
+        await aTimeout(400);
 
         document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
         await elementUpdated(el);

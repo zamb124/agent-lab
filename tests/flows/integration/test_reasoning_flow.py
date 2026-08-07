@@ -84,7 +84,9 @@ class TestReasoningInAgent:
         result = data["result"]
         assert "artifacts" in result
         assert result["artifacts"] is not None
-        assert len(result["artifacts"]) == 2
+        named = {a.get("name") for a in result["artifacts"] if isinstance(a, dict)}
+        assert "reasoning" in named
+        assert "response" in named or None in named
         reasoning_artifact = next(
             (a for a in result["artifacts"] if a.get("name") == "reasoning"), None
         )

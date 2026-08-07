@@ -33,7 +33,6 @@ from apps.agent.tunnel_bus import (  # noqa: E402
 from apps.flows.config import FlowSettings, get_settings  # noqa: E402
 from apps.flows.src.api import (  # noqa: E402
     a2a_router,
-    chat_router,
     registry_router,
     websocket_router,
 )
@@ -297,7 +296,6 @@ app = create_service_app(
     routers=[
         api_v1_router,
         registry_router,
-        chat_router,
         websocket_router,
         a2a_router,
         agent_platform_mcp_router,

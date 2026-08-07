@@ -409,7 +409,7 @@ async def test_flows_agent_handoff(
     assert isinstance(first_tool, dict)
     assert first_tool.get("call_type") == "handoff"
     await flows_switch_editor_mode(page, "run")
-    run_chat = page.locator("flows-execution-panel platform-chat").first
+    run_chat = page.locator("flows-execution-panel platform-flow-ui").first
     await expect(run_chat).to_be_visible(timeout=15_000)
     await scenario.step(
         "Опубликуйте и откройте режим запуска",
@@ -445,48 +445,42 @@ async def test_flows_agent_handoff(
         ]
     )
     await flows_execution_send_message(page, "Хочу вернуть заказ GG-1042")
-    handoff_card = run_chat.locator("flows-chat-message[data-role='handoff'] .handoff-card").last
-    await expect(handoff_card).to_be_visible(timeout=120_000)
-    await expect(handoff_card).to_contain_text(GREEN_GARDEN_RETURNS_AGENT)
+    await expect(
+        run_chat.get_by_text(re.compile(r"готов принять детали возврата|Агент возвратов", re.I)).first
+    ).to_be_visible(timeout=120_000)
     await scenario.step(
         "Передайте диалог профильному агенту",
         page,
         screenshot_name="handoff-visible-in-chat",
         label_en="Hand off the dialog to the specialist",
         details=(
-            "Отправьте вопрос о возврате. В ленте появится отдельная карточка передачи "
-            f"управления агенту «{GREEN_GARDEN_RETURNS_AGENT}». Это не обычный ответ: "
-            "следующая реплика пользователя уже пойдёт дочернему агенту."
+            "Отправьте вопрос о возврате. Управление переходит агенту "
+            f"«{GREEN_GARDEN_RETURNS_AGENT}»: следующая реплика пользователя уже идёт "
+            "дочернему агенту, а ответ появляется в общей conversation-ленте Flow UI."
         ),
         details_en=(
-            "Send a return question. The feed shows a dedicated control-transfer card for "
-            f"{GREEN_GARDEN_RETURNS_AGENT}. This is not a normal reply: the next user turn "
-            "is routed to the child agent."
+            "Send a return question. Control moves to "
+            f"{GREEN_GARDEN_RETURNS_AGENT}: the next user turn is routed to the child "
+            "agent, and the reply appears in the shared Flow UI conversation feed."
         ),
     )
 
     await flows_execution_send_message(page, "Товар не использован, упаковка сохранена")
-    child_bubble = run_chat.locator("flows-chat-message[data-role='assistant']").filter(
-        has_text=re.compile(r"GG-1042|готовлю возврат|Агент возвратов", re.I)
-    ).last
-    await expect(child_bubble).to_be_visible(timeout=120_000)
-    child_author = child_bubble.locator(
-        ".author-identity[data-author-kind='subagent'], .author-identity"
-    ).first
-    if await child_author.count() > 0:
-        await expect(child_author).to_contain_text(GREEN_GARDEN_RETURNS_AGENT)
+    await expect(
+        run_chat.get_by_text(re.compile(r"GG-1042|готовлю возврат|Агент возвратов", re.I)).first
+    ).to_be_visible(timeout=120_000)
     await scenario.step(
         "Убедитесь, что отвечает субагент",
         page,
         screenshot_name="subagent-author-visible",
         label_en="Verify that the sub-agent is replying",
         details=(
-            "Ответ помечен синей иконкой, именем «Агент возвратов» и ролью «Субагент». "
-            "Так в длинном диалоге сразу видно, кто написал каждый bubble."
+            "В ленте виден ответ субагента по возврату. В одной Flow UI conversation "
+            "остаётся весь диалог родителя и дочернего агента."
         ),
         details_en=(
-            "The reply is marked with a blue icon, the Returns Agent name, and the "
-            "Sub-agent role. Every bubble remains attributable in a long conversation."
+            "The return sub-agent reply is visible in the feed. One Flow UI conversation "
+            "keeps the full parent and child dialog."
         ),
     )
 
@@ -503,24 +497,22 @@ async def test_flows_agent_handoff(
         ]
     )
     await flows_execution_send_message(page, "Оформите возврат и верните меня помощнику")
-    handback_card = run_chat.locator(
-        "flows-chat-message[data-role='handback'] .handback-card"
-    ).last
-    await expect(handback_card).to_be_visible(timeout=120_000)
-    await expect(handback_card).to_contain_text("Возврат GG-1042 оформлен")
+    await expect(
+        run_chat.get_by_text(re.compile(r"Возврат GG-1042 оформлен", re.I)).first
+    ).to_be_visible(timeout=120_000)
     await scenario.step(
         "Верните управление главному агенту",
         page,
         screenshot_name="handback-visible-in-chat",
         label_en="Return control to the main agent",
         details=(
-            "Когда задача решена, дочерний агент вызывает **handback_to_parent**. В чат "
-            "добавляется карточка возврата. Назад уходят только текст результата и явно "
+            "Когда задача решена, дочерний агент вызывает **handback_to_parent**. В ленту "
+            "попадает результат handback. Назад уходят только текст результата и явно "
             "указанные переменные — здесь это return_id."
         ),
         details_en=(
-            "When the task is complete, the child calls **handback_to_parent**. A handback "
-            "card is added to the feed. Only the result text and explicitly selected "
+            "When the task is complete, the child calls **handback_to_parent**. The handback "
+            "result appears in the feed. Only the result text and explicitly selected "
             "variables are returned — return_id in this example."
         ),
     )
@@ -528,28 +520,24 @@ async def test_flows_agent_handoff(
     parent_reply_text = "Главный агент снова на связи. Возврат RET-1042 подтверждён."
     await flows_seed_mock_llm([{"type": "text", "content": parent_reply_text}])
     await flows_execution_send_message(page, "Спасибо, что дальше?")
-    parent_bubble = run_chat.locator("flows-chat-message[data-role='assistant']").filter(
-        has_text=re.compile(r"Главный агент снова на связи", re.I)
-    ).last
-    await expect(parent_bubble).to_be_visible(timeout=120_000)
-    parent_author = parent_bubble.locator(".author-identity[data-author-kind='agent']")
-    await expect(parent_author).to_be_visible(timeout=15_000)
-    await expect(parent_author).to_contain_text(GREEN_GARDEN_AGENT_NAME)
+    await expect(
+        run_chat.get_by_text(re.compile(r"Главный агент снова на связи", re.I)).first
+    ).to_be_visible(timeout=120_000)
     await scenario.step(
         "Проверьте возврат к главному агенту",
         page,
         screenshot_name="parent-author-restored",
         label_en="Verify the return to the main agent",
         details=(
-            "**Демонстрация результата.** Следующий ответ снова подписан именем главного "
-            "агента и ролью «Агент». В одной ленте виден весь цикл: пользователь → агент → "
-            "handoff → субагент → handback → агент.\n\n"
+            "**Демонстрация результата.** Следующий ответ снова от главного агента. "
+            "В одной ленте виден весь цикл: пользователь → агент → handoff → субагент → "
+            "handback → агент.\n\n"
             "**Итог.** Используйте Call для разового запроса с возвратом результата, Handoff "
             "для передачи следующих реплик и handback_to_parent для явного возврата управления."
         ),
         details_en=(
-            "**Result demonstration.** The next reply is again labelled with the main agent "
-            "name and Agent role. One feed shows the complete cycle: user → agent → handoff → "
+            "**Result demonstration.** The next reply is again from the main agent. "
+            "One feed shows the complete cycle: user → agent → handoff → "
             "sub-agent → handback → agent.\n\n"
             "**Summary.** Use Call for a one-off invocation, Handoff to route following turns, "
             "and handback_to_parent to explicitly return control."

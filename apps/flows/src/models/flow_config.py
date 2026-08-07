@@ -23,12 +23,16 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
 from core.models import StrictBaseModel
+from core.models.flow_interface import (
+    FlowInterfaceConfig,
+    FlowInterfaceOverride,
+    default_flow_interface_config,
+)
 from core.types import JsonObject, JsonValue
 from core.urn import extract_resource_id
 from core.variables.models import VariableEntry, normalize_variables_map
 
 from .enums import MergeMode
-from .flow_chat_settings import FlowChatSettings
 from .flow_speech_settings import FlowSpeechSettings
 from .resource import ResourceReference
 from .trigger_config import TriggerConfig
@@ -230,6 +234,14 @@ class BranchConfig(StrictBaseModel):
     speech: FlowSpeechSettings | None = Field(
         default=None,
         description="Переопределение профиля речи для ветки (мержится поверх flow.speech)",
+    )
+
+    interface_override: FlowInterfaceOverride = Field(
+        default_factory=FlowInterfaceOverride,
+        description=(
+            "Полная replacement-семантика Flow UI для ветки; "
+            "inherit не создаёт частичный component merge"
+        ),
     )
 
     @model_validator(mode="before")
@@ -445,9 +457,12 @@ class FlowConfig(StrictBaseModel):
         description="Профиль речи (STT/TTS/VAD) без секретов; tier ниже explicit SpeechOverride, выше company",
     )
 
-    chat: FlowChatSettings = Field(
-        default_factory=FlowChatSettings,
-        description="Политика поведения чат-компонента для пользователей flow (доставляется через chat-profile)",
+    interface: FlowInterfaceConfig = Field(
+        default_factory=default_flow_interface_config,
+        description=(
+            "Единственный design-time Flow UI; чат является его "
+            "редактируемым default template"
+        ),
     )
 
     # Триггеры flow — точки входа (telegram, cron, webhook, email)

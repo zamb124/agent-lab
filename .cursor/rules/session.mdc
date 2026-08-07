@@ -4,6 +4,11 @@ alwaysApply: false
 ---
 # Сессии flows
 
+## Zero Translation (канон)
+
+См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
+Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
+
 `session_id` связывает пользовательский поток с durable workflow instance. Формат для A2A/flows: `{flow_id}:{context_id}`. Значение хранится в `ExecutionState.session_id`, но сам `ExecutionState` является projection, а не источником истины.
 
 ## Agent handoff sessions
@@ -55,6 +60,14 @@ await container.workflow_runtime.save_state(
 - Resume после interrupt загружает projection через `workflow_runtime.get_state`, применяет пользовательский ответ и коммитит новое событие.
 - Retry после `raise` возвращается к последней recoverable durable boundary, а не к грязному in-memory объекту.
 - Time-travel всегда работает через `get_state_history` / `load_state_at_sequence` / fork-branch semantics.
+
+## Flow UI continuity и A2A Tasks
+
+Один `context_id` — одна durable conversation/UI document identity; каждый Submit создаёт новый `task_id` в этом context. Последний Task не заменяет историю прежних Tasks. `GetTask` адресует task projection; session bootstrap возвращает current acknowledged `FlowUIDocument` и values.
+
+Reload/reopen/new tab/device сначала hydrates authoritative A2A snapshot, затем подключает live tail; default template не рендерится поверх существующей session. Debounced `platform.ui.sync` сохраняет values до Submit, а `pagehide`, share и Submit выполняют forced flush с acknowledgement.
+
+Live share использует revocable scoped grant на тот же context/document/revision. Grant выдаётся только после подтверждения requested minimum revision, не создаёт новую conversation и проверяется на каждом bootstrap/sync/submit/subscribe. Local recovery journal содержит только unacknowledged semantic mutations и не становится источником истины. Канон → **`flow_ui.mdc`**.
 
 ## Interrupt и resume
 

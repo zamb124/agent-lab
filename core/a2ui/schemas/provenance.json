@@ -1,0 +1,15 @@
+{
+  "protocol": "A2UI v0.9.1",
+  "repository": "https://github.com/a2ui-project/a2ui",
+  "commit": "5be36dbf169cec5701ba88e642123c25ca9fc0e5",
+  "sourceRoot": "specification/v0_9_1/json",
+  "retrievedAt": "2026-08-04",
+  "upstreamSha256": {
+    "server_to_client.json": "2ba29dbcb57611225c96d3e064d05cf97e9d8224b293c8b20d37b93922a2d30d",
+    "client_to_server.json": "f049f8a554296a603cd3c1cef37dd6811006dc90e3ff52ce845d1674cd00a6b7",
+    "client_data_model.json": "6aefe455be9287caaf2f964ae480e8cf87706718106130908b41df19d5e982be",
+    "client_capabilities.json": "917ff302b883c8c50475f0fafa836c17620078e7e2089392b322dc5df01de78f",
+    "server_capabilities.json": "bdaf275dd2abf279e62637ead1b840744e031d94735ec4f63d0c7c2fe5347dd4"
+  },
+  "note": "Vendored standalone fixtures preserve the pinned upstream contracts while normalizing external catalog references and the documented v0.9.1 capability alias. Upstream byte hashes identify the immutable source inputs. Runtime validation additionally enforces Linnex catalog and security policy."
+}

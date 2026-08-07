@@ -544,6 +544,15 @@ class PythonSandboxExecutor:
                         f"Capability {{capability_name}} failed: {{exc.code}} {{error_body}}"
                     ) from exc
                 decoded = json.loads(response_body.decode("utf-8"))
+                platform_effects = decoded.get("platform_effects")
+                if platform_effects is not None:
+                    if not isinstance(platform_effects, list):
+                        raise RuntimeError(
+                            f"Capability {{capability_name}} returned invalid platform_effects"
+                        )
+                    current_request.setdefault("_platform_effects", []).extend(
+                        platform_effects
+                    )
                 returned_state = decoded.get("state")
                 if isinstance(returned_state, dict):
                     current_request["state"].clear()
@@ -855,6 +864,7 @@ class PythonSandboxExecutor:
                     current_request = json.loads(raw_line)
                     if "args" not in current_request and "state" not in current_request:
                         return json.dumps(validate_request(current_request), ensure_ascii=False, separators=(",", ":"))
+                    current_request["_platform_effects"] = []
                     state = ExecutionStateView(current_request["state"])
                     current_request["state"] = state
                     args = dict(current_request["args"])
@@ -898,6 +908,7 @@ class PythonSandboxExecutor:
                         "state": state,
                         "state_returned": state_returned,
                         "logs": [],
+                        "platform_effects": current_request["_platform_effects"],
                     }}
                 except CapabilityInterrupt as interrupt:
                     payload = interrupt.payload
@@ -907,6 +918,7 @@ class PythonSandboxExecutor:
                         "state": current_request.get("state", {{}}),
                         "interrupt": payload.get("interrupt"),
                         "logs": [],
+                        "platform_effects": current_request.get("_platform_effects", []),
                     }}
                 except FlowInterrupt as interrupt:
                     response_payload = {{
@@ -918,6 +930,7 @@ class PythonSandboxExecutor:
                             "body": interrupt.body,
                         }},
                         "logs": [],
+                        "platform_effects": current_request.get("_platform_effects", []),
                     }}
                 except BaseException as exc:
                     context = current_request.get("context", {{}}) if isinstance(current_request, dict) else {{}}
@@ -936,6 +949,7 @@ class PythonSandboxExecutor:
                             "trace_id": context.get("trace_id"),
                         }},
                         "logs": [],
+                        "platform_effects": current_request.get("_platform_effects", []),
                     }}
                 finally:
                     sys.stdout = real_stdout

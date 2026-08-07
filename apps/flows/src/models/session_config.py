@@ -25,6 +25,10 @@ class SessionConfig(StrictBaseModel):
     channel: str = Field(..., description="Канал (a2a, telegram, api)")
     user_id: str = Field(..., description="Идентификатор пользователя")
     flow_id: str = Field(..., description="Идентификатор агента")
+    branch_id: str = Field(
+        default="default",
+        description="Ветка графа, которой принадлежит сессия (неизменяема)",
+    )
     context_id: str | None = Field(default=None, description="ID контекста (извлекается из session_id)")
     status: SessionStatus = Field(default=SessionStatus.ACTIVE, description="Статус сессии")
     metadata: JsonObject = Field(default_factory=dict, description="Метаданные сессии")

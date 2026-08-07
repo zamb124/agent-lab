@@ -147,16 +147,16 @@ class TestDurableWorkflowRuntime:
     """Тесты durable projection read/write."""
 
     @pytest.mark.asyncio
-    async def test_set_and_get_state(self, app):
+    async def test_set_and_get_state(self, app, unique_id):
         """Сохранение и получение state."""
         container = get_container()
         runtime = container.workflow_runtime
 
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=f"test-context-{unique_id}",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test-agent:test-context-{unique_id}",
             content="test",
             messages=[],
         )
@@ -167,7 +167,7 @@ class TestDurableWorkflowRuntime:
             message_id="test-msg",
             role=ROLE_USER,
             parts=[Part(text="Hello")],
-            task_id="test-task"
+            task_id=f"test-task-{unique_id}"
         )
         state.messages.append(message)
 

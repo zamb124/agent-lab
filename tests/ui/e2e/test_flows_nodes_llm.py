@@ -159,7 +159,7 @@ async def test_flows_add_agent_tools(
         ]
     )
     await flows_execution_send_message(page, "Посчитай 2+2 для скидки")
-    reply = page.locator("flows-execution-panel platform-chat").get_by_text(
+    reply = page.locator("flows-execution-panel platform-flow-ui").get_by_text(
         re.compile(r"4|Сумма"), exact=False
     ).first
     await expect(reply).to_be_visible(timeout=120_000)

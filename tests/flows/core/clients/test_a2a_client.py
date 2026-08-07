@@ -42,13 +42,20 @@ class TestA2AClient:
                 "jsonrpc": "2.0",
                 "id": data["id"],
                 "result": {
-                    "status": {"state": "TASK_STATE_COMPLETED"},
-                    "artifacts": [
-                        {"parts": [{"text": f"Echo: {content}"}]}
-                    ],
+                    "task": {
+                        "id": "task-echo-1",
+                        "contextId": context_id,
+                        "status": {"state": "TASK_STATE_COMPLETED"},
+                        "artifacts": [
+                            {
+                                "artifactId": "echo-1",
+                                "name": "response",
+                                "parts": [{"text": f"Echo: {content}"}],
+                            }
+                        ],
+                    }
                 },
             })
-
         app = web.Application()
         app.router.add_get("/.well-known/agent-card.json", handle_agent_card)
         app.router.add_post("/", handle_send_task)
