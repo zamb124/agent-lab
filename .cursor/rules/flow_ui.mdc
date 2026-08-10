@@ -456,13 +456,18 @@ Gallery UI — только Interface Editor модалка `flows.interface_tem
 
 Компоненты с user-facing полями используют `<platform-field>`, действия editor chrome — `<platform-button>`, тексты — парные RU/EN i18n keys, colors/spacing/typography — только platform tokens.
 
-`ArtifactFeed` с `properties.presentation = "conversation"` (default chat template) показывает Tasks с turn content: user — artifact `user_message` или task-scoped `ROLE_USER`; assistant — сначала streamed artifact `name="response"`, иначе текст из A2A `task.status.message.parts[]`. Между user и assistant (и во время waiting) лента рисует **inline activity strip** из ordinary A2A artifacts через `projectConversationActivity` ([`turn-activity.js`](../../core/frontend/static/lib/flow-ui/runtime/turn-activity.js)), с теми же policy gates, что toast overlay:
+`ArtifactFeed` с `properties.presentation = "conversation"` (default chat template) показывает Tasks с turn content: user — artifact `user_message` или task-scoped `ROLE_USER`; assistant — сначала streamed artifact `name="response"`, иначе текст из A2A `task.status.message.parts[]`. Между user и assistant (и во время waiting) лента рисует **inline activity strip** из ordinary A2A artifacts через `projectConversationActivity` + `enrichConversationActivityWithBrowserPreviews` ([`turn-activity.js`](../../core/frontend/static/lib/flow-ui/runtime/turn-activity.js)), с теми же policy gates, что toast overlay:
 
-| Chip | Gate |
-|---|---|
-| tool (`tool_call:` / `tool_result:`) | `show_activity` + `tool_calls_display !== 'hidden'` |
-| skill (`load_agent_skill` / `skill_activity`) | `show_skill_loads` |
-| error (`node_error*` / failed task) | всегда при наличии; текст — `errors_display` generic/detailed |
+| Chip | Gate | UI |
+|---|---|---|
+| tool (`tool_call:` / `tool_result:`) | `show_activity` + `tool_calls_display !== 'hidden'` | icon-only chip (`tool`), tooltip = tool name |
+| skill (`load_agent_skill` / `skill_activity`) | `show_skill_loads` | icon-only chip (`scroll-text`), tooltip = skill id |
+| error (`node_error*` / failed task) | всегда при наличии; текст — `errors_display` generic/detailed | icon-only chip (`alert-triangle`), tooltip = error label |
+| browser preview match | `show_browser_previews` + `/content/artifacts/*` с `viewer_url`, match по `tool_call_id` | interactive glowing `globe` chip; click → `browser-preview-open` → `flows.browser_preview` modal (или `window.open` fallback) |
+
+Preview data пишется server-side через `present_flow_ui_artifact(kind="browser_preview")` и **сразу** публикуется A2UI transition'ом (`emit_flow_ui_transitions` в `browser_preview.py`, как handoff); `_copy_state_back` также мержит `_pending_ui_transitions`, чтобы superstep emit не терял presenter deltas. Без этих кадров conversation enrich не видит `viewer_url` и chip остаётся некликабельным `tool`.
+
+Strip **без текстовых лейблов** («Работа инструментов» и т.п.): только glyph + optional running pulse; имя/detail — `title` / `aria-label`.
 
 Observability artifacts **не** входят в turn text / `hasConversationContent` — EmptyState (`greeting`) остаётся видимым, пока нет user/response content. Toast overlay на conversation feed по-прежнему **выключен** (`hasConversationFeed` → `[]`). Без `presentation=conversation` feed рендерит ordinary artifacts как debug/trace dump.
 

@@ -460,11 +460,12 @@ async def browser_preview_viewer(
     let followStartedAt = 0;
     let followTimer = null;
     let statusTimer = null;
-    const FOLLOW_POLL_MS = 1500;
-    const FOLLOW_TIMEOUT_MS = 90000;
+    const FOLLOW_POLL_MS = 1200;
+    const FOLLOW_GRACE_MS = 6000;
     let pendingClick = false;
     let takeoverActive = false;
     let refreshTimer = null;
+    let frameErrorStreak = 0;
 
     function setStatus(text) {{
       status.textContent = text;
@@ -493,6 +494,28 @@ async def browser_preview_viewer(
       }}
     }}
 
+    function notifyParentFinished(reason) {{
+      try {{
+        window.parent.postMessage({{
+          type: 'flows.browser_preview.finished',
+          sessionId,
+          taskId,
+          reason: typeof reason === 'string' ? reason : 'finished',
+        }}, window.location.origin);
+      }} catch (_) {{}}
+    }}
+
+    function finishPreview(reason) {{
+      if (stopped) return;
+      const text = typeof reason === 'string' && reason.length > 0 ? reason : 'Session finished';
+      stopAllPolling();
+      setStatus(text);
+      empty.style.display = 'block';
+      empty.textContent = text;
+      screen.style.display = 'none';
+      notifyParentFinished(text);
+    }}
+
     function enterFollowMode() {{
       if (stopped || followMode) return;
       followMode = true;
@@ -502,7 +525,7 @@ async def browser_preview_viewer(
         refreshTimer = null;
       }}
       setStatus('Agent continues in browser…');
-      scheduleFollowPoll(400);
+      scheduleFollowPoll(300);
     }}
 
     function scheduleFollowPoll(delayMs) {{
@@ -518,11 +541,6 @@ async def browser_preview_viewer(
 
     async function pollActiveSession() {{
       if (stopped || !followMode) return;
-      if (Date.now() - followStartedAt >= FOLLOW_TIMEOUT_MS) {{
-        setStatus('Session finished');
-        stopAllPolling();
-        return;
-      }}
       try {{
         const res = await fetch(
           `${{taskBase}}/active-session?token=${{encodeURIComponent(token)}}`,
@@ -540,8 +558,16 @@ async def browser_preview_viewer(
             return;
           }}
         }}
+        if (Date.now() - followStartedAt >= FOLLOW_GRACE_MS) {{
+          finishPreview('Session finished');
+          return;
+        }}
         scheduleFollowPoll(FOLLOW_POLL_MS);
       }} catch (_) {{
+        if (Date.now() - followStartedAt >= FOLLOW_GRACE_MS) {{
+          finishPreview('Session finished');
+          return;
+        }}
         scheduleFollowPoll(FOLLOW_POLL_MS);
       }}
     }}
@@ -640,6 +666,7 @@ async def browser_preview_viewer(
       if (stopped || followMode) return;
       const img = new Image();
       img.onload = () => {{
+        frameErrorStreak = 0;
         screen.src = img.src;
         screen.style.display = 'block';
         empty.style.display = 'none';
@@ -650,7 +677,8 @@ async def browser_preview_viewer(
       }};
       img.onerror = () => {{
         if (followMode || stopped) return;
-        if (screen.src) {{
+        frameErrorStreak += 1;
+        if (screen.src || frameErrorStreak >= 2) {{
           enterFollowMode();
           return;
         }}

@@ -1138,6 +1138,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                             locale=${locale || 'ru'}
                             @flow-ui-state-changed=${this._onChatStateChanged}
                             @flow-ui-ready=${this._onChatStateChanged}
+                            @browser-preview-open=${this._onBrowserPreviewOpen}
                         ></platform-flow-ui>
                     </div>
 

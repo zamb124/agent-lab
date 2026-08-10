@@ -4,6 +4,7 @@ import { leadFormSurface } from '../../../../core/frontend/static/lib/flow-ui/te
 import { LINNEX_CATALOG_ID } from '../../../../core/frontend/static/lib/flow-ui/protocol/constants.js';
 import {
     deriveTurnActivityToasts,
+    enrichConversationActivityWithBrowserPreviews,
     hasConversationFeed,
     projectConversationActivity,
     resolveTurnActivityPolicy,
@@ -41,6 +42,32 @@ function contextWithTask(task, { submitting = false } = {}) {
         tasksById: task ? { [task.id]: task } : {},
         taskOrder: task ? [task.id] : [],
     };
+}
+
+function documentWithBrowserArtifact(policy, artifactPayload) {
+    const document = {
+        ...buildDefaultChatDocument(),
+        policy,
+    };
+    const pageId = document.active_page_id;
+    const surfaceId = document.pages[pageId].root_surface_id;
+    const surface = document.surfaces[surfaceId];
+    document.surfaces = {
+        ...document.surfaces,
+        [surfaceId]: {
+            ...surface,
+            data_model: {
+                ...surface.data_model,
+                content: {
+                    ...surface.data_model.content,
+                    artifacts: {
+                        'browser:call-browser': artifactPayload,
+                    },
+                },
+            },
+        },
+    };
+    return document;
 }
 
 describe('turn activity toasts', () => {
@@ -139,6 +166,7 @@ describe('turn activity toasts', () => {
         expect(resolveTurnActivityPolicy({})).toMatchObject({
             show_reasoning: false,
             show_activity: true,
+            show_browser_previews: true,
             tool_calls_display: 'compact',
             errors_display: 'generic',
         });
@@ -214,10 +242,26 @@ describe('turn activity toasts', () => {
             policy,
             'en',
         );
-        expect(items.map((item) => ({ kind: item.kind, label: item.label, status: item.status }))).toEqual([
-            { kind: 'skill', label: 'flows-code', status: 'done' },
-            { kind: 'tool', label: 'flows_get_node', status: 'running' },
-            { kind: 'error', label: 'Ошибка выполнения инструмента', status: 'error' },
+        expect(items.map((item) => ({
+            kind: item.kind,
+            label: item.label,
+            status: item.status,
+            glyph: item.glyph,
+            interactive: item.interactive,
+        }))).toEqual([
+            {
+                kind: 'skill', label: 'flows-code', status: 'done', glyph: 'scroll-text', interactive: false,
+            },
+            {
+                kind: 'tool', label: 'flows_get_node', status: 'running', glyph: 'tool', interactive: false,
+            },
+            {
+                kind: 'error',
+                label: 'Ошибка выполнения инструмента',
+                status: 'error',
+                glyph: 'alert-triangle',
+                interactive: false,
+            },
         ]);
     });
 
@@ -250,7 +294,9 @@ describe('turn activity toasts', () => {
             'ru',
         );
         expect(items).toEqual([
-            expect.objectContaining({ kind: 'tool', label: 'ask_user', status: 'done' }),
+            expect.objectContaining({
+                kind: 'tool', label: 'ask_user', status: 'done', glyph: 'tool', interactive: false,
+            }),
         ]);
     });
 
@@ -289,5 +335,97 @@ describe('turn activity toasts', () => {
             'en',
         );
         expect(items).toEqual([]);
+    });
+
+    it('enriches matching tool chip with interactive browser preview action', () => {
+        const policy = resolveTurnActivityPolicy({
+            policy: {
+                show_activity: true,
+                tool_calls_display: 'compact',
+                show_skill_loads: false,
+                show_browser_previews: true,
+            },
+        });
+        const projected = projectConversationActivity(
+            taskWithArtifacts([
+                {
+                    name: 'tool_call:call-browser',
+                    artifactId: 'tool_call:call-browser',
+                    parts: [{
+                        data: {
+                            tool: 'browser_duckduckgo_links',
+                            tool_call_id: 'call-browser',
+                        },
+                    }],
+                },
+            ]),
+            policy,
+            'en',
+        );
+        const document = documentWithBrowserArtifact(policy, {
+            tool_call_id: 'call-browser',
+            viewer_url: 'https://example.test/viewer?token=abc',
+            session_id: 'sess-1',
+            url: 'https://duckduckgo.com',
+            status: 'running',
+        });
+        const items = enrichConversationActivityWithBrowserPreviews(projected, document, policy);
+        expect(items).toHaveLength(1);
+        expect(items[0]).toEqual(expect.objectContaining({
+            id: 'call-browser',
+            kind: 'tool',
+            label: 'browser_duckduckgo_links',
+            glyph: 'globe',
+            interactive: true,
+            action: {
+                kind: 'browser_preview',
+                viewerUrl: 'https://example.test/viewer?token=abc',
+                sessionId: 'sess-1',
+                currentUrl: 'https://duckduckgo.com',
+                status: 'running',
+            },
+        }));
+    });
+
+    it('does not mark browser chips interactive when show_browser_previews is false', () => {
+        const policy = resolveTurnActivityPolicy({
+            policy: {
+                show_activity: true,
+                tool_calls_display: 'compact',
+                show_skill_loads: false,
+                show_browser_previews: false,
+            },
+        });
+        const projected = projectConversationActivity(
+            taskWithArtifacts([
+                {
+                    name: 'tool_call:call-browser',
+                    artifactId: 'tool_call:call-browser',
+                    parts: [{
+                        data: {
+                            tool: 'browser_duckduckgo_links',
+                            tool_call_id: 'call-browser',
+                        },
+                    }],
+                },
+            ]),
+            policy,
+            'en',
+        );
+        const document = documentWithBrowserArtifact(
+            { show_browser_previews: false },
+            {
+                tool_call_id: 'call-browser',
+                viewer_url: 'https://example.test/viewer?token=abc',
+                session_id: 'sess-1',
+                status: 'running',
+            },
+        );
+        const items = enrichConversationActivityWithBrowserPreviews(projected, document, policy);
+        expect(items[0]).toEqual(expect.objectContaining({
+            glyph: 'tool',
+            interactive: false,
+            action: null,
+        }));
     });
 });

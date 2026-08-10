@@ -513,22 +513,27 @@ export class FlowUISurfaceElement extends LitElement {
         .turn-activity {
             display: flex;
             flex-wrap: wrap;
+            align-items: center;
             gap: 6px;
             margin: 2px 0 2px 40px;
             max-width: min(720px, 100%);
         }
         .turn-activity-chip {
+            position: relative;
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            max-width: 100%;
-            padding: 4px 10px;
-            border-radius: 999px;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border-radius: 10px;
             border: 1px solid var(--flow-ui-border);
             background: var(--flow-ui-chip, var(--flow-ui-surface-subtle));
             color: var(--flow-ui-muted);
-            font-size: 11px;
-            line-height: 1.3;
+            box-sizing: border-box;
+        }
+        .turn-activity-chip .flow-ui-glyph {
+            opacity: 0.88;
         }
         .turn-activity-chip[data-kind="skill"] {
             color: var(--flow-ui-text);
@@ -539,30 +544,55 @@ export class FlowUISurfaceElement extends LitElement {
             border-color: color-mix(in srgb, var(--error, #ff8da3) 40%, var(--flow-ui-border));
             background: color-mix(in srgb, var(--error, #ff8da3) 10%, transparent);
         }
-        .turn-activity-kind {
-            font-weight: 650;
-            letter-spacing: 0.01em;
-            text-transform: uppercase;
-            font-size: 10px;
-            opacity: 0.85;
+        button.turn-activity-chip {
+            appearance: none;
+            cursor: default;
+            font: inherit;
         }
-        .turn-activity-label {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            max-width: 280px;
-            color: var(--flow-ui-text);
+        .turn-activity-chip.is-interactive {
+            cursor: pointer;
+            color: var(--flow-ui-accent);
+            border-color: color-mix(in srgb, var(--flow-ui-accent) 55%, var(--flow-ui-border));
+            background: color-mix(in srgb, var(--flow-ui-accent) 14%, var(--flow-ui-panel, var(--flow-ui-surface-subtle)));
+            box-shadow:
+                0 0 0 1px color-mix(in srgb, var(--flow-ui-accent) 28%, transparent),
+                0 0 12px color-mix(in srgb, var(--flow-ui-accent) 34%, transparent);
+            animation: flow-ui-chip-glow 1.8s ease-in-out infinite;
+        }
+        .turn-activity-chip.is-interactive:hover {
+            box-shadow:
+                0 0 0 2px color-mix(in srgb, var(--flow-ui-accent) 40%, transparent),
+                0 0 18px color-mix(in srgb, var(--flow-ui-accent) 48%, transparent);
+        }
+        .turn-activity-chip.is-interactive:focus-visible {
+            outline: 2px solid var(--flow-ui-accent);
+            outline-offset: 2px;
         }
         .turn-activity-pulse {
+            position: absolute;
+            top: 3px;
+            right: 3px;
             width: 6px;
             height: 6px;
             border-radius: 50%;
             background: var(--flow-ui-accent);
-            box-shadow: 0 0 0 3px color-mix(in srgb, var(--flow-ui-accent) 22%, transparent);
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--flow-ui-accent) 22%, transparent);
             animation: flow-ui-pulse 1.1s ease-in-out infinite;
         }
         @keyframes flow-ui-pulse {
             50% { opacity: 0.45; }
+        }
+        @keyframes flow-ui-chip-glow {
+            0%, 100% {
+                box-shadow:
+                    0 0 0 1px color-mix(in srgb, var(--flow-ui-accent) 24%, transparent),
+                    0 0 10px color-mix(in srgb, var(--flow-ui-accent) 28%, transparent);
+            }
+            50% {
+                box-shadow:
+                    0 0 0 2px color-mix(in srgb, var(--flow-ui-accent) 42%, transparent),
+                    0 0 16px color-mix(in srgb, var(--flow-ui-accent) 46%, transparent);
+            }
         }
 
         .artifact-card { display: grid; gap: 10px; overflow: hidden; }
@@ -959,6 +989,30 @@ export class FlowUISurfaceElement extends LitElement {
         this.copiedTaskId = taskId;
         clearTimeout(this._copiedTimer);
         this._copiedTimer = setTimeout(() => { this.copiedTaskId = null; }, 1600);
+    }
+
+    _openBrowserPreview(action) {
+        if (!action || typeof action !== 'object' || action.kind !== 'browser_preview') {
+            throw new Error('flow-ui: _openBrowserPreview requires browser_preview action');
+        }
+        const viewerUrl = typeof action.viewerUrl === 'string' ? action.viewerUrl.trim() : '';
+        if (viewerUrl === '') {
+            throw new Error('flow-ui: browser preview viewerUrl required');
+        }
+        const event = new CustomEvent('browser-preview-open', {
+            bubbles: true,
+            composed: true,
+            cancelable: true,
+            detail: {
+                viewerUrl,
+                sessionId: typeof action.sessionId === 'string' ? action.sessionId : '',
+                currentUrl: typeof action.currentUrl === 'string' ? action.currentUrl : '',
+                status: typeof action.status === 'string' ? action.status : '',
+            },
+        });
+        this.dispatchEvent(event);
+        if (event.defaultPrevented) return;
+        window.open(viewerUrl, '_blank', 'noopener,noreferrer');
     }
 
     _retryTurn(task) {

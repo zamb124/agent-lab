@@ -14,6 +14,7 @@ from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
 from apps.flows.src.models.mcp import MCPCallResult, MCPServerConfig
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
 from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
+from apps.flows.src.streaming.flow_ui import emit_flow_ui_transitions
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.models.base import StrictBaseModel
@@ -286,12 +287,15 @@ async def _emit_browser_preview_mcp_event(
         source="browser",
         artifact_id=f"browser:{ctx.tool_call_id}",
     )
+    # Live turn: publish accepted document deltas immediately (handoff pattern),
+    # otherwise conversation chips never see viewer_url until (or never after) node end.
+    await emit_flow_ui_transitions(emitter=ctx.emitter, state=state)
 
     # Viewer следит за задачей, а не за одной сессией: поддерживаем в Redis
     # маппинг task_id -> активная browser-сессия, чтобы после закрытия сессии
     # iframe мог переключиться на следующую.
-    if phase == "finished" and session_id:
-        if tool_name == "browser_create_session":
-            await _store_active_browser_session(task_id, session_id)
-        elif tool_name == "browser_close_session":
+    if session_id:
+        if tool_name == "browser_close_session" and phase == "finished":
             await _clear_active_browser_session(task_id, session_id)
+        elif phase in {"started", "finished"}:
+            await _store_active_browser_session(task_id, session_id)

@@ -142,6 +142,18 @@ export class ChatPage extends PlatformPage {
         }
         this.openModal('flows.durable_history', { sessionId });
     }
+
+    _onBrowserPreviewOpen(e) {
+        e.preventDefault();
+        const detail = e.detail && typeof e.detail === 'object' ? e.detail : {};
+        const viewerUrl = typeof detail.viewerUrl === 'string' ? detail.viewerUrl : '';
+        this.openModal('flows.browser_preview', {
+            viewerUrl,
+            sessionId: typeof detail.sessionId === 'string' ? detail.sessionId : '',
+            currentUrl: typeof detail.currentUrl === 'string' ? detail.currentUrl : '',
+            status: typeof detail.status === 'string' ? detail.status : '',
+        });
+    }
     _editor() {
         if (this.branchId && this.branchId !== 'base') this.navigate('flow_editor_branch', { flowId: this.flowId, branchId: this.branchId });
         else this.navigate('flow_editor', { flowId: this.flowId });
@@ -225,6 +237,7 @@ export class ChatPage extends PlatformPage {
                 profile="spa"
                 theme="auto"
                 @flow-ui-ready=${this._onReady}
+                @browser-preview-open=${this._onBrowserPreviewOpen}
             ></platform-flow-ui>
         `;
     }

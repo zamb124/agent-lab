@@ -20,6 +20,7 @@ import {
     mergeConversationTasks,
 } from './conversation-turn.js';
 import {
+    enrichConversationActivityWithBrowserPreviews,
     projectConversationActivity,
     resolveTurnActivityPolicy,
 } from '../../runtime/turn-activity.js';
@@ -137,30 +138,43 @@ function activityChipTitle(item) {
     return item.label;
 }
 
+function renderActivityChip(host, item) {
+    const title = activityChipTitle(item);
+    const pulse = item.status === 'running'
+        ? html`<span class="turn-activity-pulse" aria-hidden="true"></span>`
+        : nothing;
+    const glyph = flowUIGlyph(item.glyph, 14);
+    if (item.interactive === true && item.action) {
+        return html`<button
+            type="button"
+            class="turn-activity-chip is-interactive"
+            role="listitem"
+            data-kind=${item.kind}
+            data-status=${item.status}
+            title=${title}
+            aria-label=${title}
+            @click=${() => host._openBrowserPreview(item.action)}
+        >${glyph}${pulse}</button>`;
+    }
+    return html`<span
+        class="turn-activity-chip"
+        role="listitem"
+        data-kind=${item.kind}
+        data-status=${item.status}
+        title=${title}
+        aria-label=${title}
+    >${glyph}${pulse}</span>`;
+}
+
 function renderTurnActivityStrip(host, task) {
     const document = host.controller?.document || null;
     const policy = resolveTurnActivityPolicy(document || {});
     const locale = host.locale === 'en' ? 'en' : 'ru';
-    const items = projectConversationActivity(task, policy, locale);
+    const projected = projectConversationActivity(task, policy, locale);
+    const items = enrichConversationActivityWithBrowserPreviews(projected, document, policy);
     if (items.length === 0) return nothing;
     return html`<div class="turn-activity" role="list" aria-label=${flowUIText(locale, 'turn_toast_activity')}>
-        ${items.map((item) => html`<span
-            class="turn-activity-chip"
-            role="listitem"
-            data-kind=${item.kind}
-            data-status=${item.status}
-            title=${activityChipTitle(item)}
-        >
-            <span class="turn-activity-kind">${item.kind === 'skill'
-                ? flowUIText(locale, 'skill_activity')
-                : (item.kind === 'error'
-                    ? flowUIText(locale, 'turn_toast_error')
-                    : flowUIText(locale, 'tool_activity'))}</span>
-            <span class="turn-activity-label">${item.label}</span>
-            ${item.status === 'running'
-                ? html`<span class="turn-activity-pulse" aria-hidden="true"></span>`
-                : nothing}
-        </span>`)}
+        ${items.map((item) => renderActivityChip(host, item))}
     </div>`;
 }
 

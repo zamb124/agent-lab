@@ -857,6 +857,11 @@ class BaseNode(ABC):
             if field_name in source_fields:
                 target[field_name] = source_fields[field_name]
 
+        # PrivateAttr queue is not in model_fields; without this merge, Flow UI
+        # presenter deltas (browser preview, skill activity, …) never reach
+        # superstep emit_flow_ui_transitions.
+        target.queue_ui_transitions(source.drain_ui_transitions())
+
         extra_src = require_json_object(
             source.__pydantic_extra__ or {},
             "source.extra",

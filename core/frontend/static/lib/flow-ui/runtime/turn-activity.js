@@ -17,9 +17,33 @@ export const FLOW_UI_TURN_ACTIVITY_POLICY_DEFAULTS = Object.freeze({
     tool_calls_display: 'compact',
     show_activity: true,
     show_skill_loads: true,
+    show_browser_previews: true,
     errors_display: 'generic',
     allow_cancel: true,
 });
+
+/**
+ * @typedef {{
+ *   kind: 'browser_preview',
+ *   viewerUrl: string,
+ *   sessionId: string,
+ *   currentUrl: string,
+ *   status: string,
+ * }} FlowUIBrowserPreviewAction
+ */
+
+/**
+ * @typedef {{
+ *   id: string,
+ *   kind: 'tool' | 'skill' | 'error',
+ *   label: string,
+ *   detail: string,
+ *   status: 'running' | 'done' | 'error',
+ *   glyph: string,
+ *   interactive: boolean,
+ *   action: FlowUIBrowserPreviewAction | null,
+ * }} FlowUIConversationActivityItem
+ */
 
 /**
  * @param {unknown} document
@@ -45,6 +69,9 @@ export function resolveTurnActivityPolicy(document) {
         show_skill_loads: typeof policy.show_skill_loads === 'boolean'
             ? policy.show_skill_loads
             : FLOW_UI_TURN_ACTIVITY_POLICY_DEFAULTS.show_skill_loads,
+        show_browser_previews: typeof policy.show_browser_previews === 'boolean'
+            ? policy.show_browser_previews
+            : FLOW_UI_TURN_ACTIVITY_POLICY_DEFAULTS.show_browser_previews,
         errors_display: policy.errors_display === 'detailed' || policy.errors_display === 'generic'
             ? policy.errors_display
             : FLOW_UI_TURN_ACTIVITY_POLICY_DEFAULTS.errors_display,
@@ -52,6 +79,28 @@ export function resolveTurnActivityPolicy(document) {
             ? policy.allow_cancel
             : FLOW_UI_TURN_ACTIVITY_POLICY_DEFAULTS.allow_cancel,
     });
+}
+
+/**
+ * @param {'tool' | 'skill' | 'error'} kind
+ * @returns {string}
+ */
+export function activityGlyphForKind(kind) {
+    if (kind === 'skill') return 'scroll-text';
+    if (kind === 'error') return 'alert-triangle';
+    return 'tool';
+}
+
+/**
+ * @param {{ kind: string, interactive?: boolean }} item
+ * @returns {string}
+ */
+export function activityGlyphForItem(item) {
+    if (item.interactive === true) return 'globe';
+    if (item.kind === 'skill' || item.kind === 'error' || item.kind === 'tool') {
+        return activityGlyphForKind(item.kind);
+    }
+    return 'tool';
 }
 
 /**
@@ -173,6 +222,108 @@ export function taskActivitySummary(task, policy) {
 }
 
 /**
+ * @param {'tool' | 'skill' | 'error'} kind
+ * @param {string} id
+ * @param {string} label
+ * @param {string} detail
+ * @param {'running' | 'done' | 'error'} status
+ * @returns {FlowUIConversationActivityItem}
+ */
+function makeActivityItem(kind, id, label, detail, status) {
+    return {
+        id,
+        kind,
+        label,
+        detail,
+        status,
+        glyph: activityGlyphForKind(kind),
+        interactive: false,
+        action: null,
+    };
+}
+
+/**
+ * Collect browser preview payloads from FlowUIDocument content artifacts.
+ * @param {unknown} document
+ * @returns {Map<string, FlowUIBrowserPreviewAction>}
+ */
+export function collectBrowserPreviewActionsByToolCallId(document) {
+    /** @type {Map<string, FlowUIBrowserPreviewAction>} */
+    const byCallId = new Map();
+    if (!document || typeof document !== 'object') return byCallId;
+    const surfaces = document.surfaces;
+    if (!surfaces || typeof surfaces !== 'object') return byCallId;
+
+    for (const surface of Object.values(surfaces)) {
+        if (!surface || typeof surface !== 'object') continue;
+        const dataModel = surface.data_model;
+        if (!dataModel || typeof dataModel !== 'object') continue;
+        const content = dataModel.content;
+        if (!content || typeof content !== 'object') continue;
+        const artifacts = content.artifacts;
+        if (!artifacts || typeof artifacts !== 'object') continue;
+
+        for (const payload of Object.values(artifacts)) {
+            if (!payload || typeof payload !== 'object') continue;
+            const viewerUrl = typeof payload.viewer_url === 'string' ? payload.viewer_url.trim() : '';
+            if (viewerUrl === '') continue;
+            const toolCallId = typeof payload.tool_call_id === 'string' && payload.tool_call_id.trim() !== ''
+                ? payload.tool_call_id.trim()
+                : (typeof payload.parent_tool_call_id === 'string' ? payload.parent_tool_call_id.trim() : '');
+            if (toolCallId === '') continue;
+            const sessionId = typeof payload.session_id === 'string' && payload.session_id.trim() !== ''
+                ? payload.session_id.trim()
+                : (typeof payload.browser_session_id === 'string' ? payload.browser_session_id.trim() : '');
+            const currentUrl = typeof payload.final_url === 'string' && payload.final_url.trim() !== ''
+                ? payload.final_url.trim()
+                : (typeof payload.url === 'string' ? payload.url.trim() : '');
+            const status = typeof payload.status === 'string' ? payload.status : '';
+            byCallId.set(toolCallId, Object.freeze({
+                kind: 'browser_preview',
+                viewerUrl,
+                sessionId,
+                currentUrl,
+                status,
+            }));
+        }
+    }
+    return byCallId;
+}
+
+/**
+ * Attach clickable browser preview actions to matching tool chips.
+ *
+ * @param {readonly FlowUIConversationActivityItem[]} items
+ * @param {unknown} document
+ * @param {{ show_browser_previews?: boolean }} policy
+ * @returns {readonly FlowUIConversationActivityItem[]}
+ */
+export function enrichConversationActivityWithBrowserPreviews(items, document, policy) {
+    if (!Array.isArray(items)) {
+        throw new Error('flow-ui: enrichConversationActivityWithBrowserPreviews requires items array');
+    }
+    if (policy.show_browser_previews !== true) {
+        return Object.freeze(items.map((item) => Object.freeze({ ...item })));
+    }
+    const previews = collectBrowserPreviewActionsByToolCallId(document);
+    if (previews.size === 0) {
+        return Object.freeze(items.map((item) => Object.freeze({ ...item })));
+    }
+    return Object.freeze(items.map((item) => {
+        const action = previews.get(item.id);
+        if (!action || item.kind !== 'tool') {
+            return Object.freeze({ ...item });
+        }
+        return Object.freeze({
+            ...item,
+            glyph: 'globe',
+            interactive: true,
+            action,
+        });
+    }));
+}
+
+/**
  * Policy-gated activity chips for conversation ArtifactFeed.
  * Observability artifacts stay out of turn text / EmptyState; they render here.
  *
@@ -184,13 +335,7 @@ export function taskActivitySummary(task, policy) {
  *   errors_display: string,
  * }} policy
  * @param {'ru' | 'en'} [locale]
- * @returns {readonly {
- *   id: string,
- *   kind: 'tool' | 'skill' | 'error',
- *   label: string,
- *   detail: string,
- *   status: 'running' | 'done' | 'error',
- * }[]}
+ * @returns {readonly FlowUIConversationActivityItem[]}
  */
 export function projectConversationActivity(task, policy, locale = 'ru') {
     if (!task || typeof task !== 'object') {
@@ -200,9 +345,9 @@ export function projectConversationActivity(task, policy, locale = 'ru') {
     const showSkills = policy.show_skill_loads === true;
     const detailed = policy.tool_calls_display === 'detailed';
 
-    /** @type {Map<string, { id: string, kind: 'tool' | 'skill', label: string, detail: string, status: 'running' | 'done' | 'error' }>} */
+    /** @type {Map<string, FlowUIConversationActivityItem>} */
     const byKey = new Map();
-    /** @type {{ id: string, kind: 'tool' | 'skill' | 'error', label: string, detail: string, status: 'running' | 'done' | 'error' }[]} */
+    /** @type {FlowUIConversationActivityItem[]} */
     const errors = [];
 
     for (const artifact of Array.isArray(task.artifacts) ? task.artifacts : []) {
@@ -217,15 +362,15 @@ export function projectConversationActivity(task, policy, locale = 'ru') {
             const label = policy.errors_display === 'detailed' && detail !== ''
                 ? detail
                 : flowUIText(locale, 'turn_toast_error_generic');
-            errors.push({
-                id: typeof artifact.artifactId === 'string' && artifact.artifactId !== ''
+            errors.push(makeActivityItem(
+                'error',
+                typeof artifact.artifactId === 'string' && artifact.artifactId !== ''
                     ? artifact.artifactId
                     : `error:${artifactName}`,
-                kind: 'error',
                 label,
-                detail: policy.errors_display === 'detailed' ? detail : '',
-                status: 'error',
-            });
+                policy.errors_display === 'detailed' ? detail : '',
+                'error',
+            ));
             continue;
         }
 
@@ -270,13 +415,13 @@ export function projectConversationActivity(task, policy, locale = 'ru') {
                 || (prev && typeof prev.label === 'string' && prev.label !== '' && prev.label !== toolName
                     ? prev.label
                     : toolName);
-            byKey.set(callId, {
-                id: callId,
+            byKey.set(callId, makeActivityItem(
                 kind,
+                callId,
                 label,
-                detail: detail || prev?.detail || '',
+                detail || prev?.detail || '',
                 status,
-            });
+            ));
             continue;
         }
 
@@ -286,26 +431,26 @@ export function projectConversationActivity(task, policy, locale = 'ru') {
                 ? adapted.payload
                 : null;
             const label = skillLabelFromPayload(payload);
-            byKey.set(adapted.artifact_id, {
-                id: adapted.artifact_id,
-                kind: 'skill',
+            byKey.set(adapted.artifact_id, makeActivityItem(
+                'skill',
+                adapted.artifact_id,
                 label,
-                detail: '',
-                status: 'done',
-            });
+                '',
+                'done',
+            ));
         }
     }
 
     if (task.status?.state === 'TASK_STATE_FAILED') {
         const failedDetail = taskErrorText(task, policy, locale);
         if (!errors.some((item) => item.kind === 'error')) {
-            errors.push({
-                id: `task-error:${typeof task.id === 'string' ? task.id : 'unknown'}`,
-                kind: 'error',
-                label: failedDetail,
-                detail: policy.errors_display === 'detailed' ? failedDetail : '',
-                status: 'error',
-            });
+            errors.push(makeActivityItem(
+                'error',
+                `task-error:${typeof task.id === 'string' ? task.id : 'unknown'}`,
+                failedDetail,
+                policy.errors_display === 'detailed' ? failedDetail : '',
+                'error',
+            ));
         }
     }
 

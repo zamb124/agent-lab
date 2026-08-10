@@ -98,6 +98,27 @@ export class FlowsBrowserPreviewModal extends PlatformModal {
         this.currentUrl = '';
         this.status = '';
         this._themeSel = this.select((s) => (s.theme && s.theme.mode === 'light' ? 'light' : 'dark'));
+        this._onPreviewMessage = (event) => {
+            if (event.origin !== window.location.origin) return;
+            const payload = event.data;
+            if (!payload || typeof payload !== 'object') return;
+            if (payload.type !== 'flows.browser_preview.finished') return;
+            const finishedSessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
+            if (finishedSessionId !== '' && this.sessionId !== '' && finishedSessionId !== this.sessionId) {
+                return;
+            }
+            this.close();
+        };
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        window.addEventListener('message', this._onPreviewMessage);
+    }
+
+    disconnectedCallback() {
+        window.removeEventListener('message', this._onPreviewMessage);
+        super.disconnectedCallback();
     }
 
     renderHeader() {
