@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import Field, ValidationError
 
 from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.runners.tool_context_view import build_tool_context_view
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.tool_call_context import active_tool_call_context
 from core.capabilities import (
@@ -190,10 +191,7 @@ async def call_tool_runtime(
                 raise ValueError("FlowInterrupt.body.kind must be a string")
             return CapabilityCallResponse(
                 status="interrupt",
-                state=require_json_object(
-                    state.model_dump(mode="json", exclude_none=False),
-                    "ExecutionState",
-                ),
+                state=build_tool_context_view(state),
                 interrupt=CapabilityInterruptEnvelope(
                     kind=raw_kind,
                     body=body,
@@ -217,10 +215,7 @@ async def call_tool_runtime(
         return CapabilityCallResponse(
             status="ok",
             result=result,
-            state=require_json_object(
-                state.model_dump(mode="json", exclude_none=False),
-                "ExecutionState",
-            ),
+            state=build_tool_context_view(state),
         )
     finally:
         if previous_context is None:

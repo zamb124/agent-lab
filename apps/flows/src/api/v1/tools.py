@@ -12,6 +12,7 @@ from pydantic import Field
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import FlowConfig, ToolReference, flow_tool_parameters_schema
 from apps.flows.src.models.enums import CodeMode, ReactToolRole
+from apps.flows.src.models.flow_config import FlowToolPickerItem
 from apps.flows.src.models.tool_contracts import ToolDefinition
 from apps.flows.src.services.agent_toolkit_service import (
     get_toolkit_ids_for_flow,
@@ -172,7 +173,7 @@ def _resolve_registry_tool(container: ContainerDep, tool_id: str) -> BaseTool | 
     return registry.get(tool_id)
 
 
-def _flow_response(flow_row: FlowConfig) -> ToolResponse:
+def _flow_response(flow_row: FlowConfig | FlowToolPickerItem) -> ToolResponse:
     return ToolResponse(
         tool_id=flow_row.flow_id,
         title=flow_row.name,
@@ -213,7 +214,7 @@ def _append_registry_tools(
 
 async def _collect_picker_flow_items(container: ContainerDep) -> tuple[list[ToolResponse], int]:
     flows_list, flows_count = await asyncio.gather(
-        container.flow_repository.list(limit=_TOOLS_MAX_LIMIT),
+        container.flow_repository.list_for_tool_picker(limit=_TOOLS_MAX_LIMIT),
         container.flow_repository.count_all(),
     )
     return [_flow_response(flow_row) for flow_row in flows_list], flows_count
@@ -276,6 +277,17 @@ async def _list_picker_tools_and_flows(
         return needle in hay
 
     if picker_category == PickerCategory.FLOW:
+        if needle is None:
+            flows_list, flows_count = await asyncio.gather(
+                container.flow_repository.list_for_tool_picker(limit=limit, offset=offset),
+                container.flow_repository.count_all(),
+            )
+            return OffsetPage[ToolResponse](
+                items=[_flow_response(flow_row) for flow_row in flows_list],
+                total=flows_count,
+                limit=limit,
+                offset=offset,
+            )
         flow_items, _flows_count = await _collect_picker_flow_items(container)
         filtered = [item for item in flow_items if _match(item)]
         page = filtered[offset : offset + limit]

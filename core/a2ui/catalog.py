@@ -107,6 +107,7 @@ _COMPONENTS = [
     _component("Slider", "input", "Numeric slider"),
     _component("DatePicker", "input", "Date input"),
     _component("FileUpload", "input", "A2A file attachment input"),
+    _component("VoiceInput", "input", "Voice dictation or duplex session control"),
     _component("Divider", "content", "Visual separator"),
     _component("Table", "data", "Accessible data table"),
     _component("Chart", "data", "Declarative chart"),

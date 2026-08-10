@@ -40,7 +40,7 @@ from tests.fixtures.flow_employee_test_helpers import (
     provision_flow_employee_for_tests,
 )
 
-pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio, pytest.mark.timeout(60, func_only=True)]
 
 
 def _http_json(response: Response) -> dict[str, object]:

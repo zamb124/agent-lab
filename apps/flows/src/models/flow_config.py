@@ -297,6 +297,20 @@ class FlowEmployeeConfig(StrictBaseModel):
         return self
 
 
+class FlowToolPickerItem(StrictBaseModel):
+    """
+    Lightweight projection для tool picker: только поля списка без валидации
+    полного FlowConfig / Flow UI document.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
+    flow_id: str
+    name: str
+    description: str = ""
+    tags: list[str] = Field(default_factory=list)
+
+
 class FlowConfig(StrictBaseModel):
     """
     СТРОГАЯ конфигурация агента.

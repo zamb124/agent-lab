@@ -10,6 +10,7 @@ Fernet-ciphertext (`value_encrypted`), несекретная — plaintext JSON
 from __future__ import annotations
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 
 from core.db.utils import get_rowcount
 from core.secrets.crypto import decrypt_secret, encrypt_secret
@@ -19,6 +20,7 @@ from core.types import JsonObject, require_json_object
 from core.variables.models import PlatformVariable, VariableValuePayload
 
 _MASKED_PAYLOAD: VariableValuePayload = VariableValuePayload()
+_UPSERT_MAX_ATTEMPTS = 5
 
 
 def _payload_from_row(
@@ -73,53 +75,80 @@ class SecretsRepository:
 
     async def upsert(self, variable: PlatformVariable) -> PlatformVariable:
         value_payload, value_encrypted = _encode_payload(variable)
-        async with self._db.session() as session:
-            existing = (
-                await session.execute(
-                    select(SecretVariableRow.version).where(
-                        SecretVariableRow.company_id == variable.company_id,
-                        SecretVariableRow.variable_key == variable.variable_key,
-                    )
-                )
-            ).scalar_one_or_none()
-            next_version = 1 if existing is None else existing + 1
+        last_error: IntegrityError | None = None
+        for _attempt in range(_UPSERT_MAX_ATTEMPTS):
+            try:
+                async with self._db.session() as session:
+                    existing_row = (
+                        await session.execute(
+                            select(SecretVariableRow)
+                            .where(
+                                SecretVariableRow.company_id == variable.company_id,
+                                SecretVariableRow.variable_key == variable.variable_key,
+                            )
+                            .with_for_update()
+                        )
+                    ).scalar_one_or_none()
+                    next_version = 1 if existing_row is None else existing_row.version + 1
 
-            row = SecretVariableRow(
-                company_id=variable.company_id,
-                variable_key=variable.variable_key,
-                version=next_version,
-                secret=variable.secret,
-                shared_for_execution=variable.shared_for_execution,
-                public=variable.public,
-                created_by=variable.created_by,
-                title=variable.title,
-                description=variable.description,
-                order_index=variable.order,
-                groups=list(variable.groups),
-                value_payload=value_payload,
-                value_encrypted=value_encrypted,
-            )
-            merged = await session.merge(row)
-            session.add(
-                SecretVariableVersionRow(
-                    company_id=variable.company_id,
-                    variable_key=variable.variable_key,
-                    version=next_version,
-                    secret=variable.secret,
-                    shared_for_execution=variable.shared_for_execution,
-                    public=variable.public,
-                    created_by=variable.created_by,
-                    title=variable.title,
-                    description=variable.description,
-                    order_index=variable.order,
-                    groups=list(variable.groups),
-                    value_payload=value_payload,
-                    value_encrypted=value_encrypted,
-                )
-            )
-            await session.commit()
-            await session.refresh(merged)
-            return _row_to_variable(merged, include_secret_values=True)
+                    if existing_row is None:
+                        row = SecretVariableRow(
+                            company_id=variable.company_id,
+                            variable_key=variable.variable_key,
+                            version=next_version,
+                            secret=variable.secret,
+                            shared_for_execution=variable.shared_for_execution,
+                            public=variable.public,
+                            created_by=variable.created_by,
+                            title=variable.title,
+                            description=variable.description,
+                            order_index=variable.order,
+                            groups=list(variable.groups),
+                            value_payload=value_payload,
+                            value_encrypted=value_encrypted,
+                        )
+                        session.add(row)
+                        merged = row
+                    else:
+                        existing_row.version = next_version
+                        existing_row.secret = variable.secret
+                        existing_row.shared_for_execution = variable.shared_for_execution
+                        existing_row.public = variable.public
+                        existing_row.created_by = variable.created_by
+                        existing_row.title = variable.title
+                        existing_row.description = variable.description
+                        existing_row.order_index = variable.order
+                        existing_row.groups = list(variable.groups)
+                        existing_row.value_payload = value_payload
+                        existing_row.value_encrypted = value_encrypted
+                        merged = existing_row
+                    session.add(
+                        SecretVariableVersionRow(
+                            company_id=variable.company_id,
+                            variable_key=variable.variable_key,
+                            version=next_version,
+                            secret=variable.secret,
+                            shared_for_execution=variable.shared_for_execution,
+                            public=variable.public,
+                            created_by=variable.created_by,
+                            title=variable.title,
+                            description=variable.description,
+                            order_index=variable.order,
+                            groups=list(variable.groups),
+                            value_payload=value_payload,
+                            value_encrypted=value_encrypted,
+                        )
+                    )
+                    await session.commit()
+                    await session.refresh(merged)
+                    return _row_to_variable(merged, include_secret_values=True)
+            except IntegrityError as exc:
+                # Параллельный company_init (test enqueue + idle) на тот же ключ.
+                last_error = exc
+                continue
+        if last_error is None:
+            raise RuntimeError("secrets upsert failed without IntegrityError")
+        raise last_error
 
     async def get(
         self,

@@ -24,7 +24,7 @@ from core.state.flow_ui import (
 from core.types import JsonObject
 
 DEFAULT_CHAT_TEMPLATE_ID = "linnex.default-chat"
-DEFAULT_CHAT_TEMPLATE_VERSION = "1.1.0"
+DEFAULT_CHAT_TEMPLATE_VERSION = "1.2.0"
 
 
 class FlowUIDocumentTemplate(StrictBaseModel):
@@ -254,7 +254,7 @@ def build_default_chat_document(
             component_id="message-form",
             type="Form",
             kind="container",
-            children=["file-upload", "message-input", "submit"],
+            children=["file-upload", "message-input", "voice-input", "submit"],
             container_layout=_stack_layout(gap="space.3"),
             properties={"formId": "message-form", "presentation": "composer"},
         ),
@@ -273,6 +273,12 @@ def build_default_chat_document(
                 "rows": 1,
                 "placeholder": "Ask anything…",
             },
+        ),
+        "voice-input": FlowUIComponent(
+            component_id="voice-input",
+            type="VoiceInput",
+            bindings={"value": "/values/message"},
+            properties={"presentation": "composer", "mode": "session"},
         ),
         "submit": FlowUIComponent(
             component_id="submit",

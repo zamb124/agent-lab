@@ -154,6 +154,8 @@ async def ensure_system_landing_demo_embeds(container: FrontendContainer) -> Non
                 landing_card_image_url=card_url,
                 landing_sort_order=spec.sort,
                 guest_max_user_messages=spec.guest_max_user_messages,
+                voice_enabled=True,
+                session_share_enabled=True,
                 usage_count=prev.usage_count if prev is not None else 0,
                 last_used_at=prev.last_used_at if prev is not None else None,
                 created_at=created_at,

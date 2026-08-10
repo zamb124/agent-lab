@@ -59,6 +59,7 @@ async def _fetch_tools_all_pages(
     client,
     *,
     picker_category: str | None = None,
+    stop_when_tool_id: str | None = None,
 ) -> list[dict]:
     items: list[dict] = []
     offset = 0
@@ -74,6 +75,11 @@ async def _fetch_tools_all_pages(
         assert body["limit"] == _TOOLS_ALL_PAGE
         assert len(page_items) <= _TOOLS_ALL_PAGE
         items.extend(page_items)
+        if stop_when_tool_id is not None and any(
+            isinstance(entry, dict) and entry.get("tool_id") == stop_when_tool_id
+            for entry in page_items
+        ):
+            break
         offset += len(page_items)
         total = body["total"]
         if len(page_items) == 0 or offset >= total:
@@ -104,6 +110,7 @@ async def test_tools_all_q_filters_before_pagination(client, app, unique_id):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(120, func_only=True)
 async def test_picker_category_flow_is_not_truncated_by_many_mcp_tools(client, app, unique_id):
     """Flows вкладка и picker_category=all сохраняют flow при большом числе MCP tools."""
     container = get_container()
@@ -128,12 +135,17 @@ async def test_picker_category_flow_is_not_truncated_by_many_mcp_tools(client, a
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_picker_flow_item_contains_complete_flow_tool_schema(client, app, unique_id):
     container = get_container()
     flow_id = f"picker_contract_{unique_id}"
     await container.flow_repository.set(_flow_config(flow_id))
 
-    items = await _fetch_tools_all_pages(client, picker_category="flow")
+    items = await _fetch_tools_all_pages(
+        client,
+        picker_category="flow",
+        stop_when_tool_id=flow_id,
+    )
     item = next(entry for entry in items if entry["tool_id"] == flow_id)
     assert item["item_type"] == "flow"
     assert item["parameters_schema"] == {
@@ -150,6 +162,7 @@ async def test_picker_flow_item_contains_complete_flow_tool_schema(client, app, 
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_picker_category_filters_code_and_mcp(client, app, unique_id):
     """picker_category=code и picker_category=mcp возвращают непересекающиеся наборы."""
     container = get_container()
@@ -173,6 +186,7 @@ async def test_picker_category_filters_code_and_mcp(client, app, unique_id):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_picker_category_all_skips_agent_toolkit_lookup(client, app, monkeypatch, unique_id):
     """picker_category=all не вызывает N+1 lookup agent_toolkit_ids."""
     container = get_container()

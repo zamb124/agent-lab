@@ -153,6 +153,10 @@ def _flow_external_requirements(config: JsonObject) -> list[str]:
                         token in tool_code for token in EXTERNAL_CODE_TOKENS
                     ):
                         requirements.add(f"{node_id}:tool_code_capability:{tool_id}")
+
+        raw_skills = raw_node.get("agent_skills")
+        if isinstance(raw_skills, list) and raw_skills:
+            requirements.add(f"{node_id}:agent_skills")
     return sorted(requirements)
 
 
@@ -256,6 +260,7 @@ class TestAllFlowsExecution:
         assert EXECUTABLE_FLOW_IDS
         assert "psychologist_assistant" in EXTERNAL_REQUIREMENTS_BY_FLOW
         assert "simple_crawler" in EXTERNAL_REQUIREMENTS_BY_FLOW
+        assert "lara" in EXTERNAL_REQUIREMENTS_BY_FLOW
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("flow_id", EXECUTABLE_FLOW_IDS)

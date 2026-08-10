@@ -328,12 +328,14 @@ class TestVariablesE2E:
         # 5. Проверяем что contextId сохранился
         assert task["contextId"] == context_id
 
-        # 6. Проверяем что history содержит сообщения
+        # 6. История Task — входной trail (ROLE_USER); ответ агента в status.message
+        #    (см. core.a2a.task_projection + tests/core/a2a/test_task_projection.py).
         assert "history" in task
-        assert len(task["history"]) >= 2
+        assert len(task["history"]) >= 1
         roles = [msg["role"] for msg in task["history"]]
         assert "ROLE_USER" in roles
-        assert "ROLE_AGENT" in roles
+        status_message = task["status"]["message"]
+        assert status_message["role"] == "ROLE_AGENT"
 
     @pytest.mark.asyncio
     async def test_current_date_variable_from_metadata_with_var_reference(

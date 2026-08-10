@@ -108,32 +108,36 @@ async def seed_platform_assistant_skills(
             existing_references=existing.references if existing is not None else [],
         )
 
+        update_payload = AgentSkillUpdateInput(
+            name=parsed.name,
+            description=parsed.description,
+            body_markdown=parsed.body_markdown,
+            tool_refs=parsed.tool_refs,
+            depends_on=parsed.depends_on,
+            references=references,
+            assets=[],
+        )
         if existing is None:
-            _ = await agent_skill_service.create(
-                AgentSkillCreateInput(
-                    agent_skill_id=parsed.agent_skill_id,
-                    name=parsed.name,
-                    description=parsed.description,
-                    body_markdown=parsed.body_markdown,
-                    tool_refs=parsed.tool_refs,
-                    depends_on=parsed.depends_on,
-                    references=references,
-                    assets=[],
+            try:
+                _ = await agent_skill_service.create(
+                    AgentSkillCreateInput(
+                        agent_skill_id=parsed.agent_skill_id,
+                        name=parsed.name,
+                        description=parsed.description,
+                        body_markdown=parsed.body_markdown,
+                        tool_refs=parsed.tool_refs,
+                        depends_on=parsed.depends_on,
+                        references=references,
+                        assets=[],
+                    )
                 )
-            )
+            except ValueError as exc:
+                # Параллельный company_init (test enqueue + idle) может создать skill между get и create.
+                if f"AgentSkill already exists: {parsed.agent_skill_id}" not in str(exc):
+                    raise
+                _ = await agent_skill_service.update(parsed.agent_skill_id, update_payload)
         else:
-            _ = await agent_skill_service.update(
-                parsed.agent_skill_id,
-                AgentSkillUpdateInput(
-                    name=parsed.name,
-                    description=parsed.description,
-                    body_markdown=parsed.body_markdown,
-                    tool_refs=parsed.tool_refs,
-                    depends_on=parsed.depends_on,
-                    references=references,
-                    assets=[],
-                ),
-            )
+            _ = await agent_skill_service.update(parsed.agent_skill_id, update_payload)
         seeded += 1
 
     logger.info(

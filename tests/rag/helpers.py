@@ -88,7 +88,7 @@ async def wait_rag_document_status(
             )
         payload = status_response.json()
         status = payload.get("status")
-        if status in ("ready", "failed", "error"):
+        if status in ("completed", "ready", "failed", "error"):
             return payload
         await asyncio.sleep(interval)
         elapsed += interval

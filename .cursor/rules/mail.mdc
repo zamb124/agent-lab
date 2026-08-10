@@ -97,7 +97,7 @@ Wire folder = exact IMAP name; роли только SPECIAL-USE. Ensure: sent/d
 
 ## Provision
 
-- **System**: `reconcile_system` / `ensure_system_*` — company connection + role boxes; members через `ensure_system_user_bindings`.
+- **System**: `reconcile_system` / `ensure_system_*` — company connection + role boxes; members через `ensure_system_user_bindings` (пропуск `flow_employee_*`: Mail для сотрудников — MISSING в `flow_employee.mdc`).
 - **Prod K8s**: `mail.system.enabled` + hosts/user в `deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`; `authinfo_password` — GitHub Secret `MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD` → `platform-secrets` → ENV. Frontend lifespan вызывает `reconcile_system` при `enabled=true`.
 - **Lazy company**: `MailService.get_or_create_user_binding(user_id)`.
 - **Personal**: `MailService.connect_personal_mailbox` — personal connection + binding, `provision=false`, healthcheck login до save.

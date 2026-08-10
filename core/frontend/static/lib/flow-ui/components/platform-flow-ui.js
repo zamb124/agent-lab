@@ -10,6 +10,12 @@ import { activeConversationTask, conversationSessionFiles, mergeConversationTask
 import { normalizeFlowUIBranchId } from '../protocol/a2a-codec.js';
 import { resolveFlowUITheme } from '../shell/resolve-theme.js';
 import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
+import {
+    flowUIVoiceSessionReady,
+    stopFlowUIVoiceSession,
+    toggleFlowUIVoiceSession,
+} from '../voice/coordinator.js';
+import { stopStreamTtsPlayback } from '../../voice/stream-tts-registry.js';
 import './flow-ui-error-boundary.js';
 import './flow-ui-surface.js';
 import './flow-ui-turn-toasts.js';
@@ -47,6 +53,11 @@ export class PlatformFlowUI extends LitElement {
         parityReady: { state: true },
         renderFingerprint: { state: true },
         shareState: { state: true },
+        embedState: { state: true },
+        voiceSessionActive: { state: true },
+        drawerExpanded: { type: Boolean, attribute: 'drawer-expanded', reflect: true },
+        companyId: { type: String, attribute: 'company-id' },
+        voiceBaseUrl: { type: String, attribute: 'voice-base-url' },
         getRequestHeaders: { attribute: false },
         getExtraMetadataVariables: { attribute: false },
     };
@@ -218,14 +229,17 @@ export class PlatformFlowUI extends LitElement {
             transition: var(--motion-transition-interactive, background .15s ease, box-shadow .15s ease);
         }
         .share-options .share-btn,
-        .share-card > .share-btn {
+        .share-card > .share-btn,
+        .embed-card .share-btn {
             width: 100%;
         }
-        .share-card .share-btn.secondary {
+        .share-card .share-btn.secondary,
+        .embed-card .share-btn.secondary {
             color: var(--platform-btn-secondary-text, #99A6F9);
             background: var(--platform-btn-secondary-bg, rgba(153, 166, 249, 0.15));
         }
-        .share-card .share-btn.secondary:hover:not(:disabled) {
+        .share-card .share-btn.secondary:hover:not(:disabled),
+        .embed-card .share-btn.secondary:hover:not(:disabled) {
             background: var(--platform-btn-secondary-bg-hover, rgba(153, 166, 249, 0.1));
             box-shadow: var(--platform-btn-secondary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.2));
         }
@@ -265,6 +279,50 @@ export class PlatformFlowUI extends LitElement {
             font-size: var(--font-size-sm, 14px);
         }
         .share-error { color: var(--error, #ff8da3); font-size: 12px; }
+        details.embed { position: relative; }
+        details.embed > summary {
+            list-style: none; cursor: pointer;
+        }
+        details.embed > summary::-webkit-details-marker { display: none; }
+        .embed-card {
+            position: absolute; inset: calc(100% + 9px) 0 auto auto; z-index: 10;
+            width: min(320px, calc(100vw - 28px));
+            padding: var(--space-4, 16px);
+            display: grid;
+            gap: var(--space-3, 12px);
+            border: 1px solid var(--glass-border-medium, var(--flow-ui-border-strong));
+            border-radius: var(--radius-2xl, 25px);
+            background: var(--glass-solid-strong, var(--flow-ui-panel-strong, var(--flow-ui-panel)));
+            box-shadow: var(--glass-shadow-strong, var(--flow-ui-panel-shadow));
+        }
+        .embed-title {
+            font-weight: 650;
+            font-size: var(--font-size-sm, 14px);
+            letter-spacing: -.01em;
+            color: var(--flow-ui-heading, var(--text-primary));
+        }
+        .embed-copy {
+            color: var(--flow-ui-muted, var(--text-tertiary));
+            font-size: var(--font-size-xs, 12px);
+            line-height: 1.45;
+        }
+        .embed-result {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: var(--space-2, 8px);
+            align-items: center;
+        }
+        .embed-result input {
+            min-width: 0;
+            height: 36px;
+            border: 1px solid var(--border-default, var(--flow-ui-border));
+            border-radius: var(--btn-radius, 22px);
+            background: var(--flow-ui-input, var(--glass-solid-subtle));
+            color: var(--flow-ui-text);
+            padding: 0 14px;
+            font: inherit;
+            font-size: var(--font-size-sm, 14px);
+        }
         .viewport {
             min-height: 0;
             overflow: hidden;
@@ -331,11 +389,18 @@ export class PlatformFlowUI extends LitElement {
         this.shareState = {
             loading: false, url: '', grantId: '', permission: 'view', copied: false, error: '',
         };
+        this.embedState = { copied: false };
+        this.voiceSessionActive = false;
+        this.drawerExpanded = false;
+        this.companyId = '';
+        this.voiceBaseUrl = '';
         this.getRequestHeaders = null;
         this.getExtraMetadataVariables = null;
         this._hitlTransport = null;
         this._themeObserver = null;
         this._sessionGeneration = 0;
+        this._voiceMedia = null;
+        this._voiceBridge = null;
         this._onThemeAttribute = () => this.requestUpdate();
     }
 
@@ -401,6 +466,7 @@ export class PlatformFlowUI extends LitElement {
     _disposeSession() {
         this._hitlTransport?.dispose();
         this._hitlTransport = null;
+        void stopFlowUIVoiceSession(this);
         if (this.controller) {
             this.controller.dispose();
             this.controller = null;
@@ -450,7 +516,11 @@ export class PlatformFlowUI extends LitElement {
         }
         const pages = Object.values(document?.pages || {}).filter((page) => page.navigation?.visible !== false);
         if (pages.length > 1) return 'full';
-        if (this.profile === 'spa' || this.display === 'panel' || this.display === 'drawer') {
+        // Drawer always keeps minimal chrome so Expand / Share / Embed stay reachable.
+        if (this.display === 'drawer') {
+            return 'minimal';
+        }
+        if (this.profile === 'spa' || this.display === 'panel') {
             return this.runtimeState?.profile?.viewer?.can_share === true ? 'minimal' : 'none';
         }
         return 'full';
@@ -601,12 +671,58 @@ export class PlatformFlowUI extends LitElement {
     hydrateContext(snapshot) { return this.controller?.hydrateContext(snapshot); }
     startNewContext() { return this.controller?.startNewContext(); }
     submit(surfaceId, componentId) { return this.controller?.submit(surfaceId, componentId); }
-    cancelActiveTask() { return this.controller?.cancelActiveTask(); }
-    stopVoice() { this.dispatchEvent(new CustomEvent('flow-ui-stop-voice', { bubbles: true, composed: true })); }
+    cancelActiveTask() {
+        stopStreamTtsPlayback();
+        return this.controller?.cancelActiveTask();
+    }
+    stopVoice() {
+        void stopFlowUIVoiceSession(this);
+        this.dispatchEvent(new CustomEvent('flow-ui-stop-voice', { bubbles: true, composed: true }));
+    }
+    voiceSessionReady() {
+        return flowUIVoiceSessionReady(this);
+    }
+    toggleVoiceSession() {
+        return toggleFlowUIVoiceSession(this);
+    }
     navigate(pageId) { return this.controller?.navigate(pageId); }
     applyA2AFrame(frame) { return this.controller?.applyA2AFrame(frame); }
     createShare(options) { return this.controller?.createShare(options); }
     revokeShare(grantId) { return this.controller?.revokeShare(grantId); }
+
+    _toggleDrawerExpand() {
+        this.dispatchEvent(new CustomEvent('flow-ui-drawer-expand-toggle', {
+            bubbles: true,
+            composed: true,
+            detail: { expanded: this.drawerExpanded !== true },
+        }));
+    }
+
+    _embedPageUrl() {
+        const embedId = typeof this.embedId === 'string' ? this.embedId.trim() : '';
+        if (embedId === '') {
+            return '';
+        }
+        if (typeof window === 'undefined' || !window.location) {
+            throw new Error('flow-ui embed: window.location required');
+        }
+        return `${window.location.origin}/flow-embed-page?embed=${encodeURIComponent(embedId)}`;
+    }
+
+    async _copyEmbedPageUrl() {
+        const url = this._embedPageUrl();
+        if (url === '') {
+            throw new Error('flow-ui embed: embedId required');
+        }
+        try {
+            await navigator.clipboard.writeText(url);
+            this.embedState = { copied: true };
+        } catch {
+            const input = this.renderRoot.querySelector('.embed-result input');
+            input?.select();
+            this.embedState = { copied: false };
+        }
+    }
 
     getRenderContext() {
         const document = this.controller?.document;
@@ -773,6 +889,46 @@ export class PlatformFlowUI extends LitElement {
         </details>`;
     }
 
+    _embedMenu() {
+        const pageUrl = this._embedPageUrl();
+        if (pageUrl === '') return nothing;
+        const locale = resolveFlowUILocale(this.locale);
+        return html`<details class="embed">
+            <summary
+                class="chrome-icon-btn"
+                aria-label=${flowUIText(locale, 'embed_aria')}
+                title=${flowUIText(locale, 'embed')}
+            >${flowUIGlyph('code', 18)}</summary>
+            <div class="embed-card">
+                <div>
+                    <div class="embed-title">${flowUIText(locale, 'embed_title')}</div>
+                    <div class="embed-copy">${flowUIText(locale, 'embed_page_description')}</div>
+                </div>
+                <div class="embed-copy">${flowUIText(locale, 'embed_page_url')}</div>
+                <div class="embed-result">
+                    <input readonly .value=${pageUrl} aria-label=${flowUIText(locale, 'embed_page_url')}>
+                    <button type="button" class="share-btn secondary" @click=${this._copyEmbedPageUrl}>
+                        ${flowUIText(locale, this.embedState.copied ? 'embed_copied' : 'embed_copy')}
+                    </button>
+                </div>
+            </div>
+        </details>`;
+    }
+
+    _expandControl() {
+        if (this.display !== 'drawer') return nothing;
+        const locale = resolveFlowUILocale(this.locale);
+        const expanded = this.drawerExpanded === true;
+        return html`<button
+            type="button"
+            class="chrome-icon-btn"
+            aria-pressed=${expanded ? 'true' : 'false'}
+            aria-label=${flowUIText(locale, expanded ? 'collapse_aria' : 'expand_aria')}
+            title=${flowUIText(locale, expanded ? 'collapse_aria' : 'expand_aria')}
+            @click=${this._toggleDrawerExpand}
+        >${flowUIGlyph(expanded ? 'minimize' : 'expand', 18)}</button>`;
+    }
+
     _topActions(chromeMode, effectiveReadonly) {
         const sessionFiles = this._sessionFiles();
         const filesPanel = sessionFiles.length > 0
@@ -783,6 +939,8 @@ export class PlatformFlowUI extends LitElement {
             : nothing;
         const runControl = this._taskRunControl(effectiveReadonly);
         const shareMenu = this._shareMenu();
+        const embedMenu = this._embedMenu();
+        const expandControl = this._expandControl();
         const readonlyPill = effectiveReadonly && chromeMode === 'full'
             ? html`<span class="readonly-pill">${flowUIText(resolveFlowUILocale(this.locale), 'read_only')}</span>`
             : nothing;
@@ -790,11 +948,13 @@ export class PlatformFlowUI extends LitElement {
             filesPanel === nothing
             && runControl === nothing
             && shareMenu === nothing
+            && embedMenu === nothing
+            && expandControl === nothing
             && readonlyPill === nothing
         ) {
             return nothing;
         }
-        return html`<div class="top-actions">${filesPanel}${readonlyPill}${runControl}${shareMenu}</div>`;
+        return html`<div class="top-actions">${filesPanel}${readonlyPill}${runControl}${expandControl}${embedMenu}${shareMenu}</div>`;
     }
 
     _navigation(document) {

@@ -213,12 +213,14 @@ Capabilities `voice.transcribe_audio` / `voice.synthesize_speech` для isolate
 
 ## `<platform-flow-ui>`: голос в браузере
 
-Полный голос AI (эфир) в `<platform-flow-ui>` включается только для catalog voice-input/Submit component при capability **`voice-enabled`** (embed — из `InterfaceProfile.look.voice_*`) и готовности инфраструктуры (`voice-base-url`, `company-id`, `flow-id` или `embed-id`, `flowsBaseUrl`). Иначе доступна только явно разрешённая диктовка в bound field.
+Полный голос AI (эфир) в `<platform-flow-ui>` включается только для catalog **`VoiceInput`** (`mode: session`) при capability **`voice`** (embed — из `InterfaceProfile.look.voice_*` → `capabilities.voice`) и готовности инфраструктуры (`voice-base-url`, `company-id`, `flow-id` или `embed-id`, `baseUrl` / flows root). `mode: dictation` пишет STT в bound TextArea через `<platform-voice-dictation>`. Form composer **не** инжектит mic сам — только рендерит child `VoiceInput` из document. Без capability компонент остаётся в document как disabled control.
 
-| Условие | Кнопка микрофона в композере | Технология |
+| Условие | Кнопка микрофона | Технология |
 |---|---|---|
-| `voice_enabled` и готова инфраструктура voice + A2A | переключение эфира | `VoiceMediaSession` + `VoiceAgentBridge`, WS `/voice/api/ws/session/{id}`, `voice-toggle` |
-| инфраструктура неполная **или** `voice_enabled=false` при `enable-voice` | диктовка в textarea | Web Speech API |
+| `VoiceInput` `mode=session`, `capabilities.voice`, готова инфраструктура voice + A2A | переключение эфира | `VoiceMediaSession` + `VoiceAgentBridge`, WS `/voice/api/ws/session/{id}` |
+| `VoiceInput` `mode=session`, инфраструктура неполная (при разрешённом voice) | диктовка в textarea | `<platform-voice-dictation>` → `POST /voice/api/v1/transcribe` |
+| `VoiceInput` `mode=dictation`, `capabilities.voice` | диктовка в bound field | `<platform-voice-dictation>` |
+| нет `VoiceInput` в document | нет mic | — |
 
 Потоковая озвучка ответа (`feedStreamTtsFromA2aResult` → WS `speak`): при видимой surface и включённом pref `platform:voice:tts_output_enabled` universal runtime держит tts-only `VoiceMediaSession`; duplex переносит target на свою сессию. Команды буферизуются до `OPEN`, длинный text режется по `VOICE_WS_SPEAK_TEXT_CHUNK_MAX`. Artifact projection сохраняет wire order и не озвучивает data/raw/url или hidden reasoning без policy.
 

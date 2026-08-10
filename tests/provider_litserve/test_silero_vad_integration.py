@@ -51,6 +51,7 @@ def test_silero_vad_detects_no_segments_on_pure_silence(shared_silero_vad_engine
         audio_bytes=pcm,
         api_model_id=api_id,
         sample_rate_override=None,
+        threshold_override=None,
     )
     assert segments == []
 
@@ -68,6 +69,7 @@ def test_silero_vad_returns_list_for_synthetic_tone(shared_silero_vad_engine):
         audio_bytes=pcm,
         api_model_id=api_id,
         sample_rate_override=None,
+        threshold_override=None,
     )
     assert isinstance(segments, list)
     for seg in segments:
@@ -87,4 +89,5 @@ def test_silero_vad_unknown_model_raises_value_error(
             audio_bytes=pcm,
             api_model_id=f"unknown-{unique_id}",
             sample_rate_override=None,
+            threshold_override=None,
         )

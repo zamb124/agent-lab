@@ -198,15 +198,28 @@ async def browser_page_markdown(
     *,
     state: "ExecutionState",
 ) -> JsonObject:
-    markdown = await BrowserClient().page_markdown(
-        state,
-        url,
-        server_id=server_id,
-        navigation_timeout_ms=navigation_timeout_ms,
-        ingest_source=ingest_source,
-    )
+    try:
+        markdown = await BrowserClient().page_markdown(
+            state,
+            url,
+            server_id=server_id,
+            navigation_timeout_ms=navigation_timeout_ms,
+            ingest_source=ingest_source,
+        )
+    except Exception as exc:
+        # Контракт tool/public_search: success=false при недоступном browser MCP /
+        # сетевых сбоях — не ронять code-node через capability 500.
+        return {
+            "success": False,
+            "error": str(exc),
+            "markdown": "",
+            "truncated": False,
+            "original_chars": 0,
+            "max_markdown_chars": max_markdown_chars,
+        }
     bounded_markdown, truncated = bound_browser_markdown(markdown, max_markdown_chars)
     return {
+        "success": True,
         "markdown": bounded_markdown,
         "truncated": truncated,
         "original_chars": len(markdown),

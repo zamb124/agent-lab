@@ -19,8 +19,10 @@ from sqlalchemy import Column, DateTime, MetaData, String, Table, delete, select
 from sqlalchemy import func as sa_func
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.sql.elements import ColumnElement, Label
 
 from core.db.database import get_session_factory
+from core.db.jsonb import jsonb_text
 from core.db.models import (
     Namespaces as NamespacesModel,
 )
@@ -37,7 +39,7 @@ from core.db.request_scope_kv_cache import invalidate_key, lookup_memoized, set_
 from core.db.utils import get_rowcount
 from core.logging import get_logger
 from core.models.context_models import Context
-from core.types import JsonValue, parse_json_value
+from core.types import JsonObject, JsonValue, parse_json_value
 
 logger = get_logger(__name__)
 
@@ -683,6 +685,86 @@ class Storage:
                 data[key] = _encode_storage_value(cast(JsonValue, row[1]))
 
             return data
+
+    async def get_all_by_key_endswith_and_table(
+        self,
+        suffix: str,
+        table_name: str,
+        *,
+        limit: int = 100,
+    ) -> dict[str, str]:
+        """Выборка по SQL endswith по полному ключу (без авто-префикса company).
+
+        Нужен для unscoped lookup ``…:flow:{flow_id}`` без full-scan ``company:%``.
+        """
+        if suffix.strip() == "":
+            raise ValueError("suffix is required")
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        async with self.get_session() as session:
+            table = self._get_table(table_name)
+            result = await session.execute(
+                select(table.c["key"], table.c["value"])
+                .where(table.c["key"].endswith(suffix))
+                .order_by(table.c["updated_at"].desc())
+                .limit(limit)
+            )
+            data: dict[str, str] = {}
+            for row in result:
+                key = _row_key(cast(str, row[0]))
+                data[key] = _encode_storage_value(cast(JsonValue, row[1]))
+            return data
+
+    async def list_json_fields_by_prefix_and_table(
+        self,
+        prefix: str,
+        table_name: str,
+        *,
+        fields: tuple[str, ...],
+        limit: int = 1000,
+        offset: int = 0,
+    ) -> list[dict[str, JsonValue]]:
+        """
+        Страница JSONB-записей с проекцией только указанных top-level полей.
+
+        Не читает полный value (в т.ч. тяжёлые вложенные документы вроде Flow UI).
+        """
+        if offset < 0:
+            raise ValueError("offset должен быть >= 0")
+        if not fields:
+            raise ValueError("fields must be non-empty")
+        async with self.get_session() as session:
+            table = self._get_table(table_name)
+            value_col = cast(ColumnElement[JsonObject], table.c["value"])
+            projected: list[Label[JsonValue] | Label[str | None]] = []
+            for field_name in fields:
+                # tags — JSON array (->); scalars — text (->>) so asyncpg
+                # does not JSON-decode huge blobs into Python.
+                if field_name == "tags":
+                    tags_expr = cast(
+                        ColumnElement[JsonValue],
+                        value_col.op("->")(field_name),
+                    )
+                    projected.append(tags_expr.label(field_name))
+                else:
+                    projected.append(jsonb_text(value_col, field_name).label(field_name))
+            result = await session.execute(
+                select(*projected)
+                .where(table.c["key"].like(f"{prefix}%"))
+                .order_by(table.c["updated_at"].desc())
+                .offset(offset)
+                .limit(limit)
+            )
+            rows: list[dict[str, JsonValue]] = []
+            for row in result.mappings():
+                payload: dict[str, JsonValue] = {}
+                for field_name in fields:
+                    raw_value = cast(JsonValue, row[field_name])
+                    if field_name != "tags" and raw_value is None:
+                        continue
+                    payload[field_name] = raw_value
+                rows.append(payload)
+            return rows
 
     async def count_by_prefix_and_table(self, prefix: str, table_name: str) -> int:
         """Считает количество записей по префиксу в таблице. Используется BaseRepository."""

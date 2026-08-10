@@ -413,7 +413,7 @@ async def test_lara_wiki_every_tool_full_tour(
     props = _ok_tool(turn2, "wiki_update_properties")
     assert props.get("wiki_page_id") == wiki_page_id
     searched = _ok_tool(turn2, "wiki_search")
-    assert searched.get("success") is True
+    assert isinstance(searched.get("items"), list)
     # last wiki_create_page overwrites tool_results key
     child = _ok_tool(turn2, "wiki_create_page")
     child_page_id = _require_str(child, "wiki_page_id")

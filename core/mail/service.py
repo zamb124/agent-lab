@@ -1281,6 +1281,14 @@ class MailService:
                 )
                 local_override = self._local_dev_mailbox_password(email_address)
                 if has_secret and local_override is None:
+                    if payload.provision and connection.supports_provision:
+                        port = self._port_for(connection)
+                        spec = MailboxEnsureSpec(
+                            mail_domain=connection.mail_domain,
+                            local_part=local_part,
+                            password=secrets.token_urlsafe(24),
+                        )
+                        _ = await port.ensure_mailbox(spec)
                     return await self._autolink_company_mailbox_calendar(
                         binding=existing,
                         connection=connection,
@@ -3653,6 +3661,11 @@ class MailService:
             raise MailConfigError("system company not found")
         ensured: list[str] = []
         for user_id in company.members:
+            # Mail для flow-сотрудников — отдельный эпик (flow_employee.mdc).
+            # Префикс = FLOW_EMPLOYEE_USER_ID_PREFIX; без импорта flow_employee
+            # (цикл BaseContainer → MailService → flow_employee → BaseContainer).
+            if user_id.startswith("flow_employee_"):
+                continue
             existing = await self._binding_repository.get_by_user(SYSTEM_COMPANY_ID, user_id)
             if existing is not None:
                 ensured.append(existing.email_address)

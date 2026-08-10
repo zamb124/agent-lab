@@ -7,7 +7,7 @@ const BASIC = [
 const PLATFORM = [
     'PageShell', 'Navigation', 'PageLink', 'Section', 'Grid', 'Stack', 'Heading', 'Markdown',
     'CodeBlock', 'Citations', 'Form', 'FieldGroup', 'Select', 'TextArea', 'NumberField', 'DatePicker',
-    'Switch', 'FileUpload', 'FileCard', 'FileList', 'DataTable', 'Chart', 'Metric', 'Badge', 'Status',
+    'Switch', 'FileUpload', 'VoiceInput', 'FileCard', 'FileList', 'DataTable', 'Chart', 'Metric', 'Badge', 'Status',
     'Progress', 'Alert', 'EmptyState', 'Avatar', 'AgentIdentity', 'ArtifactFeed', 'ArtifactCard',
     'JsonInspector', 'TaskControls', 'RunTrace', 'ToolActivity', 'BrowserPreview', 'SuggestedPrompts',
     'ConversationFeed', 'FileCollection', 'SkillActivity', 'ReflectionResult', 'ActionPreview',
@@ -161,6 +161,7 @@ const LAYOUT_BY_TYPE = Object.freeze({
     Divider: LAYOUT_DIVIDER,
 
     FileUpload: LAYOUT_BLOCK,
+    VoiceInput: LAYOUT_COMPACT,
     SuggestedPrompts: LAYOUT_BLOCK,
     TaskControls: LAYOUT_BLOCK,
     EmptyState: LAYOUT_BLOCK,
@@ -483,6 +484,23 @@ const EDITOR_BY_TYPE = Object.freeze({
         ],
         defaults: { properties: { multiple: true }, bindings: { value: '/values/{id}' } },
     },
+    VoiceInput: {
+        group: 'input',
+        icon: 'mic',
+        schema: [
+            field('mode', 'enum', 'Режим', 'Mode', {
+                options: Object.freeze([
+                    Object.freeze({ value: 'dictation', label: Object.freeze({ ru: 'Диктовка', en: 'Dictation' }) }),
+                    Object.freeze({ value: 'session', label: Object.freeze({ ru: 'Эфир', en: 'Live session' }) }),
+                ]),
+            }),
+            field('presentation', 'string', 'Представление', 'Presentation'),
+        ],
+        defaults: {
+            properties: { mode: 'dictation' },
+            bindings: { value: '/values/message' },
+        },
+    },
     Form: { group: 'input', icon: 'checklist', schema: [field('formId', 'string', 'ID формы', 'Form ID'), field('presentation', 'string', 'Представление', 'Presentation')] },
     FieldGroup: { group: 'input', icon: 'list-check' },
 
@@ -655,6 +673,7 @@ const EDITOR_LABELS = Object.freeze({
     DatePicker: Object.freeze({ ru: 'Дата', en: 'Date' }),
     Switch: Object.freeze({ ru: 'Переключатель', en: 'Switch' }),
     FileUpload: Object.freeze({ ru: 'Загрузка файлов', en: 'File upload' }),
+    VoiceInput: Object.freeze({ ru: 'Голосовой ввод', en: 'Voice input' }),
     Button: Object.freeze({ ru: 'Кнопка', en: 'Button' }),
     PageLink: Object.freeze({ ru: 'Ссылка на страницу', en: 'Page link' }),
     TaskControls: Object.freeze({ ru: 'Управление запуском', en: 'Run controls' }),

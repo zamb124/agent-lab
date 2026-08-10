@@ -164,6 +164,14 @@ class EmbedConfig(BaseModel):
             "Имеет силу только если voice_enabled=True."
         ),
     )
+    session_share_enabled: bool = Field(
+        default=False,
+        title="Share сессии из embed",
+        description=(
+            "Разрешить гостю embed-сессии создавать Flow UI share-ссылку на текущий диалог. "
+            "По умолчанию выключено; для публичных демо лендинга включается явно."
+        ),
+    )
     preview_share_link: bool = Field(
         default=False,
         title="Служебный виджет для одноразовой гостевой ссылки из редактора flow",
@@ -252,6 +260,7 @@ class EmbedInterfaceLook(BaseModel):
     branding: bool
     voice_enabled: bool
     voice_default_on: bool
+    session_share_enabled: bool
 
     @classmethod
     def from_embed_config(cls, config: EmbedConfig) -> "EmbedInterfaceLook":
@@ -276,6 +285,7 @@ class EmbedInterfaceLook(BaseModel):
             branding=config.branding,
             voice_enabled=config.voice_enabled,
             voice_default_on=config.voice_default_on,
+            session_share_enabled=config.session_share_enabled,
         )
 
 

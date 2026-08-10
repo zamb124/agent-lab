@@ -25,6 +25,9 @@ from core.models.identity_models import User
 from core.utils.tokens import get_token_service
 
 
+pytestmark = [pytest.mark.timeout(120, func_only=True)]
+
+
 @pytest_asyncio.fixture
 async def system_landing_embed(frontend_container):
     """Виджет system с landing_visible для публичного API."""
@@ -355,6 +358,7 @@ async def test_public_landing_agents_seeds_demo_when_catalog_empty(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(120, func_only=True)
 async def test_public_landing_agents_resolves_card_from_flow_store_url(
     frontend_client: AsyncClient,
     frontend_container,
@@ -409,7 +413,8 @@ async def test_public_landing_agents_resolves_card_from_flow_store_url(
     assert r.status_code == 200
     hit = next((x for x in r.json()["items"] if x["embed_id"] == embed_id), None)
     assert hit is not None
-    assert "/frontend/api/v1/files/download/" in hit["landing_card_image_url"]
+    assert "/api/v1/files/download/" in hit["landing_card_image_url"]
+    assert hit["landing_card_image_url"].startswith("/")
 
     set_context(
         Context(

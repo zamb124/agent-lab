@@ -1190,7 +1190,13 @@ async def _interface_profile_internal(
         viewer=InterfaceProfileViewer(
             can_edit_flow=not is_embed_session and not is_share_session,
             can_interact=share_permission != "view",
-            can_share=not is_embed_session and not is_share_session,
+            can_share=(
+                not is_share_session
+                and (
+                    not is_embed_session
+                    or (look is not None and look.session_share_enabled)
+                )
+            ),
             auth_mode=(
                 "share"
                 if is_share_session

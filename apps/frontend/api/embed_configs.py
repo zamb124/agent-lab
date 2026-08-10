@@ -174,6 +174,7 @@ def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
         guest_max_user_messages=config.guest_max_user_messages,
         voice_enabled=config.voice_enabled,
         voice_default_on=config.voice_default_on,
+        session_share_enabled=config.session_share_enabled,
         interface_override=compact_embed_interface_override(config.interface_override),
         preview_share_link=config.preview_share_link,
         usage_count=config.usage_count,
@@ -219,6 +220,10 @@ class CreateEmbedConfigRequest(BaseModel):
         default=False,
         description="Автоматически включать голосовой режим при открытии виджета",
     )
+    session_share_enabled: bool = Field(
+        default=False,
+        description="Разрешить Share текущей сессии из embed-чата",
+    )
     interface_override: EmbedInterfaceOverride | None = Field(
         default=None,
         description=(
@@ -249,6 +254,7 @@ class UpdateEmbedConfigRequest(BaseModel):
     guest_max_user_messages: int | None = None
     voice_enabled: bool | None = None
     voice_default_on: bool | None = None
+    session_share_enabled: bool | None = None
     interface_override: EmbedInterfaceOverride | None = None
 
 class EmbedConfigResponse(BaseModel):
@@ -274,6 +280,7 @@ class EmbedConfigResponse(BaseModel):
     guest_max_user_messages: int | None
     voice_enabled: bool
     voice_default_on: bool
+    session_share_enabled: bool
     interface_override: EmbedInterfaceOverride | None
     preview_share_link: bool
     usage_count: int
@@ -413,6 +420,7 @@ async def create_embed_config(
         guest_max_user_messages=request_data.guest_max_user_messages,
         voice_enabled=request_data.voice_enabled,
         voice_default_on=request_data.voice_default_on,
+        session_share_enabled=request_data.session_share_enabled,
         interface_override=compact_embed_interface_override(
             request_data.interface_override
         ),
@@ -581,6 +589,10 @@ async def update_embed_config(
         if request_data.voice_default_on is None:
             raise HTTPException(status_code=400, detail="voice_default_on не может быть null")
         config.voice_default_on = request_data.voice_default_on
+    if "session_share_enabled" in fields:
+        if request_data.session_share_enabled is None:
+            raise HTTPException(status_code=400, detail="session_share_enabled не может быть null")
+        config.session_share_enabled = request_data.session_share_enabled
     if "interface_override" in fields:
         config.interface_override = compact_embed_interface_override(
             request_data.interface_override

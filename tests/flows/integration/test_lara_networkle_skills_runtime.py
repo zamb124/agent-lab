@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import date
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import TypeAdapter
@@ -327,7 +327,8 @@ async def test_lara_networkle_note_list_and_discard_draft_path(
         unique_id=unique_id,
         flow_suffix="notes",
     )
-    today = date.today().isoformat()
+    # note_date default = UTC calendar day (crm.mdc); local date.today() drifts near midnight.
+    today = datetime.now(UTC).date().isoformat()
     note_name = f"Note {unique_id}"
     _ = mock_llm_with_queue(
         [

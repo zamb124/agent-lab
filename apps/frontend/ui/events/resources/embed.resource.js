@@ -58,6 +58,15 @@ export const embedConfigsResource = createResourceCollection({
                 throw new Error('frontend/embed_configs: guest_max_user_messages invalid');
             }
         }
+        if (typeof raw.voice_enabled !== 'boolean') {
+            throw new Error('frontend/embed_configs: voice_enabled required');
+        }
+        if (typeof raw.voice_default_on !== 'boolean') {
+            throw new Error('frontend/embed_configs: voice_default_on required');
+        }
+        if (typeof raw.session_share_enabled !== 'boolean') {
+            throw new Error('frontend/embed_configs: session_share_enabled required');
+        }
         if (raw.interface_override != null && (typeof raw.interface_override !== 'object' || Array.isArray(raw.interface_override))) {
             throw new Error('frontend/embed_configs: interface_override must be object or null');
         }

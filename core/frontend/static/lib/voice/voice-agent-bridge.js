@@ -39,11 +39,11 @@
 
 import { unwrapA2aStreamResult } from '../flow-ui/protocol/a2a-result-helpers.js';
 import {
-    A2A_PROTOCOL_VERSION,
     a2aEndpointUrl,
     buildA2aSendStreamingMessageBody,
     buildCancelTaskBody,
 } from '../flow-ui/protocol/a2a-codec.js';
+import { A2A_PROTOCOL_VERSION } from '../flow-ui/protocol/constants.js';
 import { consumeA2AStream } from '../flow-ui/protocol/a2a-stream.js';
 import { isVoiceClientDebugEnabled } from './voice-media-session.js';
 

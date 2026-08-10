@@ -1,4 +1,4 @@
-"""Playwright E2E: публичный landing demo drawer (platform-flow-ui embed_public)."""
+"""Playwright E2E: публичный landing demo drawer (flow-ui-drawer → platform-flow-ui embed_public)."""
 
 from __future__ import annotations
 
@@ -47,5 +47,28 @@ async def test_landing_demo_drawer_opens_platform_chat(
     await expect(open_btn).to_be_visible(timeout=30_000)
     await open_btn.click()
 
-    drawer_chat = page.locator("landing-home-demo-agents platform-flow-ui").first
+    drawer_chat = page.locator(
+        "landing-home-demo-agents flow-ui-drawer platform-flow-ui"
+    ).first
     await expect(drawer_chat).to_be_attached(timeout=30_000)
+    drawer = page.locator("landing-home-demo-agents flow-ui-drawer").first
+    await expect(drawer).to_have_attribute("open", "", timeout=10_000)
+
+    expand = drawer_chat.locator(
+        "button[aria-label*='Expand'], button[title*='Expand'], "
+        "button[aria-label*='Развернуть'], button[title*='Развернуть'], "
+        "button[aria-label*='На весь'], button[title*='На весь'], "
+        "button[aria-label*='Collapse'], button[title*='Свернуть']"
+    ).first
+    await expect(expand).to_be_visible(timeout=15_000)
+    await expand.click()
+    await expect(drawer).to_have_attribute("expanded", "", timeout=5_000)
+
+    # Catalog VoiceInput control in composer (dictation fallback or session toggle).
+    mic = drawer_chat.locator(
+        "platform-voice-dictation, button.composer-voice-session, "
+        "button[aria-label*='voice' i], button[aria-label*='эфир' i], "
+        "button[aria-label*='диктов' i], button[aria-label*='голос' i], "
+        "button[title*='голос' i], button[title*='voice' i]"
+    ).first
+    await expect(mic).to_be_attached(timeout=15_000)

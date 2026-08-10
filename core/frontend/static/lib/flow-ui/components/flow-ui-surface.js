@@ -149,9 +149,21 @@ export class FlowUISurfaceElement extends LitElement {
         .page-shell--conversation > .flow-node[data-flow-ui-type="Form"] {
             padding: var(--space-2, 8px) var(--space-4, 16px) var(--space-4, 16px);
         }
+        /*
+         * width:100% is required: ArtifactFeed is a column flex stack, and
+         * margin-inline:auto without an explicit width shrink-wraps the feed to
+         * content then centers it — short first turns look middle-aligned until
+         * later longer bubbles widen the track.
+         */
         .page-shell--conversation .task-feed {
+            width: 100%;
             max-width: min(100%, 760px);
             margin-inline: auto;
+            box-sizing: border-box;
+        }
+        .page-shell--conversation .task-feed > .task {
+            width: 100%;
+            min-width: 0;
         }
         .page-shell--conversation .suggestions {
             max-width: min(100%, 760px);

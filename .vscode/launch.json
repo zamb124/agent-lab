@@ -492,7 +492,7 @@
                 "--ws",
                 "--reload",
                 "--reload-paths",
-                "apps",
+                "apps/search",
                 "--reload-paths",
                 "core",
                 "--no-access-log"
@@ -523,7 +523,7 @@
                 "--ws",
                 "--reload",
                 "--reload-paths",
-                "apps",
+                "apps/wiki",
                 "--reload-paths",
                 "core",
                 "--no-access-log"
@@ -554,7 +554,7 @@
                 "--ws",
                 "--reload",
                 "--reload-paths",
-                "apps",
+                "apps/flows",
                 "--reload-paths",
                 "core",
                 "--no-access-log"

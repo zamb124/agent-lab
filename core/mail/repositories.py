@@ -7,6 +7,7 @@ from typing import Final, final
 
 from sqlalchemy import String, and_, cast, delete, nulls_first, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 
 from core.db.database import get_session_factory
 from core.db.models.platform import (
@@ -112,6 +113,9 @@ def _cursor_from_record(record: MailboxSyncCursorRecord) -> MailboxSyncCursor:
     )
 
 
+_CONNECTION_UPSERT_MAX_ATTEMPTS: Final[int] = 5
+
+
 @final
 class CompanyMailConnectionRepository:
     def __init__(self, db_url: str) -> None:
@@ -150,69 +154,104 @@ class CompanyMailConnectionRepository:
 
     async def upsert(self, connection: CompanyMailConnection) -> CompanyMailConnection:
         session_factory = await get_session_factory(self._db_url)
-        ispmanager_base_url: str | None = None
-        ispmanager_authinfo_user: str | None = None
-        ispmanager_authinfo_password_encrypted: str | None = None
-        if connection.ispmanager is not None:
-            ispmanager_base_url = connection.ispmanager.base_url
-            ispmanager_authinfo_user = connection.ispmanager.authinfo_user
-            ispmanager_authinfo_password_encrypted = (
-                connection.ispmanager.authinfo_password_encrypted
-            )
-        values = {
-            "company_mail_connection_id": connection.company_mail_connection_id,
-            "company_id": connection.company_id,
-            "scope": str(connection.scope),
-            "owner_user_id": connection.owner_user_id,
-            "mail_domain": connection.mail_domain,
-            "provider": str(connection.provider),
-            "imap_host": connection.imap_host,
-            "imap_port": connection.imap_port,
-            "smtp_host": connection.smtp_host,
-            "smtp_port": connection.smtp_port,
-            "use_ssl": connection.use_ssl,
-            "supports_provision": connection.supports_provision,
-            "status": str(connection.status),
-            "ispmanager_base_url": ispmanager_base_url,
-            "ispmanager_authinfo_user": ispmanager_authinfo_user,
-            "ispmanager_authinfo_password_encrypted": ispmanager_authinfo_password_encrypted,
-            "created_at": connection.created_at,
-            "updated_at": connection.updated_at,
-        }
-        stmt = insert(CompanyMailConnectionRecord).values(**values)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["company_mail_connection_id"],
-            set_={
-                "company_id": stmt.excluded.company_id,
-                "scope": stmt.excluded.scope,
-                "owner_user_id": stmt.excluded.owner_user_id,
-                "mail_domain": stmt.excluded.mail_domain,
-                "provider": stmt.excluded.provider,
-                "imap_host": stmt.excluded.imap_host,
-                "imap_port": stmt.excluded.imap_port,
-                "smtp_host": stmt.excluded.smtp_host,
-                "smtp_port": stmt.excluded.smtp_port,
-                "use_ssl": stmt.excluded.use_ssl,
-                "supports_provision": stmt.excluded.supports_provision,
-                "status": stmt.excluded.status,
-                "ispmanager_base_url": stmt.excluded.ispmanager_base_url,
-                "ispmanager_authinfo_user": stmt.excluded.ispmanager_authinfo_user,
+        # Partial unique (company_id) WHERE scope='company': concurrent ensure can
+        # race between get_by_company and INSERT — retry after IntegrityError.
+        last_error: IntegrityError | None = None
+        for _attempt in range(_CONNECTION_UPSERT_MAX_ATTEMPTS):
+            resolved = connection
+            if connection.scope == MailConnectionScope.COMPANY:
+                existing_company = await self.get_by_company(connection.company_id)
+                if (
+                    existing_company is not None
+                    and existing_company.company_mail_connection_id
+                    != connection.company_mail_connection_id
+                ):
+                    resolved = connection.model_copy(
+                        update={
+                            "company_mail_connection_id": (
+                                existing_company.company_mail_connection_id
+                            ),
+                            "created_at": existing_company.created_at,
+                        }
+                    )
+            ispmanager_base_url: str | None = None
+            ispmanager_authinfo_user: str | None = None
+            ispmanager_authinfo_password_encrypted: str | None = None
+            if resolved.ispmanager is not None:
+                ispmanager_base_url = resolved.ispmanager.base_url
+                ispmanager_authinfo_user = resolved.ispmanager.authinfo_user
+                ispmanager_authinfo_password_encrypted = (
+                    resolved.ispmanager.authinfo_password_encrypted
+                )
+            values = {
+                "company_mail_connection_id": resolved.company_mail_connection_id,
+                "company_id": resolved.company_id,
+                "scope": str(resolved.scope),
+                "owner_user_id": resolved.owner_user_id,
+                "mail_domain": resolved.mail_domain,
+                "provider": str(resolved.provider),
+                "imap_host": resolved.imap_host,
+                "imap_port": resolved.imap_port,
+                "smtp_host": resolved.smtp_host,
+                "smtp_port": resolved.smtp_port,
+                "use_ssl": resolved.use_ssl,
+                "supports_provision": resolved.supports_provision,
+                "status": str(resolved.status),
+                "ispmanager_base_url": ispmanager_base_url,
+                "ispmanager_authinfo_user": ispmanager_authinfo_user,
                 "ispmanager_authinfo_password_encrypted": (
-                    stmt.excluded.ispmanager_authinfo_password_encrypted
+                    ispmanager_authinfo_password_encrypted
                 ),
-                "updated_at": stmt.excluded.updated_at,
-            },
-        )
-        async with session_factory() as session:
-            _ = await session.execute(stmt)
-            await session.commit()
-        stored = await self.get(connection.company_mail_connection_id)
-        if stored is None:
-            raise RuntimeError(
-                "CompanyMailConnection upsert failed for "
-                + f"company_mail_connection_id={connection.company_mail_connection_id}"
+                "created_at": resolved.created_at,
+                "updated_at": resolved.updated_at,
+            }
+            stmt = insert(CompanyMailConnectionRecord).values(**values)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["company_mail_connection_id"],
+                set_={
+                    "company_id": stmt.excluded.company_id,
+                    "scope": stmt.excluded.scope,
+                    "owner_user_id": stmt.excluded.owner_user_id,
+                    "mail_domain": stmt.excluded.mail_domain,
+                    "provider": stmt.excluded.provider,
+                    "imap_host": stmt.excluded.imap_host,
+                    "imap_port": stmt.excluded.imap_port,
+                    "smtp_host": stmt.excluded.smtp_host,
+                    "smtp_port": stmt.excluded.smtp_port,
+                    "use_ssl": stmt.excluded.use_ssl,
+                    "supports_provision": stmt.excluded.supports_provision,
+                    "status": stmt.excluded.status,
+                    "ispmanager_base_url": stmt.excluded.ispmanager_base_url,
+                    "ispmanager_authinfo_user": stmt.excluded.ispmanager_authinfo_user,
+                    "ispmanager_authinfo_password_encrypted": (
+                        stmt.excluded.ispmanager_authinfo_password_encrypted
+                    ),
+                    "updated_at": stmt.excluded.updated_at,
+                },
             )
-        return stored
+            try:
+                async with session_factory() as session:
+                    _ = await session.execute(stmt)
+                    await session.commit()
+            except IntegrityError as exc:
+                last_error = exc
+                continue
+            stored = await self.get(resolved.company_mail_connection_id)
+            if stored is None and connection.scope == MailConnectionScope.COMPANY:
+                # Partial-unique winner may have a different PK; re-resolve.
+                stored = await self.get_by_company(connection.company_id)
+            if stored is None:
+                raise RuntimeError(
+                    "CompanyMailConnection upsert failed for "
+                    + f"company_mail_connection_id={resolved.company_mail_connection_id}"
+                )
+            return stored
+        if last_error is None:
+            raise RuntimeError("CompanyMailConnection upsert failed without IntegrityError")
+        raise RuntimeError(
+            "CompanyMailConnection upsert exhausted retries for "
+            + f"company_id={connection.company_id}"
+        ) from last_error
 
     async def delete(self, company_mail_connection_id: str) -> bool:
         if not company_mail_connection_id.strip():

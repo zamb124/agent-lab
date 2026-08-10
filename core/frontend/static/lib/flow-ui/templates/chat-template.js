@@ -5,7 +5,7 @@
 import { flowUIComponent as component, stackLayout } from './component-factory.js';
 
 export const LINNEX_DEFAULT_CHAT_TEMPLATE_ID = 'linnex.default-chat';
-export const LINNEX_DEFAULT_CHAT_TEMPLATE_VERSION = '1.1.0';
+export const LINNEX_DEFAULT_CHAT_TEMPLATE_VERSION = '1.2.0';
 export const PLATFORM_UI_SUBMIT_ACTION = 'platform.ui.submit';
 
 /**
@@ -86,7 +86,7 @@ export function buildDefaultChatDocument(options = {}) {
             component_id: 'message-form',
             type: 'Form',
             kind: 'container',
-            children: ['file-upload', 'message-input', 'submit'],
+            children: ['file-upload', 'message-input', 'voice-input', 'submit'],
             container_layout: stackLayout('space.3'),
             properties: { formId: 'message-form', presentation: 'composer' },
         }),
@@ -105,6 +105,12 @@ export function buildDefaultChatDocument(options = {}) {
                 rows: 1,
                 placeholder: 'Ask anything…',
             },
+        }),
+        'voice-input': component({
+            component_id: 'voice-input',
+            type: 'VoiceInput',
+            bindings: { value: '/values/message' },
+            properties: { presentation: 'composer', mode: 'session' },
         }),
         submit: component({
             component_id: 'submit',

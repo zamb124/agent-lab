@@ -13,7 +13,7 @@ from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import Message
 from a2a.types.a2a_pb2 import ROLE_USER
 
-from apps.flows.src.a2a import A2ATaskProjectionService
+from apps.flows.src.a2a import A2ATaskProjectionService, ensure_submitted_a2a_task
 from apps.flows.src.durable_execution import ConversationMessageAppendedPayload
 from apps.flows.src.durable_execution.manager import DurableWorkflowRuntime, create_initial_state
 from apps.flows.src.models.hitl_conversation import (
@@ -432,6 +432,41 @@ class HitlConversationService:
                 return turn
         raise RuntimeError(f"appended message {message.message_id!r} not found in projection")
 
+    async def _stream_emitter(
+        self,
+        ref: WorkItemConversationRef,
+        *,
+        company_id: str,
+        content: str | None = None,
+    ) -> Emitter:
+        task_id = ref.a2a_task_id
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise ValueError(
+                f"HITL stream requires a2a_task_id on conversation ref (session={ref.session_id!r})"
+            )
+        runtime_state = await self._runtime.get_state(ref.session_id)
+        if runtime_state is not None:
+            state = runtime_state
+        else:
+            state = create_initial_state(
+                task_id=task_id.strip(),
+                context_id=ref.context_id,
+                user_id="",
+                session_id=ref.session_id,
+                branch_id=ref.branch_id,
+            )
+        await ensure_submitted_a2a_task(
+            repository=self._a2a_projection.task_repository,
+            company_id=company_id,
+            state=state,
+            content=content,
+        )
+        return Emitter(
+            self._a2a_projection,
+            state,
+            company_id=company_id,
+        )
+
     async def _stream_to_user(
         self,
         ref: WorkItemConversationRef,
@@ -440,23 +475,7 @@ class HitlConversationService:
         artifact_name: str,
         company_id: str,
     ) -> None:
-        task_id = ref.a2a_task_id
-        if not isinstance(task_id, str) or not task_id.strip():
-            raise ValueError(
-                f"HITL stream requires a2a_task_id on conversation ref (session={ref.session_id!r})"
-            )
-        state = create_initial_state(
-            task_id=task_id.strip(),
-            context_id=ref.context_id,
-            user_id="",
-            session_id=ref.session_id,
-            branch_id=ref.branch_id,
-        )
-        emitter = Emitter(
-            self._a2a_projection,
-            state,
-            company_id=company_id,
-        )
+        emitter = await self._stream_emitter(ref, company_id=company_id, content=text)
         await emitter.emit_text(text, append=True, last_chunk=False, artifact_name=artifact_name)
 
     async def _stream_operator_files(
@@ -466,23 +485,7 @@ class HitlConversationService:
         *,
         company_id: str,
     ) -> None:
-        task_id = ref.a2a_task_id
-        if not isinstance(task_id, str) or not task_id.strip():
-            raise ValueError(
-                f"HITL stream requires a2a_task_id on conversation ref (session={ref.session_id!r})"
-            )
-        state = create_initial_state(
-            task_id=task_id.strip(),
-            context_id=ref.context_id,
-            user_id="",
-            session_id=ref.session_id,
-            branch_id=ref.branch_id,
-        )
-        emitter = Emitter(
-            self._a2a_projection,
-            state,
-            company_id=company_id,
-        )
+        emitter = await self._stream_emitter(ref, company_id=company_id)
         await emitter.emit_file_artifact(file_ids, artifact_name="operator_files")
 
     async def _publish_realtime(

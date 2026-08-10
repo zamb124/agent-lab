@@ -53,6 +53,10 @@ class A2ATaskProjectionService:
     def redis_client(self) -> RedisClient:
         return self._redis
 
+    @property
+    def task_repository(self) -> A2ATaskRepository:
+        return self._repository
+
     async def publish(self, *, company_id: str, event: StreamEvent) -> StreamEvent:
         """Persist/enrich one event, publish exact stored bytes, acknowledge delivery."""
         identity = _event_identity(event)

@@ -1,14 +1,18 @@
 /**
- * Секция главной: три публичных демо-агента (lawyer, support_demo, psy) + тот же drawer, что на digital-workers.
+ * Секция главной: три публичных демо-агента (lawyer, support_demo, psy) + flow-ui-drawer.
  */
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/flow-ui/components/platform-flow-ui.js';
+import '@platform/lib/flow-ui/shell/drawer.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-spinner.js';
+import { resolveVoiceHttpOriginFromFlowsBaseUrl } from '@platform/lib/voice/voice-http-origin.js';
 
 const HOME_DEMO_FLOW_ORDER = Object.freeze(['lawyer', 'support_demo', 'psy']);
+
+/** Изолированный toggle: не пересекается с Lara (`platform-lara-open`). */
+const LANDING_DEMO_DRAWER_TOGGLE_EVENT = 'landing-demo-flow-ui-toggle';
 
 export class LandingHomeDemoAgents extends PlatformElement {
     static i18nNamespace = 'landing';
@@ -122,29 +126,6 @@ export class LandingHomeDemoAgents extends PlatformElement {
             throw new Error('landing_home_demo_agents: window.location.origin required');
         }
         this._flowsBaseUrl = new URL('/flows', window.location.origin).href;
-        this._voiceBaseUrl = new URL('/voice', window.location.origin).href;
-    }
-
-    /** Публичные демо-виджеты: guest JWT с company_id `system`. */
-    static embedDemoCompanyId = 'system';
-
-    _onEmbedDrawerToast(e) {
-        const detail = e && typeof e.detail === 'object' ? e.detail : null;
-        const msg = typeof detail?.message === 'string' ? detail.message.trim() : '';
-        if (msg === '') {
-            return;
-        }
-        this.toast('digital_workers.embed_voice_message', { type: 'warning', vars: { detail: msg } });
-    }
-
-    _drawerVoiceEnabled() {
-        const s = this._drawerSpec;
-        return s !== null && s.voice_enabled === true;
-    }
-
-    _drawerVoiceDefaultOn() {
-        const s = this._drawerSpec;
-        return s !== null && s.voice_enabled === true && s.voice_default_on === true;
     }
 
     connectedCallback() {
@@ -159,7 +140,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
         }
     }
 
-    _getDemoAuthHeaders = async () => {
+    _getDemoRequestHeaders = async () => {
         const spec = this._drawerSpec;
         if (!spec || typeof spec.embed_id !== 'string' || spec.embed_id === '') {
             throw new Error('landing_home_demo_agents: drawer embed context missing');
@@ -193,28 +174,15 @@ export class LandingHomeDemoAgents extends PlatformElement {
         if (typeof card.branch_id !== 'string' || card.branch_id === '') {
             throw new Error('landing_home_demo_agents: card.branch_id required');
         }
-        const title =
-            typeof card.assistant_title === 'string' && card.assistant_title.trim() !== ''
-                ? card.assistant_title.trim()
-                : card.name;
         const theme = card.theme === 'light' || card.theme === 'dark' || card.theme === 'auto' ? card.theme : 'dark';
         const locale =
             card.interface_locale === 'ru' || card.interface_locale === 'en' ? card.interface_locale : 'auto';
-        if (typeof card.voice_enabled !== 'boolean') {
-            throw new Error('landing_home_demo_agents: card.voice_enabled must be boolean');
-        }
-        if (typeof card.voice_default_on !== 'boolean') {
-            throw new Error('landing_home_demo_agents: card.voice_default_on must be boolean');
-        }
         this._drawerSpec = {
             embed_id: card.embed_id,
             flow_id: card.flow_id,
             branch_id: card.branch_id,
-            assistant_title: title,
             theme,
             interface_locale: locale,
-            voice_enabled: card.voice_enabled,
-            voice_default_on: card.voice_default_on === true,
         };
         this._drawerOpen = true;
         this.requestUpdate();
@@ -222,6 +190,28 @@ export class LandingHomeDemoAgents extends PlatformElement {
 
     _hire() {
         this.openModal('auth.login');
+    }
+
+    _drawerConfig() {
+        const spec = this._drawerSpec;
+        if (spec === null) {
+            throw new Error('landing_home_demo_agents: drawer spec required');
+        }
+        return {
+            embedId: spec.embed_id,
+            flowId: spec.flow_id,
+            branchId: spec.branch_id,
+            baseUrl: this._flowsBaseUrl,
+            companyId: 'system',
+            voiceBaseUrl: resolveVoiceHttpOriginFromFlowsBaseUrl(this._flowsBaseUrl),
+            profile: 'embed_public',
+            theme: spec.theme,
+            locale: spec.interface_locale,
+            showLauncher: true,
+            credentials: 'omit',
+            toggleEventName: LANDING_DEMO_DRAWER_TOGGLE_EVENT,
+            getRequestHeaders: this._getDemoRequestHeaders,
+        };
     }
 
     _allItemsList() {
@@ -334,27 +324,15 @@ export class LandingHomeDemoAgents extends PlatformElement {
                       `
                     : ''}
             </div>
-            <platform-flow-ui
-                display="drawer"
-                profile="embed_public"
-                flows-base-url=${this._flowsBaseUrl}
-                flow-id=${this._drawerSpec ? this._drawerSpec.flow_id : ''}
-                embed-id=${this._drawerSpec ? this._drawerSpec.embed_id : ''}
-                branch-id=${this._drawerSpec ? this._drawerSpec.branch_id : ''}
-                assistant-title=${this._drawerSpec ? this._drawerSpec.assistant_title : ''}
-                theme=${this._drawerSpec ? this._drawerSpec.theme : 'dark'}
-                interface-locale=${this._drawerSpec ? this._drawerSpec.interface_locale : 'auto'}
-                ?show-launcher=${false}
-                ?use-credentials=${false}
-                .open=${this._drawerOpen}
-                voice-base-url=${this._voiceBaseUrl}
-                company-id=${LandingHomeDemoAgents.embedDemoCompanyId}
-                ?voice-enabled=${this._drawerVoiceEnabled()}
-                ?voice-default-on=${this._drawerVoiceDefaultOn()}
-                .getAuthToken=${this._getDemoAuthHeaders}
-                @humanitec-embed-drawer-open-changed=${this._onDrawerOpenChanged}
-                @embed-toast=${this._onEmbedDrawerToast}
-            ></platform-flow-ui>
+            ${this._drawerSpec === null
+                ? nothing
+                : html`
+                      <flow-ui-drawer
+                          .open=${this._drawerOpen}
+                          .config=${this._drawerConfig()}
+                          @flow-ui-drawer-open-changed=${this._onDrawerOpenChanged}
+                      ></flow-ui-drawer>
+                  `}
         `;
     }
 }

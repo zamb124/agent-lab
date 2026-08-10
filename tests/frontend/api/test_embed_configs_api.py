@@ -256,6 +256,7 @@ async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_
     assert data["placeholder"] == "Type your message..."
     assert data["usage_count"] == 0
     assert data["last_used_at"] is None
+    assert data["session_share_enabled"] is False
     assert "created_at" in data
     assert "created_by" in data
 

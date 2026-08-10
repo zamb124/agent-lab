@@ -12,6 +12,7 @@ from typing import ClassVar, override
 from pydantic import ValidationError
 
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.models.flow_config import FlowToolPickerItem
 from core.db import BaseRepository, Storage
 from core.logging import get_logger
 from core.types import parse_json_object
@@ -109,15 +110,15 @@ class FlowRepository(BaseRepository[FlowConfig]):
         Нужен для публичного POST Telegram (в запросе нет company context, как у серверов Telegram).
         Возвращает (config, company_identifier) — идентификатор сегмента company:* из ключа.
         """
+        if flow_id.strip() == "":
+            raise ValueError("flow_id is required")
         table_name = self._get_table_name()
-        all_data = await self._storage.get_all_by_prefix_and_table(
-            "company:", table_name, 10_000, 0
+        all_data = await self._storage.get_all_by_key_endswith_and_table(
+            f":flow:{flow_id}",
+            table_name,
+            limit=100,
         )
         for key, raw in all_data.items():
-            if f"flow:{flow_id}_v" in key:
-                continue
-            if not key.endswith(f"flow:{flow_id}"):
-                continue
             parts = key.split(":")
             if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
                 continue
@@ -210,6 +211,28 @@ class FlowRepository(BaseRepository[FlowConfig]):
                 items.append(cfg)
             except (ValueError, ValidationError) as e:
                 logger.warning(f"Failed to parse flow from key {key}: {e}")
+                continue
+
+        return items
+
+    async def list_for_tool_picker(self, *, limit: int, offset: int = 0) -> list[FlowToolPickerItem]:
+        """Страница flow только с полями tool picker (SQL projection, без полного JSON)."""
+        base_prefix = self._get_prefix()
+        final_prefix = self._build_final_key(base_prefix)
+        rows = await self._storage.list_json_fields_by_prefix_and_table(
+            final_prefix,
+            self._get_table_name(),
+            fields=("flow_id", "name", "description", "tags"),
+            limit=limit,
+            offset=offset,
+        )
+
+        items: list[FlowToolPickerItem] = []
+        for row in rows:
+            try:
+                items.append(FlowToolPickerItem.model_validate(row))
+            except ValidationError as e:
+                logger.warning(f"Failed to parse flow picker item: {e}")
                 continue
 
         return items

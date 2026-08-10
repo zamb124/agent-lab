@@ -198,7 +198,7 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
         "type": "text",
         "content": json.dumps(_analyze_body, ensure_ascii=False),
     }
-    await mock_llm_redis([_slot, _slot])
+    await mock_llm_redis([_slot, _slot, _slot, _slot, _slot, _slot])
 
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
     create_propose_raw = await crm_create_note._run_impl(
@@ -280,7 +280,10 @@ async def test_crm_create_note_and_analyze_tool_chains(
         "type": "text",
         "content": json.dumps(_combo_body, ensure_ascii=False),
     }
-    await mock_llm_redis([_combo_slot, _combo_slot])
+    # create+analyze + background daily-summary rebuild share the same test_scope queue
+    await mock_llm_redis(
+        [_combo_slot, _combo_slot, _combo_slot, _combo_slot, _combo_slot, _combo_slot]
+    )
 
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
     combo_raw = await crm_create_note_and_analyze._run_impl(

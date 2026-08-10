@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from apps.flows.src.services.flows_loader import FlowsLoader
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.tools.builtin_specs import builtin_tool_ids
 from apps.flows.tools.index_search import web_search
@@ -18,6 +19,47 @@ from tests.search.integration.snippet_support import strip_snippet_highlight
 # — autouse session fixture в tests/search/conftest.py). Без регистрации плагина autouse-фикстура не
 # срабатывает для тестов под tests/flows/, и MCP RPC падает "system admin user is required".
 pytest_plugins = ["tests.search.conftest"]
+
+_FLOWS_BUNDLES_DIR = Path(__file__).resolve().parents[3] / "apps" / "flows" / "bundles"
+_FLOWS_REGISTRY_PATH = _FLOWS_BUNDLES_DIR.parent / "registry.yaml"
+
+
+@pytest.fixture(autouse=True)
+async def _reload_public_search_bundle(container, app) -> None:
+    """Подтягивает актуальный public_search/flow.json в БД (research/tools contract)."""
+    _ = app
+    from core.context import clear_context, get_context, set_context
+    from core.models.context_models import Context
+    from core.models.identity_models import User
+    from tests.fixtures.ai_provider_defaults import make_test_company
+
+    previous = get_context()
+    set_context(
+        Context(
+            user=User(user_id="test_user", name="Test User"),
+            active_company=make_test_company(company_id="system", name="System"),
+            session_id="test_session",
+            channel="test",
+            metadata={"user_id": "test_user", "email": "test@example.com", "grps": []},
+        )
+    )
+    try:
+        loader = FlowsLoader(
+            bundles_dir=_FLOWS_BUNDLES_DIR,
+            flow_repository=container.flow_repository,
+            node_repository=container.node_repository,
+            tool_repository=container.tool_repository,
+            registry_path=_FLOWS_REGISTRY_PATH,
+        )
+        loaded = await loader.reload_flow_bundle("public_search")
+        if loaded != "public_search":
+            raise AssertionError(f"expected public_search reload, got {loaded!r}")
+    finally:
+        if previous is not None:
+            set_context(previous)
+        # ASGI Bearer-тесты пропускают autouse test_context — оставляем system
+        # context после reload, иначе mcp_server_repository/flow_repository
+        # падают без active_company.
 
 
 async def _ingest_runet_marker(
@@ -92,11 +134,12 @@ def _parse_sse_results(text: str) -> list[dict[str, Any]]:
 def _artifact_data_part(artifact: dict[str, Any]) -> dict[str, Any]:
     parts = artifact.get("parts")
     assert isinstance(parts, list) and parts
-    part = parts[0]
-    assert isinstance(part, dict)
-    data = part.get("data")
-    assert isinstance(data, dict)
-    return data
+    for part in parts:
+        assert isinstance(part, dict)
+        data = part.get("data")
+        if isinstance(data, dict):
+            return data
+    raise AssertionError(f"artifact has no data part: {artifact.get('name')!r}")
 
 
 def _captured_tool_names(calls: list[dict[str, Any]]) -> set[str]:
@@ -128,20 +171,125 @@ def _stream_artifact_update(event: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _content_path_value(content: dict[str, Any], path: str) -> object | None:
+    """Читает JSON Pointer вида /content/... из surface data_model.content."""
+    if not path.startswith("/content/"):
+        raise ValueError(f"unsupported Flow UI content path: {path!r}")
+    current: object = content
+    for segment in path[len("/content/") :].split("/"):
+        if not isinstance(current, dict) or segment not in current:
+            return None
+        current = current[segment]
+    return current
+
+
+def _event_type_for_content_path(path: str, payload: dict[str, Any]) -> str:
+    if path == "/content/serp/results":
+        if payload.get("rank_stage") == "refined":
+            return "search/serp/results_refined"
+        return "search/serp/results_ready"
+    if path == "/content/serp/resultsRefined":
+        return "search/serp/results_refined"
+    if path == "/content/serp/suggestions":
+        return "search/serp/suggestions_ready"
+    if path == "/content/serp/insights":
+        return "search/serp/insights_ready"
+    if path == "/content/serp/completed":
+        return "search/serp/completed"
+    if path == "/content/research/plan":
+        return "search/research/plan_ready"
+    if path == "/content/research/search":
+        return "search/research/search_ready"
+    if path == "/content/research/reflection":
+        return "search/research/reflection_ready"
+    if path.startswith("/content/research/sources/"):
+        return "search/research/source_ready"
+    raise ValueError(f"unknown public_search Flow UI path: {path!r}")
+
+
+_PUBLIC_SEARCH_CONTENT_PATHS: tuple[str, ...] = (
+    "/content/serp/results",
+    "/content/serp/resultsRefined",
+    "/content/serp/suggestions",
+    "/content/serp/insights",
+    "/content/serp/completed",
+    "/content/research/plan",
+    "/content/research/search",
+    "/content/research/reflection",
+)
+
+
 def _collect_ui_events(stream_text: str) -> list[tuple[str, dict[str, Any]]]:
+    """
+    Собирает staged public_search updates из Flow UI stream.
+
+    Канон: capability ui.update_data → durable Flow UI document → artifact
+    ui.document / ui.surface.*; special artifact.name=ui_event запрещён.
+    """
     events: list[tuple[str, dict[str, Any]]] = []
+    previous_by_path: dict[str, object] = {}
     for event in _parse_sse_results(stream_text):
         artifact_update = _stream_artifact_update(event)
         if artifact_update is None:
             continue
         artifact = artifact_update.get("artifact")
-        if not isinstance(artifact, dict) or artifact.get("name") != "ui_event":
+        if not isinstance(artifact, dict):
             continue
-        data = _artifact_data_part(artifact)
-        event_type = data.get("type")
-        payload = data.get("payload")
-        if isinstance(event_type, str) and isinstance(payload, dict):
-            events.append((event_type, payload))
+        artifact_name = artifact.get("name")
+        if not isinstance(artifact_name, str):
+            continue
+
+        payloads_by_path: dict[str, dict[str, Any]] = {}
+
+        if artifact_name == "ui.document" or artifact_name.startswith("ui.surface."):
+            flow_ui_payload: dict[str, Any] | None = None
+            a2ui_messages: list[object] | None = None
+            raw_parts = artifact.get("parts")
+            if isinstance(raw_parts, list):
+                for part in raw_parts:
+                    if not isinstance(part, dict):
+                        continue
+                    part_data = part.get("data")
+                    if isinstance(part_data, dict) and isinstance(part_data.get("flowUi"), dict):
+                        flow_ui_payload = part_data
+                    elif isinstance(part_data, list):
+                        a2ui_messages = part_data
+            if flow_ui_payload is not None:
+                flow_ui = flow_ui_payload["flowUi"]
+                assert isinstance(flow_ui, dict)
+                surfaces = flow_ui.get("surfaces")
+                if isinstance(surfaces, dict):
+                    main = surfaces.get("main")
+                    if isinstance(main, dict):
+                        data_model = main.get("data_model")
+                        if isinstance(data_model, dict):
+                            content = data_model.get("content")
+                            if isinstance(content, dict):
+                                for path in _PUBLIC_SEARCH_CONTENT_PATHS:
+                                    value = _content_path_value(content, path)
+                                    if isinstance(value, dict):
+                                        payloads_by_path[path] = value
+            if isinstance(a2ui_messages, list):
+                for message in a2ui_messages:
+                    if not isinstance(message, dict):
+                        continue
+                    update = message.get("updateDataModel")
+                    if not isinstance(update, dict):
+                        continue
+                    path = update.get("path")
+                    value = update.get("value")
+                    if (
+                        isinstance(path, str)
+                        and path in _PUBLIC_SEARCH_CONTENT_PATHS
+                        and isinstance(value, dict)
+                    ):
+                        payloads_by_path[path] = value
+
+        for path, payload in payloads_by_path.items():
+            if previous_by_path.get(path) == payload:
+                continue
+            previous_by_path[path] = payload
+            events.append((_event_type_for_content_path(path, payload), payload))
     return events
 
 
@@ -306,22 +454,8 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     )
     assert stream_response.status_code == 200, stream_response.text
     assert "text/event-stream" in stream_response.headers.get("content-type", "")
-    events = _parse_sse_results(stream_response.text)
-    ui_payloads: dict[str, dict[str, Any]] = {}
-    for event in events:
-        artifact_update = _stream_artifact_update(event)
-        if artifact_update is None:
-            continue
-        artifact = artifact_update.get("artifact")
-        if not isinstance(artifact, dict):
-            continue
-        if artifact.get("name") != "ui_event":
-            continue
-        data = _artifact_data_part(artifact)
-        event_type = data.get("type")
-        payload = data.get("payload")
-        if isinstance(event_type, str) and isinstance(payload, dict):
-            ui_payloads[event_type] = payload
+    ui_events = _collect_ui_events(stream_response.text)
+    ui_payloads = {event_type: payload for event_type, payload in ui_events}
 
     assert ui_payloads["search/serp/results_ready"]["phase"] == "results"
     assert ui_payloads["search/serp/results_ready"]["results"]
@@ -491,20 +625,11 @@ async def test_public_search_with_file_reads_file_before_search(
     )
 
     assert stream_response.status_code == 200, stream_response.text
-    events = _parse_sse_results(stream_response.text)
-    completed_payload: dict[str, Any] | None = None
-    for event in events:
-        artifact_update = _stream_artifact_update(event)
-        if artifact_update is None:
-            continue
-        artifact = artifact_update.get("artifact")
-        if not isinstance(artifact, dict) or artifact.get("name") != "ui_event":
-            continue
-        data = _artifact_data_part(artifact)
-        if data.get("type") == "search/serp/completed":
-            payload = data.get("payload")
-            assert isinstance(payload, dict)
-            completed_payload = payload
+    ui_events = _collect_ui_events(stream_response.text)
+    completed_payload = next(
+        (payload for et, payload in ui_events if et == "search/serp/completed"),
+        None,
+    )
 
     assert completed_payload is not None, stream_response.text
     assert completed_payload["query"] == query

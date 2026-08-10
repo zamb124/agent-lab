@@ -123,6 +123,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         _guestMaxUserMessages: { state: true },
         _voiceEnabled: { state: true },
         _voiceDefaultOn: { state: true },
+        _sessionShareEnabled: { state: true },
         _interfaceOverrideEnabled: { state: true },
         _interfacePolicyPatch: { state: true },
     };
@@ -149,6 +150,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._guestMaxUserMessages = '';
         this._voiceEnabled = true;
         this._voiceDefaultOn = false;
+        this._sessionShareEnabled = false;
         this._interfaceOverrideEnabled = false;
         this._interfacePolicyPatch = {};
         this.size = 'lg';
@@ -183,6 +185,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._guestMaxUserMessages = '';
         this._voiceEnabled = true;
         this._voiceDefaultOn = false;
+        this._sessionShareEnabled = false;
         this._interfaceOverrideEnabled = false;
         this._interfacePolicyPatch = {};
         this._placeholder = this.t('embed_create_modal.default_message_placeholder');
@@ -247,6 +250,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             }
             this._voiceEnabled = c.voice_enabled === true;
             this._voiceDefaultOn = c.voice_default_on === true;
+            this._sessionShareEnabled = c.session_share_enabled === true;
             if (c.interface_override != null && typeof c.interface_override === 'object' && !Array.isArray(c.interface_override)) {
                 this._interfaceOverrideEnabled = true;
                 const policy = c.interface_override.policy;
@@ -560,6 +564,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             guest_max_user_messages,
             voice_enabled: this._voiceEnabled,
             voice_default_on: this._voiceEnabled && this._voiceDefaultOn,
+            session_share_enabled: this._sessionShareEnabled,
             interface_override: this._buildInterfaceOverridePayload(),
         };
         const result = await this._awaitEmbedWrite(isEdit, payload);
@@ -815,6 +820,18 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                             <span>${this.t('embed_create_modal.label_voice_default_on')}</span>
                         </label>
                         <div class="hint">${this.t('embed_create_modal.voice_default_on_hint')}</div>
+                    </div>
+
+                    <div class="form-group full">
+                        <label class="switch-row">
+                            <input
+                                type="checkbox"
+                                .checked=${this._sessionShareEnabled}
+                                @change=${(e) => { this._sessionShareEnabled = e.target.checked; this.isDirty = true; }}
+                            />
+                            <span>${this.t('embed_create_modal.label_session_share_enabled')}</span>
+                        </label>
+                        <div class="hint">${this.t('embed_create_modal.session_share_enabled_hint')}</div>
                     </div>
 
                     <div class="full">

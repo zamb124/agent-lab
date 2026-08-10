@@ -18,9 +18,7 @@ import {
 } from './conversation-turn.js';
 import { flowUIText } from '../../utils/text.js';
 import { openFlowUISessionFile } from '../../utils/open-session-file.js';
-import { hasFactory } from '../../../events/factory-registry.js';
-import { hasPlatformBus } from '../../../events/bus-singleton.js';
-import '../../../components/platform-voice-dictation.js';
+import { renderVoiceInput } from './voice.js';
 
 function isComposerForm(component) {
     if (optionalComponentProperty(component, 'presentation') === 'composer') return true;
@@ -74,17 +72,6 @@ const CONVERSATION_FLEX_LAYOUT = Object.freeze({
         justify_content: 'start',
     }),
 });
-
-function voiceAllowed(host) {
-    // Production iframe has no PlatformApp → no bus/factories. Voice UI requires
-    // platform/voice_dictation; without it the composer must omit the control.
-    if (!hasPlatformBus() || !hasFactory('platform/voice_dictation')) return false;
-    const policy = host.controller?.document?.policy;
-    if (policy && policy.allow_voice === false) return false;
-    const capabilities = host.controller?.profile?.capabilities;
-    if (capabilities && capabilities.voice === false) return false;
-    return true;
-}
 
 /** Composer attach / file chips — capabilities.files only (not the tray policy). */
 function filesCapabilityAllowed(host) {
@@ -232,6 +219,7 @@ export function renderForm(host, component) {
             .filter(Boolean);
         const fileUpload = children.find((child) => child.type === 'FileUpload');
         const textArea = children.find((child) => child.type === 'TextArea');
+        const voiceInput = children.find((child) => child.type === 'VoiceInput');
         const submit = children.find((child) => child.type === 'Button');
         const submitRenderer = submit ? flowUIComponentRenderer(submit.type) : null;
         const messageValue = textArea
@@ -248,7 +236,6 @@ export function renderForm(host, component) {
         const hasFiles = Array.isArray(fileRefs) && fileRefs.length > 0;
         const canSend = !host.readonly
             && (String(messageValue ?? '').trim() !== '' || hasFiles);
-        const showVoice = Boolean(textArea) && voiceAllowed(host) && !host.readonly;
         const textRequired = textArea ? componentHasRequiredCheck(textArea) : false;
         const textInvalid = textArea ? componentFieldError(host, textArea) !== '' : false;
         // Composer submit control state machine: send → busy (submit in flight,
@@ -299,23 +286,15 @@ export function renderForm(host, component) {
                             ></textarea>` : nothing}
                         </div>
                         <div class="composer-toolbar-end">
-                            ${showVoice ? html`<platform-voice-dictation
-                                density="dense"
-                                ?disabled=${host.readonly}
-                                @transcribed=${(event) => {
-                                    const spoken = event.detail?.text;
-                                    if (typeof spoken !== 'string' || spoken.trim() === '') {
-                                        throw new Error('flow-ui: voice dictation returned empty text');
-                                    }
-                                    const current = String(
-                                        resolveBound(host.surface, textArea, 'value', host.tasks) ?? '',
-                                    );
-                                    const next = current.trim() === ''
-                                        ? spoken.trim()
-                                        : `${current.trimEnd()} ${spoken.trim()}`;
-                                    host._change(textArea, 'value', next);
-                                }}
-                            ></platform-voice-dictation>` : nothing}
+                            ${voiceInput
+                                ? renderVoiceInput(host, {
+                                    ...voiceInput,
+                                    properties: {
+                                        ...(voiceInput.properties || {}),
+                                        presentation: 'composer',
+                                    },
+                                }, { dense: true })
+                                : nothing}
                             ${submit && submitRenderer ? (() => {
                                 if (submit.placement == null || typeof submit.placement !== 'object') {
                                     throw new Error(

@@ -22,6 +22,7 @@ def _bind_idle_container(frontend_container):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_namespace_personal_backfill_creates_missing_personal(
     frontend_container,
     unique_id: str,

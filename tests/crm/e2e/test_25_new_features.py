@@ -8,6 +8,7 @@ aggregate facets, relationship integrity, access_level.
 import csv
 import io
 import json
+from datetime import date
 from typing import cast
 
 import pytest
@@ -16,6 +17,11 @@ from httpx import AsyncClient, Response
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 
 pytestmark = pytest.mark.timeout(120, func_only=True)
+
+
+def _isolated_note_date(unique_id: str) -> str:
+    day_offset = int(unique_id[:8], 16) % 20_000
+    return date.fromordinal(date(2090, 1, 1).toordinal() + day_offset).isoformat()
 
 
 def _http_json(response: Response) -> dict[str, object]:
@@ -317,7 +323,6 @@ class TestSchemaValidation:
         assert len(email_errors) == 1
 
 
-@pytest.mark.timeout(30)
 class TestBulkOperations:
     """Batch create / update / delete через /entities/bulk."""
 
@@ -437,6 +442,9 @@ class TestBulkOperations:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Удаление нескольких сущностей за один запрос."""
+        # Isolated note_date: enqueue_daily_summary_rebuild scans notes for that day;
+        # default+UTC-today is polluted after a long suite and times out the HTTP path.
+        note_date = _isolated_note_date(unique_id)
         entity_ids: list[str] = []
         for i in range(3):
             create_resp = await crm_client.post(
@@ -444,6 +452,7 @@ class TestBulkOperations:
                 json={
                     "entity_type": "note",
                     "name": f"Del {i} {unique_id}",
+                    "note_date": note_date,
                 },
                 headers=auth_headers_system,
             )

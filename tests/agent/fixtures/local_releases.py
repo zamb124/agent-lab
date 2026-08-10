@@ -17,8 +17,10 @@ from scripts.agent_build import detect_host_platform
 def agent_local_release_artifact() -> Path:
     from tests.agent.desktop_e2e.desktop_app import ensure_humanitec_desktop_release_artifact
 
-    artifact_path = ensure_humanitec_desktop_release_artifact()
-    return artifact_path
+    try:
+        return ensure_humanitec_desktop_release_artifact()
+    except FileNotFoundError as exc:
+        pytest.skip(str(exc))
 
 
 def require_local_release_asset_name(artifact_path: Path) -> str:

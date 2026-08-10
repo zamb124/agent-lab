@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import cast
 
 import pytest
 
@@ -11,8 +12,11 @@ from core.config.models import (
     MailConfig,
     MailIspmanagerConfig,
     MailLiveTestConfig,
+    MailLocalDevConfig,
     MailSystemConfig,
 )
+from core.identity.flow_employee import flow_employee_user_id
+from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.mail.exceptions import MailConnectionNotFoundError
 from core.mail.models import (
     CompanyMailConnection,
@@ -22,6 +26,7 @@ from core.mail.models import (
     MailConnectionStatus,
     MailProvider,
 )
+from core.mail.ports import MailServerPort
 from core.mail.repositories import (
     CompanyMailConnectionRepository,
     MailboxBindingRepository,
@@ -138,6 +143,71 @@ async def test_ensure_system_with_fake_port(
     again = await service.ensure_system_mail_connection()
     assert again is not None
     assert again.company_mail_connection_id == connection.company_mail_connection_id
+
+
+@pytest.mark.asyncio
+async def test_ensure_system_user_bindings_skips_flow_employees(
+    mail_connection_repository: CompanyMailConnectionRepository,
+    mailbox_binding_repository: MailboxBindingRepository,
+    recording_mail_port: RecordingMailServerPort,
+    container,
+    unique_id: str,
+) -> None:
+    """flow_employee_* не получают mailbox при reconcile (Mail для сотрудников — MISSING)."""
+    employee_user_id = flow_employee_user_id(f"mailskip_{unique_id}")
+    company = await container.company_repository.get(SYSTEM_COMPANY_ID)
+    assert company is not None
+    previous_members = dict(company.members)
+    company.members[employee_user_id] = ["member"]
+    await container.company_repository.set(company)
+
+    mail_config = MailConfig(
+        system=MailSystemConfig(
+            enabled=True,
+            mail_domain="linnex.io",
+            provider="ispmanager",
+            imap_host="imap.example.com",
+            imap_port=993,
+            smtp_host="smtp.example.com",
+            smtp_port=465,
+            use_ssl=True,
+            ispmanager=MailIspmanagerConfig(
+                base_url="https://panel.example.com:1500/ispmgr",
+                authinfo_user="admin",
+                authinfo_password="panel-secret",
+            ),
+            role_mailboxes=[],
+            protected_local_parts=[],
+        ),
+        live_test=MailLiveTestConfig(enabled=False),
+        local_dev=MailLocalDevConfig(
+            enabled=True,
+            mutate_remote_passwords=False,
+            mailbox_passwords={},
+        ),
+    )
+    shared_url = get_settings().database.shared_url
+    if shared_url is None:
+        raise RuntimeError("DATABASE__SHARED_URL обязателен для mail tests")
+    service = MailService(
+        connection_repository=mail_connection_repository,
+        binding_repository=mailbox_binding_repository,
+        sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
+        company_repository=container.company_repository,
+        user_repository=container.user_repository,
+        mail_config=mail_config,
+        port_override=cast(MailServerPort, cast(object, recording_mail_port)),
+    )
+    try:
+        _ = await service.ensure_system_mail_connection()
+        _ = await service.ensure_system_user_bindings()
+        employee_binding = await mailbox_binding_repository.get_by_user(
+            SYSTEM_COMPANY_ID, employee_user_id
+        )
+        assert employee_binding is None
+    finally:
+        company.members = previous_members
+        await container.company_repository.set(company)
 
 
 @pytest.mark.asyncio
