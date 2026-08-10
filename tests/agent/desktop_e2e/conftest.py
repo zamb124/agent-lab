@@ -84,8 +84,10 @@ def platform_test_scope():
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     # Fail-fast: desktop E2E не должны висеть минутами на сломанном pairing/окне.
+    # Не перетираем явный @pytest.mark.timeout на тесте (ensure+LLM внутри 15s).
     for item in items:
-        item.add_marker(pytest.mark.timeout(15, func_only=True))
+        if item.get_closest_marker("timeout") is None:
+            item.add_marker(pytest.mark.timeout(15, func_only=True))
 
     if not os.environ.get("AGENT_DESKTOP_E2E_RUN"):
         # Явный opt-in: desktop E2E не должны стартовать из широкого `pytest tests/` (xdist, без Electron).

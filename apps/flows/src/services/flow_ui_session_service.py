@@ -445,7 +445,16 @@ class FlowUISessionService:
                     raise ValueError("Flow UI action context.formId must be a string")
                 if representation is None:
                     raise ValueError("Flow UI submit requires negotiated representation")
-                if state.terminal_task_state is not None:
+                # Parked interrupts live in terminal_task_state (`input-required` /
+                # `auth-required`) but must keep interrupt_path for ReAct resume.
+                # begin_interaction_turn clears interrupt — only for truly finished
+                # turns (completed/failed/…) without an active interrupt.
+                if state.interrupt is not None:
+                    state.task_id = task_id
+                    state.terminal_task_state = None
+                    state.terminal_task_error = None
+                    state.a2a_representation = representation
+                elif state.terminal_task_state is not None:
                     state = begin_interaction_turn(
                         state,
                         task_id=task_id,

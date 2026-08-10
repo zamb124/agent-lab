@@ -1,11 +1,10 @@
 import { isA2UIArtifact } from '../../protocol/a2ui-0-9-1-codec.js';
+import {
+    INTERRUPTED_TASK_STATES,
+    TERMINAL_TASK_STATES as PROTOCOL_TERMINAL_TASK_STATES,
+} from '../../protocol/constants.js';
 
-export const TERMINAL_TASK_STATES = Object.freeze(new Set([
-    'TASK_STATE_COMPLETED',
-    'TASK_STATE_FAILED',
-    'TASK_STATE_CANCELED',
-    'TASK_STATE_REJECTED',
-]));
+export const TERMINAL_TASK_STATES = PROTOCOL_TERMINAL_TASK_STATES;
 
 function textFromParts(parts) {
     if (!Array.isArray(parts)) return '';
@@ -280,7 +279,7 @@ function taskHasUserTurn(task) {
  * A pending entry drops as soon as a real task carries its `mutation_id`.
  * Until then it is paired with the in-flight (or orphan assistant-only) real
  * task so the user bubble never appears *after* the agent reply, and so
- * typing disappears once that real task is terminal.
+ * typing disappears once that real task is settled.
  */
 export function mergeConversationTasks(tasks, pendingTurns) {
     const real = conversationTimeline(tasks);
@@ -300,11 +299,11 @@ export function mergeConversationTasks(tasks, pendingTurns) {
         const task = real[index];
         const hasUser = taskHasUserTurn(task);
         const isLastReal = index === real.length - 1;
-        const nonTerminal = !isTerminalTaskState(task.status?.state);
+        const inFlight = !isSettledTaskState(task.status?.state);
         // Pair with the submit's real task: still running, or the latest
         // assistant-only projection that answered before user_message landed.
         const orphanAssistantReply = isLastReal && !hasUser && pendingQueue.length > 0;
-        if (!hasUser && pendingQueue.length > 0 && (nonTerminal || orphanAssistantReply)) {
+        if (!hasUser && pendingQueue.length > 0 && (inFlight || orphanAssistantReply)) {
             result.push(withOptimisticUser(task, pendingQueue.shift()));
             continue;
         }
@@ -313,11 +312,11 @@ export function mergeConversationTasks(tasks, pendingTurns) {
     for (const item of pendingQueue) {
         result.push(makeOptimisticTask(item));
     }
-    // Drop terminal shells that stayed empty after pairing drained the queue.
+    // Drop settled shells that stayed empty after pairing drained the queue.
     return result.filter((task) => (
         taskHasUserTurn(task)
         || conversationTurnText(task) !== ''
-        || !isTerminalTaskState(task.status?.state)
+        || !isSettledTaskState(task.status?.state)
     ));
 }
 
@@ -346,22 +345,35 @@ export function isTerminalTaskState(state) {
     return TERMINAL_TASK_STATES.has(state);
 }
 
+export function isInterruptedTaskState(state) {
+    return INTERRUPTED_TASK_STATES.has(state);
+}
+
 /**
- * Latest non-terminal Task — the turn the flow is answering right now.
+ * Stream boundary for conversation UX: terminal or interrupt (ask_user / auth).
+ * Unlocks composer and stops streaming chrome while the task waits for the user.
+ */
+export function isSettledTaskState(state) {
+    return isTerminalTaskState(state) || isInterruptedTaskState(state);
+}
+
+/**
+ * Latest in-flight Task — the turn the flow is answering right now.
+ * Interrupted (INPUT_REQUIRED / AUTH_REQUIRED) is settled: not active.
  */
 export function activeConversationTask(tasks) {
     if (!Array.isArray(tasks)) return null;
     for (let index = tasks.length - 1; index >= 0; index -= 1) {
         const task = tasks[index];
         if (!task || typeof task !== 'object') continue;
-        if (!isTerminalTaskState(task.status?.state)) return task;
+        if (!isSettledTaskState(task.status?.state)) return task;
     }
     return null;
 }
 
 /**
  * Tasks visible in the conversation timeline: turns with content, plus
- * non-terminal tasks that are still waiting for the first chunk.
+ * in-flight tasks that are still waiting for the first chunk.
  */
 export function conversationTimeline(tasks) {
     if (!Array.isArray(tasks)) {
@@ -369,7 +381,7 @@ export function conversationTimeline(tasks) {
     }
     return tasks.filter((task) => {
         if (!task || typeof task !== 'object') return false;
-        if (!isTerminalTaskState(task.status?.state)) return true;
+        if (!isSettledTaskState(task.status?.state)) return true;
         return (
             conversationTurnText(task) !== ''
             || conversationUserText(task) !== ''

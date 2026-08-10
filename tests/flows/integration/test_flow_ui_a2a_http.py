@@ -8,6 +8,7 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.src.channels.a2a import _flow_ui_task_id
 from apps.flows.src.container import get_container
 from core.a2a import (
     PLATFORM_UI_BOOTSTRAP_ACTION,
@@ -15,6 +16,7 @@ from core.a2a import (
     PLATFORM_UI_SYNC_ACTION,
 )
 from core.context import require_context
+from tests.flows._a2a_v1 import A2A_HEADERS
 from tests.flows._flow_ui_session import a2a_flow_ui_send
 from tests.flows.a2a_conformance.helpers.flows import create_echo_flow, delete_flow
 
@@ -124,5 +126,132 @@ async def test_a2a_flow_ui_submit_runs_echo_flow(
         state = await _wait_state_response(session_id, needle=f"ECHO:run-{unique_id}")
         assert state.ui_document.revision >= 3
         assert state.ui_interaction is not None
+    finally:
+        await delete_flow(client, flow_id)
+
+
+async def _create_ask_user_llm_flow(client: AsyncClient, flow_id: str) -> None:
+    response = await client.post(
+        "/flows/api/v1/flows/",
+        headers=A2A_HEADERS,
+        json={
+            "flow_id": flow_id,
+            "name": "Flow UI ask_user turn identity",
+            "entry": "main",
+            "nodes": {
+                "main": {
+                    "type": "llm_node",
+                    "prompt": "Use ask_user when you need a clarifying question.",
+                    "tools": ["ask_user"],
+                },
+            },
+            "edges": [{"from_node": "main", "to_node": None}],
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.asyncio
+async def test_flow_ui_ask_user_resume_uses_new_task_id(
+    client: AsyncClient,
+    app: object,
+    unique_id: str,
+    mock_llm_with_queue: object,
+    sync_tools: object,
+) -> None:
+    """
+    Flow UI: ask_user INPUT_REQUIRED then second submit must open a new A2A Task
+    (action-scoped id), not mutate the interrupted turn.
+    """
+    _ = app
+    _ = sync_tools
+    _ = require_context()
+    mock_llm_with_queue(
+        [
+            {
+                "type": "tool_call",
+                "tool": "ask_user",
+                "args": {"question": "What is your name?"},
+            },
+            "Hello, FlowUI!",
+        ]
+    )
+    flow_id = f"a2a_flow_ui_ask_{unique_id}"
+    context_id = f"ctx-ask-{unique_id}"
+    session_id = f"{flow_id}:{context_id}"
+    action_ask = f"submit-ask-{unique_id}"
+    action_resume = f"submit-resume-{unique_id}"
+    await _create_ask_user_llm_flow(client, flow_id)
+    try:
+        _ = await a2a_flow_ui_send(
+            client,
+            flow_id=flow_id,
+            action=PLATFORM_UI_BOOTSTRAP_ACTION,
+            context_id=context_id,
+            action_id=f"bootstrap-{unique_id}",
+        )
+        _ = await a2a_flow_ui_send(
+            client,
+            flow_id=flow_id,
+            action=PLATFORM_UI_SYNC_ACTION,
+            context_id=context_id,
+            action_id=f"sync-{unique_id}",
+            revision=1,
+            message_value="hi",
+        )
+        interrupted = await a2a_flow_ui_send(
+            client,
+            flow_id=flow_id,
+            action=PLATFORM_UI_SUBMIT_ACTION,
+            context_id=context_id,
+            action_id=action_ask,
+            revision=2,
+            message_value="hi",
+        )
+        assert interrupted["status"]["state"] == "TASK_STATE_INPUT_REQUIRED", interrupted
+        first_task_id = interrupted["id"]
+        assert first_task_id == _flow_ui_task_id(context_id, action_ask)
+
+        state_after_interrupt = await get_container().workflow_runtime.get_state(session_id)
+        assert state_after_interrupt is not None
+        assert state_after_interrupt.interrupt is not None
+        assert state_after_interrupt.terminal_task_state == "input-required"
+        resume_revision = state_after_interrupt.ui_document.revision
+
+        resumed = await a2a_flow_ui_send(
+            client,
+            flow_id=flow_id,
+            action=PLATFORM_UI_SUBMIT_ACTION,
+            context_id=context_id,
+            action_id=action_resume,
+            revision=resume_revision,
+            message_value="FlowUI",
+        )
+        second_task_id = resumed["id"]
+        assert second_task_id == _flow_ui_task_id(context_id, action_resume)
+        assert second_task_id != first_task_id, (
+            f"Flow UI resume must not reuse interrupt task id: {first_task_id}"
+        )
+        assert resumed["status"]["state"] == "TASK_STATE_COMPLETED", resumed
+
+        artifacts = resumed.get("artifacts") or []
+        user_messages = [
+            artifact
+            for artifact in artifacts
+            if isinstance(artifact, dict) and artifact.get("name") == "user_message"
+        ]
+        assert user_messages, f"resume Task must emit user_message, artifacts={artifacts!r}"
+        mutation_ids: list[str] = []
+        for artifact in user_messages:
+            meta = artifact.get("metadata") or {}
+            if not isinstance(meta, dict):
+                continue
+            for key in ("mutation_id", "mutationId"):
+                value = meta.get(key)
+                if isinstance(value, str):
+                    mutation_ids.append(value)
+        assert action_resume in mutation_ids, (
+            f"user_message mutation_id must match submit action_id, got {mutation_ids!r}"
+        )
     finally:
         await delete_flow(client, flow_id)

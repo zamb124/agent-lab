@@ -99,20 +99,23 @@ async def pair_desktop_via_deep_link(
 
     pairing_code = await create_pairing_code(agent_frontend_http_client, auth_token)
     if page is not None:
-        # Prod IPC path: register через main process, без кликов по pairing UI.
-        has_api = await page.evaluate("typeof window.humanitecAgent?.pair === 'function'")
-        if has_api:
+        # Prefer pairing UI submit: onPaired → refreshStatus → LLM setup → chat.
+        # IPC pair() alone does not call onPaired; older builds need reload (blank body
+        # under load). New builds also listen to platform-mcp-env-updated.
+        await wait_for_pairing_ui(page)
+        code_input = page.locator("[data-humanitec-pairing-code]")
+        if await code_input.count() == 0:
+            code_input = page.locator("#pairing-code")
+        if await code_input.count() > 0:
+            await submit_pairing_code_in_ui(page, pairing_code)
+        else:
+            has_api = await page.evaluate("typeof window.humanitecAgent?.pair === 'function'")
+            if not has_api:
+                raise RuntimeError("HumanitecAgent pairing UI/API not found on provided page")
             await page.evaluate(
                 "(code) => window.humanitecAgent.pair(code)",
                 pairing_code,
             )
-        else:
-            code_input = page.locator("[data-humanitec-pairing-code]")
-            if await code_input.count() == 0:
-                code_input = page.locator("#pairing-code")
-            if await code_input.count() == 0:
-                raise RuntimeError("HumanitecAgent pairing UI/API not found on provided page")
-            await submit_pairing_code_in_ui(page, pairing_code)
     else:
         desktop_process.open_pairing_ui_deep_link()
         from playwright.async_api import async_playwright
@@ -145,6 +148,25 @@ async def pair_desktop_via_deep_link(
     if not isinstance(policy, dict):
         raise ValueError("device policy missing after pairing")
     return device_id, credentials
+
+
+async def wait_for_pairing_ui(page: Page, *, timeout_ms: int = _DESKTOP_WAIT_MS) -> None:
+    """Ждёт форму pairing (после checking), иначе IPC pair без onPaired."""
+    deadline = asyncio.get_event_loop().time() + (timeout_ms / 1000.0)
+    while asyncio.get_event_loop().time() < deadline:
+        code_input = page.locator("[data-humanitec-pairing-code]")
+        if await code_input.count() == 0:
+            code_input = page.locator("#pairing-code")
+        if await code_input.count() > 0 and await code_input.first.is_visible():
+            return
+        composer = page.locator("[data-humanitec-chat-composer]")
+        if await composer.count() > 0 and await composer.first.is_visible():
+            return
+        await asyncio.sleep(0.25)
+    raise TimeoutError(
+        f"HumanitecAgent pairing UI not ready (timeout={timeout_ms}ms); "
+        f"body={(await page.locator('body').inner_text())[:400]!r}"
+    )
 
 
 async def wait_for_chat_ready(page: Page, *, timeout_ms: int = _DESKTOP_WAIT_MS) -> None:
@@ -192,10 +214,15 @@ async def ensure_humanitec_paired_and_llm_ready(
         auth_token,
         page=page,
     )
-    # pair() через IPC не зовёт onPaired у guard — перезагрузка, чтобы refreshStatus
-    # увидел credentials и прошёл LLM setup → chat.
-    await page.reload(wait_until="domcontentloaded")
-    await wait_for_chat_ready(page)
+    # IPC pair пишет credentials и шлёт humanitec-agent:platform-mcp-env-updated —
+    # HumanitecOnboardingGuard слушает event и сам делает refreshStatus → LLM → chat.
+    # page.reload() здесь запрещён как primary path: под нагрузкой оставлял checking→null
+    # (body='') на весь wait_for_chat_ready.
+    try:
+        await wait_for_chat_ready(page, timeout_ms=20_000)
+    except TimeoutError:
+        await page.reload(wait_until="domcontentloaded")
+        await wait_for_chat_ready(page, timeout_ms=20_000)
     credentials = desktop.read_credentials()
     llm_provider_id = credentials.get("llm_provider_id")
     if llm_provider_id != "humanitec":
@@ -303,14 +330,17 @@ async def find_main_app_page(browser: Browser) -> Page:
 async def open_ready_main_page(browser: Browser) -> Page:
     """Находит главное окно и доводит его до chat-ready после IPC-pairing.
 
-    pair() через IPC не зовёт onPaired у guard — перезагрузка, чтобы refreshStatus
-    увидел credentials, прошёл LLM setup и синхронизировал расширения → chat.
+    Guard подписан на platform-mcp-env-updated; reload — только fallback.
     """
     page = await find_main_app_page(browser)
     composer = page.locator("[data-humanitec-chat-composer]")
-    if not (await composer.count() > 0 and await composer.first.is_visible()):
+    if await composer.count() > 0 and await composer.first.is_visible():
+        return page
+    try:
+        await wait_for_chat_ready(page, timeout_ms=20_000)
+    except TimeoutError:
         await page.reload(wait_until="domcontentloaded")
-    await wait_for_chat_ready(page)
+        await wait_for_chat_ready(page, timeout_ms=20_000)
     return page
 
 

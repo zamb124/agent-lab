@@ -162,9 +162,14 @@ def effective_stream_task_id_for_session(
     saved_state: ExecutionState | None,
 ) -> str:
     """
-    Task id для Pub/Sub `stream:{id}`: совпадает с тем, что в prepare, если
-    state и context те же. Единая точка с `_prepare_task_params`, чтобы
-    A2A-подписка и Emitter в воркере ссылались на один канал.
+    Task id для Pub/Sub `stream:{id}` на plain A2A / non-Flow-UI SUBMIT paths.
+
+    При активном interrupt предпочитает `interrupt.system.task_id`, чтобы
+    SendStreamingMessage resume оставался на том же Task (см. test_resume_preserves_task_id).
+
+    Flow UI SUBMIT не вызывает этот helper: action-scoped `_flow_ui_task_id`
+    (context_id + action_id) задаёт отдельный Task на каждый submit, в том числе
+    после ask_user INPUT_REQUIRED.
     """
     if saved_state is not None and saved_state.interrupt is not None:
         sid = saved_state.interrupt.system.task_id
@@ -575,9 +580,15 @@ class BaseChannel(ABC):
             # Resume, если есть interrupt ИЛИ breakpoint_hit
             is_resume = bool(state.interrupt) or bool(state.breakpoint_hit)
             if (
-                flow_ui_command is None
-                or flow_ui_command.kind == FlowUIIngressKind.SUBMIT
+                flow_ui_command is not None
+                and flow_ui_command.kind == FlowUIIngressKind.SUBMIT
             ):
+                # One Flow UI submit = one A2A Task (action-scoped id). Do not pin
+                # stream/projection to interrupt.system.task_id — that mutates the
+                # previous turn in the conversation feed after ask_user.
+                if not (task_id or "").strip():
+                    raise ValueError("Flow UI SUBMIT requires task_id")
+            elif flow_ui_command is None:
                 task_id = effective_stream_task_id_for_session(task_id, state)
 
             # A2A input-required, продолжение диалога: при активном operator takeover
@@ -894,7 +905,17 @@ class BaseChannel(ABC):
         container = self.container
         saved_state = await container.workflow_runtime.get_state(params.session_id)
 
-        effective_task_id = effective_stream_task_id_for_session(params.task_id, saved_state)
+        if (
+            params.flow_ui_command is not None
+            and params.flow_ui_command.kind == FlowUIIngressKind.SUBMIT
+            and (params.task_id or "").strip()
+        ):
+            # Flow UI turn identity already resolved in prepare / post-submit realign.
+            effective_task_id = params.task_id.strip()
+        else:
+            effective_task_id = effective_stream_task_id_for_session(
+                params.task_id, saved_state
+            )
         if not effective_task_id:
             effective_task_id = params.context_id or params.session_id or str(uuid.uuid4())
         params.task_id = effective_task_id
@@ -1020,13 +1041,11 @@ class BaseChannel(ABC):
             emit_user_turn = False
             user_turn_mutation_id = ""
             contract: FlowUISubmitContract | None = None
-            if state.ui_interaction is not None and (
-                (
-                    params.flow_ui_command is not None
-                    and params.flow_ui_command.kind == FlowUIIngressKind.SUBMIT
-                )
-                or not params.is_resume
-            ):
+            # ui_interaction is materialized only by Flow UI SUBMIT accept.
+            # Plain A2A interrupt resume has no ui_interaction → no user_message
+            # (same Task continues). Flow UI always emits one bubble per submit,
+            # including ReAct resume on a new action-scoped Task.
+            if state.ui_interaction is not None:
                 interaction = state.ui_interaction
                 snapshot = interaction.validated_values_snapshot
                 surface_values: JsonObject = (
@@ -1043,13 +1062,13 @@ class BaseChannel(ABC):
                     values=surface_values,
                 )
                 submit_file_refs = flow_ui_submit_file_refs(contract)
-                # Bubble emission once per turn kick (not on interrupt resume).
-                emit_user_turn = not params.is_resume
+                emit_user_turn = True
+                flow_ui_command = params.flow_ui_command
                 if (
-                    params.flow_ui_command is not None
-                    and params.flow_ui_command.kind == FlowUIIngressKind.SUBMIT
+                    flow_ui_command is not None
+                    and flow_ui_command.kind == FlowUIIngressKind.SUBMIT
                 ):
-                    user_turn_mutation_id = params.flow_ui_command.client_mutation_id
+                    user_turn_mutation_id = flow_ui_command.client_mutation_id
                 else:
                     user_turn_mutation_id = interaction.interaction_id
 

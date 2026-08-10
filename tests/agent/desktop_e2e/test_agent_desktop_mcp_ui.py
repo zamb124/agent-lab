@@ -53,6 +53,7 @@ async def test_mcp_bld_03_preload_exposes_toolkits_catalog_api(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_mcp_bld_04_platform_lara_after_pairing(
     agent_frontend_http_client,
     auth_token: str,
@@ -107,6 +108,7 @@ async def test_mcp_ui_01_first_launch_bundled_order(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_mcp_ui_02_after_pairing_enabled(
     agent_frontend_http_client,
     auth_token: str,
@@ -133,6 +135,7 @@ async def test_mcp_ui_02_after_pairing_enabled(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_mcp_ui_03_chat_mcp_picker_order(
     agent_frontend_http_client,
     auth_token: str,
@@ -238,6 +241,7 @@ async def test_mcp_ui_05_post_revoke_credentials_cleared(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_mcp_g_01_empty_chat_picker_platform_mcp_first(
     agent_frontend_http_client,
     auth_token: str,
@@ -262,6 +266,7 @@ async def test_mcp_g_01_empty_chat_picker_platform_mcp_first(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_mcp_g_02_flow_description_in_tools_list(
     agent_frontend_http_client,
     auth_token: str,

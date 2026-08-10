@@ -75,6 +75,13 @@ Database-first (`apps/flows/src/models/agent_toolkit.py`). Bootstrap: `registry.
 2. `POST /frontend/api/agent/register` → device JWT + URLs  
 3. Revoke → denylist + tunnel disconnect  
 
+Desktop onboarding после pair (`HumanitecOnboardingGuard`):
+
+- UI «Pair device» → `onPaired` → `refreshStatus` → LLM setup → chat
+- IPC/`register` в main → `humanitec-agent:platform-mcp-env-updated` → тот же `refreshStatus` (без `page.reload`)
+- E2E `pair_desktop_via_deep_link(page=...)` предпочитает UI submit; reload — только fallback в `ensure_humanitec_paired_and_llm_ready`
+- `phase === 'checking'` рендерит видимый статус (не `null`), иначе Playwright видит `body=''`
+
 ## Platform MCP — контракт
 
 | Method | Поведение |

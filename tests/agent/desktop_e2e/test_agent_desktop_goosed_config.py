@@ -22,6 +22,7 @@ from tests.agent.desktop_e2e.helpers import (
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_goose_cfg_01_config_extensions_platform_mcp_first(
     humanitec_desktop_process_factory,
 
@@ -61,6 +62,7 @@ async def test_goose_cfg_01_config_extensions_platform_mcp_first(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_goose_cfg_02_disable_developer_reflected_in_tools(
     humanitec_desktop_process_factory,
 

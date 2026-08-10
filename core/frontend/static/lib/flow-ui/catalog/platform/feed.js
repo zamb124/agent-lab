@@ -16,7 +16,7 @@ import {
     conversationUserText,
     hasConversationContent,
     isOrdinaryConversationArtifact,
-    isTerminalTaskState,
+    isSettledTaskState,
     mergeConversationTasks,
 } from './conversation-turn.js';
 import {
@@ -169,10 +169,10 @@ function renderConversationTask(host, task, { isLast }) {
     const userFiles = conversationUserFiles(task);
     const turnText = conversationTurnText(task);
     const state = task.status?.state;
-    const terminal = isTerminalTaskState(state);
+    const settled = isSettledTaskState(state);
     const failed = state === 'TASK_STATE_FAILED';
-    const streaming = !terminal && turnText !== '';
-    const waiting = !terminal && turnText === '' && isLast;
+    const streaming = !settled && turnText !== '';
+    const waiting = !settled && turnText === '' && isLast;
     return html`<section class="task" data-task-id=${task.id}>
         ${renderUserBubble(host, task, userText, userFiles)}
         ${renderTurnActivityStrip(host, task)}

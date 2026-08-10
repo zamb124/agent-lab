@@ -572,6 +572,11 @@ class A2AChannel(BaseChannel):
             share_grant=share_grant,
         )
         prepared.content = result.content
+        # Ledger may open/assign the action-scoped task_id; stream subscribe and
+        # worker kick must use the same id (not a stale prepare-time override).
+        if result.state.task_id.strip() == "":
+            raise ValueError("Flow UI submit left ExecutionState.task_id empty")
+        prepared.task_id = result.state.task_id
         return result.was_applied
 
     async def _register_push_from_send_configuration(

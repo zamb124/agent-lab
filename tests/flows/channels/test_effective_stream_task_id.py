@@ -43,6 +43,7 @@ def test_effective_returns_params_task_id_when_no_interrupt() -> None:
 
 
 def test_effective_prefers_interrupt_system_task_id() -> None:
+    """Plain A2A resume pins stream to interrupt.system.task_id."""
     s = _state_with_interrupt("from-interrupt")
     assert effective_stream_task_id_for_session("from-client", s) == "from-interrupt"
 
@@ -61,3 +62,13 @@ def test_effective_uses_saved_task_id_when_params_empty() -> None:
         content="x",
     )
     assert effective_stream_task_id_for_session("", s) == "saved-task"
+
+
+def test_flow_ui_submit_does_not_call_effective_helper_contract() -> None:
+    """
+    Documentation guard: Flow UI SUBMIT must keep action-scoped task_id even when
+    interrupt is parked. The helper still prefers interrupt for plain A2A; channel
+    prepare skips it for FlowUIIngressKind.SUBMIT (see base._prepare_task_params).
+    """
+    s = _state_with_interrupt("from-interrupt")
+    assert effective_stream_task_id_for_session("flow-ui-action-scoped", s) == "from-interrupt"

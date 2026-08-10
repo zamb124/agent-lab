@@ -665,6 +665,7 @@ async def test_goose_ipc_07_platform_mcp_env_updated_after_pair(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_goose_ipc_08_llm_autoconfig_after_pair(
     agent_frontend_http_client,
     auth_token: str,

@@ -98,6 +98,7 @@ async def test_d_flow_03_desktop_mcp_interrupt_resume(
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
 @pytest.mark.e2e
+@pytest.mark.timeout(90, func_only=True)
 async def test_mcp_g_03_chat_select_platform_mcp_flow_tool(
     agent_frontend_http_client: AsyncClient,
     auth_token: str,

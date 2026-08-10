@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from './components/ui/button';
 import { defineMessages, useIntl } from './i18n';
 import { ensureHumanitecLlmConfigured } from './humanitecLlmSetup';
@@ -34,6 +34,10 @@ const i18n = defineMessages({
     id: 'humanitecOnboarding.invalidCode',
     defaultMessage: 'Pairing code must be 6 digits',
   },
+  checkingStatus: {
+    id: 'humanitecOnboarding.checkingStatus',
+    defaultMessage: 'Checking device pairing…',
+  },
   llmSetupInProgress: {
     id: 'humanitecOnboarding.llmSetupInProgress',
     defaultMessage: 'Configuring Platform Brain…',
@@ -41,6 +45,10 @@ const i18n = defineMessages({
   llmSetupFailed: {
     id: 'humanitecOnboarding.llmSetupFailed',
     defaultMessage: 'Failed to configure platform LLM',
+  },
+  statusCheckFailed: {
+    id: 'humanitecOnboarding.statusCheckFailed',
+    defaultMessage: 'Failed to read pairing status',
   },
 });
 
@@ -59,6 +67,9 @@ type HumanitecAgentApi = {
   distro: () => Promise<{ display_name: string; primary_color: string } | null>;
   resyncExtensions: () => Promise<void>;
   fetchLlmModels: () => Promise<string[]>;
+  onPlatformMcpEnvUpdated: (
+    callback: (payload: { platform_mcp_url: string }) => void,
+  ) => void;
 };
 
 function resolveHumanitecAgentApi(): HumanitecAgentApi | null {
@@ -178,6 +189,7 @@ export default function HumanitecOnboardingGuard({ children }: HumanitecOnboardi
   const [phase, setPhase] = useState<'checking' | 'pairing' | 'llm_setup' | 'ready'>('checking');
   const [llmSetupError, setLlmSetupError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<HumanitecAgentCredentialsPayload | null>(null);
+  const refreshInFlightRef = useRef(false);
 
   const runLlmSetup = useCallback(async (nextCredentials: HumanitecAgentCredentialsPayload) => {
     setPhase('llm_setup');
@@ -204,26 +216,56 @@ export default function HumanitecOnboardingGuard({ children }: HumanitecOnboardi
   }, []);
 
   const refreshStatus = useCallback(async () => {
-    const agentApi = resolveHumanitecAgentApi();
-    if (agentApi === null) {
-      setPhase('ready');
+    if (refreshInFlightRef.current) {
       return;
     }
-    const status = await agentApi.status();
-    if (!status.paired || status.credentials === null) {
-      setPhase('pairing');
-      return;
+    refreshInFlightRef.current = true;
+    try {
+      const agentApi = resolveHumanitecAgentApi();
+      if (agentApi === null) {
+        setPhase('ready');
+        return;
+      }
+      const status = await agentApi.status();
+      if (!status.paired || status.credentials === null) {
+        setPhase('pairing');
+        return;
+      }
+      setCredentials(status.credentials);
+      await runLlmSetup(status.credentials);
+    } catch (error) {
+      setLlmSetupError(
+        error instanceof Error
+          ? error.message
+          : `${intl.formatMessage(i18n.statusCheckFailed)}: ${String(error)}`,
+      );
+      setPhase('llm_setup');
+    } finally {
+      refreshInFlightRef.current = false;
     }
-    setCredentials(status.credentials);
-    await runLlmSetup(status.credentials);
-  }, [runLlmSetup]);
+  }, [intl, runLlmSetup]);
 
   useEffect(() => {
     void refreshStatus();
+    const agentApi = resolveHumanitecAgentApi();
+    if (agentApi === null) {
+      return;
+    }
+    // IPC pair / deep-link register пишут credentials в main и шлют этот event —
+    // без подписки guard остаётся на pairing, а page.reload даёт пустой body (checking→null).
+    agentApi.onPlatformMcpEnvUpdated(() => {
+      void refreshStatus();
+    });
   }, [refreshStatus]);
 
   if (phase === 'checking') {
-    return null;
+    return (
+      <div className="h-screen w-full bg-background-default flex flex-col items-center justify-center p-4">
+        <p data-humanitec-onboarding-checking className="text-text-muted">
+          {intl.formatMessage(i18n.checkingStatus)}
+        </p>
+      </div>
+    );
   }
 
   if (phase === 'pairing') {

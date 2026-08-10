@@ -24,7 +24,8 @@ export class FlowUIDrawer extends LitElement {
                 0 14px 36px rgba(0, 0, 0, 0.45),
                 0 4px 12px rgba(0, 0, 0, 0.3)
             );
-            overflow: hidden;
+            /* overflow visible: disc shadow must paint outside the launcher. */
+            overflow: visible;
         }
         .launcher img {
             width: 34px; height: 34px; object-fit: contain; display: block; pointer-events: none;

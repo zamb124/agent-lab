@@ -1,5 +1,8 @@
 """Задачи для асинхронной обработки flows."""
 
+from a2a.types import Message
+
+from apps.flows.src.a2a.interaction_parser import parse_flow_ui_command
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
@@ -69,6 +72,14 @@ async def process_flow_task(
 
     channel_instance = get_container().get_channel(channel, flow_id)
     file_refs = [FileRef.model_validate(item) for item in files] if files is not None else []
+    parsed_message: Message | None = (
+        message_from_json_dict(message) if message is not None else None
+    )
+    # Channel prepare already parsed this; TaskIQ only ships the Message JSON, so
+    # the worker must re-parse for Flow UI turn identity + user_message emit.
+    flow_ui_command = (
+        parse_flow_ui_command(parsed_message) if parsed_message is not None else None
+    )
 
     params = PreparedTaskParams(
         task_id=task_id or "",
@@ -78,7 +89,7 @@ async def process_flow_task(
         branch_id=branch_id,
         is_resume=is_resume,
         files_data=file_refs,
-        message=message_from_json_dict(message) if message is not None else None,
+        message=parsed_message,
         metadata=metadata,
         user_id=user_id,
         initiator_user_id=initiator_user_id,
@@ -87,6 +98,7 @@ async def process_flow_task(
             if a2a_representation is not None
             else None
         ),
+        flow_ui_command=flow_ui_command,
     )
 
     result = await channel_instance.process_task(params)

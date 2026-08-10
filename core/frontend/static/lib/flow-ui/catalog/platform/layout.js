@@ -239,7 +239,8 @@ export function renderForm(host, component) {
         const textRequired = textArea ? componentHasRequiredCheck(textArea) : false;
         const textInvalid = textArea ? componentFieldError(host, textArea) !== '' : false;
         // Composer submit control state machine: send → busy (submit in flight,
-        // no task projection yet) → stop (active task, cancel allowed) → send.
+        // no task projection yet) → stop (in-flight task, cancel allowed) → send.
+        // INPUT_REQUIRED / AUTH_REQUIRED are settled: composer returns to send.
         const submitting = host.controller?.activeContext?.submitting === true;
         const activeTask = activeConversationTask(host.tasks);
         const cancelAllowed = host.controller?.profile?.capabilities?.cancel === true;

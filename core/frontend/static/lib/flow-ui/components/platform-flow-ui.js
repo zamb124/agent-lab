@@ -10,6 +10,7 @@ import { activeConversationTask, conversationSessionFiles, mergeConversationTask
 import { normalizeFlowUIBranchId } from '../protocol/a2a-codec.js';
 import { resolveFlowUITheme } from '../shell/resolve-theme.js';
 import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
+import { copyTextToClipboard } from '../../utils/clipboard.js';
 import {
     flowUIVoiceSessionReady,
     stopFlowUIVoiceSession,
@@ -130,7 +131,8 @@ export class PlatformFlowUI extends LitElement {
             background: var(--flow-ui-logo-disc-bg, #0c0c0f);
             border: 1px solid var(--flow-ui-logo-disc-border, rgba(255, 255, 255, 0.14));
             box-shadow: var(--flow-ui-logo-disc-shadow);
-            overflow: hidden;
+            /* overflow visible: disc shadow must paint outside the mark. */
+            overflow: visible;
         }
         .mark img { width: 18px; height: 18px; object-fit: contain; display: block; }
         nav { display: flex; gap: 5px; overflow: auto; }
@@ -715,7 +717,7 @@ export class PlatformFlowUI extends LitElement {
             throw new Error('flow-ui embed: embedId required');
         }
         try {
-            await navigator.clipboard.writeText(url);
+            await copyTextToClipboard(url);
             this.embedState = { copied: true };
         } catch {
             const input = this.renderRoot.querySelector('.embed-result input');
@@ -769,7 +771,7 @@ export class PlatformFlowUI extends LitElement {
     async _copyShare() {
         if (!this.shareState.url) return;
         try {
-            await navigator.clipboard.writeText(this.shareState.url);
+            await copyTextToClipboard(this.shareState.url);
             this.shareState = { ...this.shareState, copied: true };
         } catch {
             const input = this.renderRoot.querySelector('.share-result input');

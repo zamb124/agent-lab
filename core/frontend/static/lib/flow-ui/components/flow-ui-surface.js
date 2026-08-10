@@ -4,6 +4,7 @@ import { flowUIComponentRenderer } from '../catalog/registry.js';
 import { resolveBound, unknownExternalComponent, wrapFlowNode } from '../catalog/render-helpers.js';
 import { conversationUserText } from '../catalog/platform/conversation-turn.js';
 import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
+import { copyTextToClipboard } from '../../utils/clipboard.js';
 
 ensureFlowUICatalogRegistered();
 
@@ -122,7 +123,12 @@ export class FlowUISurfaceElement extends LitElement {
             min-height: 0;
             overflow: auto;
             overscroll-behavior: contain;
-            padding: var(--space-2, 8px) var(--space-4, 16px) 0;
+            /*
+             * Bottom bleed must fit --flow-ui-logo-disc-shadow: overflow:auto on this
+             * node otherwise hard-clips avatar drop shadows against the composer.
+             * Keep inline padding in sync with Form so the 760px columns align.
+             */
+            padding: var(--space-2, 8px) var(--space-4, 16px) var(--flow-ui-disc-shadow-bleed, 32px);
         }
         .page-shell--conversation.page-shell--conversation-empty > .flow-node[data-flow-ui-type="ConversationFeed"] {
             flex: 0 0 auto;
@@ -147,7 +153,8 @@ export class FlowUISurfaceElement extends LitElement {
             padding: 0 var(--space-4, 16px);
         }
         .page-shell--conversation > .flow-node[data-flow-ui-type="Form"] {
-            padding: var(--space-2, 8px) var(--space-4, 16px) var(--space-4, 16px);
+            /* Bottom bleed: composer pill shadow vs page-shell overflow:hidden. */
+            padding: var(--space-2, 8px) var(--space-4, 16px) var(--flow-ui-disc-shadow-bleed, 32px);
         }
         /*
          * width:100% is required: ArtifactFeed is a column flex stack, and
@@ -262,7 +269,8 @@ export class FlowUISurfaceElement extends LitElement {
             width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
             background: var(--flow-ui-logo-disc-bg); color: var(--flow-ui-logo-disc-fg);
             border: 1px solid var(--flow-ui-logo-disc-border); box-shadow: var(--flow-ui-logo-disc-shadow);
-            overflow: hidden; flex-shrink: 0;
+            /* overflow must stay visible: logo-disc shadow paints outside the disc. */
+            overflow: visible; flex-shrink: 0;
         }
         .avatar img { width: 24px; height: 24px; object-fit: contain; display: block; }
         .avatar.bot {
@@ -939,11 +947,13 @@ export class FlowUISurfaceElement extends LitElement {
     }
 
     async _copyTurnText(taskId, text) {
+        if (typeof text !== 'string' || text.length === 0) return;
         try {
-            await navigator.clipboard.writeText(text);
+            // Clipboard API отсутствует вне secure context — copyTextToClipboard даёт execCommand fallback.
+            await copyTextToClipboard(text);
         } catch (error) {
-            // Clipboard permission denial is a browser boundary, not a UI bug.
-            if (!(error instanceof DOMException)) throw error;
+            // Clipboard permission / insecure origin — browser boundary, not a UI bug.
+            if (!(error instanceof Error)) throw error;
             return;
         }
         this.copiedTaskId = taskId;

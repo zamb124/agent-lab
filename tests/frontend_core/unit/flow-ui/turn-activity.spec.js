@@ -221,6 +221,54 @@ describe('turn activity toasts', () => {
         ]);
     });
 
+    it('marks open tool_call done when task is INPUT_REQUIRED', () => {
+        const policy = resolveTurnActivityPolicy({
+            policy: {
+                show_activity: true,
+                tool_calls_display: 'compact',
+                show_skill_loads: false,
+            },
+        });
+        const items = projectConversationActivity(
+            taskWithArtifacts(
+                [
+                    {
+                        name: 'tool_call:ask',
+                        artifactId: 'tool_call:ask',
+                        parts: [{
+                            data: {
+                                tool: 'ask_user',
+                                tool_call_id: 'ask',
+                                args: { question: 'Класс?' },
+                            },
+                        }],
+                    },
+                ],
+                'TASK_STATE_INPUT_REQUIRED',
+            ),
+            policy,
+            'ru',
+        );
+        expect(items).toEqual([
+            expect.objectContaining({ kind: 'tool', label: 'ask_user', status: 'done' }),
+        ]);
+    });
+
+    it('does not show working toast after INPUT_REQUIRED', () => {
+        const toasts = deriveTurnActivityToasts({
+            document: leadFormDocument(),
+            context: contextWithTask(
+                taskWithArtifacts(
+                    [{ name: 'response', parts: [{ text: 'Вопрос?' }] }],
+                    'TASK_STATE_INPUT_REQUIRED',
+                ),
+            ),
+            locale: 'ru',
+        });
+        expect(toasts.map((toast) => toast.kind)).toEqual(['response']);
+        expect(toasts[0].streaming).toBe(false);
+    });
+
     it('hides conversation tool chips when tool_calls_display is hidden', () => {
         const policy = resolveTurnActivityPolicy({
             policy: {

@@ -1,12 +1,65 @@
 import { describe, expect, it } from 'vitest';
 import {
+    activeConversationTask,
     conversationTasks,
     conversationTurnText,
     conversationUserText,
     hasConversationContent,
+    isSettledTaskState,
     mergeConversationTasks,
 } from '../../../../core/frontend/static/lib/flow-ui/catalog/platform/conversation-turn.js';
 import { resolveFlowUITheme } from '../../../../core/frontend/static/lib/flow-ui/shell/resolve-theme.js';
+
+describe('activeConversationTask / interrupt', () => {
+    it('treats INPUT_REQUIRED as settled so composer unlocks', () => {
+        const tasks = [
+            {
+                id: 't-ask',
+                status: {
+                    state: 'TASK_STATE_INPUT_REQUIRED',
+                    message: {
+                        role: 'ROLE_AGENT',
+                        parts: [{ text: 'Какой класс?' }],
+                    },
+                },
+                artifacts: [
+                    {
+                        name: 'tool_call:ask',
+                        artifactId: 'a1',
+                        parts: [{
+                            data: {
+                                tool: 'ask_user',
+                                tool_call_id: 'ask',
+                                args: { question: 'Какой класс?' },
+                            },
+                        }],
+                    },
+                ],
+            },
+        ];
+        expect(isSettledTaskState('TASK_STATE_INPUT_REQUIRED')).toBe(true);
+        expect(isSettledTaskState('TASK_STATE_AUTH_REQUIRED')).toBe(true);
+        expect(isSettledTaskState('TASK_STATE_WORKING')).toBe(false);
+        expect(activeConversationTask(tasks)).toBeNull();
+        expect(conversationTurnText(tasks[0])).toBe('Какой класс?');
+    });
+
+    it('keeps WORKING as the active in-flight task', () => {
+        const tasks = [
+            {
+                id: 't-done',
+                status: { state: 'TASK_STATE_COMPLETED', message: { parts: [{ text: 'ok' }] } },
+                artifacts: [],
+            },
+            {
+                id: 't-work',
+                status: { state: 'TASK_STATE_WORKING' },
+                artifacts: [],
+            },
+        ];
+        expect(activeConversationTask(tasks)?.id).toBe('t-work');
+    });
+});
 
 describe('conversationTurnText', () => {
     it('uses status.message when response artifact is absent', () => {

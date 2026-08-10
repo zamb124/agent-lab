@@ -6,7 +6,7 @@
  */
 import {
     conversationTurnText,
-    isTerminalTaskState,
+    isSettledTaskState,
 } from '../catalog/platform/conversation-turn.js';
 import { adaptCurrentArtifact } from '../protocol/current-artifact-adapters.js';
 import { flowUIText } from '../utils/text.js';
@@ -309,6 +309,15 @@ export function projectConversationActivity(task, policy, locale = 'ru') {
         }
     }
 
+    // ask_user / auth interrupt: tool_call without tool_result is no longer in-flight.
+    if (isSettledTaskState(task.status?.state)) {
+        for (const item of byKey.values()) {
+            if (item.status === 'running') {
+                item.status = 'done';
+            }
+        }
+    }
+
     return Object.freeze([
         ...Array.from(byKey.values()).map((item) => Object.freeze(item)),
         ...errors.map((item) => Object.freeze(item)),
@@ -393,9 +402,9 @@ export function deriveTurnActivityToasts({ document, context, locale, capabiliti
 
     const taskId = typeof task?.id === 'string' && task.id !== '' ? task.id : 'pending';
     const state = typeof task?.status?.state === 'string' ? task.status.state : '';
-    const terminal = state !== '' && isTerminalTaskState(state);
+    const settled = state !== '' && isSettledTaskState(state);
     const failed = state === 'TASK_STATE_FAILED';
-    const working = submitting || (task != null && !terminal);
+    const working = submitting || (task != null && !settled);
     const canCancel = policy.allow_cancel === true
         && capabilities?.cancel !== false
         && working
@@ -434,8 +443,8 @@ export function deriveTurnActivityToasts({ document, context, locale, capabiliti
                 kind: 'reasoning',
                 title: flowUIText(locale, 'turn_toast_reasoning'),
                 body: reasoning,
-                streaming: !terminal,
-                dismissible: terminal,
+                streaming: !settled,
+                dismissible: settled,
                 canCancel: false,
             });
         }
@@ -449,8 +458,8 @@ export function deriveTurnActivityToasts({ document, context, locale, capabiliti
                 kind: 'activity',
                 title: flowUIText(locale, 'turn_toast_activity'),
                 body: activity,
-                streaming: !terminal,
-                dismissible: terminal,
+                streaming: !settled,
+                dismissible: settled,
                 canCancel: false,
             });
         }
@@ -464,7 +473,7 @@ export function deriveTurnActivityToasts({ document, context, locale, capabiliti
                 kind: 'response',
                 title: flowUIText(locale, 'turn_toast_response'),
                 body: response,
-                streaming: !terminal,
+                streaming: !settled,
                 dismissible: true,
                 canCancel: false,
             });
