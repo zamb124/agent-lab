@@ -130,8 +130,21 @@ jobs:
         run: |
           set -euo pipefail
           img="ghcr.io/${{ github.repository_owner }}/agent-lab-base:latest"
-          digest="$(docker buildx imagetools inspect "$img" | awk '/^Digest:/{print $2; exit}')"
-          if [ -z "$digest" ]; then
+          digest=""
+          for attempt in 1 2 3 4 5; do
+            inspect_out="$(docker buildx imagetools inspect "$img" 2>&1)" && true
+            digest="$(printf '%s\n' "${inspect_out}" | awk '/^Digest:/{print $2; exit}')"
+            if [ -z "${digest}" ]; then
+              digest="$(docker buildx imagetools inspect "$img" --format '{{.Manifest.Digest}}' 2>/dev/null || true)"
+            fi
+            if [ -n "${digest}" ]; then
+              break
+            fi
+            echo "attempt ${attempt}/5: digest пуст для ${img}"
+            printf '%s\n' "${inspect_out}"
+            sleep $((attempt * 3))
+          done
+          if [ -z "${digest}" ]; then
             echo "::error::Не удалось снять digest ${img}"
             exit 1
           fi
@@ -143,8 +156,21 @@ jobs:
         run: |
           set -euo pipefail
           img="ghcr.io/${{ github.repository_owner }}/agent-lab-base-gpu:latest"
-          digest="$(docker buildx imagetools inspect "$img" | awk '/^Digest:/{print $2; exit}')"
-          if [ -z "$digest" ]; then
+          digest=""
+          for attempt in 1 2 3 4 5; do
+            inspect_out="$(docker buildx imagetools inspect "$img" 2>&1)" && true
+            digest="$(printf '%s\n' "${inspect_out}" | awk '/^Digest:/{print $2; exit}')"
+            if [ -z "${digest}" ]; then
+              digest="$(docker buildx imagetools inspect "$img" --format '{{.Manifest.Digest}}' 2>/dev/null || true)"
+            fi
+            if [ -n "${digest}" ]; then
+              break
+            fi
+            echo "attempt ${attempt}/5: digest пуст для ${img}"
+            printf '%s\n' "${inspect_out}"
+            sleep $((attempt * 3))
+          done
+          if [ -z "${digest}" ]; then
             echo "::error::Не удалось снять digest ${img}"
             exit 1
           fi
